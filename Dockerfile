@@ -38,5 +38,6 @@ PYEOF
 COPY entrypoint.sh /entrypoint.sh
 COPY dewpoint_service.py /opt/weewx-venv/lib/python3.10/site-packages/user/dewpoint_service.py
 COPY pressure_service.py /opt/weewx-venv/lib/python3.10/site-packages/user/pressure_service.py
+COPY wcloud.py /opt/weewx-venv/lib/python3.10/site-packages/user/wcloud.py
 RUN chmod +x /entrypoint.sh
 CMD ["/entrypoint.sh"]
