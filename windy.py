@@ -20,15 +20,18 @@ class Windy(StdService):
         site_dict = config_dict.get('Windy', {})
         self.station_id = site_dict.get('station_id', '')
         self.password = site_dict.get('password', '')
+        self.post_interval = int(site_dict.get('post_interval', 300))
         if not self.station_id or not self.password:
             # try under StdRESTful
             site_dict = config_dict.get('StdRESTful', {}).get('Windy', {})
             self.station_id = site_dict.get('station_id', '')
             self.password = site_dict.get('password', '')
+            self.post_interval = int(site_dict.get('post_interval', 300))
         if not self.station_id or not self.password:
             log.error("Windy: missing station_id or password")
             return
-        log.info("Windy v2: station_id=%s", self.station_id)
+        self.last_post = 0
+        log.info("Windy v2: station_id=%s post_interval=%s", self.station_id, self.post_interval)
         self.bind(weewx.NEW_ARCHIVE_RECORD, self.new_archive_record)
 
     def new_archive_record(self, event):
