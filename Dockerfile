@@ -28,16 +28,12 @@ RUN mkdir -p /opt/weewx-venv/lib/python3.10/site-packages/user && \
     touch /opt/weewx-venv/lib/python3.10/site-packages/user/__init__.py && \
     cp /opt/weewx-data/bin/user/rtldavis.py /opt/weewx-venv/lib/python3.10/site-packages/user/rtldavis.py
 RUN sed -i "s/>APWEE5,TCPIP\*:/>APRS:/" /opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py
-RUN /opt/weewx-venv/bin/python3 << 'PYEOF'
-content = open('/opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py').read()
-old = "                        self._send(_sock, login, dbg_msg='login')\n                        # ... and then the packet"
-new = "                        self._send(_sock, login, dbg_msg='login')\n                        import time; time.sleep(2)\n                        # ... and then the packet"
-content = content.replace(old, new)
-open('/opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py', 'w').write(content)
-PYEOF
+RUN /opt/weewx-venv/bin/python3 -c "import re; content = open('/opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py').read(); content = content.replace(\"                        self._send(_sock, login, dbg_msg='login')\\n                        # ... and then the packet\", \"                        self._send(_sock, login, dbg_msg='login')\\n                        import time; time.sleep(2)\\n                        # ... and then the packet\"); open('/opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py', 'w').write(content)"
 COPY entrypoint.sh /entrypoint.sh
 COPY dewpoint_service.py /opt/weewx-venv/lib/python3.10/site-packages/user/dewpoint_service.py
 COPY pressure_service.py /opt/weewx-venv/lib/python3.10/site-packages/user/pressure_service.py
+COPY owm.py /opt/weewx-venv/lib/python3.10/site-packages/user/owm.py
+COPY windy.py /opt/weewx-venv/lib/python3.10/site-packages/user/windy.py
 COPY wcloud.py /opt/weewx-venv/lib/python3.10/site-packages/user/wcloud.py
 RUN chmod +x /entrypoint.sh
 CMD ["/entrypoint.sh"]
