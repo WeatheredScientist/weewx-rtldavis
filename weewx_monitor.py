@@ -24,7 +24,7 @@ THRESHOLDS = {
     'WOW':             3600,
     'AWEKAS':          3600,
     'windy':           3600,
-    'wcloud':          1800,
+    'WeatherCloud':    1800,
     'owm':             3600,
 }
 
@@ -115,6 +115,15 @@ def main():
         time.sleep(POLL)
 
         cur = get_linecount()
+        if cur < last_line:
+            log(f"Log reset detected (was {last_line}, now {cur}) - container restarted")
+            last_line = 0
+            # Reset last_seen to now to avoid false alerts after log rotation
+            now = time.time()
+            for svc in last_seen:
+                last_seen[svc] = now
+            for svc in in_outage:
+                in_outage[svc] = False
         if cur > last_line:
             lines = get_new_lines(last_line + 1)
             log(f"Poll: {len(lines)} new lines")
