@@ -13,9 +13,9 @@ POLL     = 30
 RESET_CD = 300
 REPEAT   = 7200
 
-GMAIL_USER = 'weatheredscientist@gmail.com'
-GMAIL_PASS = 'tiaf zggc jdlu vimy'
-ALERT_TO   = 'weatheredscientist@gmail.com'
+GMAIL_USER = os.environ.get('ALERT_FROM', '')
+GMAIL_PASS = os.environ.get('GMAIL_PASS', '')
+ALERT_TO   = os.environ.get('ALERT_TO', '')
 
 THRESHOLDS = {
     'Wunderground-RF': 600,
