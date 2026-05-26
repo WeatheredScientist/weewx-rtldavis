@@ -1,5 +1,203 @@
 ##############################################################################
 #   weewx.conf.example for weewx-rtldavis
+#   weewx + RTL-SDR Davis Vantage setup
+#
+#   Copy this file to weewx.conf and fill in your credentials.
+#   All service sections are pre-configured with recommended upload rates.
+#
+#   UPLOAD RATE REFERENCE
+#   ---------------------
+#   Service         Recommended     Maximum         Notes
+#   -----------     -----------     -------         -----
+#   WU Rapidfire    2.5 sec         2.5 sec         Every LOOP packet (Davis VP2)
+#   WU PWS          60 sec          60 sec          Every archive record
+#   PWSweather      60 sec          60 sec          Lenient, no known hard limit
+#   CWOP/APRS       300 sec         300 sec         MADIS samples at 5 min
+#   WOW Met Office  300 sec         300 sec         429 error if < 5 min (confirmed)
+#   AWEKAS          300 sec         300 sec         Account minimum; set in AWEKAS settings
+#   WeatherCloud    600 sec         600 sec         Basic/Plus plan limit; 60 sec requires paid Pro/Premium plan
+#   Windy           300 sec         300 sec         Documented 5 min interval
+#   OWM             60 sec          60 sec          Beta API; matches finest aggregation bucket (1 min)
+#
+#   NOTE: WOW (Met Office) is being decommissioned in late 2026.
+#         WOW-BE (Belgian Met Office) is a successor project.
+#
+##############################################################################
+
+[Station]
+    # Station location info
+    location = Your Location
+    latitude = 0.0000
+    longitude = 0.0000
+    altitude = 0, foot   # or meter
+    station_url = ""
+
+    # Station hardware
+    station_type = Rtldavis
+
+[Rtldavis]
+    cmd = /usr/local/bin/rtldavis
+
+    # Radio frequency: US (915 MHz), EU (868.3 MHz), NZ (921 MHz)
+    transceiver_frequency = US
+
+    # ISS channel (1-8, matches DIP switch on ISS transmitter)
+    iss_channel = 1
+
+    # Rain bucket type: 0 = 0.01 inch, 1 = 0.2 mm
+    rain_bucket_type = 0
+
+    # Set to 0 for normal operation, 1 or 2 for debugging
+    debug = 0
+
+[StdRESTful]
+    [[StationRegistry]]
+        register_this_station = false
+
+    [[Wunderground]]
+        # Weather Underground (wunderground.com)
+        # Register at: https://www.wunderground.com/member/devices
+        enable = false
+        station = YOUR_STATION_ID       # e.g. KABCDEF01
+        password = YOUR_API_KEY
+        rapidfire = true                # Sends every LOOP packet (~2.5s for Davis VP2)
+        archive_post = true             # Also post archive records (1 min)
+
+    [[PWSweather]]
+        # PWSweather.com (AerisWeather)
+        # Register at: https://pwsweather.com
+        # Recommended: 60 sec (archive interval). No known hard rate limit.
+        # Maximum: 60 sec
+        enable = false
+        station = YOUR_STATION_ID       # e.g. KABCDEF01
+        password = YOUR_API_KEY
+
+    [[CWOP]]
+        # Citizen Weather Observer Program (APRS/MADIS)
+        # Register at: https://www.wxqa.com
+        # Recommended: 300 sec. MADIS samples every 5 min; more frequent posts
+        # clutter the APRS network and may get your station flagged.
+        # Maximum: 300 sec
+        enable = false
+        station = YOUR_CWOP_ID          # e.g. CW1234 (non-ham) or W1AW (ham)
+        passcode = -1                   # -1 for non-ham CWOP stations
+        server_list = cwop.aprs.net:14580, cwop.aprs.net:23
+        post_interval = 300             # 5 minutes — MADIS sampling rate
+
+    [[WOW]]
+        # Met Office Weather Observations Website
+        # Register at: https://wow.metoffice.gov.uk
+        # *** NOTE: WOW is being decommissioned in late 2026. ***
+        # Recommended: 300 sec. Returns HTTP 429 if posted more frequently.
+        # Maximum: 300 sec
+        enable = false
+        station = YOUR_STATION_UUID     # e.g. xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        password = "YOUR_AWS_PIN"       # Use quotes to guard against parsing errors
+        post_interval = 300             # 5 minutes — required to avoid 429 errors
+
+    [[WOW-BE]]
+        # WOW Belgium (wow.meteo.be) — successor to Met Office WOW
+        # Register at: https://wow.meteo.be
+        enable = false
+        station = YOUR_STATION_ID
+        password = "YOUR_PASSWORD"
+        post_interval = 300
+
+    [[AWEKAS]]
+        # Automatisches WEtterKArten System (awekas.at)
+        # Register at: https://www.awekas.at
+        # Recommended: 300 sec. Minimum upload interval is set in your AWEKAS account.
+        # Maximum: 300 sec (account-dependent)
+        enable = false
+        username = YOUR_USERNAME
+        password = YOUR_PASSWORD
+        post_interval = 300             # 5 minutes
+
+    [[OWM]]
+        # OpenWeatherMap Stations API 3.0 (beta)
+        # Register at: https://openweathermap.org/api/stations
+        # Recommended: 60 sec. Matches finest aggregation bucket (1 min type=m).
+        # No documented rate limit; 204 confirmed at 60 sec intervals.
+        # Maximum: 60 sec (no documented limit, conservative choice)
+        enable = false
+        api_key = YOUR_API_KEY
+        station_id = YOUR_STATION_ID    # Internal ID from registration response
+
+    [[Windy]]
+        # Windy.com PWS Stations API v2
+        # Register at: https://stations.windy.com
+        # Recommended: 300 sec. Documented 5 min interval.
+        # Maximum: 300 sec (returns 429 if more frequent)
+        enable = false
+        station_id = YOUR_STATION_ID    # e.g. AbCdEfGh
+        password = YOUR_API_KEY
+        post_interval = 300             # 5 minutes
+
+    [[WeatherCloud]]
+        # WeatherCloud (weathercloud.net)
+        # Register at: https://app.weathercloud.net
+        # Recommended: 600 sec. Basic/Plus plan limit is 10 min.
+        # Maximum: 60 sec requires paid Pro/Premium plan.
+        enable = false
+        id = YOUR_DEVICE_ID
+        key = YOUR_DEVICE_KEY
+        post_interval = 600             # 10 minutes — Basic/Plus plan limit
+
+[StdReport]
+    # HTML report generation is disabled — not needed for REST-only operation.
+    # Enable and configure if you want to self-host a weather website.
+    #report_services = weewx.engine.StdPrint, weewx.engine.StdReport
+    report_services = weewx.engine.StdPrint
+
+[StdArchive]
+    archive_interval = 60               # 1 minute archive interval
+
+[StdQC]
+    [[MinMax]]
+        barometer = 26, 32.5, inHg
+        pressure = 24, 34.5, inHg
+        outTemp = -40, 120, degree_F
+        inTemp = 10, 120, degree_F
+        outHumidity = 0, 100
+        inHumidity = 0, 100
+        windSpeed = 0, 120, mile_per_hour   # Absolute ceiling; spurious spikes handled by dewpoint_service.py acceleration filter (MAX_WIND_DELTA = 75 mph/sample)
+        windGust = 0, 85, mile_per_hour
+        rain = 0, 10, inch
+
+[DavisPressure]
+    # Davis WeatherLink API v2 — fetches barometric pressure hourly
+    # Only needed for Davis stations without a barometer (e.g. ISS-only setups)
+    # Register at: https://www.weatherlink.com/develop
+    api_key = YOUR_API_KEY
+    api_secret = YOUR_API_SECRET
+    station_id = YOUR_STATION_ID        # Numeric station ID from WeatherLink
+    fetch_interval = 3600               # Fetch every hour
+
+[Logging]
+    version = 1
+    disable_existing_loggers = False
+    [[formatters]]
+        [[[standard]]]
+            format = %(asctime)s %(name)s %(levelname)s %(message)s
+    [[handlers]]
+        [[[rotate]]]
+            level = DEBUG
+            formatter = standard
+            class = logging.handlers.TimedRotatingFileHandler
+            filename = /var/log/weewx/weewx.log
+            when = midnight
+            backupCount = 30
+    [[loggers]]
+        [[[weewx]]]
+            level = INFO
+            handlers = rotate,
+            propagate = 0
+        [[[user]]]
+            level = INFO
+            handlers = rotate,
+            propagate = 0
+##############################################################################
+#   weewx.conf.example for weewx-rtldavis
 #   Eagle Hunt PWS / weewx + RTL-SDR Davis Vantage Pro 2 setup
 #
 #   Copy this file to weewx.conf and fill in your credentials.
