@@ -75,16 +75,20 @@ def get_new_lines(from_line):
 
 def do_reset():
     try:
-        log("RESET: unbinding USB 1-3")
-        with open('/sys/bus/usb/drivers/usb/unbind', 'w') as f: f.write('1-3')
-        time.sleep(3)
-        log("RESET: rebinding USB 1-3")
-        with open('/sys/bus/usb/drivers/usb/bind', 'w') as f: f.write('1-3')
-        time.sleep(3)
-        try: vendor = open('/sys/bus/usb/devices/1-3/idVendor').read().strip()
-        except: vendor = 'unknown'
-        log(f"RESET: done, idVendor={vendor}")
-        send_email("Eagle Hunt PWS: RTL-SDR reset", f"Dongle reset at {datetime.now()}. Vendor: {vendor}")
+        log("RESET: running usb_reset.sh via sudo")
+        import subprocess
+        result = subprocess.run(
+            ['sudo', '/volume1/docker/weewx-rtldavis/usb_reset.sh'],
+            capture_output=True, text=True, timeout=15
+        )
+        if result.returncode == 0:
+            try: vendor = open('/sys/bus/usb/devices/1-3/idVendor').read().strip()
+            except: vendor = 'unknown'
+            log(f"RESET: done, idVendor={vendor}")
+            send_email("Eagle Hunt PWS: RTL-SDR reset", f"Dongle reset at {datetime.now()}. Vendor: {vendor}")
+        else:
+            log(f"RESET error: {result.stderr}")
+            send_email("Eagle Hunt PWS: RTL-SDR reset FAILED", f"usb_reset.sh failed: {result.stderr}")
     except Exception as e:
         log(f"RESET error: {e}")
 
