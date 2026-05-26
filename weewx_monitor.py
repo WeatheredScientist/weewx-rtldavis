@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """weewx monitor: USB watchdog + service downtime alerting"""
 
-import subprocess, time, smtplib, os, sys
+import time, smtplib, os, sys
 from email.mime.text import MIMEText
 from datetime import datetime
 
 # --- Config ---
 LOG      = '/volume1/docker/weewx-rtldavis/logs/weewx_monitor.log'
 PIDFILE  = '/volume1/docker/weewx-rtldavis/logs/weewx_monitor.pid'
-USB_DEV  = '/sys/bus/usb/devices/1-3/syno_vbus_reset'
 POLL     = 30
 RESET_CD = 300
 REPEAT   = 7200
@@ -59,16 +58,20 @@ def send_email(subject, body):
     except Exception as e:
         log(f"EMAIL error: {e}")
 
+WEEWX_LOG_PATH = '/volume1/docker/weewx-rtldavis/logs/weewx.log'
+
 def get_linecount():
-    r = subprocess.run(['docker','exec','weewx-rtldavis','wc','-l','/var/log/weewx/weewx.log'],
-                       capture_output=True, text=True)
-    try: return int(r.stdout.strip().split()[0])
+    try:
+        with open(WEEWX_LOG_PATH) as f:
+            return sum(1 for _ in f)
     except: return 0
 
 def get_new_lines(from_line):
-    r = subprocess.run(['docker','exec','weewx-rtldavis','tail','-n',f'+{from_line}','/var/log/weewx/weewx.log'],
-                       capture_output=True, text=True)
-    return r.stdout.splitlines()
+    try:
+        with open(WEEWX_LOG_PATH) as f:
+            lines = f.readlines()
+        return [l.rstrip() for l in lines[from_line-1:]]
+    except: return []
 
 def do_reset():
     try:
