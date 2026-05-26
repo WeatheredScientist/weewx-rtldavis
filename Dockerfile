@@ -1,78 +1,118 @@
-FROM ubuntu:22.04
+#--------------------------------------------
+# weewx-rtldavis v2
+# Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
+# Multistage build for minimal runtime image
+#
+# Credits:
+#   weewx: Tom Keffer and Matthew Wall (weewx.com)
+#   weewx-rtldavis driver: Vince Skahan (github.com/weewx-contrib/weewx-rtldavis)
+#   rtldavis Go binary: Luc Heijst (github.com/lheijst/rtldavis)
+#   librtlsdr: Steve Markgraf (github.com/steve-m/librtlsdr)
+#   Multistage build approach: Vince Skahan
+#--------------------------------------------
+
+FROM ubuntu:26.04 AS base
 ENV DEBIAN_FRONTEND=noninteractive
+
+#--------------------------------------------
+# Install build dependencies
+#--------------------------------------------
 RUN apt-get update && apt-get install -y \
-    git cmake libusb-1.0-0-dev libusb-dev python3-pip python3-venv \
-    curl pkg-config busybox \
+    cmake \
+    curl \
+    gcc \
+    golang \
+    libusb-1.0-0-dev \
+    libusb-dev \
+    make \
+    python3-pip \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -L -o /tmp/go.tar.gz https://go.dev/dl/go1.24.4.linux-amd64.tar.gz && tar -C /usr/local -xzf /tmp/go.tar.gz && ln -s /usr/local/go/bin/go /usr/local/bin/go
-RUN mkdir -p /etc/modprobe.d && echo "blacklist dvb_usb_rtl28xxu" > /etc/modprobe.d/blacklist_rtlsdr.conf
-RUN cd /tmp && \
-    git clone https://github.com/steve-m/librtlsdr.git && \
-    cd librtlsdr && mkdir build && cd build && \
-    cmake ../ -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON -DENABLE_ZEROCOPY=OFF && \
-    make -j2 && make install && ldconfig
-RUN curl -L -o /tmp/src.tgz https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz && \
+
+#--------------------------------------------
+# Blacklist DVB kernel module that conflicts with RTL-SDR
+#--------------------------------------------
+RUN mkdir -p /etc/modprobe.d && \
+    echo "blacklist dvb_usb_rtl28xxu" > /etc/modprobe.d/blacklist_rtlsdr.conf
+
+#--------------------------------------------
+# Build librtlsdr and rtldavis Go binary from src.tgz
+# librtlsdr is bundled in src.tgz — no git clone needed
+#--------------------------------------------
+RUN curl -L -o /tmp/src.tgz \
+        https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz && \
     cd /tmp && tar zxf src.tgz && \
+    cd /tmp/src/librtlsdr && \
+        mkdir build && cd build && \
+        cmake ../ -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON -DENABLE_ZEROCOPY=OFF && \
+        make -j2 && make install && ldconfig && \
     cd /tmp/src/rtldavis/src/lheijst/rtldavis && \
-    GOBIN=/usr/local/bin go install -buildvcs=false -v .
-RUN python3 -m venv /opt/weewx-venv && \
-    /opt/weewx-venv/bin/pip install -q weewx requests
-RUN /opt/weewx-venv/bin/weectl station create /opt/weewx-data --no-prompt
-RUN /opt/weewx-venv/bin/weectl extension install /tmp/src/weewx-rtldavis --yes --config=/opt/weewx-data/weewx.conf && \
-    /opt/weewx-venv/bin/weectl station reconfigure --driver=user.rtldavis --no-prompt --config=/opt/weewx-data/weewx.conf
-RUN sed -i 's/frequency = EU/frequency = US/' /opt/weewx-data/weewx.conf && \
+        GOBIN=/usr/local/bin go install -buildvcs=false -v .
+
+#--------------------------------------------
+# Install weewx and configure for rtldavis
+#--------------------------------------------
+RUN python3 -m venv --copies /opt/weewx-venv && \
+    /opt/weewx-venv/bin/pip install -q weewx requests && \
+    /opt/weewx-venv/bin/weectl station create /opt/weewx-data --no-prompt && \
+    /opt/weewx-venv/bin/weectl extension install /tmp/src/weewx-rtldavis \
+        --yes --config=/opt/weewx-data/weewx.conf && \
+    /opt/weewx-venv/bin/weectl station reconfigure \
+        --driver=user.rtldavis --no-prompt --config=/opt/weewx-data/weewx.conf && \
+    sed -i 's/frequency = EU/frequency = US/' /opt/weewx-data/weewx.conf && \
     sed -i 's/rain_bucket_type = 1/rain_bucket_type = 0/' /opt/weewx-data/weewx.conf && \
-    sed -i 's|cmd = /home/pi/work/bin/rtldavis|cmd = /usr/local/bin/rtldavis|' /opt/weewx-data/weewx.conf && \
-    sed -i 's/cmd = \/usr\/local\/bin\/rtldavis \[options\]/cmd = \/usr\/local\/bin\/rtldavis/' /opt/weewx-data/weewx.conf
-RUN mkdir -p /opt/weewx-venv/lib/python3.10/site-packages/user && \
-    touch /opt/weewx-venv/lib/python3.10/site-packages/user/__init__.py && \
-    cp /opt/weewx-data/bin/user/rtldavis.py /opt/weewx-venv/lib/python3.10/site-packages/user/rtldavis.py
-RUN sed -i "s/>APWEE5,TCPIP\*:/>APRS:/" /opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py
-RUN /opt/weewx-venv/bin/python3 -c "import re; content = open('/opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py').read(); content = content.replace(\"                        self._send(_sock, login, dbg_msg='login')\\n                        # ... and then the packet\", \"                        self._send(_sock, login, dbg_msg='login')\\n                        import time; time.sleep(2)\\n                        # ... and then the packet\"); open('/opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py', 'w').write(content)" 
+    sed -i 's|cmd = /home/pi/work/bin/rtldavis|cmd = /usr/local/bin/rtldavis|' \
+        /opt/weewx-data/weewx.conf && \
+    sed -i 's/cmd = \/usr\/local\/bin\/rtldavis \[options\]/cmd = \/usr\/local\/bin\/rtldavis/' \
+        /opt/weewx-data/weewx.conf && \
+    sed -i 's/debug = 0/debug = 0/' /opt/weewx-data/weewx.conf && \
+    rm -rf /tmp/*
+
+#--------------------------------------------
+# Add logging config (file + stdout)
+#--------------------------------------------
+COPY logging.additions /tmp/logging.additions
+RUN cat /tmp/logging.additions >> /opt/weewx-data/weewx.conf && \
+    rm /tmp/logging.additions
+
+#--------------------------------------------
+# Copy custom service files
+#--------------------------------------------
+COPY dewpoint_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/dewpoint_service.py
+COPY pressure_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/pressure_service.py
+COPY owm.py              /opt/weewx-venv/lib/python3.14/site-packages/user/owm.py
+COPY windy.py            /opt/weewx-venv/lib/python3.14/site-packages/user/windy.py
+COPY wcloud.py           /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
+
+RUN touch /opt/weewx-venv/lib/python3.14/site-packages/user/__init__.py && \
+    touch /opt/weewx-venv/lib/python3.14/site-packages/user/extensions.py && \
+    cp /opt/weewx-data/bin/user/rtldavis.py /opt/weewx-venv/lib/python3.14/site-packages/user/rtldavis.py
+
 COPY entrypoint.sh /entrypoint.sh
-COPY dewpoint_service.py /opt/weewx-venv/lib/python3.10/site-packages/user/dewpoint_service.py
-COPY pressure_service.py /opt/weewx-venv/lib/python3.10/site-packages/user/pressure_service.py
-COPY owm.py /opt/weewx-venv/lib/python3.10/site-packages/user/owm.py
-COPY windy.py /opt/weewx-venv/lib/python3.10/site-packages/user/windy.py
-COPY wcloud.py /opt/weewx-venv/lib/python3.10/site-packages/user/wcloud.py
 RUN chmod +x /entrypoint.sh
-CMD ["/entrypoint.sh"]
-FROM ubuntu:22.04
+
+#--------------------------------------------
+# Minimal runtime image
+# Only copies what's needed to run weewx
+#--------------------------------------------
+FROM ubuntu:26.04 AS minimal
 ENV DEBIAN_FRONTEND=noninteractive
+
+COPY --from=base /opt/weewx-venv  /opt/weewx-venv
+COPY --from=base /opt/weewx-data  /opt/weewx-data
+COPY --from=base /usr/local       /usr/local
+COPY --from=base /entrypoint.sh   /entrypoint.sh
+COPY --from=base /etc/modprobe.d  /etc/modprobe.d
+
 RUN apt-get update && apt-get install -y \
-    git cmake libusb-1.0-0-dev libusb-dev python3-pip python3-venv \
-    curl pkg-config busybox \
-    && rm -rf /var/lib/apt/lists/*
-RUN curl -L -o /tmp/go.tar.gz https://go.dev/dl/go1.24.4.linux-amd64.tar.gz && tar -C /usr/local -xzf /tmp/go.tar.gz && ln -s /usr/local/go/bin/go /usr/local/bin/go
-RUN mkdir -p /etc/modprobe.d && echo "blacklist dvb_usb_rtl28xxu" > /etc/modprobe.d/blacklist_rtlsdr.conf
-RUN cd /tmp && \
-    git clone https://github.com/steve-m/librtlsdr.git && \
-    cd librtlsdr && mkdir build && cd build && \
-    cmake ../ -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON -DENABLE_ZEROCOPY=OFF && \
-    make -j2 && make install && ldconfig
-RUN curl -L -o /tmp/src.tgz https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz && \
-    cd /tmp && tar zxf src.tgz && \
-    cd /tmp/src/rtldavis/src/lheijst/rtldavis && \
-    GOBIN=/usr/local/bin go install -buildvcs=false -v .
-RUN python3 -m venv /opt/weewx-venv && \
-    /opt/weewx-venv/bin/pip install -q weewx requests
-RUN /opt/weewx-venv/bin/weectl station create /opt/weewx-data --no-prompt
-RUN /opt/weewx-venv/bin/weectl extension install /tmp/src/weewx-rtldavis --yes --config=/opt/weewx-data/weewx.conf && \
-    /opt/weewx-venv/bin/weectl station reconfigure --driver=user.rtldavis --no-prompt --config=/opt/weewx-data/weewx.conf
-RUN sed -i 's/frequency = EU/frequency = US/' /opt/weewx-data/weewx.conf && \
-    sed -i 's/rain_bucket_type = 1/rain_bucket_type = 0/' /opt/weewx-data/weewx.conf && \
-    sed -i 's|cmd = /home/pi/work/bin/rtldavis|cmd = /usr/local/bin/rtldavis|' /opt/weewx-data/weewx.conf && \
-    sed -i 's/cmd = \/usr\/local\/bin\/rtldavis \[options\]/cmd = \/usr\/local\/bin\/rtldavis/' /opt/weewx-data/weewx.conf
-RUN mkdir -p /opt/weewx-venv/lib/python3.10/site-packages/user && \
-    touch /opt/weewx-venv/lib/python3.10/site-packages/user/__init__.py && \
-    cp /opt/weewx-data/bin/user/rtldavis.py /opt/weewx-venv/lib/python3.10/site-packages/user/rtldavis.py
-RUN sed -i "s/>APWEE5,TCPIP\*:/>APRS:/" /opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py
-RUN /opt/weewx-venv/bin/python3 -c "import re; content = open('/opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py').read(); content = content.replace(\"                        self._send(_sock, login, dbg_msg='login')\\n                        # ... and then the packet\", \"                        self._send(_sock, login, dbg_msg='login')\\n                        import time; time.sleep(2)\\n                        # ... and then the packet\"); open('/opt/weewx-venv/lib/python3.10/site-packages/weewx/restx.py', 'w').write(content)"
-COPY entrypoint.sh /entrypoint.sh
-COPY dewpoint_service.py /opt/weewx-venv/lib/python3.10/site-packages/user/dewpoint_service.py
-COPY pressure_service.py /opt/weewx-venv/lib/python3.10/site-packages/user/pressure_service.py
-COPY owm.py /opt/weewx-venv/lib/python3.10/site-packages/user/owm.py
-COPY windy.py /opt/weewx-venv/lib/python3.10/site-packages/user/windy.py
-COPY wcloud.py /opt/weewx-venv/lib/python3.10/site-packages/user/wcloud.py
-RUN chmod +x /entrypoint.sh
+    libusb-1.0-0 \
+    python3 \
+    python3-venv \
+    && apt-get clean autoclean \
+    && apt-get autoremove --yes \
+    && rm -rf /var/lib/{apt,dpkg,cache,log} \
+    && rm -rf /usr/share/{doc,man,info} \
+    && ln -sf /usr/bin/python3 /opt/weewx-venv/bin/python3 \
+    && chmod +x /entrypoint.sh
+
 CMD ["/entrypoint.sh"]
