@@ -1,0 +1,31 @@
+#
+# docker-compose.yml for weewx-rtldavis
+#
+# Usage:
+#   docker compose up -d
+#
+# Volumes:
+#   weewx-data  — weewx.conf, database, skins
+#   logs        — weewx log files (also used by weewx_monitor.py on Synology)
+#
+# NOTE: If switching from another weewx-rtldavis container version,
+# reset the USB dongle first to ensure clean device handoff:
+#   echo '1-3' | sudo tee /sys/bus/usb/drivers/usb/unbind && sleep 2
+#   echo '1-3' | sudo tee /sys/bus/usb/drivers/usb/bind && sleep 2
+# (device path '1-3' is Synology DS918+ specific — check yours with lsusb)
+#
+services:
+  weewx-rtldavis:
+    container_name: weewx-rtldavis
+    image: weatheredscientist/weewx-rtldavis:latest
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - '/dev/bus/usb:/dev/bus/usb'
+    volumes:
+      # Synology NAS paths — adjust for your system
+      - /volume1/docker/weewx-rtldavis/weewx-data:/opt/weewx-data
+      - /volume1/docker/weewx-rtldavis/logs:/var/log/weewx
+      # Non-NAS alternative paths:
+      # - /your/path/weewx-data:/opt/weewx-data
+      # - /your/path/logs:/var/log/weewx
