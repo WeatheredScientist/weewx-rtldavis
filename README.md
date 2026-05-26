@@ -281,7 +281,34 @@ sudo -u weewx-monitor -E python3 -u /volume1/docker/weewx-rtldavis/weewx_monitor
 
 > **Note:** The USB device path `1-3` in `usb_reset.sh` is specific to the DS918+. Check your path with `lsusb` and update accordingly.
 
-### Alert Thresholds
+### Log Rotation (weewx_monitor.log)
+
+The weewx log (`weewx.log`) is rotated automatically by weewx's built-in `TimedRotatingFileHandler` — no extra setup needed.
+
+The monitor log (`weewx_monitor.log`) needs separate rotation. On Synology, use `logrotate` via DSM Task Scheduler:
+
+1. **Create the logrotate config:**
+```bash
+sudo tee /etc/logrotate.d/weewx-monitor << 'EOF'
+/volume1/docker/weewx-rtldavis/logs/weewx_monitor.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+```
+
+2. **Add to DSM Task Scheduler** (Control Panel → Task Scheduler → Create → Scheduled Task):
+   - **Task name:** `logrotate-weewx`
+   - **Schedule:** Daily at 00:05
+   - **User:** root
+   - **Script:** `logrotate /etc/logrotate.d/weewx-monitor`
+
+> `copytruncate` allows rotation without restarting the monitor process.
 
 Default thresholds in `weewx_monitor.py`:
 
