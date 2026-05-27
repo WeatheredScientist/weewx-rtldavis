@@ -40,6 +40,7 @@ The Davis ISS uses **frequency hopping spread spectrum (FHSS)** across 51 channe
 - Mount the antenna **vertically** — Davis ISS transmits with vertical polarization
 - Use a **USB extension cable** (1–3m) to move the dongle away from your computer/NAS to reduce RF interference
 - Avoid placing the dongle inside metal enclosures
+- For challenging RF environments (long distances, walls), consider tuning the RTL-SDR gain manually: add `-gain 400` to the `cmd` line in `weewx.conf` under `[Rtldavis]`
 
 ---
 
@@ -54,7 +55,6 @@ Connect the dongle to a USB port. Verify it is detected:
 ```bash
 lsusb | grep -i realtek
 # Should show a line containing: ID 0bda:2838 Realtek Semiconductor Corp.
-# Note: bus and device numbers will vary by system; 0bda:2838 is the common Realtek RTL2832U chip ID
 ```
 
 ### 3. Create directories
@@ -110,8 +110,6 @@ weewx.restx INFO CWOP: Published record ...
 
 ## Upload Rate Reference
 
-Posting too frequently causes HTTP 429 (rate limit) errors. These are the tested safe intervals:
-
 | Service | Recommended | Maximum | Notes |
 |---------|------------|---------|-------|
 | WU Rapidfire | 2.5 sec | 2.5 sec | Every LOOP packet |
@@ -119,12 +117,13 @@ Posting too frequently causes HTTP 429 (rate limit) errors. These are the tested
 | PWSweather | 60 sec | 60 sec | No hard limit documented |
 | CWOP | 300 sec | 300 sec | MADIS samples every 5 min |
 | WOW | 300 sec | 300 sec | 429 error confirmed if < 5 min |
+| WOW-BE | 300 sec | 300 sec | WOW successor |
 | AWEKAS | 300 sec | 300 sec | Account minimum |
 | WeatherCloud | 600 sec | 60 sec* | *60 sec requires paid Pro/Premium plan |
 | Windy | 300 sec | 300 sec | Documented 5 min interval |
 | OWM | 60 sec | 60 sec | Matches finest aggregation bucket |
 
-> ⚠️ **WOW (Met Office) is being decommissioned in late 2026.** Consider WOW-BE as an alternative.
+> ⚠️ **WOW (Met Office) is being decommissioned in late 2026.** Use WOW-BE as the replacement.
 
 ---
 
@@ -153,7 +152,7 @@ Posting too frequently causes HTTP 429 (rate limit) errors. These are the tested
 ```
 
 ### CWOP (free, feeds NOAA/MADIS)
-1. Register at [wxqa.com](http://wxqa.com) to get a CW/DW/GW station number
+1. Register at [wxqa.com](http://wxqa.com)
 2. In `weewx.conf`:
 ```ini
 [[CWOP]]
@@ -165,7 +164,7 @@ Posting too frequently causes HTTP 429 (rate limit) errors. These are the tested
 ```
 
 ### WOW Met Office
-> ⚠️ Being decommissioned late 2026. Consider WOW-BE instead.
+> ⚠️ Being decommissioned late 2026. Use WOW-BE instead.
 1. Register at [wow.metoffice.gov.uk](https://wow.metoffice.gov.uk)
 2. In `weewx.conf`:
 ```ini
@@ -175,6 +174,19 @@ Posting too frequently causes HTTP 429 (rate limit) errors. These are the tested
     password = "YOUR_AWS_PIN"
     post_interval = 300
 ```
+
+### WOW-BE (Belgian Met Office — WOW successor)
+1. Register at [wow.meteo.be](https://wow.meteo.be) — create an account and register your station
+2. You will receive an email with your station ID (short and long UUID) and authentication key
+3. In `weewx.conf`:
+```ini
+[[WOW-BE]]
+    enable = true
+    station = YOUR_STATION_UUID
+    password = "YOUR_AUTH_KEY"
+    post_interval = 300
+```
+> Requires weewx 5.2.0 or higher. The endpoint `https://wow.meteo.be/api/v2/send` is configured automatically.
 
 ### AWEKAS
 1. Register at [awekas.at](https://www.awekas.at)
@@ -224,13 +236,34 @@ Posting too frequently causes HTTP 429 (rate limit) errors. These are the tested
 
 ---
 
-## Synology NAS: USB Watchdog & Email Alerts
+## Synology NAS: USB Watchdog, Email Alerts & Reception Monitoring
 
 The included `weewx_monitor.py` runs on the NAS host (outside Docker) and:
 - Detects rtldavis stalls and automatically resets the USB dongle
 - Sends email alerts when any service has been down beyond its threshold
 - Sends recovery emails when services resume
 - Repeats alerts every 2 hours for ongoing outages
+- Tracks WU Rapidfire RF reception quality — alerts when packet reception drops below threshold
+- Sends a daily email summary of RF reception by hour
+
+### RF Reception Monitoring
+
+The monitor tracks how many WU Rapidfire packets are received per 60-second window (expected: ~24/min for Davis VP2). If reception drops below 60% for 5 consecutive minutes, an alert email is sent. A 5-minute summary is logged, and a full hourly breakdown is emailed daily at midnight.
+
+Default alert thresholds:
+
+| Service | Alert after |
+|---------|------------|
+| Wunderground-RF | 10 min |
+| PWSweather | 60 min |
+| CWOP | 60 min |
+| WOW | 60 min |
+| WOW-BE | 60 min |
+| AWEKAS | 60 min |
+| Windy | 60 min |
+| WeatherCloud | 30 min |
+| OWM | 60 min |
+| RF reception | 5 consecutive minutes below 60% |
 
 ### Security Note
 
@@ -257,21 +290,18 @@ sudo synoacltool -add /volume1/docker/weewx-rtldavis/logs "user:weewx-monitor:al
 ```
 
 3. **Create credentials file** (never commit to git — it is gitignored):
-```bash
-cat > /volume1/docker/weewx-rtldavis/monitor.env << 'EOF'
+```
 ALERT_FROM=your_gmail@gmail.com
 ALERT_TO=your_alert_destination@example.com
 GMAIL_PASS="your_gmail_app_password"
-EOF
 ```
+Save as `/volume1/docker/weewx-rtldavis/monitor.env`
+
 > Gmail app password: [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (requires 2FA enabled)
 
 4. **Update Task Scheduler script** (Control Panel → Task Scheduler → edit `weewx_monitor`, set User to `root`):
 ```bash
-# Add sudoers rule for weewx-monitor (recreated on each boot in case of DSM update)
 echo 'weewx-monitor ALL=(root) NOPASSWD: /volume1/docker/weewx-rtldavis/usb_reset.sh' >> /etc/sudoers
-
-# Start monitor as weewx-monitor user
 set -a
 source /volume1/docker/weewx-rtldavis/monitor.env
 set +a
@@ -287,9 +317,9 @@ The weewx log (`weewx.log`) is rotated automatically by weewx's built-in `TimedR
 
 The monitor log (`weewx_monitor.log`) needs separate rotation. On Synology, use `logrotate` via DSM Task Scheduler:
 
-1. **Create the logrotate config:**
+1. **Create the logrotate config** (run once as root):
 ```bash
-sudo tee /etc/logrotate.d/weewx-monitor << 'EOF'
+tee /etc/logrotate.d/weewx-monitor << 'LREOF'
 /volume1/docker/weewx-rtldavis/logs/weewx_monitor.log {
     daily
     rotate 30
@@ -299,7 +329,7 @@ sudo tee /etc/logrotate.d/weewx-monitor << 'EOF'
     notifempty
     copytruncate
 }
-EOF
+LREOF
 ```
 
 2. **Add to DSM Task Scheduler** (Control Panel → Task Scheduler → Create → Scheduled Task):
@@ -309,20 +339,6 @@ EOF
    - **Script:** `logrotate /etc/logrotate.d/weewx-monitor`
 
 > `copytruncate` allows rotation without restarting the monitor process.
-
-Default thresholds in `weewx_monitor.py`:
-
-| Service | Alert after |
-|---------|------------|
-| Wunderground-RF | 10 min |
-| PWSweather | 60 min |
-| CWOP | 60 min |
-| WOW | 60 min |
-| AWEKAS | 60 min |
-| Windy | 60 min |
-| WeatherCloud | 30 min |
-| OWM | 60 min |
-
 
 ---
 
@@ -361,8 +377,14 @@ sleep 2
 - Check log: `tail -f /your/path/logs/weewx.log`
 - The USB watchdog will auto-reset after 150 seconds of no data
 
+**Low RF reception**
+- Normal packet reception for Davis VP2 is ~24 packets/min at close range
+- At longer distances or through walls, 60–75% reception is common and does not cause data gaps
+- Try tuning RTL-SDR gain manually: add `-gain 400` to the `cmd` line in `[Rtldavis]`
+- Ensure antenna is vertical and not inside a metal enclosure
+
 **HTTP 429 rate limit errors**
-- Add or reduce `post_interval` for the affected service — see rate table above
+- Reduce `post_interval` for the affected service — see rate table above
 - WOW specifically requires `post_interval = 300`
 
 **weewx.conf parse error on startup**
@@ -391,7 +413,7 @@ sleep 2
 | `wcloud.py` | WeatherCloud uploader |
 | `windy.py` | Windy.com uploader |
 | `owm.py` | OpenWeatherMap uploader |
-| `weewx_monitor.py` | NAS-side USB watchdog and service alert monitor |
+| `weewx_monitor.py` | NAS-side USB watchdog, service alert monitor, and RF reception tracker |
 | `usb_reset.sh` | USB dongle reset script — called via sudo by weewx_monitor.py |
 | `monitor.env.example` | Template for monitor email credentials |
 
