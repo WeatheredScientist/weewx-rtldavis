@@ -432,9 +432,39 @@ docker build -t weewx-rtldavis .
 ## Credits
 
 - [weewx](https://weewx.com/) — Tom Keffer and Matthew Wall
-- [weewx-rtldavis driver](https://github.com/weewx-contrib/weewx-rtldavis) — Vince Skahan
-- [rtldavis Go binary](https://github.com/lheijst/rtldavis) — Luc Heijst (fork of bemasher/rtldavis)
-- [librtlsdr](https://github.com/steve-m/librtlsdr) — Steve Markgraf
+- [weewx-rtldavis weewx extension](https://github.com/lheijst/weewx-rtldavis) — Luc Heijst (driver and extension author)
+- [rtldavis](https://github.com/lheijst/rtldavis) — Luc Heijst (RTL-SDR receiver for Davis weather stations)
+- [weewx-rtldavis installer wrapper](https://github.com/weewx-contrib/weewx-rtldavis) — Vince Skahan
+- [gortlsdr](https://github.com/jpoirier/gortlsdr) — Joseph Poirier (Go wrapper for librtlsdr)
+- [librtlsdr](https://github.com/steve-m/librtlsdr) — Steve Markgraf (original author), Kacper Ludwinski (current maintainer)
+
+Upstream component commits used in this image, as identified by Vince Skahan:
+
+```
+* librtlsdr - library to turn Realtek RTL2832 based DVB dongle into a SDR receiver
+  from https://github.com/steve-m/librtlsdr.git
+  commit ae0dd6d4f09088d13500a854091b45ad281ca4f0
+  Author: Kacper Ludwinski <kac...@ludwinski.dev>
+  Date:   Sun Nov 9 21:56:53 2025 +0000
+
+* gortlsdr - 'go' wrapper around librtlsdr
+  from https://github.com/jpoirier/gortlsdr.git
+  commit 075e50ef422cf3ba193d1ba6d79a0efea89491e2
+  Author: Joseph Poirier <jdpo...@gmail.com>
+  Date:   Sat May 19 12:17:06 2018 -0500
+
+* rtldavis - RTL-SDR receiver for Davis weather stations
+  from https://github.com/lheijst/rtldavis
+  commit b95d5d734e4666c90f3d7539d5e2acd9f80f7e43
+  Author: Luc Heijst <ljm.h...@gmail.com>
+  Date:   Fri Jun 5 08:43:42 2020 -0300
+
+* weewx-rtldavis - the weewx extension as of 12/20/2025
+  from https://github.com/lheijst/weewx-rtldavis/archive/master.zip
+  commit 2f3b4b344fd70ab253aabfa837b0ffc76570c075
+  Author: Luc Heijst <ljm.h...@gmail.com>
+  Date:   Sat Jan 2 13:56:04 2021 -0300
+```
 
 ---
 
