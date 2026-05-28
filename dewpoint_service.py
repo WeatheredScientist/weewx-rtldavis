@@ -52,8 +52,8 @@ class DewpointCacher(StdService):
                         "(delta %.1f mph from last %.1f mph)",
                         ws, delta, self.last_wind_speed
                     )
-                    packet['windSpeed'] = self.last_wind_speed
-                    packet['windGust']  = self.last_wind_speed
+                    packet['windSpeed'] = None
+                    packet['windGust']  = None
                     return
                 self.last_wind_speed = ws
             else:
