@@ -58,10 +58,14 @@ class DewpointCacher(StdService):
                 self.last_wind_speed = ws
             else:
                 # Cold-start: accumulate warmup buffer before trusting delta filter
+                # Null windSpeed during warmup — clean gap is better than stuck/wrong data
                 self.wind_warmup.append(ws)
                 if len(self.wind_warmup) >= WIND_WARMUP_PACKETS:
                     self.last_wind_speed = sum(self.wind_warmup) / len(self.wind_warmup)
                     self.wind_warmup = []
+                packet['windSpeed'] = None
+                packet['windGust']  = None
+                packet['windDir']   = None
         elif self.last_wind_speed is not None:
             packet['windSpeed'] = self.last_wind_speed
 
