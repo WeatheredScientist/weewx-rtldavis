@@ -56,7 +56,7 @@ RUN curl -L -o /tmp/src.tgz \
 # Install weewx and configure for rtldavis
 #--------------------------------------------
 RUN python3 -m venv --copies /opt/weewx-venv && \
-    /opt/weewx-venv/bin/pip install -q weewx requests && \
+    /opt/weewx-venv/bin/pip install -q weewx requests weewx-influxdb2 && \
     /opt/weewx-venv/bin/weectl station create /opt/weewx-data --no-prompt && \
     /opt/weewx-venv/bin/weectl extension install /tmp/src/weewx-rtldavis \
         --yes --config=/opt/weewx-data/weewx.conf && \
