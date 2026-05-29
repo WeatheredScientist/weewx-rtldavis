@@ -1,3 +1,7 @@
+#
+# docker-compose.yml for weewx-rtldavis + InfluxDB 2.x + Grafana
+# Branch: feature/influxdb-grafana
+#
 services:
   weewx-rtldavis:
     container_name: weewx-rtldavis
@@ -9,3 +13,50 @@ services:
     volumes:
       - /volume1/docker/weewx-rtldavis/weewx-data:/opt/weewx-data
       - /volume1/docker/weewx-rtldavis/logs:/var/log/weewx
+    networks:
+      - weather-net
+
+  influxdb:
+    container_name: influxdb
+    image: influxdb:2.7
+    restart: unless-stopped
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=changeme
+      - DOCKER_INFLUXDB_INIT_ORG=eaglehunt
+      - DOCKER_INFLUXDB_INIT_BUCKET=weewx
+      - DOCKER_INFLUXDB_INIT_RETENTION=0
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=changeme-token
+    volumes:
+      - /volume1/docker/influxdb/data:/var/lib/influxdb2
+      - /volume1/docker/influxdb/config:/etc/influxdb2
+    ports:
+      - "8086:8086"
+    networks:
+      - weather-net
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana-oss:latest
+    restart: unless-stopped
+    environment:
+      - GF_SERVER_ROOT_URL=https://eaglehuntweather.com
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Public
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=changeme
+    volumes:
+      - /volume1/docker/grafana/data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - influxdb
+    networks:
+      - weather-net
+
+networks:
+  weather-net:
+    driver: bridge
