@@ -1,0 +1,20 @@
+# Grafana datasource provisioning for InfluxDB 2.x
+# Copy this file to influxdb.yaml and fill in your token.
+# influxdb.yaml is gitignored — never commit it.
+
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: eaglehunt
+      defaultBucket: weewx
+      tlsSkipVerify: true
+    secureJsonData:
+      token: YOUR_INFLUXDB_TOKEN       # match DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+    isDefault: true
+    editable: true
