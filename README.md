@@ -2,6 +2,7 @@
 
 A Docker image for running [weewx](https://weewx.com/) with the [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver, enabling a Davis Vantage weather station to upload data to multiple online weather services using an RTL-SDR USB dongle — no proprietary Davis hardware required.
 
+> **Current version:** v2.0.1  
 > **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3  
 > **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.3.1  
 > **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)
