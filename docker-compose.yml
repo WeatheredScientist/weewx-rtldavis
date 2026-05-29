@@ -5,7 +5,7 @@
 services:
   weewx-rtldavis:
     container_name: weewx-rtldavis-v2
-    image: weatheredscientist/weewx-rtldavis:latest
+    image: weatheredscientist/weewx-rtldavis:dev-influxdb
     restart: unless-stopped
     privileged: true
     environment:
