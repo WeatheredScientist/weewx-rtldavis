@@ -1,0 +1,651 @@
+{
+  "title": "Eagle Hunt Weather Station",
+  "uid": "eaglehunt_weather",
+  "description": "Live weather data from Eagle Hunt Weather Station",
+  "tags": ["weewx", "weather", "eaglehunt"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["10s", "30s", "1m", "5m", "15m", "1h"] },
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Temperature",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#1a6bd1", "value": null },
+              { "color": "#f2c94c", "value": 60 },
+              { "color": "#f2994a", "value": 80 },
+              { "color": "#eb5757", "value": 95 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"outTemp_F\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "Feels Like",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#1a6bd1", "value": null },
+              { "color": "#f2c94c", "value": 60 },
+              { "color": "#f2994a", "value": 80 },
+              { "color": "#eb5757", "value": 95 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"heatindex_F\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "Dew Point",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#27ae60", "value": null },
+              { "color": "#f2c94c", "value": 55 },
+              { "color": "#f2994a", "value": 65 },
+              { "color": "#eb5757", "value": 70 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"dewpoint_F\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "Humidity",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "humidity",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#eb5757", "value": null },
+              { "color": "#f2c94c", "value": 30 },
+              { "color": "#27ae60", "value": 40 },
+              { "color": "#1a6bd1", "value": 80 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"outHumidity\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Barometer",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurehg",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"barometer_inHg\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Wind Speed",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitymph",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#f2c94c", "value": 15 },
+              { "color": "#f2994a", "value": 25 },
+              { "color": "#eb5757", "value": 40 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"windSpeed_mph\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 7,
+      "title": "Wind Gust",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 3, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitymph",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#f2c94c", "value": 20 },
+              { "color": "#f2994a", "value": 35 },
+              { "color": "#eb5757", "value": 50 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"windGust_mph\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 8,
+      "title": "Wind Direction",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 3, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "degree",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"windDir\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 9,
+      "title": "Rain Today",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 3, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "lengthin",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#1a6bd1", "value": 0.01 },
+              { "color": "#1560bd", "value": 0.5 },
+              { "color": "#0d3d85", "value": 2 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"dayRain_in\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 10,
+      "title": "Rain Rate",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 3, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "iph",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#1a6bd1", "value": 0.01 },
+              { "color": "#1560bd", "value": 0.3 },
+              { "color": "#0d3d85", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"rainRate_inch_per_hour\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 11,
+      "title": "Solar Radiation",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 3, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "wm2",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#f2c94c", "value": 200 },
+              { "color": "#f2994a", "value": 600 },
+              { "color": "#eb5757", "value": 900 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"radiation_Wpm2\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 12,
+      "title": "Cloud Base",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 3, "w": 4, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "lengthft",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"cloudbase_foot\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 20,
+      "title": "Temperature & Dew Point (24h)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "fahrenheit" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Dew Point" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb" },
+          "query": "from(bucket: \"weewx\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"outTemp_F\")\n  |> aggregateWindow(every: 5m, fn: mean)\n  |> map(fn: (r) => ({r with _field: \"Temperature\"}))",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "influxdb" },
+          "query": "from(bucket: \"weewx\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"dewpoint_F\")\n  |> aggregateWindow(every: 5m, fn: mean)\n  |> map(fn: (r) => ({r with _field: \"Dew Point\"}))",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "title": "Wind Speed & Gust (24h)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "velocitymph" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Gust" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } },
+              { "id": "custom.lineStyle", "value": { "fill": "solid" } }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb" },
+          "query": "from(bucket: \"weewx\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"windSpeed_mph\")\n  |> aggregateWindow(every: 5m, fn: mean)\n  |> map(fn: (r) => ({r with _field: \"Wind Speed\"}))",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "influxdb" },
+          "query": "from(bucket: \"weewx\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"windGust_mph\")\n  |> aggregateWindow(every: 5m, fn: max)\n  |> map(fn: (r) => ({r with _field: \"Gust\"}))",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "title": "Barometer (24h)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "pressurehg", "decimals": 3 }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"barometer_inHg\")\n  |> aggregateWindow(every: 5m, fn: mean)",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 23,
+      "title": "Rain (24h)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "lengthin", "decimals": 2 },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Rain Rate" },
+            "properties": [
+              { "id": "unit", "value": "iph" },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "light-blue" } },
+              { "id": "custom.axisPlacement", "value": "right" }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb" },
+          "query": "from(bucket: \"weewx\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"dayRain_in\")\n  |> aggregateWindow(every: 5m, fn: last)\n  |> map(fn: (r) => ({r with _field: \"Day Total\"}))",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "influxdb" },
+          "query": "from(bucket: \"weewx\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"rainRate_inch_per_hour\")\n  |> aggregateWindow(every: 5m, fn: max)\n  |> map(fn: (r) => ({r with _field: \"Rain Rate\"}))",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "title": "Solar Radiation (24h)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 22, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "wm2",
+          "decimals": 0,
+          "custom": { "fillOpacity": 20 }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"radiation_Wpm2\")\n  |> aggregateWindow(every: 5m, fn: mean)",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 25,
+      "title": "Humidity (24h)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 22, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "humidity",
+          "decimals": 0,
+          "min": 0,
+          "max": 100
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"outHumidity\")\n  |> aggregateWindow(every: 5m, fn: mean)",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 30,
+      "title": "Station Health",
+      "type": "row",
+      "gridPos": { "x": 0, "y": 30, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 31,
+      "title": "Battery Status",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 31, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "OK", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "LOW", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"txBatteryStatus\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 32,
+      "title": "Supply Voltage",
+      "type": "gauge",
+      "gridPos": { "x": 6, "y": 31, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "minVizWidth": 0,
+        "minVizHeight": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "volt",
+          "decimals": 2,
+          "min": 2,
+          "max": 3.5,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 2.4 },
+              { "color": "green", "value": 2.6 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"supplyVoltage_volt\")\n  |> last()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 33,
+      "title": "Solar / Reference Voltage",
+      "type": "gauge",
+      "gridPos": { "x": 12, "y": 31, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "volt",
+          "decimals": 2,
+          "min": 0,
+          "max": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 2 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "influxdb" },
+        "query": "from(bucket: \"weewx\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"record\")\n  |> filter(fn: (r) => r._field == \"referenceVoltage_volt\")\n  |> last()",
+        "refId": "A"
+      }]
+    }
+  ]
+}
