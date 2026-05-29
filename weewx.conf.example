@@ -142,6 +142,18 @@
         key = YOUR_DEVICE_KEY
         post_interval = 600             # 10 minutes — Basic/Plus plan limit
 
+
+    [[InfluxDB]]
+        # InfluxDB 2.x local instance
+        # Install plugin inside container: pip install weewx-influxdb2
+        # Recommended: 60 sec. Matches archive_interval.
+        enable = true
+        host = influxdb
+        port = 8086
+        token = changeme-token          # match DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+        org = eaglehunt
+        bucket = weewx
+        post_interval = 60             # matches archive_interval
 [StdCalibrate]
     [[Corrections]]
         # Wind direction offset — required if your anemometer vane is not aligned to true north
