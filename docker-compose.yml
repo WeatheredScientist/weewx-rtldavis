@@ -50,6 +50,8 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=changeme
     volumes:
       - /volume1/docker/grafana/data:/var/lib/grafana
+      - /volume1/docker/grafana/provisioning:/etc/grafana/provisioning
+      - /volume1/docker/grafana/dashboards:/var/lib/grafana/dashboards
     ports:
       - "3000:3000"
     depends_on:

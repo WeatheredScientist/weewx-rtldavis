@@ -1,0 +1,15 @@
+# Grafana dashboard provisioning config
+# Grafana will auto-load any .json files found in the path below.
+
+apiVersion: 1
+
+providers:
+  - name: eaglehunt
+    orgId: 1
+    folder: EagleHunt Weather
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 60
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
