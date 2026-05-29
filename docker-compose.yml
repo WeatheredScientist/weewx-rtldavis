@@ -4,10 +4,12 @@
 #
 services:
   weewx-rtldavis:
-    container_name: weewx-rtldavis
+    container_name: weewx-rtldavis-v2
     image: weatheredscientist/weewx-rtldavis:latest
     restart: unless-stopped
     privileged: true
+    environment:
+      - TZ=America/New_York
     devices:
       - /dev/bus/usb:/dev/bus/usb
     volumes:
