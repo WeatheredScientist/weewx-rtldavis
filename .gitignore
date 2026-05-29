@@ -2,3 +2,27 @@ monitor.env
 *.pid
 *.pyc
 __pycache__/
+
+# Credentials and local config
+weewx.conf
+*.env
+
+# Database
+*.sdb
+*.db
+
+# Personal utilities
+wxcheck.py
+wxcheck.sh
+
+# Backup files
+*.tar.gz
+*.bak
+weewx.conf.*
+
+# Grafana provisioning secrets
+grafana/provisioning/datasources/*.yaml
+
+# OS
+.DS_Store
+Thumbs.db
