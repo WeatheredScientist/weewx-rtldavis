@@ -11,6 +11,7 @@ PIDFILE  = '/volume1/docker/weewx-rtldavis/logs/weewx_monitor.pid'
 POLL     = 30
 RESET_CD = 300
 REPEAT   = 7200
+STATION_NAME = os.environ.get('STATION_NAME', 'My PWS')  # Set in monitor.env or edit here
 
 GMAIL_USER = os.environ.get('ALERT_FROM', '')
 GMAIL_PASS = os.environ.get('GMAIL_PASS', '')
@@ -96,10 +97,10 @@ def do_reset():
             except:
                 vendor = 'unknown'
             log(f"RESET: done, idVendor={vendor}")
-            send_email("Eagle Hunt PWS: RTL-SDR reset", f"Dongle reset at {datetime.now()}. Vendor: {vendor}")
+            send_email(f"{STATION_NAME}: RTL-SDR reset", f"Dongle reset at {datetime.now()}. Vendor: {vendor}")
         else:
             log(f"RESET error: {result.stderr}")
-            send_email("Eagle Hunt PWS: RTL-SDR reset FAILED", f"usb_reset.sh failed: {result.stderr}")
+            send_email(f"{STATION_NAME}: RTL-SDR reset FAILED", f"usb_reset.sh failed: {result.stderr}")
     except Exception as e:
         log(f"RESET error: {e}")
 
@@ -117,7 +118,7 @@ def reset_dongle(last_reset):
 def format_daily_summary(hourly_buckets, date_str):
     """Format 24-hour reception summary as a text table."""
     lines = [
-        f"Eagle Hunt PWS — RF Reception Summary for {date_str}",
+        f"{STATION_NAME} — RF Reception Summary for {date_str}",
         f"Expected: {WU_RF_EXPECTED} posts/min  |  Alert threshold: {WU_RF_MIN_PCT}%",
         "",
         f"{'Hour':<8} {'Posts/min':>10} {'Reception':>10} {'Status':>8}",
@@ -162,7 +163,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
                 avg = (sum(wu_period_counts) / len(wu_period_counts) / WU_RF_EXPECTED) * 100
                 log(f"RECEPTION RECOVERY: {avg:.0f}% avg after {td//60}min")
                 send_email(
-                    "Eagle Hunt PWS: RF reception RECOVERED",
+                    f"{STATION_NAME}: RF reception RECOVERED",
                     f"WU-RF reception recovered after {td//60}min.\n"
                     f"Current window: {wu_window_count}/{WU_RF_EXPECTED} ({pct:.0f}%)\n"
                     f"Recovered at: {datetime.now()}"
@@ -176,7 +177,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             avg = (sum(wu_period_counts[-WU_RF_SUSTAIN:]) / (WU_RF_SUSTAIN * WU_RF_EXPECTED)) * 100
             log(f"RECEPTION ALERT: {wu_bad_windows} consecutive windows below {WU_RF_MIN_PCT}%, avg {avg:.0f}%")
             send_email(
-                "Eagle Hunt PWS: RF reception LOW",
+                f"{STATION_NAME}: RF reception LOW",
                 f"WU-RF reception below {WU_RF_MIN_PCT}% for {wu_bad_windows} consecutive minutes.\n"
                 f"Average over last {wu_bad_windows} windows: {avg:.0f}%\n"
                 f"Alert time: {datetime.now()}"
@@ -187,7 +188,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             td = int(now - wu_alert_sent_at)
             log(f"RECEPTION REPEAT: still low {avg:.0f}% after {td//60}min")
             send_email(
-                "Eagle Hunt PWS: RF reception STILL LOW",
+                f"{STATION_NAME}: RF reception STILL LOW",
                 f"WU-RF reception still below {WU_RF_MIN_PCT}% — ongoing for {td//60}min.\n"
                 f"Average over last {wu_bad_windows} windows: {avg:.0f}%\n"
                 f"As of: {datetime.now()}"
@@ -219,7 +220,7 @@ def main():
     wu_current_date   = datetime.now().date()
 
     log("Monitor started")
-    send_email("Eagle Hunt PWS: monitor started", f"Started at {datetime.now()}")
+    send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
 
     last_line = get_linecount()
     log(f"Starting at log line {last_line}")
@@ -256,7 +257,7 @@ def main():
                             td = int(time.time() - alert_sent[svc])
                             in_outage[svc] = False
                             log(f"RECOVERY: {svc} after {td//60}min")
-                            send_email(f"Eagle Hunt PWS: {svc} RECOVERED",
+                            send_email(f"{STATION_NAME}: {svc} RECOVERED",
                                        f"{svc} recovered after {td//60}min at {datetime.now()}")
                         last_seen[svc] = time.time()
                 if 'Wunderground-RF' in line and 'Published' in line:
@@ -292,7 +293,7 @@ def main():
             if wu_hourly_buckets:
                 summary = format_daily_summary(wu_hourly_buckets, str(wu_current_date))
                 log(f"DAILY SUMMARY: sending for {wu_current_date}")
-                send_email(f"Eagle Hunt PWS: Daily RF Reception — {wu_current_date}", summary)
+                send_email(f"{STATION_NAME}: Daily RF Reception — {wu_current_date}", summary)
             wu_hourly_buckets = {}
             wu_current_date   = today
 
@@ -306,20 +307,20 @@ def main():
                     in_outage[svc] = True
                     alert_sent[svc] = last_repeat[svc] = now
                     log(f"ALERT: {svc} down {int(age//60)}min")
-                    send_email(f"Eagle Hunt PWS: {svc} DOWN",
+                    send_email(f"{STATION_NAME}: {svc} DOWN",
                                f"{svc} not posted for {int(age//60)}min (threshold {thr//60}min)\n"
                                f"Last seen: {datetime.fromtimestamp(last_seen[svc])}")
                 elif now - last_repeat[svc] > REPEAT:
                     last_repeat[svc] = now
                     td = int(now - alert_sent[svc])
                     log(f"REPEAT: {svc} still down {td//60}min")
-                    send_email(f"Eagle Hunt PWS: {svc} STILL DOWN",
+                    send_email(f"{STATION_NAME}: {svc} STILL DOWN",
                                f"{svc} down {td//60}min\nLast seen: {datetime.fromtimestamp(last_seen[svc])}")
             elif in_outage[svc]:
                 td = int(now - alert_sent[svc])
                 in_outage[svc] = False
                 log(f"RECOVERY: {svc} after {td//60}min")
-                send_email(f"Eagle Hunt PWS: {svc} RECOVERED",
+                send_email(f"{STATION_NAME}: {svc} RECOVERED",
                            f"{svc} recovered after {td//60}min at {datetime.now()}")
 
 if __name__ == '__main__':

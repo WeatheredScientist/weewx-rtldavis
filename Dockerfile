@@ -1,17 +1,20 @@
 #--------------------------------------------
-# weewx-rtldavis v2
+# weewx-rtldavis v2.0.1
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
 # Credits:
-#   weewx: Tom Keffer and Matthew Wall (weewx.com)
-#   weewx-rtldavis driver: Vince Skahan (github.com/weewx-contrib/weewx-rtldavis)
-#   rtldavis Go binary: Luc Heijst (github.com/lheijst/rtldavis)
-#   librtlsdr: Steve Markgraf (github.com/steve-m/librtlsdr)
-#   Multistage build approach: Vince Skahan
+# weewx: Tom Keffer and Matthew Wall (weewx.com)
+# weewx-rtldavis weewx extension: Luc Heijst (github.com/lheijst/weewx-rtldavis)
+# weewx-rtldavis installer wrapper: Vince Skahan (github.com/weewx-contrib/weewx-rtldavis)
+# rtldavis Go binary: Luc Heijst (github.com/lheijst/rtldavis)
+# gortlsdr Go wrapper: Joseph Poirier (github.com/jpoirier/gortlsdr)
+# librtlsdr: Steve Markgraf (original), Kacper Ludwinski (current maintainer)
+#   (github.com/steve-m/librtlsdr)
 #--------------------------------------------
 
 FROM ubuntu:26.04 AS base
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 #--------------------------------------------
@@ -40,14 +43,14 @@ RUN mkdir -p /etc/modprobe.d && \
 # librtlsdr is bundled in src.tgz — no git clone needed
 #--------------------------------------------
 RUN curl -L -o /tmp/src.tgz \
-        https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz && \
+    https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz && \
     cd /tmp && tar zxf src.tgz && \
     cd /tmp/src/librtlsdr && \
-        mkdir build && cd build && \
-        cmake ../ -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON -DENABLE_ZEROCOPY=OFF && \
-        make -j2 && make install && ldconfig && \
+    mkdir build && cd build && \
+    cmake ../ -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON -DENABLE_ZEROCOPY=OFF && \
+    make -j2 && make install && ldconfig && \
     cd /tmp/src/rtldavis/src/lheijst/rtldavis && \
-        GOBIN=/usr/local/bin go install -buildvcs=false -v .
+    GOBIN=/usr/local/bin go install -buildvcs=false -v .
 
 #--------------------------------------------
 # Install weewx and configure for rtldavis
@@ -80,9 +83,9 @@ RUN cat /tmp/logging.additions >> /opt/weewx-data/weewx.conf && \
 #--------------------------------------------
 COPY dewpoint_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/dewpoint_service.py
 COPY pressure_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/pressure_service.py
-COPY owm.py              /opt/weewx-venv/lib/python3.14/site-packages/user/owm.py
-COPY windy.py            /opt/weewx-venv/lib/python3.14/site-packages/user/windy.py
-COPY wcloud.py           /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
+COPY owm.py /opt/weewx-venv/lib/python3.14/site-packages/user/owm.py
+COPY windy.py /opt/weewx-venv/lib/python3.14/site-packages/user/windy.py
+COPY wcloud.py /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
 
 RUN touch /opt/weewx-venv/lib/python3.14/site-packages/user/__init__.py && \
     touch /opt/weewx-venv/lib/python3.14/site-packages/user/extensions.py && \
@@ -96,13 +99,14 @@ RUN chmod +x /entrypoint.sh
 # Only copies what's needed to run weewx
 #--------------------------------------------
 FROM ubuntu:26.04 AS minimal
+
 ENV DEBIAN_FRONTEND=noninteractive
 
-COPY --from=base /opt/weewx-venv  /opt/weewx-venv
-COPY --from=base /opt/weewx-data  /opt/weewx-data
-COPY --from=base /usr/local       /usr/local
-COPY --from=base /entrypoint.sh   /entrypoint.sh
-COPY --from=base /etc/modprobe.d  /etc/modprobe.d
+COPY --from=base /opt/weewx-venv /opt/weewx-venv
+COPY --from=base /opt/weewx-data /opt/weewx-data
+COPY --from=base /usr/local /usr/local
+COPY --from=base /entrypoint.sh /entrypoint.sh
+COPY --from=base /etc/modprobe.d /etc/modprobe.d
 
 RUN apt-get update && apt-get install -y \
     libusb-1.0-0 \

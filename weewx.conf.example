@@ -39,6 +39,8 @@
 [Rtldavis]
     # -gain = tuner gain in tenths of dB; 0 = auto gain (default)
     # Example: -gain 400 sets 40.0 dB — tune for your environment
+    # Gain tuning: add -gain NNN (tenths of dB) for manual tuning; 0 = auto (default)
+    # Example: -gain 400 sets 40.0 dB — tune for your environment and distance to ISS
     cmd = /usr/local/bin/rtldavis
 
     # Radio frequency: US (915 MHz), EU (868.3 MHz), NZ (921 MHz)
@@ -139,6 +141,13 @@
         id = YOUR_DEVICE_ID
         key = YOUR_DEVICE_KEY
         post_interval = 600             # 10 minutes — Basic/Plus plan limit
+
+[StdCalibrate]
+    [[Corrections]]
+        # Wind direction offset — required if your anemometer vane is not aligned to true north
+        # Set to match your Davis console wind direction calibration value
+        # Example: if console is set to 345, use:
+        # windDir = (windDir + 345) % 360
 
 [StdReport]
     # HTML report generation is disabled — not needed for REST-only operation.
