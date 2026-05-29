@@ -56,10 +56,11 @@ RUN curl -L -o /tmp/src.tgz \
 # Install weewx and configure for rtldavis
 #--------------------------------------------
 RUN python3 -m venv --copies /opt/weewx-venv && \
-    /opt/weewx-venv/bin/pip install -q weewx requests weewx-influxdb2 && \
+    /opt/weewx-venv/bin/pip install -q weewx requests && \
     /opt/weewx-venv/bin/weectl station create /opt/weewx-data --no-prompt && \
     /opt/weewx-venv/bin/weectl extension install /tmp/src/weewx-rtldavis \
         --yes --config=/opt/weewx-data/weewx.conf && \
+    /opt/weewx-venv/bin/weectl extension install https://github.com/david-lutz/weewx-influx2/archive/master.zip --yes --config=/opt/weewx-data/weewx.conf && \
     /opt/weewx-venv/bin/weectl station reconfigure \
         --driver=user.rtldavis --no-prompt --config=/opt/weewx-data/weewx.conf && \
     sed -i 's/frequency = EU/frequency = US/' /opt/weewx-data/weewx.conf && \
@@ -86,6 +87,7 @@ COPY pressure_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/press
 COPY owm.py /opt/weewx-venv/lib/python3.14/site-packages/user/owm.py
 COPY windy.py /opt/weewx-venv/lib/python3.14/site-packages/user/windy.py
 COPY wcloud.py /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
+COPY bin/user/influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py
 
 RUN touch /opt/weewx-venv/lib/python3.14/site-packages/user/__init__.py && \
     touch /opt/weewx-venv/lib/python3.14/site-packages/user/extensions.py && \
