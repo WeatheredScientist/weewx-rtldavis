@@ -37,8 +37,6 @@
     station_type = Rtldavis
 
 [Rtldavis]
-    # -gain = tuner gain in tenths of dB; 0 = auto gain (default)
-    # Example: -gain 400 sets 40.0 dB — tune for your environment
     # Gain tuning: add -gain NNN (tenths of dB) for manual tuning; 0 = auto (default)
     # Example: -gain 400 sets 40.0 dB — tune for your environment and distance to ISS
     cmd = /usr/local/bin/rtldavis
@@ -56,6 +54,8 @@
     debug = 0
 
 [StdRESTful]
+    restful_services = weewx.restx.StdStationRegistry, weewx.restx.StdWunderground, weewx.restx.StdPWSweather, weewx.restx.StdCWOP, weewx.restx.StdWOW, weewx.restx.StdWOWBE, weewx.restx.StdAWEKAS, user.wcloud.WeatherCloud, user.windy.Windy, user.owm.OWM, user.influx.Influx, user.ogoxeUploader.OgoxeUploader
+
     [[StationRegistry]]
         register_this_station = false
 
@@ -141,6 +141,15 @@
         id = YOUR_DEVICE_ID
         key = YOUR_DEVICE_KEY
         post_interval = 600             # 10 minutes — Basic/Plus plan limit
+
+    [[OgoxeUploader]]
+        # Ogoxe Weather Platform (ogoxe.com)
+        # Register at: https://ogoxe.com
+        # Uses Weather Underground formatted data (without RapidFire protocol).
+        # Recommended: 60 sec.
+        enable = false
+        station = YOUR_STATION_ID
+        password = YOUR_PASSWORD
 
 [StdCalibrate]
     [[Corrections]]
