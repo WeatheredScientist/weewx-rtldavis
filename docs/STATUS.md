@@ -10,29 +10,32 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-_Last updated: 2026-07-04 (S17 — docs bootstrap on `dev`)_
+_Last updated: 2026-07-04 (S18 — rain fix built + tested on `feature/rain-spike-filter`)_
 
 ---
 
 ## Active thread
 
-> **▶ Resume here.** S17 in progress: nine-file governance authored on `dev`. Next up in S17:
-> add pre-commit + CI (ruff/mypy + secret-scan), then review + commit on `dev` (pause for approval),
-> then decide whether to push `dev` and merge to `main`.
->
-> After S17 lands, the natural clean session boundary is **before the P1 rain fix** — a fresh session
-> will then auto-load this CLAUDE.md the proper way.
+> **▶ Resume here.** S18: the false-rain fix is **built, tested (13/13 offline), and documented** on
+> `feature/rain-spike-filter` (off `dev`) — NOT yet committed, deployed, or merged. Root cause
+> confirmed (DEC-0021). Next actions, in order:
+> 1. Commit the feature branch (fix + tests + example + docs).
+> 2. **Reversible live hot-swap deploy** in a dry, low-traffic window — backup + checksum →
+>    in-container import pre-flight check → swap + clear pyc → `docker kill`+`start` → verify data
+>    flows within 60s → instant rollback if not. Plus the live `weewx.conf [StdQC]` edits
+>    (`rain 0,10→0,1.0`, add `rainRate 0,16`) with a config backup.
+> 3. Verify across pre-dawn windows vs the WeatherLink Live console (calendar-bound — ~1 glitch/2–3 wk).
+> 4. Merge to `dev`, then promote to `main` + tag **v2.0.3**, folding in the pending dewpoint rewrite.
 
 ## Open threads (not yet shipped)
 
-- **`dev` branch is local-only** — created off `prod-baseline-20260704` in S16, never pushed. Decide
-  at end of S17 whether to publish it.
-- **Rain fix (P1)** not started. Blocker: agree a dev-WeeWX test strategy (no drop-in dev receiver) —
-  Simulator-backed container for logic + reversible live hot-swap for RF checks — *before* touching
-  prod. Targets confirmed: `[StdQC] rain = 0, 10, inch` (weewx.conf) + spike filter in the
-  volume-mounted `rtldavis.py`. Release target v2.0.3.
+- **Rain fix** built, not deployed/merged (see Active thread). `dev` is published; the feature
+  branch and `main` are not touched yet.
+- **S19 — sensor-QC hardening (DEC-0022):** the stale-substitution DEC-0006 violation in
+  `dewpoint_service.py` (temp/humidity/radiation/UV — real 6263 sensors get stuck if they fail) +
+  minor windGust/radiation/UV StdQC bounds. Ties into the pending dewpoint rewrite. Do after v2.0.3.
 - **Pending v2.0.3 dewpoint rewrite** — the honest-null Jun-16 host version is written but undeployed
-  (dewpoint is baked → needs a rebuild). Fold into the v2.0.3 release, not before.
+  (dewpoint is baked → needs a rebuild). Fold into the v2.0.3 release; may also address DEC-0022 #1.
 - **Gain 372, interim** (DEC-0017) — awaiting a 24 h averaged no-preamp sweep to settle vs 207.
 - **rw250 vs rw350** (ARCHITECTURE §6) — running binary likely rw250, committed Dockerfile patches
   rw350; needs a rebuild + receiveWindow sweep to reconcile.

@@ -34,6 +34,16 @@ The proving run. Feature branch off `dev`. Defense in depth (DEC-0006 null-on-re
 Simulator-backed dev container for logic (2) + reversible live hot-swap for RF-dependent (3)/(4)
 before touching prod (DEC-0011). Bug timing is calendar-bound (pre-dawn) — verification spans days.
 
+**S18 status:** driver fix + StdQC backstop built and unit-tested on `feature/rain-spike-filter`;
+pending deploy + v2.0.3 release (see STATUS). Confirmed root cause = DEC-0021.
+
+## P1.5 — Sensor-QC hardening (S19, DEC-0022) — after v2.0.3
+- [ ] Fix the stale-substitution DEC-0006 violation in `dewpoint_service.py`: null
+      temp/humidity/radiation/UV after a sensor-failure timeout instead of holding the last value
+      forever — while still caching across the VP2+'s normal sparse-packet field rotation. Likely
+      folds into the pending dewpoint rewrite.
+- [ ] Add minor `[StdQC]` bounds: high-side `windGust`, `radiation`, `UV`.
+
 ## P2 — RF optimization, done honestly
 - [ ] 24 h+ **averaged gain sweep, no inline preamp**, to settle gain 372-vs-207 (DEC-0017). ~1–2 wk.
 - [ ] 24 h **receiveWindow sweep** to settle rw250-vs-rw350 and reconcile image tag ↔ Dockerfile.

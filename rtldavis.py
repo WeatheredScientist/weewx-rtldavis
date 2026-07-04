@@ -149,6 +149,68 @@ DEBUG_PARSE = 0
 DEBUG_RTLD = 0
 MPH_TO_MPS = 1609.34 / 3600.0 # meter/mile * hour/second
 
+# --- Rain-counter glitch filter (S18 false-rain fix, DEC-0021) ---
+# The Davis rain counter is 7-bit (0..127) and wraps at 128. A genuine 127->0
+# wraparound is a large negative delta (near -128); a *small* negative delta is
+# a single-bit RF-decode glitch, not a wraparound. The original driver treated
+# ANY negative delta as a wraparound and added 128, which turned a glitch into
+# phantom rain (the false-rain bug). MAX_PLAUSIBLE_TIPS additionally caps
+# implausibly large positive deltas (a high bit flipping on directly).
+# Physical basis: the world 1-minute rainfall record is ~1.23 in (123 tips at
+# 0.01 in/tip) and this is a temperate-climate station, nowhere near tropical --
+# 60 tips (0.60 in) between two received packets is generous headroom that still
+# catches the characteristic 64/128 glitches. Rejected deltas yield None
+# (null-on-rejection, DEC-0006) rather than phantom rain.
+MAX_PLAUSIBLE_TIPS = 60
+RAIN_WRAPAROUND_THRESHOLD = -100
+
+def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
+    """Rain tips between two Davis 7-bit rain-counter readings (0..127, wraps at 128).
+
+    WHY THIS FILTER EXISTS (the false-rain bug it fixes):
+    ------------------------------------------------------
+    This RTL-SDR link runs near the RF noise floor (~150 ft through walls,
+    ~67-70% reception). CRC is enforced, so simple single-bit errors are
+    dropped -- but a multi-bit corruption or a mis-decoded packet can still
+    pass CRC and deliver a wrong rain-counter byte, characteristically with a
+    high bit (64 or 128) wrong. The ORIGINAL driver treated *any* negative
+    counter delta as a 127->0 wraparound and unconditionally added 128 to
+    recover the true count. That is correct for a genuine wraparound, but a
+    corrupted reading can produce a SMALL negative delta (e.g. -64) -- and
+    adding 128 to it manufactured phantom rain. Two confirmed events on this
+    station:
+        * 2026-05-25 23:22  counter glitch -> +128 tips -> a phantom 1.28"
+          (which exceeds the WORLD 1-minute rainfall record of ~1.23")
+        * 2026-07-04 03:04  logged "rain_count=-64" -> -64 + 128 = +64 tips
+          -> a phantom 0.64", bracketed by zeros; no rain actually fell
+          (verified against a co-located Davis WeatherLink Live console).
+    Both were pure software artifacts, not weather.
+
+    HOW IT DISTINGUISHES GLITCH FROM RAIN:
+        * A GENUINE wraparound is a LARGE negative delta (near -128; every real
+          one observed here was exactly -127). Only those get the +128 fix.
+        * A small negative delta is a decode glitch -> rejected (None).
+        * A delta above max_tips is a high-bit glitch flipping on directly
+          (the +128 case) -> rejected (None). max_tips (60 = 0.60") is far
+          above any rain physically possible between two received packets here,
+          yet safely below the characteristic 64/128 glitch magnitudes.
+    Rejected deltas return None (weewx treats it as missing, not zero) -- an
+    honest gap is always preferable to fabricated rain. A backstop [StdQC] rain
+    cap in weewx.conf catches anything that slips past this.
+
+    Pure function (no I/O) so it is unit-testable against the recorded glitch
+    signatures -- see tests/test_rain_filter.py. Full write-up: docs/DECISIONS.md
+    DEC-0021 and CHANGELOG.md.
+    """
+    if last_count is None:
+        return 0
+    delta = new_count - last_count
+    if delta < RAIN_WRAPAROUND_THRESHOLD:   # genuine 127->0 wraparound (real ones = -127)
+        delta += 128
+    if delta < 0 or delta > max_tips:       # small-negative glitch, or implausible spike
+        return None
+    return delta
+
 def loader(config_dict, engine):
     return RtldavisDriver(engine, config_dict)
 
@@ -861,22 +923,21 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         for k in self.sensor_map:
             if self.sensor_map[k] in data:
                 packet[k] = data[self.sensor_map[k]]
-        # convert the rain count to a rain delta measure
+        # convert the rain count to a rain delta measure (glitch-filtered, DEC-0021)
         if 'rain_count' in data:
-            if self.last_rain_count is not None:
-                rain_count = data['rain_count'] - self.last_rain_count
+            prev = self.last_rain_count
+            tips = rain_delta_tips(prev, data['rain_count'])
+            self.last_rain_count = data['rain_count']   # always resync, even on reject
+            if tips is None:
+                logerr("rain: rejecting implausible counter delta last=%s new=%s "
+                       "(RF glitch, not rain -- DEC-0021)" %
+                       (prev, data['rain_count']))
+                packet['rain'] = None                   # null-on-rejection, DEC-0006
             else:
-                rain_count = 0
-            # handle rain counter wrap around from 127 to 0
-            if rain_count < 0:
-                loginf("rain counter wraparound detected rain_count=%s" %
-                       rain_count)
-                rain_count += 128
-            self.last_rain_count = data['rain_count']
-            packet['rain'] = float(rain_count) * self.rain_per_tip
+                packet['rain'] = float(tips) * self.rain_per_tip
             if DEBUG_RAIN:
-                logdbg("rain=%s rain_count=%s last_rain_count=%s" %
-                       (packet['rain'], rain_count, self.last_rain_count))
+                logdbg("rain=%s tips=%s last=%s new=%s" %
+                       (packet.get('rain'), tips, prev, data['rain_count']))
         packet['dateTime'] = int(time.time() + 0.5)
         packet['usUnits'] = weewx.METRICWX
         return packet
