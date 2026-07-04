@@ -218,3 +218,46 @@ evaluation.
 *Rationale / open thread:* neither value is settled without a proper test. A 24 h+ averaged gain
 sweep (no inline preamp) is needed to pick the real optimum — it takes a 1–2 week window to run
 honestly (BACKLOG, ROADMAP). Until then, 372 is the interim production value, not a final decision.
+
+## DEC-0021 — Rain-counter glitch filter (the false-rain fix)
+
+**Status:** Accepted · **Date:** 2026-07-04 (S18) · **Release:** v2.0.3
+
+Reject implausible rain-counter deltas in the driver instead of accumulating phantom rain. Root
+cause (confirmed S18 from code + archive + logs): the Davis rain counter is 7-bit (0–127, wraps at
+128), and the original driver treated **any** negative delta as a 127→0 wraparound and added 128 —
+turning an RF-decode glitch into phantom rain. Two confirmed events: 2026-05-25 (+128 → 1.28",
+exceeds the world 1-min record) and 2026-07-04 (−64 → +64 → 0.64", verified false against the
+WeatherLink Live console). Defense in depth:
+1. **Driver** (`rtldavis.py`, `rain_delta_tips`): only deltas near −128 are treated as wraparounds
+   (real ones observed were exactly −127); small-negative and >`MAX_PLAUSIBLE_TIPS` (60 tips =
+   0.60") deltas are rejected → `packet['rain'] = None` (null-on-rejection, DEC-0006). Pure,
+   unit-tested (`tests/test_rain_filter.py`).
+2. **Backstop** (`weewx.conf [StdQC]`): `rain 0,10 → 0,1.0 inch`; add `rainRate 0,16 inch_per_hour`.
+
+*Rationale:* honest null > fabricated rain (DEC-0006). The cap thresholds are physically grounded
+(world 1-min rainfall record ~1.23"; local worst ~1.8"/hr sustained) with generous leeway, so they
+catch the characteristic 64/128 glitches without ever clipping real Chester-County rain. CRC is
+enforced, so these are multi-bit/mis-decode glitches that pass CRC — the filter is defensive against
+the *class* of implausible value, not a specific bit. The rainRate bound is minor insurance: the
+driver fix already closes the main rainRate-pollution path (StdRainRater computing from phantom rain).
+
+## DEC-0022 — Sensor-QC hardening deferred to S19 (OPEN)
+
+**Status:** Deferred · **Date:** 2026-07-04 (S18)
+
+Two similar-vein issues found during the S18 rain audit, deferred to a dedicated S19 pass so the
+rain fix stays tightly scoped:
+1. **Stale-substitution (DEC-0006 violation):** `dewpoint_service.py` (lines ~90–97) substitutes the
+   **last known** outTemp/outHumidity/radiation/UV when a field is missing, instead of nulling —
+   the same anti-pattern fixed for wind. If a real sensor fails, its reading sticks indefinitely.
+   Fix needs care: some caching is legitimate (the VP2+ rotates fields across LOOP packets, so
+   "absent this packet" ≠ "sensor failed") and the substitution partly feeds the dewpoint/heatindex
+   calc — so the fix is "cache for sparse-packet gaps, null after a sensor-failure timeout," and it
+   likely folds into the pending v2.0.3 dewpoint rewrite.
+2. **Minor StdQC gaps:** high-side `windGust` glitch (that still exceeds a valid windSpeed slips past
+   `_filter_wind`), and no `radiation`/`UV` bounds. Low severity (transient, non-accumulating).
+
+*Rationale:* these share the rain bug's theme (RF glitch → bad sensor data) but have real design
+nuance and behavioral risk; bundling them into the rain deploy would widen the blast radius. See
+ROADMAP P1.5 / STATUS.

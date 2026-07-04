@@ -6,6 +6,28 @@ under [Pre-S16].
 
 ---
 
+## [S18] — 2026-07-04 — False-rain fix (on `feature/rain-spike-filter`, off `dev`)
+
+Confirm-first diagnosis then fix for the phantom-rain bug. Not yet deployed (pending a dry-window
+live hot-swap) or merged. Target release v2.0.3.
+
+- **Diagnosis (read-only):** root cause confirmed from code + archive DB + driver logs — the driver
+  treated *any* negative rain-counter delta as a 127→0 wraparound and added 128, converting an
+  RF-decode glitch into phantom rain. Two events found in 63k archive records: 2026-05-25 (1.28",
+  exceeds the world 1-min rainfall record) and 2026-07-04 (0.64"×2, `rain_count=-64` in the log),
+  both flat-zero-bracketed and false vs the WeatherLink Live console. Corrected two prior
+  assumptions: the counter is 7-bit (not 8-bit), and the recent event was −64→+64 (not a single +128).
+- **Fix (`rtldavis.py`):** extracted the pure `rain_delta_tips()` helper (DEC-0021) — only near-−128
+  deltas are wraparounds; small-negative and >60-tip (0.60") deltas → `None` (null-on-rejection,
+  DEC-0006). Self-documenting docstring explains the bug for future readers.
+- **Tests (`tests/test_rain_filter.py`):** 13 offline cases against the exact recorded signatures
+  (both glitches reject; real −127 wraparounds and normal rain pass); stubs weewx so it runs with no
+  install, wired for CI.
+- **Backstop (`weewx.conf.example [StdQC]`):** `rain 0,10 → 0,1.0`; added `rainRate 0,16` — the
+  live-config edit happens at deploy time.
+- **Audit found (deferred to S19, DEC-0022):** `dewpoint_service.py` still substitutes stale
+  temp/humidity/radiation/UV (DEC-0006 violation); minor windGust/radiation/UV StdQC gaps.
+
 ## [S17] — 2026-07-04 — Documentation governance bootstrap (on `dev`)
 
 - Authored the nine-file governance package modeled on `eaglehunt-weather-dashboard` (DEC-0010):
