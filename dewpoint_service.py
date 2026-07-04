@@ -63,6 +63,7 @@ class DewpointCacher(StdService):
                 if len(self.wind_warmup) >= WIND_WARMUP_PACKETS:
                     self.last_wind_speed = sum(self.wind_warmup) / len(self.wind_warmup)
                     self.wind_warmup = []
+                    return  # warmup complete, let this packet through
                 packet['windSpeed'] = None
                 packet['windGust']  = None
                 packet['windDir']   = None

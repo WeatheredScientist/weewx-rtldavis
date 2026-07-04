@@ -1,4 +1,61 @@
+# --- Secrets (NEVER commit — public repo) ---
+weewx.conf
+*.env
+!*.env.example
 monitor.env
-*.pid
-*.pyc
+proxy.env
+*.token
+*.pem
+*.key
+
+# --- Runtime data / databases ---
+*.sdb
+*.sdb-*
+*.db
+weewx-data/
+archive/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Backups / one-off dumps ---
+*.bak
+*.bak_*
+*_backup_*
+*-backup-*
+*.tar.gz
+*.zip
+weewx.conf.2*
+weewx.conf.pre-*
+weewx.conf.before-*
+
+# --- Sweep/test result data (scripts are versioned; their output is not) ---
+*_results.csv
+*.csv
+
+# --- Python ---
 __pycache__/
+*.pyc
+*.pid
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# --- Dashboard artifacts (belong to eaglehunt-weather-dashboard, not here) ---
+patch_*.py
+patch*.py
+eaglehunt-dashboard-*.json
+dashboard_*.json
+grafana/
+
+# --- Vendored external deps (pip-managed, not source of this repo) ---
+sortedcontainers/
+loopdata.py
+
+# --- OS / Synology cruft ---
+.DS_Store
+@eaDir/
+#recycle/
+node_modules/

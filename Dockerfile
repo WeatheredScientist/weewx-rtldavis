@@ -1,5 +1,5 @@
 #--------------------------------------------
-# weewx-rtldavis v2.0.1
+# weewx-rtldavis v2.0.2
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     make \
     python3-pip \
     python3-venv \
+    rtl-sdr \
     && rm -rf /var/lib/apt/lists/*
 
 #--------------------------------------------
@@ -50,6 +51,9 @@ RUN curl -L -o /tmp/src.tgz \
     cmake ../ -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON -DENABLE_ZEROCOPY=OFF && \
     make -j2 && make install && ldconfig && \
     cd /tmp/src/rtldavis/src/lheijst/rtldavis && \
+    echo "Before receiveWindow patch:" && grep -R "receiveWindow" . && \
+    sed -i 's/receiveWindow = 300/receiveWindow = 350/' main.go && \
+    echo "After receiveWindow patch:" && grep -R "receiveWindow" . && \
     GOBIN=/usr/local/bin go install -buildvcs=false -v .
 
 #--------------------------------------------
@@ -60,6 +64,7 @@ RUN python3 -m venv --copies /opt/weewx-venv && \
     /opt/weewx-venv/bin/weectl station create /opt/weewx-data --no-prompt && \
     /opt/weewx-venv/bin/weectl extension install /tmp/src/weewx-rtldavis \
         --yes --config=/opt/weewx-data/weewx.conf && \
+    /opt/weewx-venv/bin/weectl extension install https://github.com/david-lutz/weewx-influx2/archive/master.zip --yes --config=/opt/weewx-data/weewx.conf && \
     /opt/weewx-venv/bin/weectl station reconfigure \
         --driver=user.rtldavis --no-prompt --config=/opt/weewx-data/weewx.conf && \
     sed -i 's/frequency = EU/frequency = US/' /opt/weewx-data/weewx.conf && \
@@ -86,6 +91,12 @@ COPY pressure_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/press
 COPY owm.py /opt/weewx-venv/lib/python3.14/site-packages/user/owm.py
 COPY windy.py /opt/weewx-venv/lib/python3.14/site-packages/user/windy.py
 COPY wcloud.py /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
+COPY influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py
+
+#--------------------------------------------
+# Copy patched rtldavis.py (windDir fix — v2.0.2)
+#--------------------------------------------
+COPY rtldavis.py /opt/weewx-venv/lib/python3.14/site-packages/user/rtldavis.py
 
 RUN touch /opt/weewx-venv/lib/python3.14/site-packages/user/__init__.py && \
     touch /opt/weewx-venv/lib/python3.14/site-packages/user/extensions.py && \
@@ -112,6 +123,7 @@ RUN apt-get update && apt-get install -y \
     libusb-1.0-0 \
     python3 \
     python3-venv \
+    rtl-sdr \
     && apt-get clean autoclean \
     && apt-get autoremove --yes \
     && rm -rf /var/lib/{apt,dpkg,cache,log} \

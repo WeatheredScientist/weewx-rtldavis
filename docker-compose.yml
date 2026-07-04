@@ -1,12 +1,25 @@
 #
 # docker-compose.yml for weewx-rtldavis
 #
+# Driver-only compose. This defines ONLY the WeeWX + RTL-SDR receiver container.
+# Downstream consumers (InfluxDB, a dashboard proxy, other data sinks) are
+# intentionally NOT defined here — this repo's contract is the data it produces
+# (the loop-JSON file + the InfluxDB line-protocol schema), not a specific
+# consumer. Point the uploaders in weewx.conf at whatever backend you run.
+#
 # Usage:
+#   cp weewx.conf.example weewx-data/weewx.conf   # then fill in your secrets
 #   docker compose up -d
 #
 # Volumes:
-#   weewx-data  — weewx.conf, database, skins
-#   logs        — weewx log files (also used by weewx_monitor.py on Synology)
+#   weewx-data  — weewx.conf, database, skins  (bind-mounted so config/gain
+#                 edits need only a container restart, not an image rebuild)
+#   logs        — weewx log files (also read by weewx_monitor.py on Synology)
+#
+# Volume-mounted Python extensions (hot-swappable — edit + clear pyc + restart,
+# no rebuild). Everything else lives baked in the image. After editing any of
+# these on a running system, clear the venv pyc cache:
+#   find /opt/weewx-venv -name '*.pyc' -path '*/user/*' -delete
 #
 # NOTE: If switching from another weewx-rtldavis container version,
 # reset the USB dongle first to ensure clean device handoff:
@@ -25,9 +38,23 @@ services:
     devices:
       - '/dev/bus/usb:/dev/bus/usb'
     volumes:
-      # Synology NAS paths — adjust for your system
-      - /volume1/docker/weewx-rtldavis/weewx-data:/opt/weewx-data
-      - /volume1/docker/weewx-rtldavis/logs:/var/log/weewx
-      # Non-NAS alternative paths:
-      # - /your/path/weewx-data:/opt/weewx-data
-      # - /your/path/logs:/var/log/weewx
+      # --- Adjust the host side of each path for your system. ---
+      # Core data + logs
+      - /your/path/weewx-rtldavis/weewx-data:/opt/weewx-data
+      - /your/path/weewx-rtldavis/logs:/var/log/weewx
+      # Hot-swappable extensions (see note above). Mounting these lets you
+      # iterate on the driver/uploaders without rebuilding the image.
+      - /your/path/weewx-rtldavis/weewx-data/bin/user/rtldavis.py:/opt/weewx-venv/lib/python3.14/site-packages/user/rtldavis.py:ro
+      - /your/path/weewx-rtldavis/influx.py:/opt/weewx-venv/lib/python3.14/site-packages/user/influx.py:ro
+      - /your/path/weewx-rtldavis/loop_json_writer.py:/opt/weewx-venv/lib/python3.14/site-packages/user/loop_json_writer.py:ro
+      - /your/path/weewx-rtldavis/weewx-data/bin/user/ogoxeUploader.py:/opt/weewx-venv/lib/python3.14/site-packages/user/ogoxeUploader.py:ro
+    networks:
+      - weather-net
+
+# InfluxDB uploader (user.influx.Influx) expects a reachable InfluxDB 2.x.
+# It is NOT defined here — run it wherever you like and set [[Influx]]
+# server_url/token in weewx.conf. If you co-locate it on this Docker network,
+# give it container_name/hostname 'influxdb' and it resolves over weather-net.
+networks:
+  weather-net:
+    driver: bridge

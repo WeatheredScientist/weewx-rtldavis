@@ -77,3 +77,5 @@ class DavisPressureFetcher(StdService):
                 packet['barometer'] = self.last_pressure
             if packet.get('pressure') is None:
                 packet['pressure'] = self.last_pressure
+            if packet.get('altimeter') is None:
+                packet['altimeter'] = self.last_pressure
