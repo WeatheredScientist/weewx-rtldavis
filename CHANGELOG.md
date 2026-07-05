@@ -6,6 +6,47 @@ under [Pre-S16].
 
 ---
 
+## [S25] — 2026-07-05 — Finish the S24 review fixes (on `feature/s24-code-quality-review`)
+
+Completed the S24 review's deferred tail. **Branch-only, not deployed;** the driver changes still ride
+the next rebuild + hot-swap. No-Rewrite honored — every change is surgical. Full offline suite green
+(34/34: the prior 29 + 5 new `owm` tests).
+
+- **U1/U2 (`owm.py` rebase)** — the uploader overrode `RESTThread.run_loop` with a hand-rolled
+  `queue.get`/`urlopen` loop, silently discarding every resilience knob it was constructed with
+  (`post_interval`/`max_backlog`/`stale`/`max_tries`/`retry_wait`/`skip_upload`) — a transient network
+  failure dropped the record with no retry. Re-based on the standard hooks: kept `format_url`, moved the
+  JSON body to `get_post_body(record) → (body, 'application/json')` (the same contract `influx.py`
+  uses), deleted `run_loop`/broken `post_request`/`import time`/unused `urllib.request`. RESTThread now
+  owns retry/backoff. New `tests/test_owm_post_body.py` (5 tests: kwargs forwarded, hooks not
+  overridden, body shape + km/h→m/s conversion, None-field omission, appid URL).
+- **U4 (`influx.py` TLS)** — `post_request` unconditionally used `ssl._create_unverified_context()` for
+  any `https://` endpoint (silent MITM exposure). Added a `verify_ssl` option (**default `True`** =
+  verifying context; explicit opt-out restores unverified for self-signed/internal endpoints), wired
+  through the service `__init__` + `InfluxThread`, documented in the docstring. Moot for the current
+  local `http://` Influx; drop-in.
+- **M4 (dead code)** — deleted `_fmt` (py2-only `ord()`) and `parse_readings` from `rtldavis.py`; both
+  had zero callers repo-wide.
+- **L6 (driver nits)** — fixed the per-transmitter debug guard to test the list *element*
+  (`stats['pct_good'][i] is not None`) instead of the always-truthy list; hoisted `_stderr_sample_count`
+  init out of the hot read loop into `__init__`; annotated the unreachable `elif lines:` branch. **L5:**
+  documented the `@staticmethod`-that-takes-`self` convention at `parse_raw` rather than restructuring.
+- **Nit sweep** — `weewx_monitor.py`: narrowed three bare `except:` → `except OSError:`, and made the
+  three hardcoded `/volume1/...` paths env-overridable (`WEEWX_RTLDAVIS_DIR`/`MONITOR_LOG`/
+  `MONITOR_PIDFILE`/`WEEWX_LOG`) for parity with the env-sourced credentials. `windy.py`: replaced the
+  `__import__('queue')` wart with a normal `import queue`. `influx.py __main__`: `os.environ[...]` →
+  `.get(...)` so `--version`/`--help` no longer `KeyError`, and fixed the `InluxDfB` typos.
+  `ogoxeUploader.py`: reconciled the contradictory `server_url` comments and logged the real
+  hardcoded URL instead of `None`.
+- **SPDX** — added per-file `SPDX-License-Identifier: GPL-3.0-or-later` headers to the driver + all
+  reviewed satellites (`rtldavis`, `weewx_monitor`, `owm`, `windy`, `influx`, `ogoxeUploader`, `wcloud`,
+  `loop_json_writer`).
+- **Deferred (still, → S26):** **M-A** (monitor incremental read) and its coupled **L-B** (double-read
+  race) — both wait for the DEC-0024 Layer A monitor deploy so they don't step on the queued
+  `weewx_monitor.py`. The S24 driver fixes (H1/H2/M3) + these still need the rebuild/hot-swap.
+- Verified: `py_compile` clean on all 8 touched modules; offline suite **34/34 green**; secret-scan
+  passes on every changed file.
+
 ## [S24] — 2026-07-05 — Code-quality review + first fixes (on `feature/s24-code-quality-review`, stacked on S23)
 
 Reviewed the driver and its satellites, then fixed the two real bugs plus the log-bloat source. **Fixes

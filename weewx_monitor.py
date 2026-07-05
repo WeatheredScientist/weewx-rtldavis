@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """weewx monitor: USB watchdog + service downtime alerting + reception tracking"""
 
 import time, smtplib, os, sys, re
@@ -6,8 +7,11 @@ from email.mime.text import MIMEText
 from datetime import datetime
 
 # --- Config ---
-LOG      = '/volume1/docker/weewx-rtldavis/logs/weewx_monitor.log'
-PIDFILE  = '/volume1/docker/weewx-rtldavis/logs/weewx_monitor.pid'
+# Paths default to the NAS layout but are env-overridable for parity with the
+# credentials, which already come from env (S24 L-D).
+BASE_DIR = os.environ.get('WEEWX_RTLDAVIS_DIR', '/volume1/docker/weewx-rtldavis')
+LOG      = os.environ.get('MONITOR_LOG', f'{BASE_DIR}/logs/weewx_monitor.log')
+PIDFILE  = os.environ.get('MONITOR_PIDFILE', f'{BASE_DIR}/logs/weewx_monitor.pid')
 POLL     = 30
 RESET_CD = 300
 REPEAT   = 7200
@@ -75,13 +79,13 @@ def send_email(subject, body):
     except Exception as e:
         log(f"EMAIL error: {e}")
 
-WEEWX_LOG_PATH = '/volume1/docker/weewx-rtldavis/logs/weewx.log'
+WEEWX_LOG_PATH = os.environ.get('WEEWX_LOG', f'{BASE_DIR}/logs/weewx.log')
 
 def get_linecount():
     try:
         with open(WEEWX_LOG_PATH) as f:
             return sum(1 for _ in f)
-    except:
+    except OSError:
         return 0
 
 def get_new_lines(from_line):
@@ -89,7 +93,7 @@ def get_new_lines(from_line):
         with open(WEEWX_LOG_PATH) as f:
             lines = f.readlines()
         return [l.rstrip() for l in lines[from_line-1:]]
-    except:
+    except OSError:
         return []
 
 # --- Rain-counter glitch alert (DEC-0021) ---
@@ -145,7 +149,7 @@ def do_reset():
         if result.returncode == 0:
             try:
                 vendor = open('/sys/bus/usb/devices/1-3/idVendor').read().strip()
-            except:
+            except OSError:
                 vendor = 'unknown'
             log(f"RESET: done, idVendor={vendor}")
             send_email(f"{STATION_NAME}: RTL-SDR reset", f"Dongle reset at {datetime.now()}. Vendor: {vendor}")

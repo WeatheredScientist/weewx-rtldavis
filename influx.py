@@ -1,5 +1,6 @@
 # Copyright 2016-2020 Matthew Wall
 # Distributed under the terms of the GNU Public License (GPLv3)
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 """
 Influx is a platform for collecting, storing, and managing time-series data.
@@ -290,6 +291,10 @@ class Influx(weewx.restx.StdRESTbase):
         add_binding_tag: Whether or not to include the binding (archive
         or loop) as a tag for each data point.
         Default is True
+
+        verify_ssl: verify the server's TLS certificate when server_url is
+        https. Set to False only for self-signed / internal endpoints.
+        Default is True
         """
         super(Influx, self).__init__(engine, cfg_dict)
         loginf("service version is %s" % VERSION)
@@ -311,10 +316,12 @@ class Influx(weewx.restx.StdRESTbase):
         site_dict.setdefault('augment_record', True)
         site_dict.setdefault('measurement', 'record')
         site_dict.setdefault('add_binding_tag', True)
+        site_dict.setdefault('verify_ssl', True)
 
         site_dict['append_units_label'] = to_bool(
             site_dict.get('append_units_label'))
         site_dict['augment_record'] = to_bool(site_dict.get('augment_record'))
+        site_dict['verify_ssl'] = to_bool(site_dict.get('verify_ssl'))
 
         usn = site_dict.get('unit_system', None)
         if usn in weewx.units.unit_constants:
@@ -385,6 +392,7 @@ class InfluxThread(weewx.restx.RESTThread):
                  unit_system=None, augment_record=True,
                  inputs=dict(), obs_to_upload='most', append_units_label=True,
                  add_binding_tag=True,
+                 verify_ssl=True,
                  skip_upload=False,
                  manager_dict=None,
                  post_interval=None, max_backlog=MAX_SIZE, stale=None,
@@ -417,6 +425,7 @@ class InfluxThread(weewx.restx.RESTThread):
         self.templates = dict()
         self.line_format = line_format
         self.add_binding_tag = to_bool(add_binding_tag)
+        self.verify_ssl = to_bool(verify_ssl)
 
     def get_record(self, record, dbm):
         # We allow the superclass to add stuff to the record only if the user
@@ -467,11 +476,17 @@ class InfluxThread(weewx.restx.RESTThread):
         super(InfluxThread, self).handle_exception(e, count)
 
     def post_request(self, request, payload=None):
-        # FIXME: provide full set of ssl options instead of this hack
+        # S24 U4: default to a verifying TLS context so an https endpoint isn't
+        # silently exposed to MITM. verify_ssl=False restores the old
+        # unverified behaviour for self-signed / internal endpoints on purpose.
         if self.server_url.startswith('https'):
             import ssl
+            if self.verify_ssl:
+                context = ssl.create_default_context()
+            else:
+                context = ssl._create_unverified_context()
             return urlopen(request, data=payload, timeout=self.timeout,
-                           context=ssl._create_unverified_context())
+                           context=context)
         else:
             return super(InfluxThread, self).post_request(request, payload)
 
@@ -564,17 +579,17 @@ if __name__ == "__main__":
     parser = optparse.OptionParser(usage=usage)
     parser.add_option('--version', action='store_true',
                       help='Display weewx-influx version')
-    parser.add_option('--server-url', default=os.environ['INFLUX_HOST'],
+    parser.add_option('--server-url', default=os.environ.get('INFLUX_HOST'),
                       help="URL for the InfluxDB server. Default is $INFLUX_HOST",
                       metavar="SERVER-URL")
-    parser.add_option('--org', default=os.environ['INFLUX_ORG'],
+    parser.add_option('--org', default=os.environ.get('INFLUX_ORG'),
                       help="InfluxDB Organization. Default is $INFLUX_ORG",
                       metavar="ORG_NAME")
-    parser.add_option('--token', default=os.environ['INFLUX_TOKEN'],
-                      help="InluxDfB Authorization Token. Default is $INFLUX_TOKEN",
+    parser.add_option('--token', default=os.environ.get('INFLUX_TOKEN'),
+                      help="InfluxDB Authorization Token. Default is $INFLUX_TOKEN",
                       metavar="TOKEN")
     parser.add_option('--bucket', default="WeeWXTest",
-                      help="InluxDfB Bucket, default is 'WeeWXTest'",
+                      help="InfluxDB Bucket, default is 'WeeWXTest'",
                       metavar="BUCKET")
     parser.add_option('--measurement', default='record',
                       help="InfluxDB measurement name. Default is 'record'",

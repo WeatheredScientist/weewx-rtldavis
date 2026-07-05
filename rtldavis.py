@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # coding: latin-1
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # This driver is a merge of modified versions of both
 # the weewx-sdr driver and the weewx_meteostick driver.
@@ -224,11 +225,6 @@ def dbg_parse(verbosity, msg):
 def dbg_rtld(verbosity, msg):
     if DEBUG_RTLD >= verbosity:
         logdbg(msg)
-
-def _fmt(data):
-    if not data:
-        return ''
-    return ' '.join(['%02x' % ord(x) for x in data])
 
 # default temperature for soil moisture and leaf wetness sensors that
 # do not have a temperature sensor.
@@ -884,6 +880,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self.cmd = self.cmd + " -tf " + str(self.frequency) + " -tr " + str(self.transmitters)
 
         self._last_pkt = None # avoid duplicate sequential packets
+        self._stderr_sample_count = 0  # bounded startup RAW sample (S24 L6)
         self._mgr = ProcManager()
         self._mgr.startup(self.cmd, self.path, self.ld_library_path)
 
@@ -1017,7 +1014,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     (total_max_count, total_count, total_missed, self.stats['pct_good_all']))
             # log the stats for each active transmitter and no-init-counters
             for i in range(0, 4):
-                if self.stats['curr_cnt'][i] > 0 and self.stats['count'][i] > 0 and self.stats['pct_good'] is not None:
+                if self.stats['curr_cnt'][i] > 0 and self.stats['count'][i] > 0 and self.stats['pct_good'][i] is not None:
                     x = self.stats['activeTrIds'][i]
                     logdbg("ARCHIVE_STATS: station %d: max_count= %4d count=%4d missed=%4d pct_good=%6.2f" % 
                         (i+1, self.stats['max_count'][i], self.stats['count'][i], self.stats['missed'][i], self.stats['pct_good'][i]))
@@ -1072,8 +1069,6 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # program main.go writes its data to stderr
             for lines in self._mgr.get_stderr():
                 for _line in lines:
-                    if not hasattr(self, "_stderr_sample_count"):
-                        self._stderr_sample_count = 0
                     if self._stderr_sample_count < 20:
                         # bounded startup sample; debug_rtld=2 (S24 M3)
                         dbg_rtld(2, "RAW_RTL_STDERR_SAMPLE: %s" % _line.strip())
@@ -1097,21 +1092,18 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                             if packet:
                                 dbg_parse(3, "ignoring duplicate packet %s" % packet)
                     elif lines:
+                        # NOTE (S24 L6): effectively unreachable -- PacketFactory
+                        # .create() drains `lines` to empty before this loop ends,
+                        # so `lines` is falsy here. Kept as a defensive log.
                         loginf("missed (unparsed): %s" % lines)
         else:
             logerr("err: %s" % self._mgr.get_stderr())
             raise weewx.WeeWxIOError("rtldavis process is not running")
 
-    def parse_readings(self, pkt):
-        data = dict()
-        if not pkt:
-            return data
-        try:
-            data = self.parse_raw(self, pkt)
-        except ValueError as e:
-            logerr("parse failed for '%s': %s" % (pkt, e))
-        return data
-
+    # NOTE (S24 L5): parse_raw, parse_text, and ch_to_xmit are declared
+    # @staticmethod yet take `self` explicitly and are called X.parse_raw(self,
+    # pkt). The driver instance is passed by hand -- misleading but intentional;
+    # documented here rather than restructured (No-Rewrite, DEC-0014).
     @staticmethod
     def parse_raw(self, pkt):
         data = dict()
