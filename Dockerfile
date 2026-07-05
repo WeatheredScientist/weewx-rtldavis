@@ -92,13 +92,19 @@ COPY wcloud.py /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
 COPY influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py
 
 #--------------------------------------------
-# Copy patched rtldavis.py (windDir fix — v2.0.2)
+# Copy the patched rtldavis.py — the driver weewx actually imports (user.* resolves
+# to venv site-packages/user). Carries: windDir fix (v2.0.2), rain spike filter,
+# and the S24 H1/H2/M3 fixes (H2 revives rxCheckPercent). v2.0.3.
 #--------------------------------------------
 COPY rtldavis.py /opt/weewx-venv/lib/python3.14/site-packages/user/rtldavis.py
 
+# NOTE: do NOT copy /opt/weewx-data/bin/user/rtldavis.py over the venv copy here.
+# That path holds the STOCK driver from `weectl extension install` (upstream
+# src.tgz) and would clobber the patched rtldavis.py COPY'd above — which is the
+# file weewx actually imports (user.* resolves to the venv site-packages/user).
+# The old `cp` silently shipped the stock driver (no rain filter, no H1/H2/M3).
 RUN touch /opt/weewx-venv/lib/python3.14/site-packages/user/__init__.py && \
-    touch /opt/weewx-venv/lib/python3.14/site-packages/user/extensions.py && \
-    cp /opt/weewx-data/bin/user/rtldavis.py /opt/weewx-venv/lib/python3.14/site-packages/user/rtldavis.py
+    touch /opt/weewx-venv/lib/python3.14/site-packages/user/extensions.py
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
