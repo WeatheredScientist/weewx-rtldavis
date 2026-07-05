@@ -102,16 +102,21 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
   Fixed on the PR #10 branch (`WU_RF_EXPECTED` 24→21, env-overridable, `wu_pct()` capped at 100, +9
   tests). Deploys with the M-A/L-B monitor change. This is the *interim* honest number; the *real* metric
   is the driver's `rxCheckPercent` (next thread).
-- **`rxCheckPercent` dead since 2026-06-18 — INVESTIGATION OPEN (S29).** The driver's own honest
-  reception metric (received ÷ max_count, using the correct per-transmitter period) populated the archive
-  from 2026-05-26 to **2026-06-18 (avg 67.5%)**, then went **NULL for 17 days** (0 non-null in the last 7
-  days). The S24 "H2" story (a guard that "could never pass") does **not** fit 22,502 populated rows, so
-  the real cause is something that changed on/around June 18 — most likely the `curr_cnt` data-packet
-  parse (the driver reads per-transmitter counts off the Go process's data line; if that line's format
-  changed with the rw250/rw350 binary, `curr_cnt` stays 0 → `total_max_count=0` → `pct_good_all=None` →
-  `rxCheckPercent` NULL). **Next:** diff what the live Go binary emits vs what `parse_text`/`curr_cnt%d`
-  expects; reconcile with the rw250-vs-rw350 question (ARCHITECTURE §6). Reviving this + the S24 H2 fix is
-  the path to a *trustworthy* live RF number (then point the monitor at it instead of counting log lines).
+- **`rxCheckPercent` dead since 2026-06-18 — ROOT CAUSE FOUND (S29); fix already on `dev`.** The
+  driver's honest reception metric populated the archive 2026-05-26 → **2026-06-18 18:42 UTC (avg
+  67.5%)**, then went NULL. **Cause:** at `2026-06-18 14:44 EDT` the weewx engine reloaded the driver
+  (`Main loop exiting … Loading station type Rtldavis`), and the reloaded code carries the **S24 "H2"
+  `pct_good_all` deadlock** — live `rtldavis.py:1006` reads `if total_max_count > 0 and
+  self.stats['pct_good_all'] is not None:`, but `pct_good_all` is reset to `None` every period (`:966`),
+  so the guard **can never pass** → `pct_good_all` stays None → `rxCheckPercent` never set (`:1023`) →
+  NULL forever. (Not the `curr_cnt` parse — sensor data still flows, so the DATA `PATTERN` still matches;
+  no signal/restart anomaly at the transition, records kept coming every 60s.) **Fix already on `dev`:**
+  `rtldavis.py:1011` is `if total_max_count > 0:` (the `and … is not None` removed), regression-tested in
+  `tests/test_reception_stats.py`. **Ships when the v2.0.3 image is rebuilt** (driver is baked; needs the
+  same rebuild as H1/M3 + the dewpoint rewrite). On ship, live-confirm `rxCheckPercent` repopulates and
+  then point the monitor at it instead of scraping WU-publish lines. *Bonus finding:* a pre-June-18
+  `user.reception_service` (`ReceptionMonitor: received N/24`) was a 2nd honest-ish signal; it's since
+  been removed (0 lines today, not in `weewx.conf`) and also used the wrong /24 denominator.
 - **ERR-0001 local honest-null — OWNER-GATED prod step (S29, DEC-0025).** The July 4 phantom +1.28" is in
   the archive (two 0.64" records at 07:04 + 07:05 UTC). Correcting it is a prod DB write (blocked by the
   read-only NAS boundary), so it's an owner step: **(1)** back up `weewx.sdb`; **(2)** `UPDATE archive SET
@@ -161,8 +166,10 @@ MADIS); established **DEC-0025** (preserve-and-flag) + **`docs/DATA_ERRATA.md`**
    "Poll: N new lines" keeps flowing. (b) **Apply ERR-0001 honest-null** — back up `weewx.sdb`; `UPDATE
    archive SET rain=NULL WHERE dateTime IN (1783148640, 1783148700)`; `weectl database rebuild-daily
    --date=2026-07-04`; verify Jul-4 total drops 1.28"; mark ERR-0001 ✅. InfluxDB null is cross-repo.
-1. **`rxCheckPercent` revival investigation** (Open threads) — the path to a *trustworthy* live RF metric;
-   diff the live Go binary's data line vs `curr_cnt%d` parsing; reconcile rw250/rw350. Pairs with S24 H2.
+1. **Revive `rxCheckPercent`** — root cause found (S29): the S24 "H2" `pct_good_all` deadlock, deployed
+   at the 2026-06-18 driver reload; **fix already on `dev`** (`rtldavis.py:1011`). No more investigation
+   needed — just ship it in the v2.0.3 image rebuild, then live-confirm it repopulates and point the
+   monitor at it instead of scraping WU-publish lines. (Open threads has the full evidence.)
 2. **Merge PR #10 to `dev`** (secret-scan green, lint red-on-purpose; now also carries the reception fix).
 3. **Watch for the first real rain glitch** (0 to date, re-checked S29). Confirms the S18 fix + alert
    together (log "rejecting implausible counter delta" + clean archive + the email to `ALERT_TO`).
