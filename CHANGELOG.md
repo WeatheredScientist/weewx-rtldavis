@@ -27,6 +27,14 @@ live hot-swap) or merged. Target release v2.0.3.
   live-config edit happens at deploy time.
 - **Audit found (deferred to S19, DEC-0022):** `dewpoint_service.py` still substitutes stale
   temp/humidity/radiation/UV (DEC-0006 violation); minor windGust/radiation/UV StdQC gaps.
+- **Email alert (`weewx_monitor.py`):** watch the weewx log for the driver's rejection line and
+  email on each caught glitch (reusing the monitor's existing Gmail + log-tail; the driver stays
+  pure I/O-free). Reports the counter values and the false rainfall the old code would have
+  recorded. `--test-alert` sends a sample email for verification. Detection unit-tested
+  (`tests/test_rain_glitch_alert.py`, 6 cases — no false positives on real wraparounds/uploads).
+  DEPLOYED (rain driver + StdQC) to the live container 2026-07-04 via reversible hot-swap with an
+  in-container import pre-flight; verified healthy. Monitor file staged; alert activates on the next
+  monitor restart.
 
 ## [S17] — 2026-07-04 — Documentation governance bootstrap (on `dev`)
 
