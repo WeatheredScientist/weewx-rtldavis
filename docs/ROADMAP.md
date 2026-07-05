@@ -3,8 +3,8 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see STATUS.md (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-07-05 (S23 — governance-alignment audit; ROADMAP restructured to the shared
-P0–P4 / short-med-long vocabulary and folded to post-S22 reality. See CHANGELOG `[S23]`, ASSESSMENT.md.)
+**Last updated:** 2026-07-05 (S24 — added **P0.6** code-quality review + fixes (H1/H2/M3/U3 done, rest
+→ S25); marked the P0.5 review follow-on done. See CHANGELOG `[S24]`, docs/CODE_REVIEW_S24.md.)
 
 STATUS.md holds what's *in motion right now*; this holds the ordered plan. BACKLOG.md holds
 unordered ideas not yet scheduled.
@@ -54,13 +54,34 @@ isolated (ASSESSMENT.md §2). Docs-only; zero prod risk.
       doc-map slot #2; `CLAUDE.md` numbering rule updated (S23).
 - [ ] Archive/fold the pre-governance root `cleanup_backlog.md` into BACKLOG; give `logging.additions`
       + the bare `additions` artifact a documented home or remove them (S23).
-- [ ] **Follow-ons (own sessions):** Keep-a-Changelog headings + DECISIONS entry-skeleton convergence
-      (S25); thorough code-quality review of rtldavis.py + monitor + uploaders (S24); per-file SPDX
-      `GPL-3.0-or-later` headers (fold into the S24 review).
+- [x] **Code-quality review of rtldavis.py + monitor + uploaders** — done S24; promoted to its own
+      workstream (see **P0.6** below). Per-file SPDX headers folded into P0.6.
+- [ ] **Follow-on (own session):** Keep-a-Changelog headings + DECISIONS entry-skeleton convergence (S25).
 - Two remaining P0 housekeeping stragglers, tracked here: fix remote URL casing (lowercase →
   canonical `WeatheredScientist/`); review + clean the stale public `origin/feature/influxdb-grafana`
   branch (cherry-pick the driver-relevant `3f5470f` wind-warmup fix, move dashboard JSON out per
   DEC-0010, delete the branch from the remote).
+
+## P0.6 — Code-quality review + fixes (S24) — IN PROGRESS
+Outcome of the P0.5 review follow-on. Ranked findings in `docs/CODE_REVIEW_S24.md`; fixes on
+`feature/s24-code-quality-review` (draft **PR #5**, stacked on the S23 branch). No-Rewrite honored;
+each fix ships with a proven regression test (offline suite 29/29).
+- [x] Full read + ranked findings across `rtldavis.py`, `weewx_monitor.py`, and all uploaders +
+      `loop_json_writer.py` (`docs/CODE_REVIEW_S24.md`, PR #5) — S24.
+- [x] **H1** — `parse_raw` unknown-channel `raw`→`pkt` NameError crash; fix + test (`0929952`).
+- [x] **H2** — `pct_good_all` deadlock that left the driver's own `rxCheckPercent` permanently null;
+      fix + test (`970c47e`). **Live-confirm rxCheckPercent starts populating on deploy.**
+- [x] **M3 + U3** — gate the per-packet `RAW_*` (driver) / per-record `loginf` (influx) INFO logging
+      out of `weewx.log` — the bloat (`8872947`).
+- [ ] **U1/U2** — re-base `owm.py` on the standard RESTThread overrides (regains retry/backoff),
+      modelled on `windy.py`; delete its dead `format_url`/`post_request`/`import time` (S25).
+- [ ] **U4** — restore TLS verification in `influx.py` with an opt-out flag (S25).
+- [ ] **M-A** — `weewx_monitor.py` incremental (byte-offset) log read — **after** the Layer A deploy
+      (P1.5), since both edit the monitor and Layer A is tested + queued (S25).
+- [ ] **M4 + nits + SPDX** — delete dead `_fmt` / `parse_readings`; L5/L6/L-B/L-C/L-D/U5 cleanups;
+      per-file SPDX `GPL-3.0-or-later` headers (S25).
+- **Deploy note:** H1/H2/M3 are branch-only — they need a rebuild + hot-swap; fold into the next
+  driver deploy (the P1 v2.0.3 / dewpoint rebuild cycle).
 
 ## P1 — The false-rain fix → v2.0.3 (the proving run) — IN PROGRESS
 First real change through the governed workflow. Defense in depth (DEC-0006 null-on-rejection):
@@ -101,7 +122,8 @@ bound and done via reversible live hot-swap with an instant rollback path.
 - [ ] Rebuild image from clean source; confirm the running binary's receiveWindow (ARCHITECTURE §6).
 - [ ] Investigate rebuilding `rtldavis` from newer Go source to emit `FreqError`/`ChannelIdx`
       telemetry, enabling data-driven `-ppm`/`-fc` tuning (BACKLOG RF history). Also the DEC-0024
-      Layer B path (driver stops publishing dataless freqError packets; fixes `weewx.log` bloat).
+      Layer B path: driver stops publishing dataless freqError packets. (The INFO-logging half of the
+      `weewx.log` bloat was already fixed in S24 — see P0.6 M3.)
 
 ## P3 — Modularity toward multi-source (PRINCIPLES §1)
 - [ ] Harden INTERFACES.md as the stable contract; document it well enough for a non-Davis WeeWX or
