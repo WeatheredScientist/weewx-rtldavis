@@ -56,14 +56,14 @@ dewpoint rebuild. Prior: S26 — secret-gate audit + the two draft PRs.)_
 
 ## Open threads (not yet shipped)
 
-- **Reception metric ~150% — Layer A merged to `dev` (via #5, S27), PENDING DEPLOY.** Root cause: the
-  daily RF-Reception email over-counts because `weewx_monitor.py` counted raw `Wunderground-RF:
-  Published` log lines, but the driver publishes freqError freq-hop packets as duplicate publishes of
-  the SAME record epoch (~1.66×; live 2026-07-05 sample showed a clean 2× — same epoch posted twice).
-  **Layer A fix** (`feature/reception-dedup`, commit `20bf7c0`): a pure `wu_record_key()` helper dedups
-  on the trailing `(<epoch>)`; the window counts unique epochs. 6 offline tests, driver + alert logic
-  untouched. **Deploy = monitor restart only** (`sudo kill <pid>`, pidfile `logs/weewx_monitor.pid`;
-  the respawn loop reloads on-disk code ≤5 min). Reversible. **Layer B** (driver stops publishing
+- **Reception metric ~150% — Layer A DEPLOYED + CONFIRMED (S27, DEC-0024).** Root cause: the daily
+  RF-Reception email over-counted because `weewx_monitor.py` counted raw `Wunderground-RF: Published`
+  log lines, but the driver publishes freqError freq-hop packets as duplicate publishes of the SAME
+  record epoch (~1.66×). **Layer A fix** (`wu_record_key()` epoch-dedup) merged to `dev` via #5 and
+  **deployed live 2026-07-05**: scp'd the new `weewx_monitor.py` (backup `weewx_monitor.py.bak-20260705-141508`
+  on NAS), `sudo kill`ed the monitor; the esynoscheduler wrapper respawned it (`sleep 300` loop) on the
+  new code. **Confirmed working**: WINDOW dropped from a steady ~150–162% to **92%** (`22/24`) at the
+  first post-restart window — same packet volume, correct dedup. **Layer B** (driver stops publishing
   dataless freqError packets + disable `RAW_*` debug logging; also fixes 15 MB `weewx.log` bloat) is
   deeper, No-Rewrite applies — still deferred. Doc-vs-reality flag stands: the running binary **does**
   emit `ChannelIdx`/`FreqError` (BACKLOG said it didn't). See DEC-0024 + BACKLOG.
@@ -95,15 +95,16 @@ dewpoint rebuild. Prior: S26 — secret-gate audit + the two draft PRs.)_
 **✅ Done in S27 (the S23–S26 PR backlog is cleared):** secret gate merged to `dev` (#6) + `main` (#7)
 and made a **required** status check on both; the whole review stack collapsed onto `dev` via #5
 (`2c75c5e`); #3/#4 closed as merged-via-#5; S23 tail folded into BACKLOG. All open PRs resolved.
+**Reception Layer A DEPLOYED live + confirmed** (WINDOW ~154% → **92%**; backup on NAS).
 
 **Now the standing queue (owner/calendar-gated first):**
 
-1. **Deploy the reception Layer A fix** (owner action; monitor-restart-only, DEC-0024) — code is in
-   `dev`: scp the new `weewx_monitor.py`, `sudo kill <pid>` (pidfile `logs/weewx_monitor.pid`);
-   confirm the next RF-Reception email reads ≤100% (was ~150%).
-2. **M-A (monitor incremental read) + L-B (double-read race) — do AFTER the Layer A deploy lands.**
-   Both edit `weewx_monitor.py`; L-B is resolved for free by M-A's byte-offset `seek()`. Sequencing
-   avoids stepping on the just-deployed Layer A file. (The S24 review itself is **done** — S25.)
+1. **Reception Layer A — DONE (deployed + confirmed S27).** Light follow-up: eyeball the next daily
+   RF-Reception **summary email** to confirm it reads ≤100% (per-window already confirmed at 92%).
+2. **M-A (monitor incremental read) + L-B (double-read race) — now UNBLOCKED (Layer A is deployed).**
+   Both edit `weewx_monitor.py`; L-B is resolved for free by M-A's byte-offset `seek()`. Deploy the
+   same way (scp + `sudo kill`; the esynoscheduler wrapper respawns on the new file, ≤5 min). (The S24
+   review itself is **done** — S25.)
 3. **Watch for the first real rain glitch** (still not fired, checked S22). The fix is live in prod;
    this gates only the formal release.
 4. **v2.0.3 release** once the glitch rides clean: **promote `dev` → `main`, tag, release on GitHub +
