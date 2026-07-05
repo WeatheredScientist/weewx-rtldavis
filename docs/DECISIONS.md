@@ -302,11 +302,12 @@ reversed before reaching `main`.)
 
 ## DEC-0024 — RF-reception metric reads ~150%: freqError channel packets published as loop packets (OPEN)
 
-**Status:** Deferred — root cause confirmed, fix approach open · **Date:** 2026-07-04 (S21)
+**Status:** Layer A implemented (S22) — pending a monitor-restart deploy; Layer B deferred ·
+**Date:** 2026-07-04 (S21), updated 2026-07-05 (S22)
 
-> DEC-0023 (independent per-repo session numbering) lands via the S20 governance-hardening branch
-> (draft PR #1); this entry takes the next number, DEC-0024, on the rain branch. On merge the two
-> compose without collision.
+> DEC-0023 (independent per-repo session numbering) landed via the S20 governance-hardening branch,
+> merged into this rain branch as **PR #2** (S22); this entry took the next number, DEC-0024. The two
+> composed without collision.
 
 The daily "RF Reception" summary emails (and 5-min `RECEPTION:` log lines) read ~150% — well above the
 100% ceiling a reception percentage should have. **Confirmed by live read-only diagnosis (S21), not a
@@ -344,3 +345,9 @@ Two fix layers, **decision deferred** (S21 was diagnosis + documentation only, n
 *Rationale for deferring:* the symptom is cosmetic (metric only; real weather data + rain fix
 unaffected), so it can wait behind the v2.0.3 promotion. Layer A is the likely first move. See
 BACKLOG "Reception-metric over-count" and STATUS.
+
+**Update (S22, 2026-07-05):** **Layer A implemented** on `feature/reception-dedup` (commit `20bf7c0`).
+A pure `wu_record_key()` helper dedups on the trailing `(<unix_epoch>)`; the reception window now
+counts unique record epochs instead of raw publish lines. `close_reception_window` and the driver are
+untouched; 6 offline tests (`tests/test_reception_dedup.py`) against a live-recorded 2× over-read.
+Deploy is a monitor restart only (respawn loop reloads on-disk code). **Layer B remains deferred.**

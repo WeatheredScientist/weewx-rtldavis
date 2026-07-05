@@ -6,6 +6,26 @@ under [Pre-S16].
 
 ---
 
+## [S22] — 2026-07-05 — Merge PR #2 + reception metric Layer A fix (on `feature/reception-dedup`, off `feature/rain-spike-filter`)
+
+Picked up the S21 handoff. No driver or prod code touched; not yet deployed.
+
+- **Merged PR #2** (`s20-governance-hardening` → `feature/rain-spike-filter`): the S20 governance work
+  (independent numbering DEC-0023 + two `check_secrets.sh` gate fixes) now rides with the rain fix
+  toward v2.0.3. Resolved three append-conflicts keeping both S20 and S21 content (CHANGELOG S21→S20,
+  DECISIONS DEC-0023 above DEC-0024, STATUS last-updated). Merge commit `1a265e7`.
+- **Reception-metric Layer A fix (DEC-0024, `20bf7c0`):** `weewx_monitor.py` counted raw
+  `Wunderground-RF … Published` log lines, but the driver publishes freqError freq-hop packets as
+  duplicate publishes of the **same record epoch** — over-reading reception to ~150%. A live read-only
+  sample (2026-07-05) showed a clean 2× (same `(epoch)` posted twice). Fix: a pure `wu_record_key()`
+  helper dedups on the trailing `(<unix_epoch>)`; the window now counts **unique epochs**.
+  `close_reception_window` + the driver are untouched. 6 offline tests
+  (`tests/test_reception_dedup.py`). **Deploy = monitor restart only** (respawn loop reloads on-disk
+  code); reversible. **Layer B stays deferred.**
+- **Live read-only check (SSH):** confirmed no rain glitch has fired in the wild yet (v2.0.3 promotion
+  still calendar-bound); verified the live `weewx_monitor.py` was byte-identical to the repo copy
+  (md5 match) before patching.
+
 ## [S21] — 2026-07-04 — Reception metric ~150% root cause (DEC-0024) + numbering made independent (on `feature/rain-spike-filter`)
 
 Investigation + governance, **no driver or prod code touched**. (The S20 governance-hardening
