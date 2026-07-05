@@ -6,6 +6,40 @@ under [Pre-S16].
 
 ---
 
+## [S29] — 2026-07-05 — RF-metric honesty, rxCheckPercent root cause, ERR-0001 correction
+
+Turned the "how is reception really doing?" question into trustworthy answers, and reconciled the
+July-4 rain glitch. Two owner-run prod steps deployed live (agent-guided, read-only-verified).
+
+- **Reception "91%" was a denominator artifact — fixed + deployed.** The monitor divided the WU-publish
+  count by a hardcoded **24**, but this ISS (Transmitter 4) transmits every ~2.8125 s → only ~**21.3**
+  records/min are physically sent. Live measurement: **21.75/min**, ~2.78 s mean spacing, no multi-second
+  gaps → **~100% reception**, not 91%. Set `WU_RF_EXPECTED` → **21** (env-overridable per station) and
+  added `wu_pct()` (single source of truth, capped at 100). New `tests/test_reception_pct.py` (9 tests);
+  **suite 49/49**. Merged **PR #10 → `dev`** (also carries the S28 M-A/L-B incremental read) and
+  **deployed** (monitor restart); live log flipped `WINDOW: 22/24 (92%)` → **`WINDOW: 23/21 (100%)`**.
+- **`rxCheckPercent` root-caused (dead since 2026-06-18).** The driver's own honest reception metric
+  populated the archive 2026-05-26 → 2026-06-18 18:42 UTC (avg **67.5%**, the pre-LNA baseline), then
+  went NULL. Traced to a **weewx engine reload at 2026-06-18 14:44 EDT** whose code carries the S24 "H2"
+  `pct_good_all` deadlock (`rtldavis.py:1006` guards the assignment with `… and pct_good_all is not None`,
+  but it's reset to `None` every period → can never pass). **Fix already on `dev`** (`:1011`,
+  regression-tested); ships with the v2.0.3 image rebuild. (Reception genuinely improved ~70% → ~100% via
+  the LNA between June and July — right when both honest metrics were dark.)
+- **DEC-0025 — known-bad data: preserve-and-flag, never delete.** New public append-only
+  **`docs/DATA_ERRATA.md`** + the reconciliation model (as-transmitted / errata / corrected best-estimate).
+- **ERR-0001 applied — July-4 phantom honest-nulled.** The +1.28" 3 AM glitch (old driver, `rain_count=-64`
+  → +128) was confirmed baked into the archive **and** the Weather Underground record (day total **1.84"**;
+  MADIS almost certainly too — precip is barely QC'd downstream). Owner nulled the two 3 AM records
+  (`dateTime IN (1783148640, 1783148700)`) + `weectl database rebuild-daily --date=2026-07-04`; July-4 rain
+  **1.84" → 0.56"** — surgical (the day's genuine 0.56" evening rain preserved). InfluxDB copy still carries
+  it (cross-repo follow-up); external WU/MADIS immutable, reconciled by the errata.
+- **DEC-0026 — v2.0.3 confidence gate waived.** Cut the release with the rain fix baked in rather than wait
+  weeks for a live glitch; the fix is already protecting prod, is tested, and the pipeline was validated
+  end-to-end this session.
+- **Housekeeping:** merged PR #10 (branch deleted). `dev` now carries rain + reception (metric + denominator)
+  + governance + S24/S25 code-quality. **Next session ships v2.0.3** (image rebuild on Mac Docker Desktop →
+  redeploy → promote `dev`→`main` + tag → GitHub/Docker Hub → live-confirm `rxCheckPercent` repopulates).
+
 ## [S28] — 2026-07-05 — Monitor incremental read (M-A/L-B) + branch cleanup
 
 Release still calendar-gated (no real rain glitch yet); this session cleared the unblocked follow-ups.

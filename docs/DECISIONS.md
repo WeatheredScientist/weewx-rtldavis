@@ -380,3 +380,19 @@ for a public "escape the WeatherLink lock" tool, an open errata log is the hones
 ERR-0001, the 2026-07-04 phantom +1.28" rain (the glitch that inspired the DEC-0021 filter; confirmed to
 have reached Weather Underground and, almost certainly, MADIS — precipitation is barely QC'd downstream).
 Supersedes nothing; extends DEC-0006 (honest-null) and DEC-0021 (rain filter) to *historical* correction.
+
+## DEC-0026 — v2.0.3 confidence gate waived: cut on tests + live evidence
+
+**Status:** Accepted · **Date:** S29 (2026-07-05)
+
+Cut v2.0.3 with the rain fix baked in **without** first watching a brand-new rain glitch get rejected
+live. The original gate (wait for the S18/DEC-0021 filter to reject a real glitch in the wild) was always
+a **confidence** gate, not a safety one — the fix has been live in prod for weeks, is unit-tested
+(`tests/test_rain_filter.py`), and in S29 we characterized the July-4 glitch end-to-end and validated the
+whole rain pipeline (glitch → filter behavior → archive → correction). Real glitches are rare (~1 per
+2–3 weeks), so waiting could park the release a month or more for no material gain.
+
+*Rationale:* the fix is already protecting prod; a formal release does not need a live catch to be safe.
+If a fresh glitch does appear post-release and reveals a gap, we fix forward (the DEC-0021 filter + the
+DEC-0021 email alert + the DEC-0025 errata process all still apply). Supersedes the "watch for the first
+real glitch" release gate noted in prior STATUS/ROADMAP; does not change DEC-0021 itself.

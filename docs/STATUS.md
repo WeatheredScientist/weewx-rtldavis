@@ -17,12 +17,13 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 > "91%" was a denominator artifact:** the monitor divided WU-publish count by 24, but this ISS (Tx 4)
 > transmits every ~2.8125s → only ~21.3/min are physically sent; live measurement shows ~21.75/min with
 > no gaps = **~100% reception, not 91%**. Fixed the denominator (env-overridable 21 + capped `wu_pct()`),
-> +9 tests (suite **49/49**), pushed to **PR #10 branch** (rides the same monitor deploy). **The driver's
-> *honest* metric `rxCheckPercent` has been NULL since 2026-06-18** (last real value 67.5%) — opened as a
-> tracked investigation (below). **July 4 phantom +1.28" rain confirmed** in the archive (two 0.64"
-> records) and in the WU/CWOP→MADIS external record; established **DEC-0025 (preserve-and-flag, never
-> delete)** + `docs/DATA_ERRATA.md` (ERR-0001). Local honest-null is **owner-gated** (prod DB write,
-> read-only boundary). Governed lineage: S16→…→S27→S28→**S29**. Next session = S30.
+> +9 tests (suite **49/49**), **merged (PR #10) and deployed live** (log now reads `WINDOW: NN/21
+> ~100%`). **`rxCheckPercent` (dead since 2026-06-18) root-caused:** the S24 "H2" `pct_good_all` deadlock
+> deployed at that day's driver reload — **fix already on `dev`**, ships with the v2.0.3 rebuild. **July 4
+> phantom +1.28" confirmed** in the archive + WU/MADIS; established **DEC-0025 (preserve-and-flag)** +
+> `docs/DATA_ERRATA.md`, and **ERR-0001 applied** (owner-run: July 4 rain **1.84"→0.56"**, surgical —
+> genuine evening rain kept). **v2.0.3 confidence gate WAIVED (DEC-0026)** — cut it next session with the
+> fixes baked in. Governed lineage: S16→…→S27→S28→**S29**. Next session = S30 (ship v2.0.3).
 
 _Last updated: 2026-07-05 (S29 — RF-metric trust + July 4 glitch dig. **Reception fix** (denominator
 24→21 physical TX rate, `wu_pct()` cap, +9 tests, suite 49/49) pushed to PR #10 branch. **rxCheckPercent
@@ -150,38 +151,37 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S29:** Diagnosed the RF-metric trust problem — "91%" was a **denominator artifact** (monitor
-divided by 24; the ISS physically sends ~21.3/min); **real reception is ~100%**. Fixed it on the **PR #10
-branch** (`WU_RF_EXPECTED` 24→21 env-overridable + `wu_pct()` cap, +9 tests, suite **49/49**, pushed
-`db5d82f`). Found the driver's honest **`rxCheckPercent` dead since 2026-06-18** → opened as an
-investigation (Open threads). Confirmed the **July 4 phantom +1.28"** in archive + WU (+ almost certainly
-MADIS); established **DEC-0025** (preserve-and-flag) + **`docs/DATA_ERRATA.md`** (ERR-0001).
+**✅ Done in S29:** (1) **RF-metric fixed + deployed live.** "91%" was a **/24 denominator artifact**
+(the ISS physically sends ~21.3/min); real reception is **~100%**. Fixed (`WU_RF_EXPECTED` 24→21
+env-overridable + `wu_pct()` cap, +9 tests, suite **49/49**), **merged via PR #10 → `dev`**, and
+**deployed to prod** — live log now reads `WINDOW: NN/21 (~100%)` (owner scp + `sudo kill`; new pid).
+(2) **`rxCheckPercent` root-caused** (dead since 2026-06-18): the **S24 "H2" `pct_good_all` deadlock**
+deployed at that day's driver reload; **fix already on `dev`** (`rtldavis.py:1011`) — ships with the
+v2.0.3 rebuild. (3) **DEC-0025 (preserve-and-flag)** + **`docs/DATA_ERRATA.md`**; **ERR-0001 applied** —
+July 4 phantom honest-nulled (day rain **1.84" → 0.56"**, surgical; genuine evening rain preserved).
+(4) **v2.0.3 confidence gate WAIVED** ([DEC-0026](DECISIONS.md)) — cut it with the fixes baked in.
 
-**Now the standing queue (owner-gated first):**
+**Next session (→ S30) = ship v2.0.3.** The release, in order (build on the owner's **Mac Docker
+Desktop**; owner drives, agent guides — no Docker/creds on the agent side):
 
-0. **Owner prod steps (need a real terminal / write access — read-only boundary blocks the agent):**
-   (a) **Deploy PR #10 + the reception fix** — one monitor restart carries both (scp `weewx_monitor.py`,
-   `sudo kill <pid>`, esynoscheduler respawns ≤5 min). Then confirm WINDOW now reads ~100% (not ~90%) and
-   "Poll: N new lines" keeps flowing. (b) **Apply ERR-0001 honest-null** — back up `weewx.sdb`; `UPDATE
-   archive SET rain=NULL WHERE dateTime IN (1783148640, 1783148700)`; `weectl database rebuild-daily
-   --date=2026-07-04`; verify Jul-4 total drops 1.28"; mark ERR-0001 ✅. InfluxDB null is cross-repo.
-1. **Revive `rxCheckPercent`** — root cause found (S29): the S24 "H2" `pct_good_all` deadlock, deployed
-   at the 2026-06-18 driver reload; **fix already on `dev`** (`rtldavis.py:1011`). No more investigation
-   needed — just ship it in the v2.0.3 image rebuild, then live-confirm it repopulates and point the
-   monitor at it instead of scraping WU-publish lines. (Open threads has the full evidence.)
-2. **Merge PR #10 to `dev`** (secret-scan green, lint red-on-purpose; now also carries the reception fix).
-3. **Watch for the first real rain glitch** (0 to date, re-checked S29). Confirms the S18 fix + alert
-   together (log "rejecting implausible counter delta" + clean archive + the email to `ALERT_TO`).
-   Calendar-bound (~1/2–3 wk). The fix is live in prod; this gates only the *formal* release, and it's
-   a **confidence** gate, not a safety one — could be waived (cut v2.0.3 on tests + live evidence).
-4. **v2.0.3 release** once the glitch rides clean (or the gate is waived): **promote `dev` → `main`,
-   tag, release on GitHub + Docker Hub.** `dev` already carries rain + reception + governance + the
-   S24/S25 code-quality fixes. Fold in the baked honest-null dewpoint rewrite (needs an image rebuild)
-   and the **S24 driver fixes** (H1/H2/M3, branch-only — need the same rebuild + hot-swap). When H2
-   ships, **live-confirm rxCheckPercent starts populating** (`SELECT rxCheckPercent FROM archive ...` —
-   expected all-NULL now). See ROADMAP P1.
-5. **Owner housekeeping:** rotate the exposed WU API key; set `STATION_NAME` in the NAS `monitor.env`
-   (emails currently fall back to "My PWS"). Keep `feature/rain-spike-filter` until v2.0.3.
+1. **Build the image** (Mac Docker Desktop) folding in the branch-only pieces not yet live: **H2**
+   (revives `rxCheckPercent`), the honest-null **dewpoint** rewrite, **H1/M3**. (Rain + reception are
+   already live via hot-swap.) Reconcile the rw250-vs-rw350 receiveWindow question at build time
+   (ARCHITECTURE §6) — decide which tag ships.
+2. **Deploy the new image** on the NAS (`docker kill` + re-run; ~min downtime — not a hot-swap).
+3. **Promote `dev` → `main`** (explicit approval per rules — never force-push/merge to main) + **tag
+   `v2.0.3`** so `main` = what's actually running.
+4. **GitHub release** + **push image to Docker Hub** (`weatheredscientist/weewx-rtldavis`).
+5. **Live-confirm `rxCheckPercent` repopulates** — `SELECT rxCheckPercent FROM archive ORDER BY
+   dateTime DESC LIMIT 5;` should go from all-NULL to real values (the H2 payoff).
+
+**Also open (not blocking v2.0.3):**
+- **ERR-0001 InfluxDB null** — the dashboard reads InfluxDB, which still carries the July 4 phantom;
+  cross-repo (DEC-0010), no `influx` CLI on the NAS. Handle on the dashboard side or via the Influx API.
+- **Owner housekeeping:** rotate the exposed WU API key; set `STATION_NAME` in the NAS `monitor.env`
+  (alert emails fall back to "My PWS"). Keep `feature/rain-spike-filter` until v2.0.3 ships.
+- **Snow / freezing / no heating tape** (parked, owner's future thread) — cold-weather failure modes
+  (sensor freeze, stuck counters, DEC-0006 stale-substitution) we haven't designed for. 2026 = learning year.
 
 **Live access (read-only used in S21/S22):** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in
 gitignored `docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use
