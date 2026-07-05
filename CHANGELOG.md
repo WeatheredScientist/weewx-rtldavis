@@ -6,6 +6,30 @@ under [Pre-S16].
 
 ---
 
+## [S21] — 2026-07-04 — Reception metric ~150% root cause (DEC-0024) + numbering made independent (on `feature/rain-spike-filter`)
+
+Investigation + governance, **no driver or prod code touched**. (The S20 governance-hardening
+CHANGELOG entry rides in separately via draft PR #2 — see below.)
+
+- **Reception-metric ~150% — root cause confirmed (DEC-0024, OPEN).** Live read-only diagnosis: the
+  daily RF-Reception emails over-count because `weewx_monitor.py` counts `Wunderground-RF: Published`
+  *log lines* ÷ `WU_RF_EXPECTED`(=24), but the driver publishes freqError freq-hop `CHANNELPacket`s as
+  extra **dataless loop packets** (~1.66×; live sample 1605 publishes / 968 unique record epochs,
+  single Transmitter:4). True reception was ~90%. Cosmetic — real weather data + the rain fix are
+  unaffected. Documented Layer A (monitor counts unique epochs — safe, monitor-restart-only) vs
+  Layer B (driver stops publishing dataless freqError packets + disable `RAW_*` debug logging; also
+  fixes the 15 MB / 122 k-line `weewx.log` bloat). Fix **deferred** (diagnosis + docs only).
+- **Doc-vs-reality flag:** BACKLOG claimed the Go binary emits no `ChannelIdx`/`FreqError`; the running
+  binary emits **both** — the likely trigger. BACKLOG finding corrected.
+- **Session numbering made independent per-repo (DEC-0023, supersedes DEC-0013).** A forensic audit
+  showed the "shared lineage with the dashboard" premise never held (the dashboard runs its own
+  continuous S1→S40 counter and never referenced a shared one). Each repo now counts its **own**
+  sessions; number from *this repo's* CHANGELOG/STATUS +1; prefix cross-repo refs (`weewx S21` vs
+  `dash S40`); this repo's line is contiguous S16→…→**S20**→**S21**. The prior draft PR that tried to
+  *reunify* into a shared counter (mislabeled "S40") was reworked into the **S20** governance-hardening
+  session and now rides as **draft PR #2** (`s20-governance-hardening`; PR #1 auto-closed by the branch
+  rename). That branch also carries two real `check_secrets.sh` fixes.
+
 ## [S18] — 2026-07-04 — False-rain fix (on `feature/rain-spike-filter`, off `dev`)
 
 Confirm-first diagnosis then fix for the phantom-rain bug. Not yet deployed (pending a dry-window

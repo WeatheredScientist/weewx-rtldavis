@@ -261,3 +261,48 @@ rain fix stays tightly scoped:
 *Rationale:* these share the rain bug's theme (RF glitch → bad sensor data) but have real design
 nuance and behavioral risk; bundling them into the rain deploy would widen the blast radius. See
 ROADMAP P1.5 / STATUS.
+
+## DEC-0024 — RF-reception metric reads ~150%: freqError channel packets published as loop packets (OPEN)
+
+**Status:** Deferred — root cause confirmed, fix approach open · **Date:** 2026-07-04 (S21)
+
+> DEC-0023 (independent per-repo session numbering) lands via the S20 governance-hardening branch
+> (draft PR #1); this entry takes the next number, DEC-0024, on the rain branch. On merge the two
+> compose without collision.
+
+The daily "RF Reception" summary emails (and 5-min `RECEPTION:` log lines) read ~150% — well above the
+100% ceiling a reception percentage should have. **Confirmed by live read-only diagnosis (S21), not a
+code regression in the metric itself** (`weewx_monitor.py` reception code is unchanged since it was
+added). Root cause, traced end to end:
+
+1. `weewx_monitor.py` computes reception as *(count of `Wunderground-RF: Published record` log lines
+   per 60 s) / `WU_RF_EXPECTED` (=24)*. `24` assumes **one publish per ~2.5 s sensor transmission**
+   (one Davis ISS).
+2. `rtldavis.py` `CHANNELPacket.parse_text` (~L615-642) turns each RF **frequency-hop** telemetry
+   message (`ChannelIdx:… FreqError:… Transmitter:N`) into a **WeeWX loop packet** carrying only
+   `dateTime`+`freqError` — no weather data — and `PacketFactory.create` (~L682) yields it alongside
+   the real sensor `DATAPacket`.
+3. WU RapidFire publishes **every** loop packet, so each real reading is shadowed by freq-hop
+   "phantom" publishes. Live evidence (4000-line sample, single active Transmitter:4): **1605**
+   `Published` lines vs **968** unique record epochs (~**1.66×**); **939** `RAW_CHANNEL_PAYLOAD`
+   freq-hop messages over the same span. True reception was ~90% that night; the metric showed ~150%.
+
+**Doc-vs-reality contradiction flagged:** BACKLOG's "FreqError / ppm-fc telemetry gap" finding states
+the compiled Go binary emits *neither* `ChannelIdx` nor `FreqError`. The **running binary now emits
+both** — which is exactly what activates the `CHANNELPacket → loop-packet` path. This is the most
+likely "as of late" trigger (a binary that started emitting the telemetry, or an always-stale
+finding); BACKLOG updated accordingly.
+
+Two fix layers, **decision deferred** (S21 was diagnosis + documentation only, no code touched):
+- **Layer A (monitor, safe/reversible, not the sacred driver):** count **unique record epochs** per
+  window instead of raw publish lines. Directly fixes the reading regardless of driver behavior.
+  Slight known trade-off: two real records sharing one integer `dateTime` second collapse to one
+  (conservative under-count, acceptable). Deploy = monitor restart only.
+- **Layer B (driver, deeper — No-Rewrite DEC-0014 applies):** stop publishing dataless freqError
+  channel packets as loop packets, and/or disable the `RAW_*` `loginf` debug instrumentation (also
+  the cause of `weewx.log` bloat: 15 MB / 122 k lines). Side benefit: stops posting ~1.6× redundant
+  dataless updates to Weather Underground. Needs its own migration plan + prod strategy + approval.
+
+*Rationale for deferring:* the symptom is cosmetic (metric only; real weather data + rain fix
+unaffected), so it can wait behind the v2.0.3 promotion. Layer A is the likely first move. See
+BACKLOG "Reception-metric over-count" and STATUS.
