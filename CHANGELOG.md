@@ -40,6 +40,12 @@ Mac Docker Desktop + the NAS, agent-guided). The image folds in H1/H2/M3 (alread
   reception-metric fix and ERR-0001 were the NAS monitor + a DB edit, not the driver — those were already
   live.)*
 - Bumped the `Dockerfile` header `v2.0.2 → v2.0.3` and refreshed the stale rtldavis `COPY` comment.
+- **Committed `logging.additions` — the build was not reproducible from a clean clone.** `Dockerfile:80`
+  `COPY logging.additions` referenced a file that was **untracked** (present only in the owner's checkout,
+  never committed, not gitignored), so `docker build` from a fresh `git clone` failed at that step. Found
+  when the v2.0.3 image was built on the NAS from the `dev` tarball. Also de-duplicated its contents (the
+  `[Logging]` block had been accidentally appended twice). Now tracked → the image builds from a clean
+  checkout on any host.
 
 ## [S29] — 2026-07-05 — RF-metric honesty, rxCheckPercent root cause, ERR-0001 correction
 
