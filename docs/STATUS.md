@@ -13,16 +13,21 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-> **Current session: S25** (2026-07-05) — finished the S24 review's deferred fixes on
-> `feature/s24-code-quality-review`. Governed lineage: S16→…→S23→S24→**S25**. Next session = S26.
+> **Current session: S26** (2026-07-05) — cross-repo secret-gate audit + fix. The DEC-0012 gate had
+> **no working coverage on `main` or `dev`**; fixed both as draft PRs **#6 → dev** and **#7 → main**.
+> No prod/driver code touched, nothing merged. Governed lineage: S16→…→S24→S25→**S26**. Next session = S27.
 
-_Last updated: 2026-07-05 (S25 — completed the S24 review tail, all branch-only, NOT deployed:
-**U1/U2** rebased `owm.py` on the standard RESTThread hooks (`get_post_body`), regaining retry/backoff
-+ `tests/test_owm_post_body.py`; **U4** added `influx.py` `verify_ssl` (default verifying, opt-out for
-self-signed); **M4** deleted dead `_fmt`/`parse_readings`; **L6/L5** driver nits; **L-C/L-D/U5** monitor
-+ uploader nits; per-file **SPDX GPL-3.0-or-later** headers on the driver + 7 satellites. Offline suite
-34/34 green. Deferred **M-A** + its coupled **L-B** to S26 (both wait on the Layer A monitor deploy).
-Prior: S24 — code-quality review (docs/CODE_REVIEW_S24.md) + H1/H2/M3+U3 fixes.)_
+_Last updated: 2026-07-05 (S26 — secret-gate hardening. A dashboard cross-repo note flagged the ported
+secret gate as neutered; verified empirically here. The neuter bug — the `grep -n` `<lineno>:` prefix
+matched the docstring allow-rule's bare `:` and silently whitelisted real `ident = secret` lines — was
+already fixed on the governance stack in S20 (`2a6327c`, `:` → `[A-Za-z]:`), but never reached the
+mainline: **`main`** had no `check_secrets.sh`/`ci.yml` at all (a fresh clone of the public default
+branch = zero secret scanning), and **`dev`** carried the neutered S17 gate whose secret-scan step was
+also skipped behind a failing `ruff` step (32 errors on the pre-S24 tree) — doubly dead. Shipped **PR #6
+→ dev** (fixed `check_secrets.sh` + split `ci.yml` into an independent `secret-scan` job) and **PR #7 →
+main** (added gate + two-job `ci.yml` + `.pre-commit-config.yaml`). CI on both confirms `secret-scan`
+**passes independently** of the expected-red `lint` job; planted secret caught (exit 1); each whole
+tracked tree scans clean. Prior: S25 — finished the S24 review tail (U1/U2/U4/M4 + nits + SPDX), 34/34.)_
 
 ---
 
@@ -51,6 +56,14 @@ Prior: S24 — code-quality review (docs/CODE_REVIEW_S24.md) + H1/H2/M3+U3 fixes
 
 ## Open threads (not yet shipped)
 
+- **Secret-gate hardening (S26) — draft PRs #6/#7, NOT merged.** The DEC-0012 gate had no working
+  coverage on the mainline: `main` had no gate/CI at all, `dev` had the neutered S17 gate with its
+  scan skipped behind a failing `ruff` step. **PR #6 → `dev`** (fixed `check_secrets.sh` + `ci.yml`
+  split into an independent `secret-scan` job) and **PR #7 → `main`** (added gate + two-job `ci.yml`
+  + `.pre-commit-config.yaml`) fix it. CI verified: `secret-scan` passes, `lint` red-as-expected.
+  **Blocking follow-up:** the gate only *blocks* merges once `secret-scan` is a **required** status
+  check in branch protection (repo-admin action; PAT 403'd) — until then it's advisory. Also: the
+  s20→s24 governance stack still ships the old single-job `ci.yml` to reconcile on merge.
 - **Reception metric ~150% — Layer A built + tested (DEC-0024, S22), PENDING DEPLOY.** Root cause: the
   daily RF-Reception email over-counts because `weewx_monitor.py` counted raw `Wunderground-RF:
   Published` log lines, but the driver publishes freqError freq-hop packets as duplicate publishes of
@@ -83,9 +96,22 @@ Prior: S24 — code-quality review (docs/CODE_REVIEW_S24.md) + H1/H2/M3+U3 fixes
 - **Stale public branch** `origin/feature/influxdb-grafana` (11 commits) — may carry dashboard JSON +
   a driver-relevant wind-warmup fix; review, cherry-pick driver bits, delete from remote.
 
-## Next session actions (→ S26)
+## Next session actions (→ S27)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
+
+**⚠ Tie up outstanding commits/PRs first (nothing from S23–S26 is merged yet):**
+- **Secret gate (S26):** review + merge **PR #6 → `dev`**, then **PR #7 → `main`** (drafts — mark
+  ready when reviewed). Then **mark `secret-scan` a REQUIRED status check** in branch protection on
+  both branches (repo-admin; PAT 403'd) — the gate is advisory until this is done. When the
+  governance stack later merges, reconcile its old single-job `ci.yml` to the S26 two-job structure.
+- **Governance/review stack:** **PR #5** (`feature/s23-governance-alignment`) → then the stacked
+  `feature/s24-code-quality-review` (carries S24+S25). Merge S23 first, retarget/merge S24+S25;
+  finish the S23 tail (fold root `cleanup_backlog.md` into BACKLOG; resolve `logging.additions` +
+  the bare `additions` artifact).
+- **Reception Layer A:** review + merge **PR #3** (`feature/reception-dedup`) alongside its deploy.
+
+**Then the standing queue:**
 
 1. **M-A (monitor incremental read) + L-B (double-read race) — do AFTER the Layer A deploy lands**
    (item 3). Both edit `weewx_monitor.py`; L-B is resolved for free by M-A's byte-offset `seek()`.
