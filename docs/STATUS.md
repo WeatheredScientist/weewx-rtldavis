@@ -6,13 +6,22 @@ is actively in motion, parked, or needs a check.
 
 - DECISIONS.md records *settled* decisions. **This file records open ones.**
 - CHANGELOG.md records *shipped* work. **This file records work not yet shipped.**
+- **This file is the single source of truth for the current session number and the next-session
+  handoff** (DEC-0023). Every other doc — and Claude memory — points *at* this; none carries its own
+  copy. Handoff state lives here (in the repo, visible on GitHub), never only in private memory.
 
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-_Last updated: 2026-07-05 (S22 — merged PR #2 (S20 governance) into the rain branch; built + tested
-the reception-metric Layer A fix (DEC-0024) pending a monitor restart; confirmed no rain glitch in
-the wild yet. Rain fix still live + unmerged.)_
+> **Current session: S23** (2026-07-05) — governance-alignment initiative (docs-only, zero prod
+> risk). Governed lineage: S16→S17→S18→S19→S20→S21→S22→**S23**. Next session = S24.
+
+_Last updated: 2026-07-05 (S23 — cross-project governance-alignment audit (ASSESSMENT.md) + the safe
+docs deliverables: LICENSE=GPLv3, AGENTS.md, ROADMAP restructured to shared P-tiers, STATUS made the
+session-# source of truth with the handoff moved in from memory, doc-map reorder. No prod code, no
+deploy. Prior: S22 — merged PR #2 (S20 governance) into the rain branch; built + tested the
+reception-metric Layer A fix (DEC-0024) pending a monitor restart; no rain glitch in the wild yet;
+rain fix still live + unmerged.)_
 
 ---
 
@@ -72,3 +81,30 @@ the wild yet. Rain fix still live + unmerged.)_
 - **Remote URL casing** — origin is lowercase; GitHub redirects to canonical `WeatheredScientist/`.
 - **Stale public branch** `origin/feature/influxdb-grafana` (11 commits) — may carry dashboard JSON +
   a driver-relevant wind-warmup fix; review, cherry-pick driver bits, delete from remote.
+
+## Next session actions (→ S24)
+
+**This section is the repo-visible handoff** (replaces the old Claude-private `next-session-actions`
+memory, which now only points here). Read it first when resuming.
+
+1. **Finish the S23 governance-alignment tail** (the `feature/s23-governance-alignment` branch): after
+   review, merge it; then the small stragglers — archive/fold the root `cleanup_backlog.md` into
+   BACKLOG, and resolve `logging.additions` + the bare `additions` artifact (document or remove). Then
+   converge the changelog format (Keep-a-Changelog headings) + DECISIONS entry-skeleton (planned S25).
+2. **S24 = thorough code-quality review** — `rtldavis.py` (1506 ll) + `weewx_monitor.py` + the
+   uploaders, for sloppy/confusing/under-commented code; deliver ranked findings, then agreed fixes on
+   a branch (No-Rewrite applies). Fold in per-file SPDX `GPL-3.0-or-later` headers.
+3. **Deploy the reception Layer A fix** (owner action; monitor-restart-only, DEC-0024): scp the new
+   `weewx_monitor.py` to the NAS, then `sudo kill <pid>` (pidfile `logs/weewx_monitor.pid`) — the
+   respawn loop reloads on-disk code ≤5 min. Confirm the next RF-Reception email reads ≤100% (was
+   ~150%). Review + merge draft PR #3. Reversible.
+4. **Watch for the first real rain glitch in the wild** — still not fired (checked S22). Grep
+   `weewx.log` for "rejecting implausible counter delta" + the monitor email. Gates v2.0.3.
+5. **Then v2.0.3** — merge `feature/rain-spike-filter` → `dev` → `main`, tag, release on GitHub +
+   Docker Hub; fold in the baked honest-null dewpoint rewrite (needs an image rebuild). See ROADMAP P1.
+6. **Housekeeping (P0/P4):** remote URL casing (lowercase → `WeatheredScientist/`); clean stale
+   `origin/feature/influxdb-grafana`; rotate the exposed WU API key.
+
+**Live access (read-only used in S21/S22):** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in
+gitignored `docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use
+`env -u GH_TOKEN` for any `git push` (keyring token, not the PAT).
