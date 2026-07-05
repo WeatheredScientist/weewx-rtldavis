@@ -56,3 +56,15 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
 ## Data integrity
 - May monthly rain totals were noted as compromised by dev restarts; reconcile against the Davis
   WeatherLink Live gold standard once the rain-spike fix lands — don't compound the error.
+- **[PRIORITIZED — owner, S30] Bad-packet root cause for temp/humidity/radiation/UV spikes.** Recent
+  temperature spikes were patched with *filtering bandaids* (coarse `[StdQC]` MinMax bounds, e.g.
+  `outTemp = -40, 120 degF`, which pass any in-range spike + the DewpointCacher carry-forward that
+  masks — not detects — bad reads). The likely **root cause is bad RF packets**, the same failure class
+  as the rain 64/128 decode glitch — but rain got a proper packet-level plausibility filter
+  (`rtldavis.py:211`, null-on-rejection per DEC-0006) while temp/humidity/radiation/UV never did. The
+  real fix is a **decode-layer plausibility/delta filter** for those sensors (reject implausible
+  per-packet jumps → honest null, don't clamp/substitute), which also unblocks converting them from
+  carry-forward to honest-null (ties into **DEC-0022** sensor-QC hardening). **Make this a dedicated
+  future session** and **pick a model suited to deep RF-decode root-causing** (Opus, high reasoning) —
+  it's investigation-heavy (capture raw packets around a spike, characterize the corruption), not a
+  quick patch. Do after v2.0.3 ships.
