@@ -10,27 +10,30 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-_Last updated: 2026-07-04 (S18 — rain fix built + tested on `feature/rain-spike-filter`)_
+_Last updated: 2026-07-04 (S19 resume — rain fix DEPLOYED live; monitor alert active; unmerged)_
 
 ---
 
 ## Active thread
 
-> **▶ Resume here.** S18: the false-rain fix is **built, tested (13/13 offline), and documented** on
-> `feature/rain-spike-filter` (off `dev`) — NOT yet committed, deployed, or merged. Root cause
-> confirmed (DEC-0021). Next actions, in order:
-> 1. Commit the feature branch (fix + tests + example + docs).
-> 2. **Reversible live hot-swap deploy** in a dry, low-traffic window — backup + checksum →
->    in-container import pre-flight check → swap + clear pyc → `docker kill`+`start` → verify data
->    flows within 60s → instant rollback if not. Plus the live `weewx.conf [StdQC]` edits
->    (`rain 0,10→0,1.0`, add `rainRate 0,16`) with a config backup.
-> 3. Verify across pre-dawn windows vs the WeatherLink Live console (calendar-bound — ~1 glitch/2–3 wk).
-> 4. Merge to `dev`, then promote to `main` + tag **v2.0.3**, folding in the pending dewpoint rewrite.
+> **▶ Resume here.** S18's false-rain fix is **committed, deployed live, and its email alert is
+> active** — but **NOT yet merged** off `feature/rain-spike-filter`. Root cause confirmed (DEC-0021).
+> Done so far: commits `be72832` (fix + 13/13 tests) and `3aabee8` (monitor alert); reversible live
+> hot-swap of `rtldavis.py` + `weewx.conf [StdQC]` (`rain 0,10→0,1.0`, added `rainRate 0,16`) to
+> `weewx-rtldavis-v2`; monitor restarted 2026-07-04 (PID 584) so the rain-glitch email alert is now
+> live. A live storm right after deploy (0.44", peak ~1.5 in/hr) flowed through with zero false
+> rejections. Remaining, in order:
+> 1. **Watch for the first real glitch in the wild** — confirms fix + alert together (log
+>    "rejecting implausible counter delta" + clean archive + the email). Calendar-bound (~1 glitch/2–3 wk).
+> 2. After it's ridden a few days clean: **merge `feature/rain-spike-filter` → `dev` → `main` + tag
+>    v2.0.3**, folding in the pending baked dewpoint rewrite (needs an image rebuild — bigger deploy
+>    than the hot-swap; plan it).
+> 3. Then **S19 proper** — DEC-0022 sensor-QC hardening (below).
 
 ## Open threads (not yet shipped)
 
-- **Rain fix** built, not deployed/merged (see Active thread). `dev` is published; the feature
-  branch and `main` are not touched yet.
+- **Rain fix** deployed live but **not merged** — still only on `feature/rain-spike-filter` (`dev`
+  and `main` untouched). Promote to v2.0.3 once it's proven in the wild (see Active thread).
 - **S19 — sensor-QC hardening (DEC-0022):** the stale-substitution DEC-0006 violation in
   `dewpoint_service.py` (temp/humidity/radiation/UV — real 6263 sensors get stuck if they fail) +
   minor windGust/radiation/UV StdQC bounds. Ties into the pending dewpoint rewrite. Do after v2.0.3.
