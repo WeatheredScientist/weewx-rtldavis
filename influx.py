@@ -481,13 +481,15 @@ class InfluxThread(weewx.restx.RESTThread):
         # create the list of tags
         tags = ''
         binding = record.pop('binding', None)
-        loginf("Add Bindding Tag = %s" % self.add_binding_tag)
+        # S24 U3: these fire on every record; keep them at debug level so they
+        # don't spam the log (they were part of the DEC-0024 log-bloat family).
+        logdbg("add_binding_tag = %s" % self.add_binding_tag)
         if binding is not None and self.add_binding_tag:
-            loginf("Adding Binding Tag")
+            logdbg("adding binding tag")
             tags = ',binding=%s' % binding
         if self.tags:
             tags = '%s,%s' % (tags, self.tags)
-        loginf("tags = %s" % tags)
+        logdbg("tags = %s" % tags)
 
         # if uploading everything, we must check every time the list of
         # variables that should be uploaded since variables may come and
