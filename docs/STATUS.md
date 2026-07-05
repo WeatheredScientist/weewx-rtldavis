@@ -13,17 +13,16 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-> **Current session: S24** (2026-07-05) — code-quality review of the driver + satellites, plus the
-> first fixes. Governed lineage: S16→S17→S18→S19→S20→S21→S22→S23→**S24**. Next session = S25.
+> **Current session: S25** (2026-07-05) — finished the S24 review's deferred fixes on
+> `feature/s24-code-quality-review`. Governed lineage: S16→…→S23→S24→**S25**. Next session = S26.
 
-_Last updated: 2026-07-05 (S24 — code-quality review: docs/CODE_REVIEW_S24.md ranks findings across
-rtldavis.py + weewx_monitor.py + the uploaders (draft PR #5, based on the S23 branch). Then fixed on
-feature/s24-code-quality-review, each with a proven regression test: H1 (parse_raw `raw`→`pkt`
-NameError on the unknown-channel path), H2 (pct_good_all deadlock that left the driver's own
-rxCheckPercent permanently null), and M3+U3 (gated the per-packet RAW logging out of INFO — the
-weewx.log bloat). Branch-only; the driver fixes need a rebuild + hot-swap to take effect (NOT
-deployed). Prior: S23 — governance alignment (LICENSE=GPLv3, AGENTS.md, ASSESSMENT, ROADMAP P-tiers,
-STATUS as the session-# source of truth).)_
+_Last updated: 2026-07-05 (S25 — completed the S24 review tail, all branch-only, NOT deployed:
+**U1/U2** rebased `owm.py` on the standard RESTThread hooks (`get_post_body`), regaining retry/backoff
++ `tests/test_owm_post_body.py`; **U4** added `influx.py` `verify_ssl` (default verifying, opt-out for
+self-signed); **M4** deleted dead `_fmt`/`parse_readings`; **L6/L5** driver nits; **L-C/L-D/U5** monitor
++ uploader nits; per-file **SPDX GPL-3.0-or-later** headers on the driver + 7 satellites. Offline suite
+34/34 green. Deferred **M-A** + its coupled **L-B** to S26 (both wait on the Layer A monitor deploy).
+Prior: S24 — code-quality review (docs/CODE_REVIEW_S24.md) + H1/H2/M3+U3 fixes.)_
 
 ---
 
@@ -84,31 +83,28 @@ STATUS as the session-# source of truth).)_
 - **Stale public branch** `origin/feature/influxdb-grafana` (11 commits) — may carry dashboard JSON +
   a driver-relevant wind-warmup fix; review, cherry-pick driver bits, delete from remote.
 
-## Next session actions (→ S25)
+## Next session actions (→ S26)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-1. **Finish the S24 review fixes** (see docs/CODE_REVIEW_S24.md "fix ordering"). Remaining on
-   `feature/s24-code-quality-review`: **U1/U2** (re-base `owm.py` on the standard RESTThread overrides,
-   modelled on `windy.py`, so it regains retry/backoff; delete its dead `format_url`/`post_request`/
-   `import time`), **U4** (restore TLS verification in `influx.py` with an opt-out), and the low-risk
-   sweep — **M4** dead code (`_fmt`, `parse_readings`) + **L5/L6/L-B/L-C/L-D/U5** nits + per-file SPDX
-   `GPL-3.0-or-later` headers.
-2. **M-A (monitor incremental read) — do AFTER the Layer A deploy lands** (item 4). Both edit
-   `weewx_monitor.py`; sequencing avoids stepping on the tested-and-queued Layer A file.
-3. **Deploy the S24 driver fixes** (H1/H2/M3): branch-only, need a rebuild + hot-swap — fold into the
+1. **M-A (monitor incremental read) + L-B (double-read race) — do AFTER the Layer A deploy lands**
+   (item 3). Both edit `weewx_monitor.py`; L-B is resolved for free by M-A's byte-offset `seek()`.
+   Sequencing avoids stepping on the tested-and-queued Layer A file. (The rest of the S24 review is
+   **done** in S25 — see CODE_REVIEW_S24.md "Fix status (S25)".)
+2. **Deploy the S24 driver fixes** (H1/H2/M3): branch-only, need a rebuild + hot-swap — fold into the
    next driver deploy (batches with v2.0.3 / the dewpoint rebuild). When H2 ships, **live-confirm
    rxCheckPercent starts populating** (`SELECT rxCheckPercent FROM archive ...` — expected all-NULL now).
-4. **Deploy the reception Layer A fix** (owner action; monitor-restart-only, DEC-0024): scp the new
+3. **Deploy the reception Layer A fix** (owner action; monitor-restart-only, DEC-0024): scp the new
    `weewx_monitor.py`, `sudo kill <pid>` (pidfile `logs/weewx_monitor.pid`); confirm the next
    RF-Reception email reads ≤100% (was ~150%). Review + merge draft PR #3.
-5. **Merge chain:** `feature/s24-code-quality-review` is stacked on `feature/s23-governance-alignment`
-   (draft PR #5). Merge S23 first, then retarget/merge S24. Also finish the S23 tail (fold root
-   `cleanup_backlog.md` into BACKLOG; resolve `logging.additions` + the bare `additions` artifact).
-6. **Watch for the first real rain glitch** (still not fired, checked S22), then **v2.0.3** (merge
+4. **Merge chain:** `feature/s24-code-quality-review` (now also carries the S25 fixes) is stacked on
+   `feature/s23-governance-alignment` (draft PR #5). Merge S23 first, then retarget/merge S24+S25. Also
+   finish the S23 tail (fold root `cleanup_backlog.md` into BACKLOG; resolve `logging.additions` + the
+   bare `additions` artifact).
+5. **Watch for the first real rain glitch** (still not fired, checked S22), then **v2.0.3** (merge
    `feature/rain-spike-filter` → `dev` → `main`, tag, release on GitHub + Docker Hub; fold in the baked
    honest-null dewpoint rewrite — needs an image rebuild). See ROADMAP P1.
-7. **Housekeeping (P0/P4):** remote URL casing (→ `WeatheredScientist/`); clean stale
+6. **Housekeeping (P0/P4):** remote URL casing (→ `WeatheredScientist/`); clean stale
    `origin/feature/influxdb-grafana`; rotate the exposed WU API key.
 
 **Live access (read-only used in S21/S22):** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in

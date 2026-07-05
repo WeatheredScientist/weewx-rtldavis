@@ -19,10 +19,15 @@ Severity: **H** = correctness bug (wrong output, crash, or silently-dead feature
 maintainability/efficiency with real impact · **L** = minor/readability.
 
 **Fix status (S24):** ✅ **H1** (`0929952`), ✅ **H2** (`970c47e`), ✅ **M3 + U3** (`8872947`) — each
-with a proven regression test; branch-only, driver fixes await a rebuild + hot-swap. ⏳ Deferred to
-S25 (see STATUS handoff): **M-A** (after the DEC-0024 Layer A monitor deploy, to avoid a conflict),
-**U1/U2** (`owm.py` RESTThread rebase), **U4** (`influx.py` TLS), and the **M4** dead-code + minor-nit
-+ SPDX sweep.
+with a proven regression test; branch-only, driver fixes await a rebuild + hot-swap.
+
+**Fix status (S25):** ✅ **U1/U2** (`owm.py` RESTThread rebase + `tests/test_owm_post_body.py`),
+✅ **U4** (`influx.py` `verify_ssl` opt-out, default verifying), ✅ **M4** (deleted `_fmt` +
+`parse_readings`), ✅ **L6** (per-element `pct_good` guard, `_stderr_sample_count` hoist, unreachable-`elif`
+note), ✅ **L5** (convention documented at `parse_raw`), ✅ **L-C/L-D/U5** nit sweep, ✅ per-file **SPDX**
+headers. ⏳ Still deferred to **S26**: **M-A** (monitor incremental read) + its coupled **L-B**
+(double-read race) — both wait for the DEC-0024 Layer A monitor deploy to avoid stepping on the queued
+`weewx_monitor.py`.
 
 ---
 
