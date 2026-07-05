@@ -6,6 +6,34 @@ under [Pre-S16].
 
 ---
 
+## [S24] — 2026-07-05 — Code-quality review + first fixes (on `feature/s24-code-quality-review`, stacked on S23)
+
+Reviewed the driver and its satellites, then fixed the two real bugs plus the log-bloat source. **Fixes
+are branch-only; the driver ones need a rebuild + hot-swap and are NOT deployed.** No-Rewrite honored —
+every change is surgical.
+
+- **`docs/CODE_REVIEW_S24.md` (new)** — deliverable-of-record: ranked findings across `rtldavis.py`
+  (1506 ll), `weewx_monitor.py`, and all uploaders (`owm`/`windy`/`ogoxe`/`wcloud`/`influx`) +
+  `loop_json_writer.py`. Draft **PR #5**, based on the S23 branch. Records a verification note: a
+  candidate `setDaemon`/`setName` finding was **dropped** after testing against the live Python 3.14.5.
+- **H1 (`0929952`)** — `parse_raw` unknown-channel branch referenced an undefined `raw` (param is
+  `pkt`) → `NameError` inside `genLoopPackets` instead of the intended log line. One-line fix +
+  `tests/test_parse_raw_channel.py` (proven to fail with the exact NameError pre-fix).
+- **H2 (`970c47e`)** — `pct_good_all` bootstrap deadlock: `_update_summaries` only set it under a guard
+  that also required it to be non-`None`, but `_init_stats`/`_reset_stats` null it every period, so the
+  driver's own `rxCheckPercent` was **never populated** (likely why the log-scraping monitor exists).
+  Dropped the self-defeating clause + `tests/test_reception_stats.py` (drives two archive periods +
+  `new_archive_record`; fails pre-fix). Live-confirm `rxCheckPercent` on deploy.
+- **M3 + U3 (`8872947`)** — the `weewx.log` bloat (DEC-0024 Layer B family): gated the driver's
+  per-packet `RAW_CHANNEL_PAYLOAD`/`RAW_RTL_HOP`/`RAW_RTL_STDERR_SAMPLE` INFO logging behind
+  `debug_rtld`, and dropped `influx.py`'s per-record `loginf` → `logdbg` (also fixed the "Bindding"
+  typo). Pure log-level changes, no behavior change.
+- **Deferred (in STATUS handoff → S25):** M-A (monitor incremental read — waits for the Layer A deploy
+  to avoid stepping on it), U1/U2 (`owm.py` RESTThread rebase for retry/backoff), U4 (`influx.py` TLS
+  verification), and the M4 dead-code + minor-nits + SPDX-header sweep.
+- Verified: full offline suite **29/29 green** (H1 2, H2 2, plus the existing 25); secret-scan passes
+  on every changed file; both edited modules `py_compile` clean.
+
 ## [S23] — 2026-07-05 — Cross-project governance alignment (on `feature/s23-governance-alignment`)
 
 Docs-only, **no driver or prod code touched, not deployed.** Piloting a shared governance standard
