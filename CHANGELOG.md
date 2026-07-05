@@ -6,6 +6,28 @@ under [Pre-S16].
 
 ---
 
+## [S23] — 2026-07-05 — Cross-project governance alignment (on `feature/s23-governance-alignment`)
+
+Docs-only, **no driver or prod code touched, not deployed.** Piloting a shared governance standard
+across the three-repo Eagle Hunt family (this repo is the pilot; ASSESSMENT.md §2/§5).
+
+- **`docs/ASSESSMENT.md` (new)** — cross-repo governance audit (weewx vs `eaglehunt-weather-dashboard`
+  vs `hyperlocal-forecast`), the "isolate content / harmonize form" alignment model, a draft
+  **Governance Standard v1** (shared core + per-repo profiles), ranked recommendations, and the
+  pilot→harvest→propagate roadmap toward a generic project template.
+- **`LICENSE` (new)** — GPLv3, verbatim canonical text (reused from `hyperlocal-forecast` for
+  guaranteed-correct text + cross-repo consistency). Fills the gap of a public, published tool with no
+  license; ecosystem-standard for a WeeWX-derived work. Per-file SPDX headers deferred to the S24 review.
+- **`AGENTS.md` (new)** — cross-agent entrypoint (the `AGENTS.md` convention) pointing at CLAUDE.md +
+  STATUS.md, so a non-Claude agent or human can pick the repo up from GitHub alone.
+- **ROADMAP restructured** — shared `P0–P4` vocabulary mapped to short/medium/long horizons; folded to
+  post-S22 reality with ✅ done-markers and a "vision" preamble; added the P0.5 governance-alignment
+  workstream. P0 governance bootstrap marked done.
+- **STATUS.md made the single source of truth** for the session number (DEC-0023) and the
+  **next-session handoff moved into the repo** (out of Claude-private memory, now a pointer) — the
+  north-star fix so handoff state is visible on GitHub. Doc-map reordered to put STATUS at slot #2.
+- Verified: secret-scan gate (DEC-0012) passes on all changed files; docs-only diff.
+
 ## [S22] — 2026-07-05 — Merge PR #2 + reception metric Layer A fix (on `feature/reception-dedup`, off `feature/rain-spike-filter`)
 
 Picked up the S21 handoff. No driver or prod code touched; not yet deployed.

@@ -16,14 +16,17 @@ can use it (PRINCIPLES §1, docs/INTERFACES.md).
 | # | Doc | Answers |
 |---|-----|---------|
 | 1 | `CLAUDE.md` (this) | where everything is + the rules that must never break |
-| 2 | `docs/CONVENTIONS.md` | how we operate — paths, commands, workflow, infra constants |
-| 3 | `docs/PRINCIPLES.md` | durable intent behind the design |
-| 4 | `docs/DECISIONS.md` | ADR log — settled choices; **do not re-litigate**, supersede with a new DEC |
-| 5 | `docs/ARCHITECTURE.md` | the ISS→RTL-SDR→driver→WeeWX→sinks chain; volume-mount map; entrypoint |
-| 6 | `docs/INTERFACES.md` | the data contract — loop-JSON fields + InfluxDB schema (what consumers depend on) |
-| 7 | `docs/ROADMAP.md` | what's next, in what order |
-| 8 | `docs/STATUS.md` | what's on the bench right now (in-flight threads) |
+| 2 | `docs/STATUS.md` | **where we are right now** — current session + active thread + next actions (single source of truth) |
+| 3 | `docs/CONVENTIONS.md` | how we operate — paths, commands, workflow, infra constants |
+| 4 | `docs/PRINCIPLES.md` | durable intent behind the design |
+| 5 | `docs/DECISIONS.md` | ADR log — settled choices; **do not re-litigate**, supersede with a new DEC |
+| 6 | `docs/ARCHITECTURE.md` | the ISS→RTL-SDR→driver→WeeWX→sinks chain; volume-mount map; entrypoint |
+| 7 | `docs/INTERFACES.md` | the data contract — loop-JSON fields + InfluxDB schema (what consumers depend on) |
+| 8 | `docs/ROADMAP.md` | what's next, in what order |
 | 9 | `CHANGELOG.md` | what changed recently (read the latest entry); `BACKLOG.md` = open ideas |
+
+Also: `docs/ASSESSMENT.md` — current strategic anchor (cross-repo governance alignment); `AGENTS.md` —
+cross-agent entrypoint (points here + at STATUS); `LICENSE` — GPLv3.
 
 If a doc is missing or contradicts another, stop and flag it — don't guess.
 
@@ -60,10 +63,15 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
 
 ## Session ritual
 
-- **Start:** read this map; `git fetch && git status`; read STATUS.md "Active thread".
-- **End:** update STATUS.md, append to CHANGELOG.md, `git status` should show *up to date*.
+- **Start:** read this map (STATUS.md first); `git fetch && git status`; read STATUS.md "Active
+  thread" + "Next session actions". A clean-pickup check: `git status` clean and `pytest` green
+  before new work.
+- **End:** update STATUS.md (session #, active thread, next actions — it's the source of truth),
+  append to CHANGELOG.md, `git status` should show *up to date*. Don't strand the next session's
+  handoff in private memory — it lives in STATUS.md so it's visible on GitHub.
 - Sessions use **this repo's own independent counter** — a session number means something only within
-  this repo (cross-repo refs are prefixed, e.g. `weewx S21` vs `dash S40`). To number a session, take
-  *this repo's* latest `CHANGELOG.md` / `STATUS.md` + 1; **do not** consult the dashboard (DEC-0023
-  supersedes the old shared-counter idea in DEC-0013). The governed era runs **S16 → S17 → S18 → S19
-  → S20 → …** (S20 = governance hardening); pre-S16 history is reconstructed/approximate.
+  this repo (cross-repo refs are prefixed, e.g. `weewx S23` vs `dash S40`). **`docs/STATUS.md` is the
+  single source of truth for the current session number** — take it from there (+1 for a new session),
+  not from CHANGELOG or memory; every other doc points at STATUS. DEC-0023 supersedes the old
+  shared-counter idea in DEC-0013. The governed era runs **S16 → S17 → S18 → S19 → S20 → S21 → S22 →
+  S23 → …**; pre-S16 history is reconstructed/approximate.
