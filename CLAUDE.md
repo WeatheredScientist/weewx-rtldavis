@@ -62,5 +62,8 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
 
 - **Start:** read this map; `git fetch && git status`; read STATUS.md "Active thread".
 - **End:** update STATUS.md, append to CHANGELOG.md, `git status` should show *up to date*.
-- Sessions are numbered continuing the shared lineage with the dashboard repo — this repo's
-  governed era began at **S16** (see DEC-0013). Pre-S16 history is reconstructed/approximate.
+- Sessions use **this repo's own independent counter** — a session number means something only within
+  this repo (cross-repo refs are prefixed, e.g. `weewx S21` vs `dash S40`). To number a session, take
+  *this repo's* latest `CHANGELOG.md` / `STATUS.md` + 1; **do not** consult the dashboard (DEC-0023
+  supersedes the old shared-counter idea in DEC-0013). The governed era runs **S16 → S17 → S18 → S19
+  → S20 → …** (S20 = governance hardening); pre-S16 history is reconstructed/approximate.
