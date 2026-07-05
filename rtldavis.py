@@ -691,7 +691,9 @@ class PacketFactory(object):
         pkt = dict()
         payload = lines[0].strip()
         if "ChannelIdx:" in payload:
-            loginf("RAW_CHANNEL_PAYLOAD: %s" % payload)
+            # DEC-0024 investigation scaffolding: gated behind debug_rtld=3 so it
+            # no longer floods weewx.log at INFO on every freq-hop (S24 M3).
+            dbg_rtld(3, "RAW_CHANNEL_PAYLOAD: %s" % payload)
         if payload:
             for parser in PacketFactory.KNOWN_PACKETS:
                 m = parser.IDENTIFIER.search(payload)
@@ -1073,10 +1075,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     if not hasattr(self, "_stderr_sample_count"):
                         self._stderr_sample_count = 0
                     if self._stderr_sample_count < 20:
-                        loginf("RAW_RTL_STDERR_SAMPLE: %s" % _line.strip())
+                        # bounded startup sample; debug_rtld=2 (S24 M3)
+                        dbg_rtld(2, "RAW_RTL_STDERR_SAMPLE: %s" % _line.strip())
                         self._stderr_sample_count += 1
                     if "Hop:" in _line or "ChannelIdx:" in _line:
-                        loginf("RAW_RTL_HOP: %s" % _line.strip())
+                        # per-hop line -- gated at debug_rtld=3 so it no longer
+                        # floods weewx.log at INFO on every freq-hop (S24 M3).
+                        dbg_rtld(3, "RAW_RTL_HOP: %s" % _line.strip())
                 for data in PacketFactory.create(self, lines):
                     if data:
                         time_last_received = int(time.time())
