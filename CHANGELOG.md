@@ -6,6 +6,36 @@ under [Pre-S16].
 
 ---
 
+## [S26] — 2026-07-05 — Fix the secret gate's mainline coverage (draft PRs #6 → dev, #7 → main)
+
+A dashboard (dash) cross-repo note flagged the ported DEC-0012 secret gate as neutered and warned this
+repo's gate "almost certainly has the same hole." Verified empirically — the concern is real, but not
+where the note assumed. **No prod/driver code touched; two draft PRs, nothing merged.**
+
+- **Diagnosis (empirical).** The neuter bug — the `grep -n` `<lineno>:` prefix matched the docstring
+  allow-rule's bare `:` and silently whitelisted real `ident = secret` lines — was **already fixed** on
+  the governance feature-stack in S20 (`2a6327c`, `:` → `[A-Za-z]:`); the current gate catches a planted
+  secret assignment (a real-looking `api_key` value) that the old gate passed clean. But the fix
+  never reached the mainline:
+  - **`main`/`origin/main`** — **no `check_secrets.sh` and no `ci.yml` at all.** A fresh clone of the
+    public default branch had zero secret scanning.
+  - **`dev`/`origin/dev`** — the **neutered S17 gate**, *and* its secret-scan was the last step of a
+    single CI job behind `ruff check`, which fails on the pre-S24 tree (32 errors) — so the whole job
+    went red at ruff and the scan never ran. Doubly dead.
+- **PR #6 → `dev`** (`s26-secret-gate-dev`) — replaced `check_secrets.sh` with the fixed version; split
+  `.github/workflows/ci.yml` into an independent **`secret-scan`** job + a `lint` job so a lint failure
+  can never skip the gate.
+- **PR #7 → `main`** (`s26-secret-gate-main`) — added `check_secrets.sh` (fixed) + the two-job `ci.yml`
+  + `.pre-commit-config.yaml` (main had none of the apparatus).
+- **Verified.** On both PRs, CI **`secret-scan` = pass** (clean tree) and **`lint` = fail** (expected,
+  pre-S24 ruff; non-blocking to the gate). Locally: planted secret caught (exit 1); the fixed gate scans
+  each whole tracked tree clean (exit 0, no false positives).
+- **Open (→ S27):** (1) mark **`secret-scan`** a **required** status check in branch protection on `dev`
+  + `main` (needs repo admin; PAT 403'd) — until then CI is advisory, not blocking. (2) Reconcile the
+  s20→s24 governance stack's old single-job `ci.yml` to this two-job structure when it merges. (3) Review
+  + merge #6 then #7. Cross-repo finding recorded; the corrected takeaway for dash: verify against the
+  branch that actually carries the fix, and confirm its own gate uses the `[A-Za-z]:` guard.
+
 ## [S25] — 2026-07-05 — Finish the S24 review fixes (on `feature/s24-code-quality-review`)
 
 Completed the S24 review's deferred tail. **Branch-only, not deployed;** the driver changes still ride
