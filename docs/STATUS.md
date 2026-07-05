@@ -10,7 +10,8 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-_Last updated: 2026-07-04 (S19 resume — rain fix DEPLOYED live; monitor alert active; unmerged)_
+_Last updated: 2026-07-04 (S40 — session numbering realigned to the shared counter (DEC-0023);
+secret-scan gate hardened; rain fix still live + unmerged)_
 
 ---
 
@@ -28,13 +29,17 @@ _Last updated: 2026-07-04 (S19 resume — rain fix DEPLOYED live; monitor alert 
 > 2. After it's ridden a few days clean: **merge `feature/rain-spike-filter` → `dev` → `main` + tag
 >    v2.0.3**, folding in the pending baked dewpoint rewrite (needs an image rebuild — bigger deploy
 >    than the hot-swap; plan it).
-> 3. Then **S19 proper** — DEC-0022 sensor-QC hardening (below).
+> 3. Then, in a later session, **DEC-0022 sensor-QC hardening** (below).
+>
+> _Numbering note (S40): this repo's counter had drifted (independent S16–S19) from the dashboard's
+> shared lineage (at S39); realigned forward per DEC-0023 — this session is **S40**, and the next
+> weewx session takes the shared counter's next integer._
 
 ## Open threads (not yet shipped)
 
 - **Rain fix** deployed live but **not merged** — still only on `feature/rain-spike-filter` (`dev`
   and `main` untouched). Promote to v2.0.3 once it's proven in the wild (see Active thread).
-- **S19 — sensor-QC hardening (DEC-0022):** the stale-substitution DEC-0006 violation in
+- **Sensor-QC hardening (DEC-0022, a later session):** the stale-substitution DEC-0006 violation in
   `dewpoint_service.py` (temp/humidity/radiation/UV — real 6263 sensors get stuck if they fail) +
   minor windGust/radiation/UV StdQC bounds. Ties into the pending dewpoint rewrite. Do after v2.0.3.
 - **Pending v2.0.3 dewpoint rewrite** — the honest-null Jun-16 host version is written but undeployed

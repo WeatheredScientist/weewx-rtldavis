@@ -261,3 +261,26 @@ rain fix stays tightly scoped:
 *Rationale:* these share the rain bug's theme (RF glitch → bad sensor data) but have real design
 nuance and behavioral risk; bundling them into the rain deploy would widen the blast radius. See
 ROADMAP P1.5 / STATUS.
+
+## DEC-0023 — Reunify session numbering into one shared cross-repo counter
+
+**Status:** Accepted · **Date:** 2026-07-04 (S40) · **Amends:** DEC-0013
+
+DEC-0013 established that session numbering continues a **single lineage shared** with
+`eaglehunt-weather-dashboard`. In practice this repo incremented its **own** copy of the counter
+(S16 → S17 → S18 → S19) while the dashboard independently reached **S39** — the two collided on
+S16–S19 and diverged, orphaning this repo's numbering from the shared line (caught in the S40
+governance audit). Correction, chosen to avoid rewriting published history:
+
+- weewx-rtldavis **rejoins the shared counter at the current global maximum + 1**. The dashboard's
+  latest session is S39, so **this session is S40**, and both repos henceforth draw the next number
+  from **one increasing counter**.
+- Before numbering a session, **check the sibling repo's latest `CHANGELOG.md` / `docs/STATUS.md`**
+  and take the next integer, regardless of which repo the session runs in.
+- The published S16–S19 labels here are **left as-is** — a valid, labeled parallel sub-sequence.
+  Retroactively renumbering committed CHANGELOG/DECISIONS entries and any tags is not worth the churn.
+
+*Rationale:* a shared counter is only useful if it is actually shared; two independent counters both
+claiming "S16+" defeat the cross-repo coherence DEC-0013 sought. Realigning **forward** fixes it with
+zero disruption to published tags or entries (PRINCIPLES §7, incremental-over-rewrite). DEC-0013's
+origin-alignment rationale still stands; this only corrects the going-forward mechanics.
