@@ -26,7 +26,8 @@ can use it (PRINCIPLES §1, docs/INTERFACES.md).
 | 9 | `CHANGELOG.md` | what changed recently (read the latest entry); `BACKLOG.md` = open ideas |
 
 Also: `docs/ASSESSMENT.md` — current strategic anchor (cross-repo governance alignment); `AGENTS.md` —
-cross-agent entrypoint (points here + at STATUS); `LICENSE` — GPLv3.
+cross-agent entrypoint (points here + at STATUS); `docs/DATA_ERRATA.md` — append-only log of known-bad
+observations + how they were corrected/reconciled (DEC-0025); `LICENSE` — GPLv3.
 
 If a doc is missing or contradicts another, stop and flag it — don't guess.
 

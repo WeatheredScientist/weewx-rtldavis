@@ -13,14 +13,24 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-> **Current session: S28** (2026-07-05) — release still calendar-gated (no real rain glitch yet); cleared
-> the unblocked follow-ups. **P1 verified live** (rain-watch: 0 glitches to date; reception Layer A
-> confirmed 91–92% [OK]). **M-A + L-B** (monitor byte-offset incremental read) coded + tested (40/40) →
-> **draft PR #10 → `dev`**, not yet deployed (owner-gated). **Branch cleanup done** (deleted
-> `s20-governance-hardening` + `feature/influxdb-grafana`; `s27-p3-deployed` already auto-gone; URL casing
-> already correct). No prod/driver code touched. Governed lineage: S16→…→S26→S27→**S28**. Next session = S29.
+> **Current session: S29** (2026-07-05) — dug into RF-metric trust + the July 4 rain glitch. **Reception
+> "91%" was a denominator artifact:** the monitor divided WU-publish count by 24, but this ISS (Tx 4)
+> transmits every ~2.8125s → only ~21.3/min are physically sent; live measurement shows ~21.75/min with
+> no gaps = **~100% reception, not 91%**. Fixed the denominator (env-overridable 21 + capped `wu_pct()`),
+> +9 tests (suite **49/49**), pushed to **PR #10 branch** (rides the same monitor deploy). **The driver's
+> *honest* metric `rxCheckPercent` has been NULL since 2026-06-18** (last real value 67.5%) — opened as a
+> tracked investigation (below). **July 4 phantom +1.28" rain confirmed** in the archive (two 0.64"
+> records) and in the WU/CWOP→MADIS external record; established **DEC-0025 (preserve-and-flag, never
+> delete)** + `docs/DATA_ERRATA.md` (ERR-0001). Local honest-null is **owner-gated** (prod DB write,
+> read-only boundary). Governed lineage: S16→…→S27→S28→**S29**. Next session = S30.
 
-_Last updated: 2026-07-05 (S28 — unblocked follow-ups. **P1 verified (read-only, live):** rain-watch
+_Last updated: 2026-07-05 (S29 — RF-metric trust + July 4 glitch dig. **Reception fix** (denominator
+24→21 physical TX rate, `wu_pct()` cap, +9 tests, suite 49/49) pushed to PR #10 branch. **rxCheckPercent
+dead since 2026-06-18** → investigation opened. **DEC-0025 + docs/DATA_ERRATA.md** (ERR-0001: July 4
+phantom +1.28", confirmed in archive + WU/MADIS). Local honest-null owner-gated. **S28 below still
+holds:** rain-watch = 0 glitches since the fix, reception genuinely ~100% (was misread as 91%).)_
+
+_Prior S28: unblocked follow-ups. **P1 verified (read-only, live):** rain-watch
 grep = **0** `rejecting implausible counter delta` events across the full log range (2026-06-05 → now),
 so v2.0.3 stays parked; reception Layer A confirmed live (WINDOW 88–100%, 5-window avg **91–92% [OK]**,
 0 bad windows), monitor healthy. Layer B signature still live (driver emits `RAW_CHANNEL_PAYLOAD`/
@@ -87,6 +97,29 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
   `WeatheredScientist/weewx-rtldavis`, and it is public (the dashboard is the separate
   `eaglehunt-weather-dashboard`). So the fix is already public on GitHub (on `dev`), just not released
   on `main`. Promote `dev` → `main` + tag v2.0.3 once it's proven in the wild (see Active thread).
+- **Reception %% denominator fixed — honest metric still owed (S29).** The monitor's "91%" was a
+  denominator artifact (divided by 24; the ISS physically sends ~21.3/min at the 2.8125s Tx-4 period).
+  Fixed on the PR #10 branch (`WU_RF_EXPECTED` 24→21, env-overridable, `wu_pct()` capped at 100, +9
+  tests). Deploys with the M-A/L-B monitor change. This is the *interim* honest number; the *real* metric
+  is the driver's `rxCheckPercent` (next thread).
+- **`rxCheckPercent` dead since 2026-06-18 — INVESTIGATION OPEN (S29).** The driver's own honest
+  reception metric (received ÷ max_count, using the correct per-transmitter period) populated the archive
+  from 2026-05-26 to **2026-06-18 (avg 67.5%)**, then went **NULL for 17 days** (0 non-null in the last 7
+  days). The S24 "H2" story (a guard that "could never pass") does **not** fit 22,502 populated rows, so
+  the real cause is something that changed on/around June 18 — most likely the `curr_cnt` data-packet
+  parse (the driver reads per-transmitter counts off the Go process's data line; if that line's format
+  changed with the rw250/rw350 binary, `curr_cnt` stays 0 → `total_max_count=0` → `pct_good_all=None` →
+  `rxCheckPercent` NULL). **Next:** diff what the live Go binary emits vs what `parse_text`/`curr_cnt%d`
+  expects; reconcile with the rw250-vs-rw350 question (ARCHITECTURE §6). Reviving this + the S24 H2 fix is
+  the path to a *trustworthy* live RF number (then point the monitor at it instead of counting log lines).
+- **ERR-0001 local honest-null — OWNER-GATED prod step (S29, DEC-0025).** The July 4 phantom +1.28" is in
+  the archive (two 0.64" records at 07:04 + 07:05 UTC). Correcting it is a prod DB write (blocked by the
+  read-only NAS boundary), so it's an owner step: **(1)** back up `weewx.sdb`; **(2)** `UPDATE archive SET
+  rain=NULL WHERE dateTime IN (1783148640, 1783148700)`; **(3)** rebuild that day's summary (`weectl
+  database rebuild-daily --date=2026-07-04` in the container, or update `archive_day_rain`); **(4)** verify
+  the Jul-4 daily total drops by 1.28". **InfluxDB** (the dashboard's source) still shows +1.28" until its
+  matching points are nulled — cross-repo (DEC-0010), tracked in DATA_ERRATA.md. External WU/MADIS copies
+  are immutable. Update ERR-0001's status to ✅ when done.
 - **Sensor-QC hardening (DEC-0022, a later session):** the stale-substitution DEC-0006 violation in
   `dewpoint_service.py` (temp/humidity/radiation/UV — real 6263 sensors get stuck if they fail) +
   minor windGust/radiation/UV StdQC bounds. Ties into the pending dewpoint rewrite. Do after v2.0.3.
@@ -109,31 +142,39 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
   its only driver-relevant bit (wind-warmup `3f5470f`) was already in `dev`. Also deleted merged
   `s20-governance-hardening`; `s27-p3-deployed` was already auto-gone on #9's merge.
 
-## Next session actions (→ S29)
+## Next session actions (→ S30)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S28:** P1 verified live (rain-watch = 0 glitches to date; reception Layer A confirmed
-91–92% [OK]). Coded + tested **M-A + L-B** (monitor byte-offset incremental read) → **draft PR #10 →
-`dev`** (40/40, secret-scan green). **Branch cleanup done** (deleted `s20-governance-hardening` +
-`feature/influxdb-grafana`; `s27-p3-deployed` already auto-gone; URL casing already correct — both no-ops).
+**✅ Done in S29:** Diagnosed the RF-metric trust problem — "91%" was a **denominator artifact** (monitor
+divided by 24; the ISS physically sends ~21.3/min); **real reception is ~100%**. Fixed it on the **PR #10
+branch** (`WU_RF_EXPECTED` 24→21 env-overridable + `wu_pct()` cap, +9 tests, suite **49/49**, pushed
+`db5d82f`). Found the driver's honest **`rxCheckPercent` dead since 2026-06-18** → opened as an
+investigation (Open threads). Confirmed the **July 4 phantom +1.28"** in archive + WU (+ almost certainly
+MADIS); established **DEC-0025** (preserve-and-flag) + **`docs/DATA_ERRATA.md`** (ERR-0001).
 
-**Now the standing queue (owner/calendar-gated first):**
+**Now the standing queue (owner-gated first):**
 
-1. **Merge + deploy PR #10 (M-A/L-B).** Review the draft PR; merge to `dev`; deploy the monitor the
-   same way as Layer A (owner: scp `weewx_monitor.py`, `sudo kill <pid>`, esynoscheduler respawns ≤5
-   min). Confirm "Poll: N new lines" keeps flowing + reception stays ~90%. Independent of the release.
-2. **Watch for the first real rain glitch** (0 to date, checked S28). Confirms the S18 fix + alert
+0. **Owner prod steps (need a real terminal / write access — read-only boundary blocks the agent):**
+   (a) **Deploy PR #10 + the reception fix** — one monitor restart carries both (scp `weewx_monitor.py`,
+   `sudo kill <pid>`, esynoscheduler respawns ≤5 min). Then confirm WINDOW now reads ~100% (not ~90%) and
+   "Poll: N new lines" keeps flowing. (b) **Apply ERR-0001 honest-null** — back up `weewx.sdb`; `UPDATE
+   archive SET rain=NULL WHERE dateTime IN (1783148640, 1783148700)`; `weectl database rebuild-daily
+   --date=2026-07-04`; verify Jul-4 total drops 1.28"; mark ERR-0001 ✅. InfluxDB null is cross-repo.
+1. **`rxCheckPercent` revival investigation** (Open threads) — the path to a *trustworthy* live RF metric;
+   diff the live Go binary's data line vs `curr_cnt%d` parsing; reconcile rw250/rw350. Pairs with S24 H2.
+2. **Merge PR #10 to `dev`** (secret-scan green, lint red-on-purpose; now also carries the reception fix).
+3. **Watch for the first real rain glitch** (0 to date, re-checked S29). Confirms the S18 fix + alert
    together (log "rejecting implausible counter delta" + clean archive + the email to `ALERT_TO`).
    Calendar-bound (~1/2–3 wk). The fix is live in prod; this gates only the *formal* release, and it's
    a **confidence** gate, not a safety one — could be waived (cut v2.0.3 on tests + live evidence).
-3. **v2.0.3 release** once the glitch rides clean (or the gate is waived): **promote `dev` → `main`,
+4. **v2.0.3 release** once the glitch rides clean (or the gate is waived): **promote `dev` → `main`,
    tag, release on GitHub + Docker Hub.** `dev` already carries rain + reception + governance + the
    S24/S25 code-quality fixes. Fold in the baked honest-null dewpoint rewrite (needs an image rebuild)
    and the **S24 driver fixes** (H1/H2/M3, branch-only — need the same rebuild + hot-swap). When H2
    ships, **live-confirm rxCheckPercent starts populating** (`SELECT rxCheckPercent FROM archive ...` —
    expected all-NULL now). See ROADMAP P1.
-4. **Owner housekeeping:** rotate the exposed WU API key; set `STATION_NAME` in the NAS `monitor.env`
+5. **Owner housekeeping:** rotate the exposed WU API key; set `STATION_NAME` in the NAS `monitor.env`
    (emails currently fall back to "My PWS"). Keep `feature/rain-spike-filter` until v2.0.3.
 
 **Live access (read-only used in S21/S22):** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in
