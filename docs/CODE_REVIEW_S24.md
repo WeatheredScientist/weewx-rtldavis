@@ -18,6 +18,12 @@ confirmation that isn't reachable from a dev checkout, it is marked **[needs liv
 Severity: **H** = correctness bug (wrong output, crash, or silently-dead feature) · **M** =
 maintainability/efficiency with real impact · **L** = minor/readability.
 
+**Fix status (S24):** ✅ **H1** (`0929952`), ✅ **H2** (`970c47e`), ✅ **M3 + U3** (`8872947`) — each
+with a proven regression test; branch-only, driver fixes await a rebuild + hot-swap. ⏳ Deferred to
+S25 (see STATUS handoff): **M-A** (after the DEC-0024 Layer A monitor deploy, to avoid a conflict),
+**U1/U2** (`owm.py` RESTThread rebase), **U4** (`influx.py` TLS), and the **M4** dead-code + minor-nit
++ SPDX sweep.
+
 ---
 
 ## `rtldavis.py` (1506 lines) — the driver

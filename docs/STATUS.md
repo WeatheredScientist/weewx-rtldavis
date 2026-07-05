@@ -13,15 +13,17 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-> **Current session: S23** (2026-07-05) — governance-alignment initiative (docs-only, zero prod
-> risk). Governed lineage: S16→S17→S18→S19→S20→S21→S22→**S23**. Next session = S24.
+> **Current session: S24** (2026-07-05) — code-quality review of the driver + satellites, plus the
+> first fixes. Governed lineage: S16→S17→S18→S19→S20→S21→S22→S23→**S24**. Next session = S25.
 
-_Last updated: 2026-07-05 (S23 — cross-project governance-alignment audit (ASSESSMENT.md) + the safe
-docs deliverables: LICENSE=GPLv3, AGENTS.md, ROADMAP restructured to shared P-tiers, STATUS made the
-session-# source of truth with the handoff moved in from memory, doc-map reorder. No prod code, no
-deploy. Prior: S22 — merged PR #2 (S20 governance) into the rain branch; built + tested the
-reception-metric Layer A fix (DEC-0024) pending a monitor restart; no rain glitch in the wild yet;
-rain fix still live + unmerged.)_
+_Last updated: 2026-07-05 (S24 — code-quality review: docs/CODE_REVIEW_S24.md ranks findings across
+rtldavis.py + weewx_monitor.py + the uploaders (draft PR #5, based on the S23 branch). Then fixed on
+feature/s24-code-quality-review, each with a proven regression test: H1 (parse_raw `raw`→`pkt`
+NameError on the unknown-channel path), H2 (pct_good_all deadlock that left the driver's own
+rxCheckPercent permanently null), and M3+U3 (gated the per-packet RAW logging out of INFO — the
+weewx.log bloat). Branch-only; the driver fixes need a rebuild + hot-swap to take effect (NOT
+deployed). Prior: S23 — governance alignment (LICENSE=GPLv3, AGENTS.md, ASSESSMENT, ROADMAP P-tiers,
+STATUS as the session-# source of truth).)_
 
 ---
 
@@ -82,27 +84,31 @@ rain fix still live + unmerged.)_
 - **Stale public branch** `origin/feature/influxdb-grafana` (11 commits) — may carry dashboard JSON +
   a driver-relevant wind-warmup fix; review, cherry-pick driver bits, delete from remote.
 
-## Next session actions (→ S24)
+## Next session actions (→ S25)
 
-**This section is the repo-visible handoff** (replaces the old Claude-private `next-session-actions`
-memory, which now only points here). Read it first when resuming.
+**This section is the repo-visible handoff.** Read it first when resuming.
 
-1. **Finish the S23 governance-alignment tail** (the `feature/s23-governance-alignment` branch): after
-   review, merge it; then the small stragglers — archive/fold the root `cleanup_backlog.md` into
-   BACKLOG, and resolve `logging.additions` + the bare `additions` artifact (document or remove). Then
-   converge the changelog format (Keep-a-Changelog headings) + DECISIONS entry-skeleton (planned S25).
-2. **S24 = thorough code-quality review** — `rtldavis.py` (1506 ll) + `weewx_monitor.py` + the
-   uploaders, for sloppy/confusing/under-commented code; deliver ranked findings, then agreed fixes on
-   a branch (No-Rewrite applies). Fold in per-file SPDX `GPL-3.0-or-later` headers.
-3. **Deploy the reception Layer A fix** (owner action; monitor-restart-only, DEC-0024): scp the new
-   `weewx_monitor.py` to the NAS, then `sudo kill <pid>` (pidfile `logs/weewx_monitor.pid`) — the
-   respawn loop reloads on-disk code ≤5 min. Confirm the next RF-Reception email reads ≤100% (was
-   ~150%). Review + merge draft PR #3. Reversible.
-4. **Watch for the first real rain glitch in the wild** — still not fired (checked S22). Grep
-   `weewx.log` for "rejecting implausible counter delta" + the monitor email. Gates v2.0.3.
-5. **Then v2.0.3** — merge `feature/rain-spike-filter` → `dev` → `main`, tag, release on GitHub +
-   Docker Hub; fold in the baked honest-null dewpoint rewrite (needs an image rebuild). See ROADMAP P1.
-6. **Housekeeping (P0/P4):** remote URL casing (lowercase → `WeatheredScientist/`); clean stale
+1. **Finish the S24 review fixes** (see docs/CODE_REVIEW_S24.md "fix ordering"). Remaining on
+   `feature/s24-code-quality-review`: **U1/U2** (re-base `owm.py` on the standard RESTThread overrides,
+   modelled on `windy.py`, so it regains retry/backoff; delete its dead `format_url`/`post_request`/
+   `import time`), **U4** (restore TLS verification in `influx.py` with an opt-out), and the low-risk
+   sweep — **M4** dead code (`_fmt`, `parse_readings`) + **L5/L6/L-B/L-C/L-D/U5** nits + per-file SPDX
+   `GPL-3.0-or-later` headers.
+2. **M-A (monitor incremental read) — do AFTER the Layer A deploy lands** (item 4). Both edit
+   `weewx_monitor.py`; sequencing avoids stepping on the tested-and-queued Layer A file.
+3. **Deploy the S24 driver fixes** (H1/H2/M3): branch-only, need a rebuild + hot-swap — fold into the
+   next driver deploy (batches with v2.0.3 / the dewpoint rebuild). When H2 ships, **live-confirm
+   rxCheckPercent starts populating** (`SELECT rxCheckPercent FROM archive ...` — expected all-NULL now).
+4. **Deploy the reception Layer A fix** (owner action; monitor-restart-only, DEC-0024): scp the new
+   `weewx_monitor.py`, `sudo kill <pid>` (pidfile `logs/weewx_monitor.pid`); confirm the next
+   RF-Reception email reads ≤100% (was ~150%). Review + merge draft PR #3.
+5. **Merge chain:** `feature/s24-code-quality-review` is stacked on `feature/s23-governance-alignment`
+   (draft PR #5). Merge S23 first, then retarget/merge S24. Also finish the S23 tail (fold root
+   `cleanup_backlog.md` into BACKLOG; resolve `logging.additions` + the bare `additions` artifact).
+6. **Watch for the first real rain glitch** (still not fired, checked S22), then **v2.0.3** (merge
+   `feature/rain-spike-filter` → `dev` → `main`, tag, release on GitHub + Docker Hub; fold in the baked
+   honest-null dewpoint rewrite — needs an image rebuild). See ROADMAP P1.
+7. **Housekeeping (P0/P4):** remote URL casing (→ `WeatheredScientist/`); clean stale
    `origin/feature/influxdb-grafana`; rotate the exposed WU API key.
 
 **Live access (read-only used in S21/S22):** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in
