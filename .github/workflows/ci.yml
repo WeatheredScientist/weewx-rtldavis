@@ -7,7 +7,22 @@ on:
     branches: [main, dev]
 
 jobs:
-  lint-and-scan:
+  # The load-bearing gate for this PUBLIC repo (DEC-0012): fail the build if any
+  # tracked file carries a secret or personal identifier. Kept as its OWN job so
+  # it runs independently of lint — a lint failure must never silently skip the
+  # secret scan (mark this job as the required status check in branch protection).
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Secret scan (all tracked files)
+        run: |
+          chmod +x scripts/check_secrets.sh
+          git ls-files | xargs scripts/check_secrets.sh
+
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -29,10 +44,3 @@ jobs:
 
       - name: Mypy
         run: python -m mypy --ignore-missing-imports --no-strict-optional . || true
-
-      # The load-bearing gate for this PUBLIC repo (DEC-0012): fail the build if
-      # any tracked file carries a secret or personal identifier.
-      - name: Secret scan (all tracked files)
-        run: |
-          chmod +x scripts/check_secrets.sh
-          git ls-files | xargs scripts/check_secrets.sh
