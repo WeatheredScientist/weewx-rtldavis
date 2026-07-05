@@ -218,3 +218,136 @@ evaluation.
 *Rationale / open thread:* neither value is settled without a proper test. A 24 h+ averaged gain
 sweep (no inline preamp) is needed to pick the real optimum — it takes a 1–2 week window to run
 honestly (BACKLOG, ROADMAP). Until then, 372 is the interim production value, not a final decision.
+
+## DEC-0021 — Rain-counter glitch filter (the false-rain fix)
+
+**Status:** Accepted · **Date:** 2026-07-04 (S18) · **Release:** v2.0.3
+
+Reject implausible rain-counter deltas in the driver instead of accumulating phantom rain. Root
+cause (confirmed S18 from code + archive + logs): the Davis rain counter is 7-bit (0–127, wraps at
+128), and the original driver treated **any** negative delta as a 127→0 wraparound and added 128 —
+turning an RF-decode glitch into phantom rain. Two confirmed events: 2026-05-25 (+128 → 1.28",
+exceeds the world 1-min record) and 2026-07-04 (−64 → +64 → 0.64", verified false against the
+WeatherLink Live console). Defense in depth:
+1. **Driver** (`rtldavis.py`, `rain_delta_tips`): only deltas near −128 are treated as wraparounds
+   (real ones observed were exactly −127); small-negative and >`MAX_PLAUSIBLE_TIPS` (60 tips =
+   0.60") deltas are rejected → `packet['rain'] = None` (null-on-rejection, DEC-0006). Pure,
+   unit-tested (`tests/test_rain_filter.py`).
+2. **Backstop** (`weewx.conf [StdQC]`): `rain 0,10 → 0,1.0 inch`; add `rainRate 0,16 inch_per_hour`.
+
+*Rationale:* honest null > fabricated rain (DEC-0006). The cap thresholds are physically grounded
+(world 1-min rainfall record ~1.23"; local worst ~1.8"/hr sustained) with generous leeway, so they
+catch the characteristic 64/128 glitches without ever clipping real Chester-County rain. CRC is
+enforced, so these are multi-bit/mis-decode glitches that pass CRC — the filter is defensive against
+the *class* of implausible value, not a specific bit. The rainRate bound is minor insurance: the
+driver fix already closes the main rainRate-pollution path (StdRainRater computing from phantom rain).
+
+## DEC-0022 — Sensor-QC hardening deferred to S19 (OPEN)
+
+**Status:** Deferred · **Date:** 2026-07-04 (S18)
+
+Two similar-vein issues found during the S18 rain audit, deferred to a dedicated S19 pass so the
+rain fix stays tightly scoped:
+1. **Stale-substitution (DEC-0006 violation):** `dewpoint_service.py` (lines ~90–97) substitutes the
+   **last known** outTemp/outHumidity/radiation/UV when a field is missing, instead of nulling —
+   the same anti-pattern fixed for wind. If a real sensor fails, its reading sticks indefinitely.
+   Fix needs care: some caching is legitimate (the VP2+ rotates fields across LOOP packets, so
+   "absent this packet" ≠ "sensor failed") and the substitution partly feeds the dewpoint/heatindex
+   calc — so the fix is "cache for sparse-packet gaps, null after a sensor-failure timeout," and it
+   likely folds into the pending v2.0.3 dewpoint rewrite.
+2. **Minor StdQC gaps:** high-side `windGust` glitch (that still exceeds a valid windSpeed slips past
+   `_filter_wind`), and no `radiation`/`UV` bounds. Low severity (transient, non-accumulating).
+
+*Rationale:* these share the rain bug's theme (RF glitch → bad sensor data) but have real design
+nuance and behavioral risk; bundling them into the rain deploy would widen the blast radius. See
+ROADMAP P1.5 / STATUS.
+
+## DEC-0023 — Independent per-repo session counter (supersedes the shared-lineage idea)
+
+**Status:** Accepted · **Date:** 2026-07-04 (S20) · **Supersedes:** DEC-0013
+
+**This repo counts its own sessions. There is no shared cross-repo counter.** DEC-0013 asserted that
+numbering "continues a single lineage shared with `eaglehunt-weather-dashboard`." A forensic audit
+(weewx S20) showed that premise never held:
+
+- The dashboard runs its **own** continuous counter **S1 → S40** (S1–S14 reconstructed; its repo
+  split + governance bootstrap at **S15**, 2026-06-23; S15 → S40 thereafter). It contains **no
+  reference to a shared counter** with this repo — the "shared lineage" existed only here.
+- weewx-rtldavis got its own governance on 2026-07-04 and, per DEC-0013, labeled its first governed
+  session **S16** — but the dashboard was already near S38 by then. So "S16" started a **parallel**
+  counter re-using numbers the dashboard had long passed. It ran S16 → S17 → S18 → S19.
+- A single monotonic counter cannot be shared by two repos developed in parallel without making at
+  least one repo's history non-contiguous. The two repos are *deliberately split* (DEC-0010/0011);
+  their sessions are independent workstreams.
+
+**Rule going forward:**
+1. Each repo has its **own** independent session counter. A session number means something only
+   **within its repo**. Coherence across repos comes from **dates**, not numbers.
+2. To number a session, take **this repo's own** latest `CHANGELOG.md` / `docs/STATUS.md` + 1. **Do
+   not** consult the sibling repo.
+3. When referring to a session **across** repos (docs, memory, commit bodies), **prefix the repo**:
+   `weewx S21`, `dash S40`. A bare `S21` always means *this* repo.
+4. Published labels are **not** rewritten: S16–S19 stand (on `main`/`dev` + in commit messages). The
+   one still-unmerged governance-hardening session that a since-reverted draft briefly mislabeled
+   "S40" is **this session, S20** — corrected before merge, so `main` never sees the shared-counter
+   detour. This repo's line is therefore contiguous: **S16 → S17 → S18 → S19 → S20 → …**
+
+*Rationale:* a shared counter is only useful if it is actually shared — and the sibling never shared
+it. Independent counters keep each repo's STATUS/CHANGELOG/DECISIONS legible on their own terms (their
+whole purpose), at the cost of a bare number not being globally unique — resolved by the repo prefix
+in cross-references. DEC-0013's "don't flatten the real pre-history" instinct still holds; only its
+shared-counter mechanism is wrong. (An earlier draft of this DEC tried to *reunify* into the shared
+counter and renumber this session to S40; that made per-repo history permanently gappy and was
+reversed before reaching `main`.)
+
+## DEC-0024 — RF-reception metric reads ~150%: freqError channel packets published as loop packets (OPEN)
+
+**Status:** Layer A implemented (S22) — pending a monitor-restart deploy; Layer B deferred ·
+**Date:** 2026-07-04 (S21), updated 2026-07-05 (S22)
+
+> DEC-0023 (independent per-repo session numbering) landed via the S20 governance-hardening branch,
+> merged into this rain branch as **PR #2** (S22); this entry took the next number, DEC-0024. The two
+> composed without collision.
+
+The daily "RF Reception" summary emails (and 5-min `RECEPTION:` log lines) read ~150% — well above the
+100% ceiling a reception percentage should have. **Confirmed by live read-only diagnosis (S21), not a
+code regression in the metric itself** (`weewx_monitor.py` reception code is unchanged since it was
+added). Root cause, traced end to end:
+
+1. `weewx_monitor.py` computes reception as *(count of `Wunderground-RF: Published record` log lines
+   per 60 s) / `WU_RF_EXPECTED` (=24)*. `24` assumes **one publish per ~2.5 s sensor transmission**
+   (one Davis ISS).
+2. `rtldavis.py` `CHANNELPacket.parse_text` (~L615-642) turns each RF **frequency-hop** telemetry
+   message (`ChannelIdx:… FreqError:… Transmitter:N`) into a **WeeWX loop packet** carrying only
+   `dateTime`+`freqError` — no weather data — and `PacketFactory.create` (~L682) yields it alongside
+   the real sensor `DATAPacket`.
+3. WU RapidFire publishes **every** loop packet, so each real reading is shadowed by freq-hop
+   "phantom" publishes. Live evidence (4000-line sample, single active Transmitter:4): **1605**
+   `Published` lines vs **968** unique record epochs (~**1.66×**); **939** `RAW_CHANNEL_PAYLOAD`
+   freq-hop messages over the same span. True reception was ~90% that night; the metric showed ~150%.
+
+**Doc-vs-reality contradiction flagged:** BACKLOG's "FreqError / ppm-fc telemetry gap" finding states
+the compiled Go binary emits *neither* `ChannelIdx` nor `FreqError`. The **running binary now emits
+both** — which is exactly what activates the `CHANNELPacket → loop-packet` path. This is the most
+likely "as of late" trigger (a binary that started emitting the telemetry, or an always-stale
+finding); BACKLOG updated accordingly.
+
+Two fix layers, **decision deferred** (S21 was diagnosis + documentation only, no code touched):
+- **Layer A (monitor, safe/reversible, not the sacred driver):** count **unique record epochs** per
+  window instead of raw publish lines. Directly fixes the reading regardless of driver behavior.
+  Slight known trade-off: two real records sharing one integer `dateTime` second collapse to one
+  (conservative under-count, acceptable). Deploy = monitor restart only.
+- **Layer B (driver, deeper — No-Rewrite DEC-0014 applies):** stop publishing dataless freqError
+  channel packets as loop packets, and/or disable the `RAW_*` `loginf` debug instrumentation (also
+  the cause of `weewx.log` bloat: 15 MB / 122 k lines). Side benefit: stops posting ~1.6× redundant
+  dataless updates to Weather Underground. Needs its own migration plan + prod strategy + approval.
+
+*Rationale for deferring:* the symptom is cosmetic (metric only; real weather data + rain fix
+unaffected), so it can wait behind the v2.0.3 promotion. Layer A is the likely first move. See
+BACKLOG "Reception-metric over-count" and STATUS.
+
+**Update (S22, 2026-07-05):** **Layer A implemented** on `feature/reception-dedup` (commit `20bf7c0`).
+A pure `wu_record_key()` helper dedups on the trailing `(<unix_epoch>)`; the reception window now
+counts unique record epochs instead of raw publish lines. `close_reception_window` and the driver are
+untouched; 6 offline tests (`tests/test_reception_dedup.py`) against a live-recorded 2× over-read.
+Deploy is a monitor restart only (respawn loop reloads on-disk code). **Layer B remains deferred.**

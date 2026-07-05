@@ -1,12 +1,13 @@
 # weewx uploader for OpenWeatherMap Stations API 3.0
 # Uses weewx RESTThread pattern for reliable non-blocking operation
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
 import queue
-import urllib.request
 import weewx
 import weewx.restx
 import weewx.units
+import weewx.manager
 from weewx.restx import StdRESTbase, RESTThread, get_site_dict
 import logging
 
@@ -56,52 +57,38 @@ class OWMThread(RESTThread):
         self.server_url = server_url
 
     def format_url(self, record):
+        # The OWM Stations API takes the API key on the query string; the
+        # measurement itself travels in the JSON POST body (see get_post_body).
         return self.server_url + '?appid=' + self.api_key
 
-    def post_request(self, request, data=None):
-        record_m = weewx.units.to_METRIC(request) if isinstance(request, dict) else request
-        # Build the URL from format_url was already called, get the record from request
-        return super().post_request(request, data)
+    def get_post_body(self, record):
+        """Build the OWM Stations measurement POST body.
 
-    def run_loop(self, dbmanager=None):
-        """Override run_loop to handle JSON POST."""
-        import time
-        self.dbmanager = dbmanager
-        while True:
-            try:
-                record = self.queue.get(timeout=60)
-            except Exception:
-                continue
-            if record is None:
-                break
-            try:
-                record_m = weewx.units.to_METRIC(record)
-                data = {'station_id': self.station_id,
-                        'dt': int(record_m['dateTime'])}
-                if record_m.get('outTemp') is not None:
-                    data['temperature'] = round(record_m['outTemp'], 1)
-                if record_m.get('outHumidity') is not None:
-                    data['humidity'] = round(record_m['outHumidity'], 0)
-                if record_m.get('barometer') is not None:
-                    data['pressure'] = round(record_m['barometer'], 1)
-                if record_m.get('windSpeed') is not None:
-                    data['wind_speed'] = round(record_m['windSpeed'] / 3.6, 1)
-                if record_m.get('windGust') is not None:
-                    data['wind_gust'] = round(record_m['windGust'] / 3.6, 1)
-                if record_m.get('windDir') is not None:
-                    data['wind_deg'] = round(record_m['windDir'], 0)
-                if record_m.get('dewpoint') is not None:
-                    data['dew_point'] = round(record_m['dewpoint'], 1)
-                if record_m.get('heatindex') is not None:
-                    data['heat_index'] = round(record_m['heatindex'], 1)
-                if record_m.get('hourRain') is not None:
-                    data['rain_1h'] = round(record_m['hourRain'], 2)
-
-                url = self.server_url + '?appid=' + self.api_key
-                payload = json.dumps([data]).encode('utf-8')
-                req = urllib.request.Request(url, data=payload,
-                    headers={'Content-Type': 'application/json'})
-                resp = urllib.request.urlopen(req, timeout=self.timeout)
-                log.info("OWM: published record %s status=%s", data['dt'], resp.getcode())
-            except Exception as e:
-                log.error("OWM: failed to post: %s", e)
+        Returns ``(body, content_type)`` per the RESTThread contract. Handing
+        the body back to RESTThread (instead of the old hand-rolled run_loop)
+        lets the superclass own the retry/backoff/stale/post_interval/skip_upload
+        loop, so a transient network failure is retried instead of dropping the
+        record (S24 U1/U2).
+        """
+        record_m = weewx.units.to_METRIC(record)
+        data = {'station_id': self.station_id,
+                'dt': int(record_m['dateTime'])}
+        if record_m.get('outTemp') is not None:
+            data['temperature'] = round(record_m['outTemp'], 1)
+        if record_m.get('outHumidity') is not None:
+            data['humidity'] = round(record_m['outHumidity'], 0)
+        if record_m.get('barometer') is not None:
+            data['pressure'] = round(record_m['barometer'], 1)
+        if record_m.get('windSpeed') is not None:
+            data['wind_speed'] = round(record_m['windSpeed'] / 3.6, 1)
+        if record_m.get('windGust') is not None:
+            data['wind_gust'] = round(record_m['windGust'] / 3.6, 1)
+        if record_m.get('windDir') is not None:
+            data['wind_deg'] = round(record_m['windDir'], 0)
+        if record_m.get('dewpoint') is not None:
+            data['dew_point'] = round(record_m['dewpoint'], 1)
+        if record_m.get('heatindex') is not None:
+            data['heat_index'] = round(record_m['heatindex'], 1)
+        if record_m.get('hourRain') is not None:
+            data['rain_1h'] = round(record_m['hourRain'], 2)
+        return json.dumps([data]), 'application/json'

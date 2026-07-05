@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # coding: latin-1
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # This driver is a merge of modified versions of both
 # the weewx-sdr driver and the weewx_meteostick driver.
@@ -149,6 +150,68 @@ DEBUG_PARSE = 0
 DEBUG_RTLD = 0
 MPH_TO_MPS = 1609.34 / 3600.0 # meter/mile * hour/second
 
+# --- Rain-counter glitch filter (S18 false-rain fix, DEC-0021) ---
+# The Davis rain counter is 7-bit (0..127) and wraps at 128. A genuine 127->0
+# wraparound is a large negative delta (near -128); a *small* negative delta is
+# a single-bit RF-decode glitch, not a wraparound. The original driver treated
+# ANY negative delta as a wraparound and added 128, which turned a glitch into
+# phantom rain (the false-rain bug). MAX_PLAUSIBLE_TIPS additionally caps
+# implausibly large positive deltas (a high bit flipping on directly).
+# Physical basis: the world 1-minute rainfall record is ~1.23 in (123 tips at
+# 0.01 in/tip) and this is a temperate-climate station, nowhere near tropical --
+# 60 tips (0.60 in) between two received packets is generous headroom that still
+# catches the characteristic 64/128 glitches. Rejected deltas yield None
+# (null-on-rejection, DEC-0006) rather than phantom rain.
+MAX_PLAUSIBLE_TIPS = 60
+RAIN_WRAPAROUND_THRESHOLD = -100
+
+def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
+    """Rain tips between two Davis 7-bit rain-counter readings (0..127, wraps at 128).
+
+    WHY THIS FILTER EXISTS (the false-rain bug it fixes):
+    ------------------------------------------------------
+    This RTL-SDR link runs near the RF noise floor (~150 ft through walls,
+    ~67-70% reception). CRC is enforced, so simple single-bit errors are
+    dropped -- but a multi-bit corruption or a mis-decoded packet can still
+    pass CRC and deliver a wrong rain-counter byte, characteristically with a
+    high bit (64 or 128) wrong. The ORIGINAL driver treated *any* negative
+    counter delta as a 127->0 wraparound and unconditionally added 128 to
+    recover the true count. That is correct for a genuine wraparound, but a
+    corrupted reading can produce a SMALL negative delta (e.g. -64) -- and
+    adding 128 to it manufactured phantom rain. Two confirmed events on this
+    station:
+        * 2026-05-25 23:22  counter glitch -> +128 tips -> a phantom 1.28"
+          (which exceeds the WORLD 1-minute rainfall record of ~1.23")
+        * 2026-07-04 03:04  logged "rain_count=-64" -> -64 + 128 = +64 tips
+          -> a phantom 0.64", bracketed by zeros; no rain actually fell
+          (verified against a co-located Davis WeatherLink Live console).
+    Both were pure software artifacts, not weather.
+
+    HOW IT DISTINGUISHES GLITCH FROM RAIN:
+        * A GENUINE wraparound is a LARGE negative delta (near -128; every real
+          one observed here was exactly -127). Only those get the +128 fix.
+        * A small negative delta is a decode glitch -> rejected (None).
+        * A delta above max_tips is a high-bit glitch flipping on directly
+          (the +128 case) -> rejected (None). max_tips (60 = 0.60") is far
+          above any rain physically possible between two received packets here,
+          yet safely below the characteristic 64/128 glitch magnitudes.
+    Rejected deltas return None (weewx treats it as missing, not zero) -- an
+    honest gap is always preferable to fabricated rain. A backstop [StdQC] rain
+    cap in weewx.conf catches anything that slips past this.
+
+    Pure function (no I/O) so it is unit-testable against the recorded glitch
+    signatures -- see tests/test_rain_filter.py. Full write-up: docs/DECISIONS.md
+    DEC-0021 and CHANGELOG.md.
+    """
+    if last_count is None:
+        return 0
+    delta = new_count - last_count
+    if delta < RAIN_WRAPAROUND_THRESHOLD:   # genuine 127->0 wraparound (real ones = -127)
+        delta += 128
+    if delta < 0 or delta > max_tips:       # small-negative glitch, or implausible spike
+        return None
+    return delta
+
 def loader(config_dict, engine):
     return RtldavisDriver(engine, config_dict)
 
@@ -162,11 +225,6 @@ def dbg_parse(verbosity, msg):
 def dbg_rtld(verbosity, msg):
     if DEBUG_RTLD >= verbosity:
         logdbg(msg)
-
-def _fmt(data):
-    if not data:
-        return ''
-    return ' '.join(['%02x' % ord(x) for x in data])
 
 # default temperature for soil moisture and leaf wetness sensors that
 # do not have a temperature sensor.
@@ -629,7 +687,9 @@ class PacketFactory(object):
         pkt = dict()
         payload = lines[0].strip()
         if "ChannelIdx:" in payload:
-            loginf("RAW_CHANNEL_PAYLOAD: %s" % payload)
+            # DEC-0024 investigation scaffolding: gated behind debug_rtld=3 so it
+            # no longer floods weewx.log at INFO on every freq-hop (S24 M3).
+            dbg_rtld(3, "RAW_CHANNEL_PAYLOAD: %s" % payload)
         if payload:
             for parser in PacketFactory.KNOWN_PACKETS:
                 m = parser.IDENTIFIER.search(payload)
@@ -820,6 +880,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self.cmd = self.cmd + " -tf " + str(self.frequency) + " -tr " + str(self.transmitters)
 
         self._last_pkt = None # avoid duplicate sequential packets
+        self._stderr_sample_count = 0  # bounded startup RAW sample (S24 L6)
         self._mgr = ProcManager()
         self._mgr.startup(self.cmd, self.path, self.ld_library_path)
 
@@ -861,22 +922,21 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         for k in self.sensor_map:
             if self.sensor_map[k] in data:
                 packet[k] = data[self.sensor_map[k]]
-        # convert the rain count to a rain delta measure
+        # convert the rain count to a rain delta measure (glitch-filtered, DEC-0021)
         if 'rain_count' in data:
-            if self.last_rain_count is not None:
-                rain_count = data['rain_count'] - self.last_rain_count
+            prev = self.last_rain_count
+            tips = rain_delta_tips(prev, data['rain_count'])
+            self.last_rain_count = data['rain_count']   # always resync, even on reject
+            if tips is None:
+                logerr("rain: rejecting implausible counter delta last=%s new=%s "
+                       "(RF glitch, not rain -- DEC-0021)" %
+                       (prev, data['rain_count']))
+                packet['rain'] = None                   # null-on-rejection, DEC-0006
             else:
-                rain_count = 0
-            # handle rain counter wrap around from 127 to 0
-            if rain_count < 0:
-                loginf("rain counter wraparound detected rain_count=%s" %
-                       rain_count)
-                rain_count += 128
-            self.last_rain_count = data['rain_count']
-            packet['rain'] = float(rain_count) * self.rain_per_tip
+                packet['rain'] = float(tips) * self.rain_per_tip
             if DEBUG_RAIN:
-                logdbg("rain=%s rain_count=%s last_rain_count=%s" %
-                       (packet['rain'], rain_count, self.last_rain_count))
+                logdbg("rain=%s tips=%s last=%s new=%s" %
+                       (packet.get('rain'), tips, prev, data['rain_count']))
         packet['dateTime'] = int(time.time() + 0.5)
         packet['usUnits'] = weewx.METRICWX
         return packet
@@ -942,13 +1002,19 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         total_missed = total_missed + self.stats['missed'][i]
                         total_max_count = total_max_count + self.stats['max_count'][i]
             # if there is a total
-            if total_max_count > 0 and self.stats['pct_good_all'] is not None:
+            # NOTE (S24, DEC-0024 review H2): this was previously also gated on
+            # `self.stats['pct_good_all'] is not None`, but _init_stats and
+            # _reset_stats set it to None every archive period, so that guard
+            # could never pass -- pct_good_all stayed None forever and the
+            # driver's own rxCheckPercent was never populated. total_max_count>0
+            # already means real messages were received this period.
+            if total_max_count > 0:
                 self.stats['pct_good_all'] = 100.0 * total_count / total_max_count
                 logdbg("ARCHIVE_STATS: total_max_count=%d total_count=%d total_missed=%d  pctGood=%6.2f" % 
                     (total_max_count, total_count, total_missed, self.stats['pct_good_all']))
             # log the stats for each active transmitter and no-init-counters
             for i in range(0, 4):
-                if self.stats['curr_cnt'][i] > 0 and self.stats['count'][i] > 0 and self.stats['pct_good'] is not None:
+                if self.stats['curr_cnt'][i] > 0 and self.stats['count'][i] > 0 and self.stats['pct_good'][i] is not None:
                     x = self.stats['activeTrIds'][i]
                     logdbg("ARCHIVE_STATS: station %d: max_count= %4d count=%4d missed=%4d pct_good=%6.2f" % 
                         (i+1, self.stats['max_count'][i], self.stats['count'][i], self.stats['missed'][i], self.stats['pct_good'][i]))
@@ -1003,13 +1069,14 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # program main.go writes its data to stderr
             for lines in self._mgr.get_stderr():
                 for _line in lines:
-                    if not hasattr(self, "_stderr_sample_count"):
-                        self._stderr_sample_count = 0
                     if self._stderr_sample_count < 20:
-                        loginf("RAW_RTL_STDERR_SAMPLE: %s" % _line.strip())
+                        # bounded startup sample; debug_rtld=2 (S24 M3)
+                        dbg_rtld(2, "RAW_RTL_STDERR_SAMPLE: %s" % _line.strip())
                         self._stderr_sample_count += 1
                     if "Hop:" in _line or "ChannelIdx:" in _line:
-                        loginf("RAW_RTL_HOP: %s" % _line.strip())
+                        # per-hop line -- gated at debug_rtld=3 so it no longer
+                        # floods weewx.log at INFO on every freq-hop (S24 M3).
+                        dbg_rtld(3, "RAW_RTL_HOP: %s" % _line.strip())
                 for data in PacketFactory.create(self, lines):
                     if data:
                         time_last_received = int(time.time())
@@ -1025,21 +1092,18 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                             if packet:
                                 dbg_parse(3, "ignoring duplicate packet %s" % packet)
                     elif lines:
+                        # NOTE (S24 L6): effectively unreachable -- PacketFactory
+                        # .create() drains `lines` to empty before this loop ends,
+                        # so `lines` is falsy here. Kept as a defensive log.
                         loginf("missed (unparsed): %s" % lines)
         else:
             logerr("err: %s" % self._mgr.get_stderr())
             raise weewx.WeeWxIOError("rtldavis process is not running")
 
-    def parse_readings(self, pkt):
-        data = dict()
-        if not pkt:
-            return data
-        try:
-            data = self.parse_raw(self, pkt)
-        except ValueError as e:
-            logerr("parse failed for '%s': %s" % (pkt, e))
-        return data
-
+    # NOTE (S24 L5): parse_raw, parse_text, and ch_to_xmit are declared
+    # @staticmethod yet take `self` explicitly and are called X.parse_raw(self,
+    # pkt). The driver instance is passed by hand -- misleading but intentional;
+    # documented here rather than restructured (No-Rewrite, DEC-0014).
     @staticmethod
     def parse_raw(self, pkt):
         data = dict()
@@ -1367,7 +1431,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
 
         else:
             logerr("unknown station with channel: %s, raw message: %s" %
-                   (data['channel'], raw))
+                   (data['channel'], pkt))
         return data
 
     @staticmethod
