@@ -33,8 +33,16 @@ THRESHOLDS = {
 }
 
 # --- Reception tracking config ---
-WU_RF_EXPECTED     = 24    # expected WU-RF posts per 60s window (one per ~2.5s)
-WU_RF_MIN_PCT      = 60    # alert threshold % (normal baseline is 65-75% at 150ft through walls)
+# WU_RF_EXPECTED is the number of records the ISS *physically transmits* per 60s
+# window -- the correct denominator for a reception %. It is NOT a fixed 24. The
+# Davis ISS transmit period depends on the transmitter id (driver loop_times run
+# 2.5625s..3.0s); this station's ISS (Transmitter 4) transmits every ~2.8125s, so
+# 60 / 2.8125 = ~21.3 records/min. The old value 24 ("one per 2.5s") assumed the
+# fastest channel and under-reported reception by ~13%: a full-reception window
+# read 22/24 = 92% when it was really ~22/21 = ~100% (S29). Override per station
+# with the WU_RF_EXPECTED env var when re-pointing to a different transmitter id.
+WU_RF_EXPECTED     = int(os.environ.get('WU_RF_EXPECTED', 21))  # physical TX/min = 60 / 2.8125s
+WU_RF_MIN_PCT      = 60    # alert threshold %: a window below this is a real >~40% packet loss
 WU_RF_WINDOW       = 60    # seconds per reception window
 WU_RF_SUSTAIN      = 5     # consecutive bad windows before alert
 WU_RF_LOG_INTERVAL = 300   # log reception summary every 5 min
@@ -81,20 +89,34 @@ def send_email(subject, body):
 
 WEEWX_LOG_PATH = os.environ.get('WEEWX_LOG', f'{BASE_DIR}/logs/weewx.log')
 
-def get_linecount():
+def get_log_size():
+    """Current size of the weewx log in bytes (0 if missing). The caller compares
+    this to the last byte-offset to detect rotation/truncation (file shrank)."""
     try:
-        with open(WEEWX_LOG_PATH) as f:
-            return sum(1 for _ in f)
+        return os.path.getsize(WEEWX_LOG_PATH)
     except OSError:
         return 0
 
-def get_new_lines(from_line):
+def get_new_lines(offset):
+    """Read complete lines appended since byte OFFSET in a SINGLE open -- no
+    whole-file re-scan (M-A) and no separate size/read double-open race (L-B);
+    both used to re-read the growing 10 MB/day log twice per poll (DEC-0024).
+
+    Returns (lines, new_offset). A trailing partial line (still being written, no
+    final newline) is held back and new_offset stops before it, so it is parsed
+    once, whole, on a later poll -- never split or double-counted. Rotation is the
+    caller's job (get_log_size() < offset -> reset offset to 0)."""
     try:
-        with open(WEEWX_LOG_PATH) as f:
-            lines = f.readlines()
-        return [l.rstrip() for l in lines[from_line-1:]]
+        with open(WEEWX_LOG_PATH, 'rb') as f:
+            f.seek(offset)
+            data = f.read()
     except OSError:
-        return []
+        return [], offset
+    consumed = data.rfind(b'\n') + 1          # bytes up to and including last '\n'
+    if consumed == 0:                          # no complete line yet
+        return [], offset
+    lines = data[:consumed].decode('utf-8', 'replace').splitlines()
+    return lines, offset + consumed
 
 # --- Rain-counter glitch alert (DEC-0021) ---
 # rtldavis.py logs this exact phrase when it rejects an implausible rain-counter
@@ -170,6 +192,14 @@ def reset_dongle(last_reset):
     t.start()
     return time.time()
 
+def wu_pct(count):
+    """Reception % = records received / records the ISS physically transmitted
+    (WU_RF_EXPECTED), capped at 100. You cannot receive more than were sent; a raw
+    value just over 100 only means a 60s window caught one extra phase-aligned
+    transmission. Single source of truth for every reception % the monitor reports."""
+    return min(100.0, 100.0 * count / WU_RF_EXPECTED)
+
+
 def format_daily_summary(hourly_buckets, date_str):
     """Format 24-hour reception summary as a text table."""
     lines = [
@@ -184,7 +214,7 @@ def format_daily_summary(hourly_buckets, date_str):
         buckets = hourly_buckets.get(hour, [])
         if buckets:
             avg_count = sum(buckets) / len(buckets)
-            avg_pct = (avg_count / WU_RF_EXPECTED) * 100
+            avg_pct = wu_pct(avg_count)
             day_counts.extend(buckets)
             status = "OK" if avg_pct >= WU_RF_MIN_PCT else "LOW"
             lines.append(f"{hour:02d}:00    {avg_count:>10.1f} {avg_pct:>9.0f}% {status:>8}")
@@ -192,7 +222,7 @@ def format_daily_summary(hourly_buckets, date_str):
             lines.append(f"{hour:02d}:00    {'--':>10} {'--':>9}  {'--':>8}")
     lines.append("-" * 42)
     if day_counts:
-        day_avg = (sum(day_counts) / len(day_counts) / WU_RF_EXPECTED) * 100
+        day_avg = wu_pct(sum(day_counts) / len(day_counts))
         lines.append(f"{'Daily avg':<8} {'':>10} {day_avg:>9.0f}%")
     return "\n".join(lines)
 
@@ -217,7 +247,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
                             wu_hourly_buckets, now):
     """Close a 60s reception window. Returns updated state tuple."""
     try:
-        pct = (wu_window_count / WU_RF_EXPECTED) * 100
+        pct = wu_pct(wu_window_count)
         wu_period_counts.append(wu_window_count)
         log(f"WINDOW: {wu_window_count}/{WU_RF_EXPECTED} ({pct:.0f}%)")
 
@@ -231,7 +261,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             if wu_in_alert:
                 wu_in_alert = False
                 td = int(now - wu_alert_sent_at)
-                avg = (sum(wu_period_counts) / len(wu_period_counts) / WU_RF_EXPECTED) * 100
+                avg = wu_pct(sum(wu_period_counts) / len(wu_period_counts))
                 log(f"RECEPTION RECOVERY: {avg:.0f}% avg after {td//60}min")
                 send_email(
                     f"{STATION_NAME}: RF reception RECOVERED",
@@ -294,17 +324,17 @@ def main():
     log("Monitor started")
     send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
 
-    last_line = get_linecount()
-    log(f"Starting at log line {last_line}")
+    last_offset = get_log_size()
+    log(f"Starting at log byte-offset {last_offset}")
 
     while True:
         time.sleep(POLL)
         now = time.time()
 
-        cur = get_linecount()
-        if cur < last_line:
-            log(f"Log reset detected (was {last_line}, now {cur}) - container restarted")
-            last_line = 0
+        cur = get_log_size()
+        if cur < last_offset:
+            log(f"Log reset detected (was {last_offset} bytes, now {cur}) - container restarted")
+            last_offset = 0
             for svc in last_seen:
                 last_seen[svc] = 0.0
             for svc in in_outage:
@@ -316,9 +346,10 @@ def main():
             wu_bad_windows   = 0
             wu_first_seen    = False
 
-        if cur > last_line:
-            lines = get_new_lines(last_line + 1)
-            log(f"Poll: {len(lines)} new lines")
+        if cur > last_offset:
+            lines, last_offset = get_new_lines(last_offset)
+            if lines:
+                log(f"Poll: {len(lines)} new lines")
             for line in lines:
                 if 'rtldavis process stalled' in line:
                     log("STALL detected")
@@ -341,7 +372,7 @@ def main():
                 if 'Wunderground-RF' in line and 'Published' in line:
                     wu_window_epochs.add(wu_record_key(line))
                     wu_first_seen = True
-            last_line = cur
+            # last_offset already advanced by get_new_lines() above.
 
 
         # --- Reception: close window every 60s ---
