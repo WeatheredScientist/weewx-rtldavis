@@ -1003,7 +1003,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         total_missed = total_missed + self.stats['missed'][i]
                         total_max_count = total_max_count + self.stats['max_count'][i]
             # if there is a total
-            if total_max_count > 0 and self.stats['pct_good_all'] is not None:
+            # NOTE (S24, DEC-0024 review H2): this was previously also gated on
+            # `self.stats['pct_good_all'] is not None`, but _init_stats and
+            # _reset_stats set it to None every archive period, so that guard
+            # could never pass -- pct_good_all stayed None forever and the
+            # driver's own rxCheckPercent was never populated. total_max_count>0
+            # already means real messages were received this period.
+            if total_max_count > 0:
                 self.stats['pct_good_all'] = 100.0 * total_count / total_max_count
                 logdbg("ARCHIVE_STATS: total_max_count=%d total_count=%d total_missed=%d  pctGood=%6.2f" % 
                     (total_max_count, total_count, total_missed, self.stats['pct_good_all']))
