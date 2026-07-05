@@ -6,6 +6,35 @@ under [Pre-S16].
 
 ---
 
+## [S28] — 2026-07-05 — Monitor incremental read (M-A/L-B) + branch cleanup
+
+Release still calendar-gated (no real rain glitch yet); this session cleared the unblocked follow-ups.
+
+- **P1 verified (read-only, live).** Rain wild-watch: **0** `rejecting implausible counter delta`
+  events across the full log range (2026-06-05 → now) — the first real glitch still hasn't fired, so
+  v2.0.3 stays parked. Reception Layer A confirmed live: WINDOW **88–100%**, 5-window avg **91–92%
+  [OK]**, 0 bad windows; monitor healthy (PID alive under the esynoscheduler wrapper). Layer B
+  signature still present live (driver emits `RAW_CHANNEL_PAYLOAD`/`FreqError` + double-publishes the
+  same record epoch — exactly what Layer A dedups; weewx.log ~10 MB/day).
+- **M-A + L-B: monitor incremental byte-offset read (PR #10 → `dev`, draft).** Replaced
+  `get_linecount()` + `get_new_lines()` — which each re-read the whole (~10 MB/day, growing)
+  `weewx.log` on every 30 s poll — with a single byte-offset read: `get_log_size()` +
+  `get_new_lines(offset)` → `(lines, new_offset)` via one `seek()`. Fixes the O(n)-per-poll re-scan
+  (**M-A**) and the double-open size/read race that double-counted appended lines (**L-B**, resolved
+  for free by the `seek()`). Rotation (`get_log_size() < offset` → reset) + partial-line (hold back a
+  line with no trailing newline) guards. New `tests/test_monitor_incremental_read.py` (6 tests);
+  **suite 40/40**; secret-scan green; `lint` red (known pre-S24 ruff baseline, non-blocking).
+  **Not yet deployed** — owner-gated (scp + `sudo kill`, same as Layer A).
+- **Branch housekeeping.** Deleted merged remote branches `s20-governance-hardening` and
+  `feature/influxdb-grafana` (moved off Grafana to Influx; its only driver-relevant bit — the
+  wind-warmup one-liner `3f5470f` — was already in `dev`). `s27-p3-deployed` was already
+  auto-deleted on PR #9's merge (stale local ref pruned). Remote-URL casing was already correct
+  (both no-ops). Remote now: `dev`, `main`, `feature/rain-spike-filter` (kept for v2.0.3),
+  `feature/s28-monitor-incremental-read`.
+- **Still owner/calendar (→ S29):** review + merge + deploy PR #10; watch for the first real rain
+  glitch → then cut v2.0.3; rotate the exposed WU key; set `STATION_NAME` in the NAS `monitor.env`
+  (emails currently fall back to "My PWS").
+
 ## [S27] — 2026-07-05 — Land the secret gate + collapse the review stack onto `dev`
 
 Tied up the S23–S26 PR backlog (five open, nothing merged). No prod/driver code touched; all the
