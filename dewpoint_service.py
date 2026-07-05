@@ -63,12 +63,16 @@ class DewpointCacher(StdService):
                 if len(self.wind_warmup) >= WIND_WARMUP_PACKETS:
                     self.last_wind_speed = sum(self.wind_warmup) / len(self.wind_warmup)
                     self.wind_warmup = []
-                    return  # warmup complete, let this packet through
-                packet['windSpeed'] = None
-                packet['windGust']  = None
-                packet['windDir']   = None
-        elif self.last_wind_speed is not None:
-            packet['windSpeed'] = self.last_wind_speed
+                    # Warmup complete — let this packet through with real values
+                else:
+                    # Still warming up — null wind fields for clean gap
+                    packet['windSpeed'] = None
+                    packet['windGust']  = None
+                    packet['windDir']   = None
+        # If windSpeed is None, pass it through as null.
+        # Do NOT substitute last_wind_speed — a null is correct when the ISS
+        # stops reporting wind (e.g. failed vane potentiometer), and a stale
+        # substituted value is misleading and harder to diagnose than an honest null.
 
     def new_loop_packet(self, event):
         packet = event.packet

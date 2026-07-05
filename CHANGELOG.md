@@ -6,6 +6,27 @@ under [Pre-S16].
 
 ---
 
+## [S30] — 2026-07-05 — v2.0.3 release prep: dewpoint wind honest-null + receiveWindow reconcile
+
+Assembled the last branch-only pieces for the v2.0.3 image (build/deploy/tag/release are owner-run on
+Mac Docker Desktop + the NAS, agent-guided). The image folds in H1/H2/M3 (already on `dev`) plus:
+
+- **Dewpoint service — wind honest-null (ported from the reviewed Jun-16 draft).** `_filter_wind` no
+  longer substitutes the last cached `windSpeed` into a packet whose `windSpeed` is `None`. The Davis
+  ISS transmits wind in **every** anemometer packet (`rtldavis.py:1122`), unlike temp/humidity/rain/UV
+  which rotate across message types — so `windSpeed` is `None` only when the reading is genuinely absent
+  (a "no sensor" raw `0,0` packet) or was just delta-rejected as a corrupt spike. In both cases an honest
+  null is correct; a stale carried-forward value looks like live wind when there is none (e.g. a failed
+  vane) and is harder to diagnose. Calm air still writes an explicit `0.0`, so charts stay continuous.
+  Archive records aggregate many LOOP packets, so an occasional null packet does not blank the record;
+  uploads omit nulls rather than sending bad data. **Temp/humidity/radiation/UV keep the carry-forward**
+  for now — those rotating sensors legitimately miss most packets (DEC-0022 sensor-QC hardening, later).
+  New `tests/test_dewpoint_wind_honest_null.py` (5 tests); **suite 54/54**.
+- **receiveWindow reconciled (ARCHITECTURE §6).** Dropped the `Dockerfile` `sed 300→350` patch so the
+  build ships the **upstream-default receiveWindow** — v2.0.3 carries only the proven software fixes, not
+  the unproven rw350 experiment (its 24 h sweep stays backlogged). `main.go` is left unpatched.
+- Bumped the `Dockerfile` header `v2.0.2 → v2.0.3`.
+
 ## [S29] — 2026-07-05 — RF-metric honesty, rxCheckPercent root cause, ERR-0001 correction
 
 Turned the "how is reception really doing?" question into trustworthy answers, and reconciled the

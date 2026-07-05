@@ -1,5 +1,5 @@
 #--------------------------------------------
-# weewx-rtldavis v2.0.2
+# weewx-rtldavis v2.0.3
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
@@ -51,9 +51,7 @@ RUN curl -L -o /tmp/src.tgz \
     cmake ../ -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON -DENABLE_ZEROCOPY=OFF && \
     make -j2 && make install && ldconfig && \
     cd /tmp/src/rtldavis/src/lheijst/rtldavis && \
-    echo "Before receiveWindow patch:" && grep -R "receiveWindow" . && \
-    sed -i 's/receiveWindow = 300/receiveWindow = 350/' main.go && \
-    echo "After receiveWindow patch:" && grep -R "receiveWindow" . && \
+    echo "receiveWindow (upstream default, unpatched — rw350 is an unproven experiment; 24h sweep backlogged, see ROADMAP/ARCHITECTURE §6):" && grep -R "receiveWindow" . && \
     GOBIN=/usr/local/bin go install -buildvcs=false -v .
 
 #--------------------------------------------
