@@ -1,15 +1,20 @@
 # Backlog — weewx-rtldavis
 
 Unordered ideas and durable findings not yet scheduled. Scheduled work lives in ROADMAP.md;
-in-flight work in docs/STATUS.md. Carried forward from the pre-governance NAS `BACKLOG.md`.
+in-flight work in docs/STATUS.md. Carried forward from the pre-governance NAS `BACKLOG.md`; the
+open items from the retired root `cleanup_backlog.md` were folded in here (S27, S23 tail).
 
 ## Open ideas
 - Reception improvement beyond ~70% (noise-floor limited at ~150 ft through walls).
 - Windows/macOS FHSS investigation (Docker Desktop USB passthrough findings for the README).
-- ESP32 secondary sensor node.
-- Blitzortung lightning integration.
+- ESP32 secondary sensor node — lightning (AS3935), pressure (BMP390), air quality (SEN55);
+  solar-powered (parts shopping list done).
+- Blitzortung lightning integration (System Blue — the detection-network route; longer term).
 - Remove vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005).
 - Rotate the exposed WU API key; store it in `monitor.env` as an env var, not inline (DEC-0012).
+- Verify OWM (OpenWeatherMap) measurements propagate into their API over time — a post-integration
+  sanity check that the uploader's values actually land.
+- Long-term stability watch (uptime / reception drift / memory) — no formal monitor yet.
 - **Reception-metric over-count (DEC-0024, root cause confirmed S21):** the daily RF-Reception email
   reads ~150% because `weewx_monitor.py` counts `Wunderground-RF: Published` *log lines* while the
   driver publishes freqError freq-hop channel packets as extra dataless loop packets (~1.66×). Fix
