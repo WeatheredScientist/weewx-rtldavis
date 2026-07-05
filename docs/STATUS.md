@@ -10,9 +10,9 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-_Last updated: 2026-07-04 (S21 — reception-metric ~150% root cause confirmed, DEC-0024; plus the
-merged S20 governance-hardening branch: independent per-repo numbering (DEC-0023) + secret-scan gate
-hardened. Rain fix still live + unmerged.)_
+_Last updated: 2026-07-05 (S22 — merged PR #2 (S20 governance) into the rain branch; built + tested
+the reception-metric Layer A fix (DEC-0024) pending a monitor restart; confirmed no rain glitch in
+the wild yet. Rain fix still live + unmerged.)_
 
 ---
 
@@ -27,31 +27,31 @@ hardened. Rain fix still live + unmerged.)_
 > rejections. Remaining, in order:
 > 1. **Watch for the first real glitch in the wild** — confirms fix + alert together (log
 >    "rejecting implausible counter delta" + clean archive + the email). Calendar-bound (~1 glitch/2–3 wk).
+>    Checked 2026-07-05 (S22, read-only): **none fired yet.**
 > 2. After it's ridden a few days clean: **merge `feature/rain-spike-filter` → `dev` → `main` + tag
 >    v2.0.3**, folding in the pending baked dewpoint rewrite (needs an image rebuild — bigger deploy
->    than the hot-swap; plan it).
+>    than the hot-swap; plan it). The rain branch now also carries the merged S20 governance work and
+>    the reception Layer A fix.
 > 3. Then, in a later session, **DEC-0022 sensor-QC hardening** (below).
 >
-> _Numbering note (S20): the "shared lineage with the dashboard" (DEC-0013) never held — the sibling
-> runs its own S1→S40 counter and never shared one. This repo now counts **independently** (DEC-0023):
-> its line is contiguous S16→S17→S18→S19→**S20**, and the next weewx session is S21. Cross-repo refs
-> are prefixed (`weewx S20` vs `dash S40`)._
+> _Numbering note (DEC-0023): the "shared lineage with the dashboard" (DEC-0013) never held — the
+> sibling runs its own S1→S40 counter and never shared one. This repo now counts **independently**:
+> its line is contiguous S16→…→**S20**→**S21**→**S22** (this session). Cross-repo refs are prefixed
+> (`weewx S22` vs `dash S40`)._
 
 ## Open threads (not yet shipped)
 
-- **Reception metric reads ~150% (DEC-0024, S21) — root cause confirmed, fix deferred.** The daily
-  RF-Reception email over-counts: `weewx_monitor.py` counts `Wunderground-RF: Published` log lines,
-  but the driver publishes freqError freq-hop channel packets as extra dataless loop packets (~1.66×;
-  live: 1605 publishes / 968 unique records, single transmitter). Cosmetic (metric only — real
-  weather data & rain fix unaffected). Next move likely **Layer A** (monitor counts unique record
-  epochs — safe, monitor-restart-only). **Layer B** (driver stops publishing dataless freqError
-  packets + disable `RAW_*` debug logging; also fixes 15 MB `weewx.log` bloat) is deeper, No-Rewrite
-  applies. Also flagged a doc-vs-reality contradiction: the running binary **does** emit
-  `ChannelIdx`/`FreqError` (BACKLOG said it didn't). See DEC-0024 + BACKLOG.
-- **Draft PR #2** (`s20-governance-hardening` → `feature/rain-spike-filter`) awaits review/merge — the
-  S20 governance-hardening session: DEC-0023 independent numbering + two `check_secrets.sh` gate fixes.
-  On merge, **STATUS.md + CHANGELOG.md will conflict** (this rain-branch S21 commit + PR #2 both touch
-  them) — resolve keeping both the reception thread/entry and the numbering entry. Then rides to v2.0.3.
+- **Reception metric ~150% — Layer A built + tested (DEC-0024, S22), PENDING DEPLOY.** Root cause: the
+  daily RF-Reception email over-counts because `weewx_monitor.py` counted raw `Wunderground-RF:
+  Published` log lines, but the driver publishes freqError freq-hop packets as duplicate publishes of
+  the SAME record epoch (~1.66×; live 2026-07-05 sample showed a clean 2× — same epoch posted twice).
+  **Layer A fix** (`feature/reception-dedup`, commit `20bf7c0`): a pure `wu_record_key()` helper dedups
+  on the trailing `(<epoch>)`; the window counts unique epochs. 6 offline tests, driver + alert logic
+  untouched. **Deploy = monitor restart only** (`sudo kill <pid>`, pidfile `logs/weewx_monitor.pid`;
+  the respawn loop reloads on-disk code ≤5 min). Reversible. **Layer B** (driver stops publishing
+  dataless freqError packets + disable `RAW_*` debug logging; also fixes 15 MB `weewx.log` bloat) is
+  deeper, No-Rewrite applies — still deferred. Doc-vs-reality flag stands: the running binary **does**
+  emit `ChannelIdx`/`FreqError` (BACKLOG said it didn't). See DEC-0024 + BACKLOG.
 - **Rain fix** deployed live but **not merged** — still only on `feature/rain-spike-filter` (`dev`
   and `main` untouched). Promote to v2.0.3 once it's proven in the wild (see Active thread).
 - **Sensor-QC hardening (DEC-0022, a later session):** the stale-substitution DEC-0006 violation in
