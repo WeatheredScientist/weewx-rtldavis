@@ -49,8 +49,9 @@ isolated (ASSESSMENT.md §2). Docs-only; zero prod risk.
 - [x] `LICENSE` = GPLv3 (WeeWX-ecosystem standard; matches the free/open mission) — S23.
 - [x] `AGENTS.md` — cross-agent entrypoint pointing at CLAUDE.md + STATUS.md (S23).
 - [x] ROADMAP restructured to shared P-tiers / short-med-long, folded to current reality (S23, this).
-- [ ] STATUS.md becomes the **single source of truth** for the session number; handoff/next-actions
-      move **into the repo** (out of Claude-private memory); STATUS promoted to doc-map slot #2 (S23).
+- [x] STATUS.md is now the **single source of truth** for the session number; handoff/next-actions
+      moved **into the repo** (out of Claude-private memory, now a pointer); STATUS promoted to
+      doc-map slot #2; `CLAUDE.md` numbering rule updated (S23).
 - [ ] Archive/fold the pre-governance root `cleanup_backlog.md` into BACKLOG; give `logging.additions`
       + the bare `additions` artifact a documented home or remove them (S23).
 - [ ] **Follow-ons (own sessions):** Keep-a-Changelog headings + DECISIONS entry-skeleton convergence
