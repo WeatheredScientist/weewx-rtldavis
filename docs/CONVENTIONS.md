@@ -67,6 +67,9 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 
 - Before considering `.py` work done: `python -m ruff check .` · `python -m ruff format` ·
   `python -m mypy` · `python -m pytest` (as applicable). Enforced by `.pre-commit-config.yaml` + CI.
+  *(On the macOS dev box the interpreter is `python3` — there is no bare `python`; pre-commit and CI
+  supply their own. Run the secret gate standalone with `bash scripts/check_secrets.sh` — it now
+  passes cleanly with no staged files rather than erroring.)*
 - Follow the WeeWX `RESTThread` pattern for uploaders (DEC-0007); honest nulls on rejection,
   never stale substitution (DEC-0006).
 
