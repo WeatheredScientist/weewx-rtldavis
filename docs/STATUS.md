@@ -13,23 +13,33 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-> **Current session: S29** (2026-07-05) — dug into RF-metric trust + the July 4 rain glitch. **Reception
-> "91%" was a denominator artifact:** the monitor divided WU-publish count by 24, but this ISS (Tx 4)
-> transmits every ~2.8125s → only ~21.3/min are physically sent; live measurement shows ~21.75/min with
-> no gaps = **~100% reception, not 91%**. Fixed the denominator (env-overridable 21 + capped `wu_pct()`),
-> +9 tests (suite **49/49**), **merged (PR #10) and deployed live** (log now reads `WINDOW: NN/21
-> ~100%`). **`rxCheckPercent` (dead since 2026-06-18) root-caused:** the S24 "H2" `pct_good_all` deadlock
-> deployed at that day's driver reload — **fix already on `dev`**, ships with the v2.0.3 rebuild. **July 4
-> phantom +1.28" confirmed** in the archive + WU/MADIS; established **DEC-0025 (preserve-and-flag)** +
-> `docs/DATA_ERRATA.md`, and **ERR-0001 applied** (owner-run: July 4 rain **1.84"→0.56"**, surgical —
-> genuine evening rain kept). **v2.0.3 confidence gate WAIVED (DEC-0026)** — cut it next session with the
-> fixes baked in. Governed lineage: S16→…→S27→S28→**S29**. Next session = S30 (ship v2.0.3).
+> **Current session: S30** (2026-07-05) — shipping v2.0.3, and found the reason the driver fixes never
+> took. **Major finding: weewx imports the driver from the BAKED venv `site-packages/user/`, and
+> `Dockerfile:101` was clobbering the patched `rtldavis.py` with the STOCK `weectl extension install`
+> copy** — so every built image shipped the stock driver (no rain filter, no H1/H2/M3), and driver
+> "hot-swaps" to `weewx-data/bin/user/` never took effect (that path isn't imported). Confirmed on the
+> running container three ways (weewx path resolver, `.pyc` only in the venv dir, content grep: live
+> driver lacks `rain_delta_tips` + carries the deadlocked H2). **This single bug explains both open
+> mysteries: `rxCheckPercent` NULL (stock `pct_good_all` deadlock) AND the July-4 phantom rain (no live
+> rain filter).** Fixed the clobber (1-line). **v2.0.3 build inputs now committed to `dev`:** dewpoint
+> **wind honest-null** (ported from the reviewed Jun-16 draft; wind is in every Davis packet so no dropout
+> — temp/hum/rad/UV keep carry-forward per DEC-0022), **receiveWindow reverted to upstream default** (drop
+> the unproven rw350 patch), Dockerfile **clobber fix** + v2.0.3 header, +5 tests (**suite 54/54**), docs
+> corrected. **Remaining (owner-run, agent-guided): build the image → redeploy → promote `dev`→`main` +
+> tag v2.0.3 → GitHub release + Docker Hub push → live-confirm `rxCheckPercent` repopulates.** Governed
+> lineage: S16→…→S28→S29→**S30**.
+>
+> **Owner priority (S30):** root-cause temp/humidity/radiation/UV spikes as **bad RF packets** (same class
+> as the rain glitch) rather than StdQC/carry-forward bandaids — a dedicated future session (after v2.0.3),
+> with a model suited to deep RF-decode debugging (BACKLOG §Data integrity; DEC-0022).
 
-_Last updated: 2026-07-05 (S29 — RF-metric trust + July 4 glitch dig. **Reception fix** (denominator
-24→21 physical TX rate, `wu_pct()` cap, +9 tests, suite 49/49) pushed to PR #10 branch. **rxCheckPercent
-dead since 2026-06-18** → investigation opened. **DEC-0025 + docs/DATA_ERRATA.md** (ERR-0001: July 4
-phantom +1.28", confirmed in archive + WU/MADIS). Local honest-null owner-gated. **S28 below still
-holds:** rain-watch = 0 glitches since the fix, reception genuinely ~100% (was misread as 91%).)_
+_Last updated: 2026-07-05 (S30 — v2.0.3 assembly + the clobber discovery. Committed to `dev`: dewpoint
+wind honest-null, receiveWindow→upstream default, **Dockerfile clobber fix** (weewx imports the baked
+venv driver; `Dockerfile:101` was shipping the STOCK driver over the patched one → rain filter + H1/H2/M3
+never live → explains rxCheckPercent NULL + the July-4 phantom), v2.0.3 header, +5 tests (suite 54/54),
+ARCHITECTURE §3 corrected (driver is BAKED not mounted). Build/deploy/promote/release remain owner-run.
+**Correction to prior S28/S29 notes:** the driver fixes were NOT actually live — the rain-fix "hot-swap"
+targeted `weewx-data/bin/user/`, a path weewx does not import; the rebuild makes them live for real.)_
 
 _Prior S28: unblocked follow-ups. **P1 verified (read-only, live):** rain-watch
 grep = **0** `rejecting implausible counter delta` events across the full log range (2026-06-05 → now),
@@ -47,10 +57,12 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
 
 ## Active thread
 
-> **▶ Resume here (→ S29).** As of S28: reception Layer A is **deployed + confirmed live** (91–92% [OK]),
-> and the M-A/L-B monitor rewrite is in **draft PR #10 → `dev`** (40/40, secret-scan green) but **not yet
-> deployed**. `main` is untouched beyond the secret gate. Open gates for the `dev`→`main` v2.0.3 release,
-> plus owner actions:
+> **▶ Resume here (S30 → S31).** v2.0.3 build inputs are committed to `dev` (see **"Next session actions"**
+> below for the remaining owner-run build/deploy/release steps + the exact NAS run config). **Key S30
+> correction:** the driver fixes (rain filter, H1/H2/M3) were **never actually live** — weewx imports the
+> baked venv driver, `Dockerfile:101` clobbered it with the stock copy, and the "hot-swaps" went to a
+> non-imported path (`weewx-data/bin/user/`). The v2.0.3 rebuild makes them live for the first time. The
+> older items below are retained for history (some describe the pre-correction understanding):
 > 1. **Review + merge + deploy PR #10 (M-A/L-B).** Same monitor-restart deploy as Layer A (owner): scp
 >    `weewx_monitor.py`, `sudo kill <pid>` (pidfile `logs/weewx_monitor.pid`); the esynoscheduler wrapper
 >    respawns on the new file (≤5 min). Independent of the release. Confirm "Poll: N new lines" keeps
@@ -147,33 +159,37 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
   its only driver-relevant bit (wind-warmup `3f5470f`) was already in `dev`. Also deleted merged
   `s20-governance-hardening`; `s27-p3-deployed` was already auto-gone on #9's merge.
 
-## Next session actions (→ S30)
+## Next session actions (S30 remaining → S31 if unfinished)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S29:** (1) **RF-metric fixed + deployed live.** "91%" was a **/24 denominator artifact**
-(the ISS physically sends ~21.3/min); real reception is **~100%**. Fixed (`WU_RF_EXPECTED` 24→21
-env-overridable + `wu_pct()` cap, +9 tests, suite **49/49**), **merged via PR #10 → `dev`**, and
-**deployed to prod** — live log now reads `WINDOW: NN/21 (~100%)` (owner scp + `sudo kill`; new pid).
-(2) **`rxCheckPercent` root-caused** (dead since 2026-06-18): the **S24 "H2" `pct_good_all` deadlock**
-deployed at that day's driver reload; **fix already on `dev`** (`rtldavis.py:1011`) — ships with the
-v2.0.3 rebuild. (3) **DEC-0025 (preserve-and-flag)** + **`docs/DATA_ERRATA.md`**; **ERR-0001 applied** —
-July 4 phantom honest-nulled (day rain **1.84" → 0.56"**, surgical; genuine evening rain preserved).
-(4) **v2.0.3 confidence gate WAIVED** ([DEC-0026](DECISIONS.md)) — cut it with the fixes baked in.
+**✅ Done in S30 (committed to `dev`, pushed):** dewpoint **wind honest-null** (ported byte-identical
+from the reviewed Jun-16 draft; `_filter_wind` no longer substitutes stale `windSpeed` — wind is in every
+Davis packet so no per-packet dropout; temp/hum/rad/UV keep carry-forward, DEC-0022), **receiveWindow →
+upstream default** (dropped the unproven rw350 `sed`), **Dockerfile clobber fix** (`:101` was shipping the
+stock driver over the patched one), v2.0.3 header + doc corrections, `tests/test_dewpoint_wind_honest_null.py`
+(+5, **suite 54/54**), secret-scan clean. Commits `5486de8`, `8085504`, `8c06817` on `dev`.
 
-**Next session (→ S30) = ship v2.0.3.** The release, in order (build on the owner's **Mac Docker
-Desktop**; owner drives, agent guides — no Docker/creds on the agent side):
+**Remaining = ship v2.0.3 (owner-run on Mac Docker Desktop + NAS; agent guides — no Docker/creds agent-side):**
 
-1. **Build the image** (Mac Docker Desktop) folding in the branch-only pieces not yet live: **H2**
-   (revives `rxCheckPercent`), the honest-null **dewpoint** rewrite, **H1/M3**. (Rain + reception are
-   already live via hot-swap.) Reconcile the rw250-vs-rw350 receiveWindow question at build time
-   (ARCHITECTURE §6) — decide which tag ships.
-2. **Deploy the new image** on the NAS (`docker kill` + re-run; ~min downtime — not a hot-swap).
+1. **Build the image** from `dev` (Mac Docker Desktop). Now that the clobber is fixed, the build bakes the
+   **patched** `rtldavis.py` (rain filter + H1/H2/M3) + honest-null `dewpoint_service.py`. Tag suggestion:
+   `weatheredscientist/weewx-rtldavis:v2.0.3` (+ `:latest`). *(The old `rw250-test` tag is a misnomer now —
+   receiveWindow ships at the upstream default; a clean `v2.0.3` tag is preferred but means updating the
+   NAS run command's image ref.)*
+2. **Deploy on the NAS** (`docker kill weewx-rtldavis-v2` — never `docker stop`, DEC-0008 — then re-run
+   with the **same** binds/devices/env, only the image changed). ⚠️ The redeploy must **not** mount over
+   `rtldavis.py`/`dewpoint_service.py` (they're baked; ARCHITECTURE §3). Exact live run config captured S30
+   via `docker inspect` — binds to preserve: `ogoxeUploader.py`, `loopdata.py`, `loop_json_writer.py`,
+   `sortedcontainers`, `weewx-data`, `logs`, `influx.py`; device `/dev/bus/usb`; `--privileged`;
+   `--restart unless-stopped`; `TZ=America/New_York`; network `weewx-rtldavis_weather-net`.
 3. **Promote `dev` → `main`** (explicit approval per rules — never force-push/merge to main) + **tag
    `v2.0.3`** so `main` = what's actually running.
 4. **GitHub release** + **push image to Docker Hub** (`weatheredscientist/weewx-rtldavis`).
-5. **Live-confirm `rxCheckPercent` repopulates** — `SELECT rxCheckPercent FROM archive ORDER BY
-   dateTime DESC LIMIT 5;` should go from all-NULL to real values (the H2 payoff).
+5. **Live-confirm the fixes are finally active** (the whole point): `SELECT rxCheckPercent FROM archive
+   ORDER BY dateTime DESC LIMIT 5;` should go from all-NULL → real values (H2). **Watch the first archive
+   cycles closely** — this is the first time the rain filter + QC actually run in prod, so verify no
+   regression in rain/wind/reception.
 
 **Also open (not blocking v2.0.3):**
 - **ERR-0001 InfluxDB null** — the dashboard reads InfluxDB, which still carries the July 4 phantom;
