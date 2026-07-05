@@ -25,7 +25,21 @@ Mac Docker Desktop + the NAS, agent-guided). The image folds in H1/H2/M3 (alread
 - **receiveWindow reconciled (ARCHITECTURE §6).** Dropped the `Dockerfile` `sed 300→350` patch so the
   build ships the **upstream-default receiveWindow** — v2.0.3 carries only the proven software fixes, not
   the unproven rw350 experiment (its 24 h sweep stays backlogged). `main.go` is left unpatched.
-- Bumped the `Dockerfile` header `v2.0.2 → v2.0.3`.
+- **Dockerfile clobber fixed — the driver fixes actually ship now (major).** `Dockerfile:101` did
+  `cp /opt/weewx-data/bin/user/rtldavis.py …/site-packages/user/rtldavis.py`, overwriting the patched
+  driver `COPY`'d one step earlier with the **stock** driver that `weectl extension install` lays down
+  from upstream `src.tgz`. Since weewx imports `user.*` from the venv `site-packages/user/` (confirmed on
+  the running container three ways: the weewx path resolver, `.pyc` presence only in that dir, and a
+  content grep showing the live driver has **no** `rain_delta_tips` and the deadlocked H2), **every built
+  image has shipped the stock driver** — no rain filter, no H1/H2/M3. This explains both open mysteries at
+  once: `rxCheckPercent` NULL (stock's `pct_good_all` deadlock) *and* the July-4 phantom rain entering the
+  archive (no live rain filter). Driver hot-swaps were landing in `data/bin/user/` — a path weewx does not
+  import. Removed the clobbering `cp` (kept the `__init__`/`extensions` touches). With this, the v2.0.3
+  rebuild bakes the patched driver → weewx imports it → the **rain filter, H1/H2/M3, and dewpoint
+  honest-null go live for the first time**, and the public Docker Hub image finally contains them. *(The
+  reception-metric fix and ERR-0001 were the NAS monitor + a DB edit, not the driver — those were already
+  live.)*
+- Bumped the `Dockerfile` header `v2.0.2 → v2.0.3` and refreshed the stale rtldavis `COPY` comment.
 
 ## [S29] — 2026-07-05 — RF-metric honesty, rxCheckPercent root cause, ERR-0001 correction
 
