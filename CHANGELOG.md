@@ -6,6 +6,39 @@ under [Pre-S16].
 
 ---
 
+## [S20] — 2026-07-04 — Governance hardening: independent session numbering + fix secret-scan gate (on `s40-governance-hardening`, off `feature/rain-spike-filter`)
+
+Governance audit ("does our governance make sense, is it robust, is it aligned with the sibling
+repos") + the fixes it surfaced. No driver/prod code touched.
+
+- **Session numbering made independent (DEC-0023, supersedes DEC-0013):** a forensic audit showed the
+  "shared lineage with the dashboard" premise never held — the dashboard runs its own continuous
+  S1→S40 counter and never referenced a shared one; this repo's DEC-0013 invented a parallel counter
+  that re-used numbers (S16–S19) the dashboard had long passed. Resolution: **each repo counts its own
+  sessions**; number from *this repo's* own CHANGELOG/STATUS +1; prefix cross-repo refs (`weewx S20`
+  vs `dash S40`). This repo's line stays contiguous **S16→S17→S18→S19→S20**. (An earlier draft of this
+  session tried to *reunify* into the shared counter and relabel this session "S40"; reversed before
+  merge so `main` never sees the detour.) Updated `CLAUDE.md`, `docs/STATUS.md`.
+- **Secret-scan gate hardened (`scripts/check_secrets.sh`)** — the load-bearing DEC-0012 gate, two bugs:
+  1. **False-negative (serious, latent since S17):** the generic assignment-style detector (branch b)
+     was effectively **dead**. Its allow-list runs against `grep -n` output, and the docstring-param
+     rule `:[[:space:]]*[A-Z][a-z]` matched the `<lineno>:` prefix (e.g. `1:api_key = "…"` → the `:a`),
+     silently whitelisting virtually every real `ident = "secret"` line. Tightened to `[A-Za-z]:…`
+     (require an alpha char before the colon) so the numeric prefix no longer matches. Verified: a
+     planted fake credential (an `sk_live_…`-style token assignment) is now caught; the whole tracked
+     tree still scans clean (no new false positives); genuine docstring params still allowed. (This
+     very reword was itself flagged by the fixed gate — dogfooding. The S16 leaks were caught by the
+     *identifier* branch, which skips this filter — so the hole went unnoticed.)
+  2. **Empty-array crash:** threw `files[@]: unbound variable` under `set -u` when run by hand with no
+     staged files (bash-3.2 empty-array expansion). Added a clean-pass guard so the manual whole-tree
+     audit path fails safe. CI (`git ls-files | xargs`) and pre-commit were already unaffected by both.
+- **Doc note (`docs/CONVENTIONS.md`):** the macOS dev box has only `python3` (no bare `python`); the
+  prescribed `python -m …` validation commands don't run verbatim locally — noted, plus how to run
+  the secret gate standalone.
+- **Audit verdict:** governance is coherent and well-aligned with the dashboard's nine-file model
+  (intentional, documented divergences: `INTERFACES.md` ← `DATA-MODEL.md`, added `BACKLOG.md`); the
+  one real drift was STATUS.md going stale after the S18 deploy — already reconciled in `689b12c`.
+
 ## [S18] — 2026-07-04 — False-rain fix (on `feature/rain-spike-filter`, off `dev`)
 
 Confirm-first diagnosis then fix for the phantom-rain bug. Not yet deployed (pending a dry-window
