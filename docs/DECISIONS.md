@@ -1,7 +1,7 @@
 # Decision Log — weewx-rtldavis
 
 **Status:** Source of truth
-**Last updated:** 2026-07-04 (S17 — governance bootstrap; genesis backfill)
+**Last updated:** 2026-07-05 (S29 — DEC-0025 known-bad-data policy; see docs/DATA_ERRATA.md)
 
 This file records accepted, superseded, and deferred decisions so future sessions don't
 re-litigate settled choices. Append-only: a decision is never edited in place — it is
@@ -351,3 +351,32 @@ A pure `wu_record_key()` helper dedups on the trailing `(<unix_epoch>)`; the rec
 counts unique record epochs instead of raw publish lines. `close_reception_window` and the driver are
 untouched; 6 offline tests (`tests/test_reception_dedup.py`) against a live-recorded 2× over-read.
 Deploy is a monitor restart only (respawn loop reloads on-disk code). **Layer B remains deferred.**
+
+## DEC-0025 — Known-bad data: preserve-and-flag, never delete
+
+**Status:** Accepted · **Date:** S29 (2026-07-05)
+
+When we discover an observation we know is wrong (RF/sensor glitch, decode fault), we **never delete
+it**. We preserve the raw value and attach a quality flag + a correction, following how observational
+networks (WMO, NOAA MADIS) handle suspect data. The policy has four parts:
+
+1. **A public, append-only errata log** — `docs/DATA_ERRATA.md` — is the source of truth for every
+   known-bad observation: the bad value, root cause, corrected value, and how far the bad value
+   propagated (local archive / InfluxDB / immutable external networks).
+2. **The local best-estimate is corrected to NULL, not deleted and not to a made-up number.** We set the
+   bad field to NULL (consistent with DEC-0006 honest-null and DEC-0021) and rebuild any derived
+   summaries. Nulling one field is **not** removing the record — the row's other valid sensors stay.
+3. **Immutable downstream copies are reconciled by the errata, not chased.** Values already sent to
+   Weather Underground / CWOP → MADIS cannot be retracted; the errata log is the bridge that maps "what
+   we broadcast" to "what we now believe." We do not pretend the external record is clean.
+4. **One observation legitimately has several truths** (what the receiver decoded, what we broadcast,
+   what physically happened, our best estimate). Correctness depends on the question; the errata log
+   preserves the mapping between them rather than collapsing them.
+
+*Rationale:* deleting bad data destroys provenance and diverges silently from the immutable copies we
+already published; keeping it silently corrupts our own totals. Preserve-and-flag is the only approach
+that keeps our best-estimate honest **and** stays reconcilable with what the world already holds — and
+for a public "escape the WeatherLink lock" tool, an open errata log is the honest posture. First entry:
+ERR-0001, the 2026-07-04 phantom +1.28" rain (the glitch that inspired the DEC-0021 filter; confirmed to
+have reached Weather Underground and, almost certainly, MADIS — precipitation is barely QC'd downstream).
+Supersedes nothing; extends DEC-0006 (honest-null) and DEC-0021 (rain filter) to *historical* correction.
