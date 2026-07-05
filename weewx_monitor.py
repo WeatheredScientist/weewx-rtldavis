@@ -81,20 +81,34 @@ def send_email(subject, body):
 
 WEEWX_LOG_PATH = os.environ.get('WEEWX_LOG', f'{BASE_DIR}/logs/weewx.log')
 
-def get_linecount():
+def get_log_size():
+    """Current size of the weewx log in bytes (0 if missing). The caller compares
+    this to the last byte-offset to detect rotation/truncation (file shrank)."""
     try:
-        with open(WEEWX_LOG_PATH) as f:
-            return sum(1 for _ in f)
+        return os.path.getsize(WEEWX_LOG_PATH)
     except OSError:
         return 0
 
-def get_new_lines(from_line):
+def get_new_lines(offset):
+    """Read complete lines appended since byte OFFSET in a SINGLE open -- no
+    whole-file re-scan (M-A) and no separate size/read double-open race (L-B);
+    both used to re-read the growing 10 MB/day log twice per poll (DEC-0024).
+
+    Returns (lines, new_offset). A trailing partial line (still being written, no
+    final newline) is held back and new_offset stops before it, so it is parsed
+    once, whole, on a later poll -- never split or double-counted. Rotation is the
+    caller's job (get_log_size() < offset -> reset offset to 0)."""
     try:
-        with open(WEEWX_LOG_PATH) as f:
-            lines = f.readlines()
-        return [l.rstrip() for l in lines[from_line-1:]]
+        with open(WEEWX_LOG_PATH, 'rb') as f:
+            f.seek(offset)
+            data = f.read()
     except OSError:
-        return []
+        return [], offset
+    consumed = data.rfind(b'\n') + 1          # bytes up to and including last '\n'
+    if consumed == 0:                          # no complete line yet
+        return [], offset
+    lines = data[:consumed].decode('utf-8', 'replace').splitlines()
+    return lines, offset + consumed
 
 # --- Rain-counter glitch alert (DEC-0021) ---
 # rtldavis.py logs this exact phrase when it rejects an implausible rain-counter
@@ -294,17 +308,17 @@ def main():
     log("Monitor started")
     send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
 
-    last_line = get_linecount()
-    log(f"Starting at log line {last_line}")
+    last_offset = get_log_size()
+    log(f"Starting at log byte-offset {last_offset}")
 
     while True:
         time.sleep(POLL)
         now = time.time()
 
-        cur = get_linecount()
-        if cur < last_line:
-            log(f"Log reset detected (was {last_line}, now {cur}) - container restarted")
-            last_line = 0
+        cur = get_log_size()
+        if cur < last_offset:
+            log(f"Log reset detected (was {last_offset} bytes, now {cur}) - container restarted")
+            last_offset = 0
             for svc in last_seen:
                 last_seen[svc] = 0.0
             for svc in in_outage:
@@ -316,9 +330,10 @@ def main():
             wu_bad_windows   = 0
             wu_first_seen    = False
 
-        if cur > last_line:
-            lines = get_new_lines(last_line + 1)
-            log(f"Poll: {len(lines)} new lines")
+        if cur > last_offset:
+            lines, last_offset = get_new_lines(last_offset)
+            if lines:
+                log(f"Poll: {len(lines)} new lines")
             for line in lines:
                 if 'rtldavis process stalled' in line:
                     log("STALL detected")
@@ -341,7 +356,7 @@ def main():
                 if 'Wunderground-RF' in line and 'Published' in line:
                     wu_window_epochs.add(wu_record_key(line))
                     wu_first_seen = True
-            last_line = cur
+            # last_offset already advanced by get_new_lines() above.
 
 
         # --- Reception: close window every 60s ---
