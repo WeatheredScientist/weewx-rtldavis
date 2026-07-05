@@ -6,10 +6,15 @@ under [Pre-S16].
 
 ---
 
-## [S30] — 2026-07-05 — v2.0.3 release prep: dewpoint wind honest-null + receiveWindow reconcile
+## [S30] — 2026-07-05 — v2.0.3: driver fixes finally go live (clobber fix + build)
 
-Assembled the last branch-only pieces for the v2.0.3 image (build/deploy/tag/release are owner-run on
-Mac Docker Desktop + the NAS, agent-guided). The image folds in H1/H2/M3 (already on `dev`) plus:
+**Built (native amd64 on the NAS) and deployed to prod.** After deploy, `rxCheckPercent` went
+NULL→real (**70–82%**) within two archive cycles — the driver's honest reception metric alive for the
+first time since 2026-06-18, proving the clobber fix baked the patched driver. Packets flowing, clean
+dongle handoff (no USB reset), old `rw250-test` image kept for rollback. *Still owner-gated: promote
+`dev`→`main` + tag `v2.0.3`, GitHub release, Docker Hub push.*
+
+The image folds in H1/H2/M3 (already on `dev`) plus:
 
 - **Dewpoint service — wind honest-null (ported from the reviewed Jun-16 draft).** `_filter_wind` no
   longer substitutes the last cached `windSpeed` into a packet whose `windSpeed` is `None`. The Davis
