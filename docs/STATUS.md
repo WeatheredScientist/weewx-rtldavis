@@ -79,8 +79,14 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
   `get_new_lines(offset)`) — kills the O(n) re-scan (M-A) and the double-open race (L-B) in one change;
   rotation + partial-line guards; `tests/test_monitor_incremental_read.py` (6 tests), suite 40/40.
   **Deploy is owner-gated** (scp + `sudo kill`, same as Layer A). Merge PR #10, then deploy.
-- **Rain fix** deployed live and now **merged to `dev`** (via #5, S27); **`main` still untouched**.
-  Promote to `main` + tag v2.0.3 once it's proven in the wild (see Active thread).
+- **Rain fix — where the code actually lives (S28 clarification).** Three distinct states, easy to
+  conflate: **(1) live in prod on the NAS** via the S18 hot-swap; **(2) on GitHub, PUBLIC `dev` branch**
+  (`rain_delta_tips` + `MAX_PLAUSIBLE_TIPS` in `rtldavis.py`, merged via #5 in S27; also on
+  `feature/rain-spike-filter`); **(3) NOT on `main`** — the tagged production-baseline branch — which is
+  exactly what the v2.0.3 promotion gates. **There is no private repo:** this driver has one repo,
+  `WeatheredScientist/weewx-rtldavis`, and it is public (the dashboard is the separate
+  `eaglehunt-weather-dashboard`). So the fix is already public on GitHub (on `dev`), just not released
+  on `main`. Promote `dev` → `main` + tag v2.0.3 once it's proven in the wild (see Active thread).
 - **Sensor-QC hardening (DEC-0022, a later session):** the stale-substitution DEC-0006 violation in
   `dewpoint_service.py` (temp/humidity/radiation/UV — real 6263 sensors get stuck if they fail) +
   minor windGust/radiation/UV StdQC bounds. Ties into the pending dewpoint rewrite. Do after v2.0.3.
