@@ -1,0 +1,39 @@
+# Pre-commit hooks for weewx-rtldavis (DEC-0015).
+# Install:  pip install pre-commit && pre-commit install
+# Run all:  pre-commit run --all-files
+#
+# This is a collection of WeeWX extension scripts (imported by the venv), not a
+# packaged app — so ruff/mypy run in non-blocking-lint mode and the secret scan
+# is the load-bearing gate for this PUBLIC repo (DEC-0012).
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.1
+    hooks:
+      - id: mypy
+        # WeeWX isn't installed in the hook env; ignore missing imports rather
+        # than vendor stubs for the whole weewx package.
+        args: ["--ignore-missing-imports", "--no-strict-optional"]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # --- Secret / secret-adjacent scan (the public-repo gate, DEC-0012) ---
+  - repo: local
+    hooks:
+      - id: no-secrets
+        name: block secrets and personal identifiers
+        entry: scripts/check_secrets.sh
+        language: script
+        pass_filenames: true
