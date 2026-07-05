@@ -35,6 +35,11 @@ WU_RF_WINDOW       = 60    # seconds per reception window
 WU_RF_SUSTAIN      = 5     # consecutive bad windows before alert
 WU_RF_LOG_INTERVAL = 300   # log reception summary every 5 min
 
+# Every WeeWX "Published record ..." line ends in "(<unix_epoch>)". The driver
+# publishes freqError freq-hop channel packets as extra dataless loop packets, so
+# each real reading is posted to WU several times under the SAME epoch (DEC-0024).
+WU_RECORD_RE = re.compile(r'\((\d+)\)\s*$')
+
 # --- PID guard ---
 # '--test-alert' bypasses the guard entirely: it sends one test email and exits,
 # and must NOT touch the running monitor's pidfile.
@@ -187,6 +192,22 @@ def format_daily_summary(hourly_buckets, date_str):
         lines.append(f"{'Daily avg':<8} {'':>10} {day_avg:>9.0f}%")
     return "\n".join(lines)
 
+def wu_record_key(line):
+    """Dedup key for a 'Wunderground-RF ... Published' line — the record epoch.
+
+    The driver publishes freqError freq-hop channel packets as extra dataless
+    loop packets, so each real reading is posted to WU several times under the
+    SAME record epoch (DEC-0024, S21). Counting raw publish lines over-reads
+    reception (~1.66x, up to 2x), which is why the RF summary showed ~150%.
+    Collapsing on this key — the trailing "(<unix_epoch>)" WeeWX stamps on every
+    'Published record' line — counts unique records for a true reception %. Falls
+    back to the whole line if the epoch can't be parsed (rare); that still dedups
+    identical lines. Two real records in the same integer second collapse to one
+    (a conservative under-count, accepted per DEC-0024).
+    """
+    m = WU_RECORD_RE.search(line)
+    return m.group(1) if m else line
+
 def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
                             wu_in_alert, wu_alert_sent_at, wu_repeat_sent_at,
                             wu_hourly_buckets, now):
@@ -255,7 +276,7 @@ def main():
 
     # Reception tracking state
     wu_window_start   = time.time()
-    wu_window_count   = 0
+    wu_window_epochs  = set()   # unique record epochs seen this window (DEC-0024)
     wu_period_counts  = []
     wu_period_start   = time.time()
     wu_bad_windows    = 0
@@ -285,7 +306,7 @@ def main():
             for svc in in_outage:
                 in_outage[svc] = False
             wu_window_start  = now
-            wu_window_count  = 0
+            wu_window_epochs = set()
             wu_period_counts = []
             wu_period_start  = now
             wu_bad_windows   = 0
@@ -314,7 +335,7 @@ def main():
                                        f"{svc} recovered after {td//60}min at {datetime.now()}")
                         last_seen[svc] = time.time()
                 if 'Wunderground-RF' in line and 'Published' in line:
-                    wu_window_count += 1
+                    wu_window_epochs.add(wu_record_key(line))
                     wu_first_seen = True
             last_line = cur
 
@@ -324,11 +345,11 @@ def main():
             (wu_period_counts, wu_bad_windows, wu_in_alert,
              wu_alert_sent_at, wu_repeat_sent_at,
              wu_hourly_buckets) = close_reception_window(
-                wu_window_count, wu_period_counts, wu_bad_windows,
+                len(wu_window_epochs), wu_period_counts, wu_bad_windows,
                 wu_in_alert, wu_alert_sent_at, wu_repeat_sent_at,
                 wu_hourly_buckets, now)
             wu_window_start = wu_window_start + WU_RF_WINDOW
-            wu_window_count = 0
+            wu_window_epochs = set()
 
         # --- Reception: log 5-min summary ---
         if wu_first_seen and (now - wu_period_start) >= WU_RF_LOG_INTERVAL:
