@@ -1428,7 +1428,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
 
         else:
             logerr("unknown station with channel: %s, raw message: %s" %
-                   (data['channel'], raw))
+                   (data['channel'], pkt))
         return data
 
     @staticmethod
