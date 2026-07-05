@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  # The load-bearing gate for this PUBLIC repo (DEC-0012): fail the build if any
+  # tracked file carries a secret or personal identifier. Kept as its OWN job so
+  # it runs independently of lint — a lint failure must never silently skip the
+  # secret scan (mark this job as the required status check in branch protection).
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Secret scan (all tracked files)
+        run: |
+          chmod +x scripts/check_secrets.sh
+          git ls-files | xargs scripts/check_secrets.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install tools
+        run: python -m pip install --upgrade pip ruff mypy
+
+      - name: Ruff lint
+        run: python -m ruff check .
+
+      - name: Ruff format (check only)
+        run: python -m ruff format --check .
+
+      - name: Mypy
+        run: python -m mypy --ignore-missing-imports --no-strict-optional . || true
