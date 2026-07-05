@@ -25,8 +25,10 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 > **wind honest-null** (ported from the reviewed Jun-16 draft; wind is in every Davis packet so no dropout
 > — temp/hum/rad/UV keep carry-forward per DEC-0022), **receiveWindow reverted to upstream default** (drop
 > the unproven rw350 patch), Dockerfile **clobber fix** + v2.0.3 header, +5 tests (**suite 54/54**), docs
-> corrected. **Remaining (owner-run, agent-guided): build the image → redeploy → promote `dev`→`main` +
-> tag v2.0.3 → GitHub release + Docker Hub push → live-confirm `rxCheckPercent` repopulates.** Governed
+> corrected. **✅ Built (native amd64 on the NAS), deployed to prod, and CONFIRMED:** `rxCheckPercent`
+> went NULL→**70–82%** within two archive cycles (alive for the first time since 2026-06-18 — the clobber
+> fix works). Packets flowing, clean dongle handoff, old `rw250-test` image kept for rollback. **Remaining
+> (owner-approval-gated): promote `dev`→`main` + tag v2.0.3 → GitHub release → Docker Hub push.** Governed
 > lineage: S16→…→S28→S29→**S30**.
 >
 > **Owner priority (S30):** root-cause temp/humidity/radiation/UV spikes as **bad RF packets** (same class
@@ -170,26 +172,25 @@ upstream default** (dropped the unproven rw350 `sed`), **Dockerfile clobber fix*
 stock driver over the patched one), v2.0.3 header + doc corrections, `tests/test_dewpoint_wind_honest_null.py`
 (+5, **suite 54/54**), secret-scan clean. Commits `5486de8`, `8085504`, `8c06817` on `dev`.
 
-**Remaining = ship v2.0.3 (owner-run on Mac Docker Desktop + NAS; agent guides — no Docker/creds agent-side):**
+**✅ Done in S30 (build + deploy):** Built the image **native amd64 on the NAS** (Mac is arm64; native
+build avoids a QEMU cross-compile of the from-source C+Go — cleaner). Flushed two more latent build bugs:
+the `Dockerfile:101` clobber (shipped stock driver) and an **untracked `logging.additions`** (Step-7
+`COPY` failed from a clean clone — now committed + de-duplicated). Verified the baked image contains the
+patched driver (rain filter + H2, 71988 B — not the 67256 B stock) + honest-null dewpoint. Deployed
+(`docker rm -f` + re-run on `:v2.0.3`, identical binds; old `rw250-test` kept for rollback). **Confirmed
+live:** `rxCheckPercent` NULL→**70–82%** within two 60 s archive cycles; packets flowing; clean dongle
+handoff (no USB reset).
 
-1. **Build the image** from `dev` (Mac Docker Desktop). Now that the clobber is fixed, the build bakes the
-   **patched** `rtldavis.py` (rain filter + H1/H2/M3) + honest-null `dewpoint_service.py`. Tag suggestion:
-   `weatheredscientist/weewx-rtldavis:v2.0.3` (+ `:latest`). *(The old `rw250-test` tag is a misnomer now —
-   receiveWindow ships at the upstream default; a clean `v2.0.3` tag is preferred but means updating the
-   NAS run command's image ref.)*
-2. **Deploy on the NAS** (`docker kill weewx-rtldavis-v2` — never `docker stop`, DEC-0008 — then re-run
-   with the **same** binds/devices/env, only the image changed). ⚠️ The redeploy must **not** mount over
-   `rtldavis.py`/`dewpoint_service.py` (they're baked; ARCHITECTURE §3). Exact live run config captured S30
-   via `docker inspect` — binds to preserve: `ogoxeUploader.py`, `loopdata.py`, `loop_json_writer.py`,
-   `sortedcontainers`, `weewx-data`, `logs`, `influx.py`; device `/dev/bus/usb`; `--privileged`;
-   `--restart unless-stopped`; `TZ=America/New_York`; network `weewx-rtldavis_weather-net`.
-3. **Promote `dev` → `main`** (explicit approval per rules — never force-push/merge to main) + **tag
-   `v2.0.3`** so `main` = what's actually running.
-4. **GitHub release** + **push image to Docker Hub** (`weatheredscientist/weewx-rtldavis`).
-5. **Live-confirm the fixes are finally active** (the whole point): `SELECT rxCheckPercent FROM archive
-   ORDER BY dateTime DESC LIMIT 5;` should go from all-NULL → real values (H2). **Watch the first archive
-   cycles closely** — this is the first time the rain filter + QC actually run in prod, so verify no
-   regression in rain/wind/reception.
+**Remaining = release (owner-approval-gated — outward-facing/hard-to-undo):**
+
+1. **Promote `dev` → `main`** (explicit approval — never force-push/merge to main) + **tag `v2.0.3`** so
+   `main` = what's actually running. 8 S30 commits on `dev` (`5486de8`→ the CHANGELOG/STATUS closeout).
+2. **GitHub release** (v2.0.3 notes) + **push image to Docker Hub** (`weatheredscientist/weewx-rtldavis`
+   `:v2.0.3` + `:latest` — first public image that actually contains the driver fixes). Image built on the
+   NAS; `docker login` + `docker push` are owner creds. *(Old `rw250-test` tag is a misnomer now —
+   receiveWindow ships at the upstream default.)*
+3. **Keep watching the first archive cycles** — first time the rain filter + QC actually run in prod;
+   verify no regression in rain/wind/reception over the next day.
 
 **Also open (not blocking v2.0.3):**
 - **ERR-0001 InfluxDB null** — the dashboard reads InfluxDB, which still carries the July 4 phantom;
