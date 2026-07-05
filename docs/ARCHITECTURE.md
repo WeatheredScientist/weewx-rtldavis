@@ -50,12 +50,13 @@ From `weewx.conf [Engine][Services]`:
 
 ## 3. Deployment: what's mounted vs baked
 
-The image is built from the `Dockerfile` (multistage Ubuntu 26.04 / Py 3.14, DEC-0002). At runtime,
-`docker-compose.yml` **volume-mounts** the hot-iteration files over the baked ones (DEC-0004):
+The image is built from the `Dockerfile` (multistage Ubuntu 26.04 / Py 3.14, DEC-0002). At runtime the
+container **volume-mounts** the hot-iteration files over the baked ones (DEC-0004). The table below is
+**verified from the running container** (`docker inspect weewx-rtldavis-v2`, S30 2026-07-05), which is
+authoritative over the published `docker-compose.yml` example (they differ — see the ⚠️ note):
 
 | Volume-mounted `:ro` (edit + clear-pyc + restart — NO rebuild) | Source path on NAS |
 |---|---|
-| `rtldavis.py` (the driver) | `weewx-data/bin/user/rtldavis.py` ⚠️ *not* the stale root copy |
 | `influx.py` | `/volume1/docker/weewx-rtldavis/influx.py` |
 | `loop_json_writer.py` | `/volume1/docker/weewx-rtldavis/loop_json_writer.py` |
 | `ogoxeUploader.py` | `weewx-data/bin/user/ogoxeUploader.py` |
@@ -63,9 +64,21 @@ The image is built from the `Dockerfile` (multistage Ubuntu 26.04 / Py 3.14, DEC
 | `sortedcontainers/` (pip dep) | `/volume1/docker/weewx-rtldavis/sortedcontainers` |
 
 **Baked into the image (changing these requires an image REBUILD):**
-`dewpoint_service.py`, `owm.py`, `pressure_service.py`, `wcloud.py`, `windy.py`, `entrypoint.sh`.
+`rtldavis.py` (the driver), `dewpoint_service.py`, `owm.py`, `pressure_service.py`, `wcloud.py`,
+`windy.py`, `entrypoint.sh`.
 
 Plus bind mounts: `weewx-data/` → `/opt/weewx-data` (config, DB, skins) and `logs/` → `/var/log/weewx`.
+
+> ⚠️ **Driver is BAKED, not mounted — corrected S30 (2026-07-05).** The published `docker-compose.yml`
+> example *and* an earlier version of this table listed `rtldavis.py` as volume-mounted from
+> `weewx-data/bin/user/rtldavis.py`. The **running container does not mount it** (confirmed via
+> `docker inspect` — no bind for `rtldavis.py` or `dewpoint_service.py`). weewx imports `user.*` from the
+> baked venv `site-packages/user/`, and `Dockerfile:101` had been **clobbering** the patched driver with
+> the stock `weectl extension install` copy — so every image shipped the **stock** driver (no rain filter,
+> no H1/H2/M3), and driver "hot-swaps" to `weewx-data/bin/user/` never took effect (that path is not
+> imported). This is why `rxCheckPercent` was NULL and the July-4 phantom rain was not rejected. Fixed in
+> v2.0.3 (clobber removed). **Consequence: driver + dewpoint changes require an image rebuild**, and the
+> redeploy `docker run` must **not** re-introduce a mount over `rtldavis.py`/`dewpoint_service.py`.
 
 ### pyc-cache gotcha
 After editing any mounted `.py` the venv imports, clear its compiled cache or WeeWX runs the stale
