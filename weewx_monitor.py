@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """weewx monitor: USB watchdog + service downtime alerting + reception tracking"""
 
-import time, smtplib, os, sys
+import time, smtplib, os, sys, re
 from email.mime.text import MIMEText
 from datetime import datetime
 
@@ -36,15 +36,19 @@ WU_RF_SUSTAIN      = 5     # consecutive bad windows before alert
 WU_RF_LOG_INTERVAL = 300   # log reception summary every 5 min
 
 # --- PID guard ---
-if os.path.exists(PIDFILE):
-    old = open(PIDFILE).read().strip()
-    if old and os.path.exists(f'/proc/{old}'):
-        print(f'Already running (PID {old}), exiting')
-        sys.exit(0)
-with open(PIDFILE, 'w') as f:
-    f.write(str(os.getpid()))
-import atexit
-atexit.register(lambda: os.remove(PIDFILE) if os.path.exists(PIDFILE) else None)
+# '--test-alert' bypasses the guard entirely: it sends one test email and exits,
+# and must NOT touch the running monitor's pidfile.
+_TEST_ALERT = '--test-alert' in sys.argv
+if not _TEST_ALERT:
+    if os.path.exists(PIDFILE):
+        old = open(PIDFILE).read().strip()
+        if old and os.path.exists(f'/proc/{old}'):
+            print(f'Already running (PID {old}), exiting')
+            sys.exit(0)
+    with open(PIDFILE, 'w') as f:
+        f.write(str(os.getpid()))
+    import atexit
+    atexit.register(lambda: os.remove(PIDFILE) if os.path.exists(PIDFILE) else None)
 
 # --- Helpers ---
 def log(msg):
@@ -82,6 +86,48 @@ def get_new_lines(from_line):
         return [l.rstrip() for l in lines[from_line-1:]]
     except:
         return []
+
+# --- Rain-counter glitch alert (DEC-0021) ---
+# rtldavis.py logs this exact phrase when it rejects an implausible rain-counter
+# delta -- an RF-decode glitch that, before the fix, would have become phantom
+# rain. Watching for it turns each catch into an email: confirmation the filter
+# earned its keep, plus a running record of how often the glitch actually fires.
+RAIN_GLITCH_MARKER = 'rejecting implausible counter delta'
+RAIN_GLITCH_CD     = 300   # seconds between glitch emails (dedupe a repeated line)
+
+def parse_rain_glitch(line):
+    """If LINE is a rain-glitch rejection, return (timestamp, detail, phantom_in);
+    else None. phantom_in = the false rainfall (inches) the OLD buggy code would
+    have recorded, for context in the alert."""
+    if RAIN_GLITCH_MARKER not in line:
+        return None
+    m = re.search(r'last=(\S+)\s+new=(\S+)', line)
+    detail = m.group(0) if m else '(counter values unparsed)'
+    phantom_in = None
+    if m:
+        try:
+            old = int(m.group(2)) - int(m.group(1))   # what the buggy code saw
+            if old < 0:
+                old += 128                             # its unconditional wraparound add
+            phantom_in = round(old * 0.01, 2)          # bucket_type 0 = 0.01 in/tip
+        except ValueError:
+            pass
+    ts = line[:19] if (len(line) >= 19 and line[4:5] == '-') else \
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return ts, detail, phantom_in
+
+def send_rain_glitch_alert(ts, detail, phantom_in, raw_line, test=False):
+    tag = '[TEST] ' if test else ''
+    body = (f"{tag}At {ts}, the rtldavis driver rejected an implausible "
+            f"rain-counter delta ({detail}).\n\n"
+            f"No phantom rain was recorded -- the DEC-0021 filter caught it.\n")
+    if phantom_in is not None:
+        body += f"Before the fix this would have logged a false +{phantom_in}\" of rain.\n"
+    if test:
+        body += "\nThis is a TEST of the rain-glitch email alert. If you got it, alerting works."
+    else:
+        body += f"\nLog line:\n{raw_line}"
+    send_email(f"{STATION_NAME}: {tag}rain-counter glitch rejected", body)
 
 def do_reset():
     try:
@@ -205,6 +251,7 @@ def main():
     last_repeat = {s: 0.0 for s in THRESHOLDS}
     in_outage   = {s: False for s in THRESHOLDS}
     last_reset  = 0.0
+    last_glitch_alert = 0.0
 
     # Reception tracking state
     wu_window_start   = time.time()
@@ -251,6 +298,12 @@ def main():
                 if 'rtldavis process stalled' in line:
                     log("STALL detected")
                     last_reset = reset_dongle(last_reset)
+                g = parse_rain_glitch(line)
+                if g and now - last_glitch_alert > RAIN_GLITCH_CD:
+                    ts, detail, phantom_in = g
+                    last_glitch_alert = now
+                    log(f"RAIN GLITCH rejected: {detail}")
+                    send_rain_glitch_alert(ts, detail, phantom_in, line)
                 for svc in THRESHOLDS:
                     if svc in line and ('Published' in line or 'published' in line):
                         if in_outage[svc]:
@@ -324,4 +377,11 @@ def main():
                            f"{svc} recovered after {td//60}min at {datetime.now()}")
 
 if __name__ == '__main__':
+    if _TEST_ALERT:
+        sample = ("2026-07-04 03:03:45 user.rtldavis ERROR rain: rejecting implausible "
+                  "counter delta last=70 new=6 (RF glitch, not rain -- DEC-0021)")
+        ts, detail, phantom_in = parse_rain_glitch(sample)
+        send_rain_glitch_alert(ts, detail, phantom_in, sample, test=True)
+        print("test alert sent (check email + weewx_monitor.log)")
+        sys.exit(0)
     main()
