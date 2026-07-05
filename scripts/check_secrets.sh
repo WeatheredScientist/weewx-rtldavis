@@ -12,6 +12,9 @@ set -u
 status=0
 files=("$@")
 [ ${#files[@]} -eq 0 ] && files=($(git diff --cached --name-only --diff-filter=ACM))
+# Nothing to scan (run by hand on a clean tree, or an empty staged set): pass cleanly
+# instead of tripping `set -u` on the empty-array expansion in the loop below.
+[ ${#files[@]} -eq 0 ] && exit 0
 
 # --- Personal / infra identifiers that must never be committed ---
 # The patterns themselves are private (naming them here would leak them in this
@@ -47,8 +50,12 @@ for f in "${files[@]}"; do
   # Allow-list (not a secret): YOUR_* / ${ENV} / env lookups / empty / self-assign /
   # config lookups / comments / an ALL_CAPS constant reference (= FOO_KEY) / a
   # docstring param description (: WeatherCloud key).
+  # NOTE: the allow-list runs against `grep -n` output, so every line carries a
+  # leading "<lineno>:" prefix. The docstring-param rule must require an ALPHA char
+  # immediately before the colon ([A-Za-z]:) — otherwise it matches that numeric
+  # prefix's colon (e.g. "1:api_key = ...") and silently whitelists real secrets.
   hits=$(grep -nEi "$secret_re" "$f" 2>/dev/null \
-    | grep -viE 'YOUR_|\$\{|os\.environ|getenv|argv|input\(|= *""|= *None|= *-1\b|self\.(password|token|key|api[_a-z]*)|options\.|\.get\(|site_dict|config_dict|# |description|Authorization|InfluxDB 2\.x|=[[:space:]]*[A-Z][A-Z0-9_]{3,}\b|:[[:space:]]*[A-Z][a-z]')
+    | grep -viE 'YOUR_|\$\{|os\.environ|getenv|argv|input\(|= *""|= *None|= *-1\b|self\.(password|token|key|api[_a-z]*)|options\.|\.get\(|site_dict|config_dict|# |description|Authorization|InfluxDB 2\.x|=[[:space:]]*[A-Z][A-Z0-9_]{3,}\b|[A-Za-z]:[[:space:]]*[A-Z][a-z]')
   if [ -n "$hits" ]; then
     echo "SECRET-SCAN: possible embedded secret in $f:"; echo "$hits"; status=1
   fi
