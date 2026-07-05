@@ -42,21 +42,24 @@ is not about picking a winner — it's about **preserving the mapping** so each 
 
 | Field | Value |
 |---|---|
-| **Observed (bad)** | `rain = 0.64"` at 07:04 UTC **and** 07:05 UTC (03:04 + 03:05 EDT) → **+1.28" daily total** |
-| **Corrected** | `rain = NULL` for both archive records (honest-null, DEC-0006) |
-| **Actual weather** | **0"** — no rain fell; the records are bracketed by zeros |
+| **Observed (bad)** | `rain = 0.64"` at 07:04 UTC **and** 07:05 UTC (03:04 + 03:05 EDT) — a **+1.28" phantom** at ~3 AM. July 4's recorded day total was **1.84"** (= 1.28" phantom + 0.56" genuine evening rain). |
+| **Corrected** | `rain = NULL` for the two 3 AM records (honest-null, DEC-0006). Corrected July-4 day total = **0.56"** (the genuine rain is untouched). |
+| **Actual weather** | No rain at 3 AM (the two records are bracketed by zeros). The day's **real** rain — **0.56"**, distributed in ≤0.05" increments over ~20:31–22:39 EDT — is genuine and preserved. |
 | **Root cause** | [DEC-0021](DECISIONS.md#dec-0021--rain-counter-glitch-filter-the-false-rain-fix) rain-counter RF glitch. The driver logged `rain counter wraparound detected rain_count=-64`; the **old** wraparound handler unconditionally added 128 → +64 tips → +0.64" per record, recorded across two archive intervals. |
 | **Why the filter didn't catch it** | This event is what **inspired** the DEC-0021 fix — the fix was written and deployed *after* 2026-07-04. The buggy handler was live at 03:04. The filter now nulls any such delta going forward (verified live; 0 further glitches to date). |
 
 **Propagation & correction status:**
 
-- **local-archive:** ⬜ pending → ✅ *(update on apply)* — `UPDATE archive SET rain=NULL` for the two
-  records, then rebuild daily summaries so rain totals drop the phantom 1.28".
-- **influxdb:** ⬜ pending — the dashboard reads InfluxDB, so its rain total still shows +1.28" until
+- **local-archive:** ✅ **applied 2026-07-05** — `UPDATE archive SET rain=NULL WHERE dateTime IN
+  (1783148640, 1783148700)` (2 rows), then `weectl database rebuild-daily --date=2026-07-04`. Verified:
+  July-4 daily rain 1.84" → **0.56"**; raw archive sum agrees. Backup:
+  `weewx-data/archive/weewx.sdb.bak-err0001-20260705-165813`.
+- **influxdb:** ⬜ pending — the dashboard reads InfluxDB, so its rain total still shows the phantom until
   the matching points are nulled there. InfluxDB tooling lives on the dashboard side
   ([DEC-0010](DECISIONS.md)); tracked as a cross-repo follow-up.
 - **external:** ⛔ immutable — **confirmed present** in the Weather Underground record (the PWS history
-  for 2026-07-04 shows 0.64" @ 03:04 → 1.28" @ 03:09, then flat 1.28" all day). Almost certainly also
+  for 2026-07-04 shows 0.64" @ 03:04 → 1.28" @ 03:09, then flat, day total **1.84"**; our archive now
+  reads 0.56" — the 1.28" divergence is exactly this phantom). Almost certainly also
   ingested by **NOAA MADIS** via CWOP: MADIS/CWOP QC concentrates its consistency/buddy checks on
   temperature, dew point, pressure and wind — **precipitation is barely quality-controlled** (rain is
   genuinely patchy and hard to spatially validate), and 0.64"/5-min, while extreme, is not *grossly*

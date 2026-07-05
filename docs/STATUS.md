@@ -117,14 +117,13 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
   then point the monitor at it instead of scraping WU-publish lines. *Bonus finding:* a pre-June-18
   `user.reception_service` (`ReceptionMonitor: received N/24`) was a 2nd honest-ish signal; it's since
   been removed (0 lines today, not in `weewx.conf`) and also used the wrong /24 denominator.
-- **ERR-0001 local honest-null — OWNER-GATED prod step (S29, DEC-0025).** The July 4 phantom +1.28" is in
-  the archive (two 0.64" records at 07:04 + 07:05 UTC). Correcting it is a prod DB write (blocked by the
-  read-only NAS boundary), so it's an owner step: **(1)** back up `weewx.sdb`; **(2)** `UPDATE archive SET
-  rain=NULL WHERE dateTime IN (1783148640, 1783148700)`; **(3)** rebuild that day's summary (`weectl
-  database rebuild-daily --date=2026-07-04` in the container, or update `archive_day_rain`); **(4)** verify
-  the Jul-4 daily total drops by 1.28". **InfluxDB** (the dashboard's source) still shows +1.28" until its
-  matching points are nulled — cross-repo (DEC-0010), tracked in DATA_ERRATA.md. External WU/MADIS copies
-  are immutable. Update ERR-0001's status to ✅ when done.
+- **ERR-0001 local honest-null — ✅ APPLIED 2026-07-05 (S29, DEC-0025).** Nulled the two 3 AM phantom
+  records (`dateTime IN (1783148640, 1783148700)`) + `weectl database rebuild-daily --date=2026-07-04`
+  (owner-run; backup `weewx.sdb.bak-err0001-20260705-165813`). Verified: July-4 daily rain **1.84" →
+  0.56"** — the honest-null was surgical (the day's genuine 0.56" evening rain, ≤0.05" increments
+  ~20:31–22:39 EDT, is preserved; only the 1.28" 3 AM phantom removed). **Still open:** the **InfluxDB**
+  copy (dashboard's source) still carries the phantom — cross-repo (DEC-0010), tracked in DATA_ERRATA.md;
+  external WU (day total 1.84") / MADIS copies are immutable, reconciled by the errata.
 - **Sensor-QC hardening (DEC-0022, a later session):** the stale-substitution DEC-0006 violation in
   `dewpoint_service.py` (temp/humidity/radiation/UV — real 6263 sensors get stuck if they fail) +
   minor windGust/radiation/UV StdQC bounds. Ties into the pending dewpoint rewrite. Do after v2.0.3.
