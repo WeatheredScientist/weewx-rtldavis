@@ -261,3 +261,41 @@ rain fix stays tightly scoped:
 *Rationale:* these share the rain bug's theme (RF glitch → bad sensor data) but have real design
 nuance and behavioral risk; bundling them into the rain deploy would widen the blast radius. See
 ROADMAP P1.5 / STATUS.
+
+## DEC-0023 — Independent per-repo session counter (supersedes the shared-lineage idea)
+
+**Status:** Accepted · **Date:** 2026-07-04 (S20) · **Supersedes:** DEC-0013
+
+**This repo counts its own sessions. There is no shared cross-repo counter.** DEC-0013 asserted that
+numbering "continues a single lineage shared with `eaglehunt-weather-dashboard`." A forensic audit
+(weewx S20) showed that premise never held:
+
+- The dashboard runs its **own** continuous counter **S1 → S40** (S1–S14 reconstructed; its repo
+  split + governance bootstrap at **S15**, 2026-06-23; S15 → S40 thereafter). It contains **no
+  reference to a shared counter** with this repo — the "shared lineage" existed only here.
+- weewx-rtldavis got its own governance on 2026-07-04 and, per DEC-0013, labeled its first governed
+  session **S16** — but the dashboard was already near S38 by then. So "S16" started a **parallel**
+  counter re-using numbers the dashboard had long passed. It ran S16 → S17 → S18 → S19.
+- A single monotonic counter cannot be shared by two repos developed in parallel without making at
+  least one repo's history non-contiguous. The two repos are *deliberately split* (DEC-0010/0011);
+  their sessions are independent workstreams.
+
+**Rule going forward:**
+1. Each repo has its **own** independent session counter. A session number means something only
+   **within its repo**. Coherence across repos comes from **dates**, not numbers.
+2. To number a session, take **this repo's own** latest `CHANGELOG.md` / `docs/STATUS.md` + 1. **Do
+   not** consult the sibling repo.
+3. When referring to a session **across** repos (docs, memory, commit bodies), **prefix the repo**:
+   `weewx S21`, `dash S40`. A bare `S21` always means *this* repo.
+4. Published labels are **not** rewritten: S16–S19 stand (on `main`/`dev` + in commit messages). The
+   one still-unmerged governance-hardening session that a since-reverted draft briefly mislabeled
+   "S40" is **this session, S20** — corrected before merge, so `main` never sees the shared-counter
+   detour. This repo's line is therefore contiguous: **S16 → S17 → S18 → S19 → S20 → …**
+
+*Rationale:* a shared counter is only useful if it is actually shared — and the sibling never shared
+it. Independent counters keep each repo's STATUS/CHANGELOG/DECISIONS legible on their own terms (their
+whole purpose), at the cost of a bare number not being globally unique — resolved by the repo prefix
+in cross-references. DEC-0013's "don't flatten the real pre-history" instinct still holds; only its
+shared-counter mechanism is wrong. (An earlier draft of this DEC tried to *reunify* into the shared
+counter and renumber this session to S40; that made per-repo history permanently gappy and was
+reversed before reaching `main`.)
