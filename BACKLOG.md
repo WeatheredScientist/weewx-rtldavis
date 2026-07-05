@@ -12,6 +12,8 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
 - Blitzortung lightning integration (System Blue — the detection-network route; longer term).
 - Remove vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005).
 - Rotate the exposed WU API key; store it in `monitor.env` as an env var, not inline (DEC-0012).
+- Set `STATION_NAME` in the NAS `monitor.env` — the monitor's alert/summary emails currently fall back
+  to the default "My PWS" (env var unset), so they're unbranded. Cosmetic, one-line fix (observed S27).
 - Verify OWM (OpenWeatherMap) measurements propagate into their API over time — a post-integration
   sanity check that the uploader's values actually land.
 - Long-term stability watch (uptime / reception drift / memory) — no formal monitor yet.
