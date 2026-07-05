@@ -29,9 +29,14 @@ review work landed on `dev`, and `main` got only the secret gate.
   duplicated `logging.additions` fragment (`7025afa`).
 - **`main` untouched beyond the gate.** The `dev`→`main` v2.0.3 promotion stays parked pending the rain
   fix's first wild glitch + the dewpoint rebuild.
-- **Still owner/calendar actions (→ S28):** deploy reception Layer A (monitor restart on the NAS — code
-  is now in `dev`); watch for the first real rain glitch; rotate the exposed WU key; the
-  influxdb-grafana cherry-pick + stale-branch cleanup; remote-URL casing.
+- **Reception Layer A DEPLOYED live (DEC-0024).** scp'd the dev `weewx_monitor.py` to the NAS (backup
+  `weewx_monitor.py.bak-20260705-141508`), `sudo kill`ed the monitor; the esynoscheduler `sleep 300`
+  wrapper respawned it on the new code. **Confirmed**: the RF WINDOW metric dropped from a steady
+  ~150–162% to **92%** (`22/24`) on the first post-restart window — same packet volume, correct
+  epoch-dedup. Reversible via the backup.
+- **Still owner/calendar actions (→ S28):** watch for the first real rain glitch; rotate the exposed WU
+  key; the influxdb-grafana cherry-pick + stale-branch cleanup; remote-URL casing; set `STATION_NAME`
+  in `monitor.env` (emails currently fall back to "My PWS").
 
 ## [S26] — 2026-07-05 — Fix the secret gate's mainline coverage (draft PRs #6 → dev, #7 → main)
 
