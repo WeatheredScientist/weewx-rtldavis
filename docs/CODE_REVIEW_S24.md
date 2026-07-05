@@ -106,20 +106,70 @@ env. Minor portability nit; make them env-overridable for parity.
 
 ---
 
-## Cross-cutting theme
+## The uploaders + loop writer (Part 2)
 
-H2 + M3 (driver) and M-A (monitor) are one story: the driver's native reception metric is **dead**
-*and* the driver spams the log, which forced a log-scraping reception workaround that must then chew
-through the bloated log every 30 s. Fixing H2 could eventually let the monitor read `rxCheckPercent`
-from the archive directly instead of tailing text.
+Scanned: `owm.py`, `windy.py`, `ogoxeUploader.py`, `wcloud.py`, `influx.py`, `loop_json_writer.py`.
+The three upstream-derived sinks (`wcloud.py`, `influx.py`, `ogoxeUploader.py`) and the two locally
+written helpers (`windy.py`, `loop_json_writer.py`) are broadly sound; the one home-grown REST
+uploader (`owm.py`) is where the real finding is. **`windy.py` is the reference for the correct
+pattern** — it overrides `format_url` + `check_response` and lets `RESTThread` own the retry loop,
+which is exactly what `owm.py` throws away.
+
+### U1 · `owm.py` · `run_loop` override discards all RESTThread resilience — **confirmed**
+`owm.py:66-107` reimplements the whole thread loop. It accepts `post_interval`, `max_backlog`,
+`stale`, `max_tries`, `retry_wait`, `skip_upload` (lines 40-53) and passes them to `super().__init__`
+— then **ignores every one of them** because the custom loop does its own `queue.get`/`urlopen`. Net
+effect: a single transient network failure **drops the record with no retry** (line 106-107 just logs
+and moves on), no post-interval throttling, no stale-record skipping, `skip_upload` inert. **Fix:**
+delete `run_loop`/`post_request`/`format_url` and drive the OWM JSON POST through the standard
+`RESTThread` overrides (as `windy.py` does), so retries/backoff come for free. Meaningful for an
+uploader whose whole job is reliable delivery.
+
+### U2 · `owm.py` · dead code / cruft — **confirmed**
+`format_url` (line 58) and `post_request` (61-64) are never exercised once `run_loop` is overridden;
+`post_request` computes `record_m` then discards it and carries a garbled comment; `import time`
+(line 68) is unused. Remove with U1.
+
+### U3 · `influx.py` · per-record INFO logging in the hot POST path
+`influx.py:484, 486, 490` — `get_post_body` runs for **every** record and unconditionally
+`loginf`s `Add Bindding Tag = ...` / `Adding Binding Tag` / `tags = ...`. Same log-bloat family as
+driver M3 and monitor M-A (see theme below); also `Bindding` is misspelled. **Fix:** drop to
+`logdbg` or delete.
+
+### U4 · `influx.py` · TLS verification disabled for https (security, low live impact)
+`influx.py:469-476` — `post_request` uses `ssl._create_unverified_context()` for any `https://`
+server URL (the `# FIXME: ... instead of this hack` is self-aware). Moot for the current local
+`http://` Influx, but if the endpoint is ever pointed at TLS it silently accepts any cert (MITM).
+**Fix:** default to a verifying context with an opt-out flag.
+
+### U5 · Minor / cosmetic
+- `influx.py:565-573` — `__main__` uses `os.environ['INFLUX_HOST']` as an option *default*, so a
+  missing env var `KeyError`s even `--version`/`--help`. Test hook only. Also typos `InluxDfB`.
+- `windy.py:25-26` — `__import__('queue').Queue()` inline fallback is an ugly wart; import `queue`
+  normally.
+- `ogoxeUploader.py:67 vs 79` — contradictory comments about whether `server_url` comes from
+  `get_site_dict`; line 68 debug-logs a value the code says isn't there (logs `None`).
+- `wcloud.py` — mature upstream (Matthew Wall 2014), proper pattern, **masks the API key in debug
+  logs** (good). Only nits: it documents the WeatherCloud `-32768` "sensor present but broken"
+  null-convention (lines 20-24) but `format_url` just omits `None` values instead; and `temp10`
+  maps to the non-standard `heatingTemp4`. Low value, upstream — leave alone.
+- `loop_json_writer.py` — clean; atomic tmp+rename write, well-commented sparse-field cache. No
+  action. (Only theoretical: `data['dateTime']` can be `None` if a packet lacks it.)
+
+**Out of scope this pass:** `pressure_service.py` and `dewpoint_service.py` are *services*, not
+uploaders; `dewpoint_service.py`'s stale-substitution issue is already tracked as DEC-0022 (a later
+session), so it is deliberately not re-reviewed here.
 
 ---
 
-## Not yet reviewed — Part 2 (pending)
+## Cross-cutting theme
 
-The handoff folds "the uploaders" into scope. Still to read: `owm.py`, `wcloud.py`, `windy.py`,
-`ogoxeUploader.py`, `influx.py`, and `loop_json_writer.py`. This section will be filled in before the
-review is considered complete.
+**The dead metric + the log-bloat trio.** H2 + M3 (driver), M-A (monitor), and U3 (influx) are one
+story. The driver's native reception metric is **dead** (H2) *and* the driver — plus the influx sink
+— spam the log at INFO on every packet/record (M3, U3). That forced a log-scraping reception
+workaround (`weewx_monitor.py`) which must then re-read the whole bloated log every 30 s (M-A).
+Fixing the INFO-spam and H2 together shrinks the log, cheapens the monitor, and could eventually let
+the monitor read `rxCheckPercent` from the archive directly instead of tailing text.
 
 Also pending from the handoff: per-file SPDX `GPL-3.0-or-later` headers (fold in with the agreed
 fixes).
@@ -132,6 +182,11 @@ fixes).
    unknown-channel branch.
 2. **H2** (`pct_good_all` guard) — fix + a unit test on `_update_summaries`/`_reset_stats` across two
    periods; then live-confirm `rxCheckPercent` starts populating.
-3. **M3 / M-A together** — gate the driver's RAW logs behind `debug_rtld`, then switch the monitor to
-   incremental reads (the log-bloat cause and its most expensive consumer, fixed as a pair).
-4. **M4** dead-code deletion + **L5/L6/L-B/L-C/L-D** cleanups as a low-risk sweep, with SPDX headers.
+3. **M3 / U3 / M-A together** — gate the driver's RAW logs behind `debug_rtld` and drop influx's
+   per-record `loginf`s (the log-bloat sources), then switch the monitor to incremental reads (its
+   most expensive consumer). Fix the cause and effect as one unit.
+4. **U1 / U2** — re-base `owm.py` on the standard `RESTThread` overrides (model it on `windy.py`) so
+   it regains retry/backoff; delete the dead `format_url`/`post_request`/`import time`.
+5. **U4** — restore TLS verification in `influx.py` with an opt-out flag.
+6. **M4** dead-code deletion + **L5/L6/L-B/L-C/L-D/U5** cleanups as a low-risk sweep, with per-file
+   SPDX `GPL-3.0-or-later` headers.
