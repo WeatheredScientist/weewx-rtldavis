@@ -192,6 +192,20 @@ handoff (no USB reset).
 3. **Keep watching the first archive cycles** — first time the rain filter + QC actually run in prod;
    verify no regression in rain/wind/reception over the next day.
 
+**Soak-window doc polish — ✅ DONE on `dev` (commit `154351f`), release still held:** README changelog →
+single-source pointer to CHANGELOG.md; added Docker Hub link + `docker pull` + pinned-tag guidance +
+refreshed the version block (v2.0.1→v2.0.3, weewx 5.3.1→5.4.0); new `SECURITY.md` + `CONTRIBUTING.md`;
+new `.github/workflows/dockerhub-description.yml` to auto-sync README → the Docker Hub overview (which is
+a separate, hand-maintained copy that drifts each release; 516 pulls, last synced 2026-05-29).
+**⚠️ Owner action:** for the Docker Hub sync to activate, add repo secrets **`DOCKERHUB_USERNAME`** +
+**`DOCKERHUB_TOKEN`** (a Docker Hub access token, Read/Write) — until then the workflow is a green no-op.
+
+**Release decision (S30): SOAK before cutting the public release.** v2.0.3 is deployed to prod but the
+`dev`→`main`/tag/GitHub-release/Docker-Hub-push steps are **held ~2–3+ days** (through ~July 8–9) to prove
+it on the owner's own data. Rationale: the clobber discovery means this is the **first time** the driver
+fixes actually run in prod, so DEC-0026's gate-waiver (which assumed they were already live) no longer
+applies — a short soak is responding to new information. Reconvene to cut the release once the data vouches.
+
 **Also open (not blocking v2.0.3):**
 - **ERR-0001 InfluxDB null** — the dashboard reads InfluxDB, which still carries the July 4 phantom;
   cross-repo (DEC-0010), no `influx` CLI on the NAS. Handle on the dashboard side or via the Influx API.
