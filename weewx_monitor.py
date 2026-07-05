@@ -33,8 +33,16 @@ THRESHOLDS = {
 }
 
 # --- Reception tracking config ---
-WU_RF_EXPECTED     = 24    # expected WU-RF posts per 60s window (one per ~2.5s)
-WU_RF_MIN_PCT      = 60    # alert threshold % (normal baseline is 65-75% at 150ft through walls)
+# WU_RF_EXPECTED is the number of records the ISS *physically transmits* per 60s
+# window -- the correct denominator for a reception %. It is NOT a fixed 24. The
+# Davis ISS transmit period depends on the transmitter id (driver loop_times run
+# 2.5625s..3.0s); this station's ISS (Transmitter 4) transmits every ~2.8125s, so
+# 60 / 2.8125 = ~21.3 records/min. The old value 24 ("one per 2.5s") assumed the
+# fastest channel and under-reported reception by ~13%: a full-reception window
+# read 22/24 = 92% when it was really ~22/21 = ~100% (S29). Override per station
+# with the WU_RF_EXPECTED env var when re-pointing to a different transmitter id.
+WU_RF_EXPECTED     = int(os.environ.get('WU_RF_EXPECTED', 21))  # physical TX/min = 60 / 2.8125s
+WU_RF_MIN_PCT      = 60    # alert threshold %: a window below this is a real >~40% packet loss
 WU_RF_WINDOW       = 60    # seconds per reception window
 WU_RF_SUSTAIN      = 5     # consecutive bad windows before alert
 WU_RF_LOG_INTERVAL = 300   # log reception summary every 5 min
@@ -184,6 +192,14 @@ def reset_dongle(last_reset):
     t.start()
     return time.time()
 
+def wu_pct(count):
+    """Reception % = records received / records the ISS physically transmitted
+    (WU_RF_EXPECTED), capped at 100. You cannot receive more than were sent; a raw
+    value just over 100 only means a 60s window caught one extra phase-aligned
+    transmission. Single source of truth for every reception % the monitor reports."""
+    return min(100.0, 100.0 * count / WU_RF_EXPECTED)
+
+
 def format_daily_summary(hourly_buckets, date_str):
     """Format 24-hour reception summary as a text table."""
     lines = [
@@ -198,7 +214,7 @@ def format_daily_summary(hourly_buckets, date_str):
         buckets = hourly_buckets.get(hour, [])
         if buckets:
             avg_count = sum(buckets) / len(buckets)
-            avg_pct = (avg_count / WU_RF_EXPECTED) * 100
+            avg_pct = wu_pct(avg_count)
             day_counts.extend(buckets)
             status = "OK" if avg_pct >= WU_RF_MIN_PCT else "LOW"
             lines.append(f"{hour:02d}:00    {avg_count:>10.1f} {avg_pct:>9.0f}% {status:>8}")
@@ -206,7 +222,7 @@ def format_daily_summary(hourly_buckets, date_str):
             lines.append(f"{hour:02d}:00    {'--':>10} {'--':>9}  {'--':>8}")
     lines.append("-" * 42)
     if day_counts:
-        day_avg = (sum(day_counts) / len(day_counts) / WU_RF_EXPECTED) * 100
+        day_avg = wu_pct(sum(day_counts) / len(day_counts))
         lines.append(f"{'Daily avg':<8} {'':>10} {day_avg:>9.0f}%")
     return "\n".join(lines)
 
@@ -231,7 +247,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
                             wu_hourly_buckets, now):
     """Close a 60s reception window. Returns updated state tuple."""
     try:
-        pct = (wu_window_count / WU_RF_EXPECTED) * 100
+        pct = wu_pct(wu_window_count)
         wu_period_counts.append(wu_window_count)
         log(f"WINDOW: {wu_window_count}/{WU_RF_EXPECTED} ({pct:.0f}%)")
 
@@ -245,7 +261,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             if wu_in_alert:
                 wu_in_alert = False
                 td = int(now - wu_alert_sent_at)
-                avg = (sum(wu_period_counts) / len(wu_period_counts) / WU_RF_EXPECTED) * 100
+                avg = wu_pct(sum(wu_period_counts) / len(wu_period_counts))
                 log(f"RECEPTION RECOVERY: {avg:.0f}% avg after {td//60}min")
                 send_email(
                     f"{STATION_NAME}: RF reception RECOVERED",
