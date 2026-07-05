@@ -6,6 +6,33 @@ under [Pre-S16].
 
 ---
 
+## [S27] — 2026-07-05 — Land the secret gate + collapse the review stack onto `dev`
+
+Tied up the S23–S26 PR backlog (five open, nothing merged). No prod/driver code touched; all the
+review work landed on `dev`, and `main` got only the secret gate.
+
+- **Secret gate now blocking (P1).** Merged **PR #6 → `dev`** (`90ef51b`) and **PR #7 → `main`**
+  (`490e776`) — `main` previously had zero secret scanning. CI on both merge commits: `secret-scan` =
+  pass, `lint` = fail (expected pre-S24 ruff, non-blocking to the gate). Then set **`secret-scan` as a
+  required status check** in branch protection on `dev` + `main` (via the keyring token — the PAT's 403
+  was a scope problem; `enforce_admins: false`, no required reviews). The DEC-0012 gate is no longer
+  advisory.
+- **Governance/review stack collapsed onto `dev` (P2).** The whole stack merges clean — the predicted
+  `ci.yml`/`check_secrets.sh` conflict never materialized because the stack's S20 gate fix (`2a6327c`)
+  is byte-identical to dev's #6 fix. Retargeted **PR #5** (`feature/s24-code-quality-review`, whose tip
+  already carried reception-dedup + s23-governance + s24/s25) to base `dev` and merged it (`2c75c5e`),
+  bringing all S18–S26 work — the rain fix, reception Layer A, the S23 governance docs (LICENSE/AGENTS/
+  ASSESSMENT), and the S24/S25 code-quality fixes — onto `dev` in one gated merge (secret-scan green,
+  34/34 tests). Closed **#3** and **#4** as merged-via-#5.
+- **S23 tail closed.** Folded the 8 still-open items from the retired root `cleanup_backlog.md` into
+  `BACKLOG.md` (dedup'd against what it already carried) and deleted `cleanup_backlog.md` + the
+  duplicated `logging.additions` fragment (`7025afa`).
+- **`main` untouched beyond the gate.** The `dev`→`main` v2.0.3 promotion stays parked pending the rain
+  fix's first wild glitch + the dewpoint rebuild.
+- **Still owner/calendar actions (→ S28):** deploy reception Layer A (monitor restart on the NAS — code
+  is now in `dev`); watch for the first real rain glitch; rotate the exposed WU key; the
+  influxdb-grafana cherry-pick + stale-branch cleanup; remote-URL casing.
+
 ## [S26] — 2026-07-05 — Fix the secret gate's mainline coverage (draft PRs #6 → dev, #7 → main)
 
 A dashboard (dash) cross-repo note flagged the ported DEC-0012 secret gate as neutered and warned this
