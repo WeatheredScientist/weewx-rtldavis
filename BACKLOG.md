@@ -68,3 +68,12 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
   future session** and **pick a model suited to deep RF-decode root-causing** (Opus, high reasoning) —
   it's investigation-heavy (capture raw packets around a spike, characterize the corruption), not a
   quick patch. Do after v2.0.3 ships.
+  - **Observed instance (2026-07-05, S30):** a **201 mph** wind spike flashed on the live dashboard
+    gauge (owner screenshot). Confirmed **not persisted** — archive DB + InfluxDB stayed clean; only the
+    real-time loop-JSON feed showed it. Two concrete findings for this session: (1) **the live gauge
+    bypasses the wind filter** — `LoopJsonWriter` is a `data_service` and runs *before* `DewpointCacher`
+    (a `process_service`), so `loop-data.txt` gets the raw packet; the fix belongs at the **driver/decode
+    layer** (a wind plausibility clamp like the rain filter) so *all* consumers are covered. (2) **possible
+    unit mismatch:** `MAX_WIND_DELTA = 75.0` is commented as mph but the packet `windSpeed` is likely m/s
+    (driver stores `wind_speed_ec * MPH_TO_MPS`), which would make the delta filter far too lenient
+    (only rejecting jumps > 75 m/s ≈ 168 mph). Verify + fix the units.
