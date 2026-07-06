@@ -197,8 +197,11 @@ single-source pointer to CHANGELOG.md; added Docker Hub link + `docker pull` + p
 refreshed the version block (v2.0.1→v2.0.3, weewx 5.3.1→5.4.0); new `SECURITY.md` + `CONTRIBUTING.md`;
 new `.github/workflows/dockerhub-description.yml` to auto-sync README → the Docker Hub overview (which is
 a separate, hand-maintained copy that drifts each release; 516 pulls, last synced 2026-05-29).
-**⚠️ Owner action:** for the Docker Hub sync to activate, add repo secrets **`DOCKERHUB_USERNAME`** +
-**`DOCKERHUB_TOKEN`** (a Docker Hub access token, Read/Write) — until then the workflow is a green no-op.
+**Owner action — TABLED until post-soak (owner, S30):** for the Docker Hub sync to activate, add repo
+secrets **`DOCKERHUB_USERNAME`** + **`DOCKERHUB_TOKEN`** (a Docker Hub access token, Read/Write) — until
+then the workflow is a green no-op. **Also tabled to post-soak:** the WU API-key rotation and
+`STATION_NAME` in `monitor.env`. Nothing owner-side is required *during* the soak — just an optional
+casual eye on the dashboard for odd rain/wind/reception (the monitor pauses if the Mac sleeps).
 
 **Release decision (S30): SOAK before cutting the public release.** v2.0.3 is deployed to prod but the
 `dev`→`main`/tag/GitHub-release/Docker-Hub-push steps are **held ~2–3+ days** (through ~July 8–9) to prove
