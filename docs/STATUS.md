@@ -181,10 +181,16 @@ patched driver (rain filter + H2, 71988 B — not the 67256 B stock) + honest-nu
 live:** `rxCheckPercent` NULL→**70–82%** within two 60 s archive cycles; packets flowing; clean dongle
 handoff (no USB reset).
 
-**Remaining = release (owner-approval-gated — outward-facing/hard-to-undo):**
+**Remaining = release (owner-approval-gated — outward-facing/hard-to-undo). ⏸ HELD for soak (~July 8–9).**
 
-1. **Promote `dev` → `main`** (explicit approval — never force-push/merge to main) + **tag `v2.0.3`** so
-   `main` = what's actually running. 8 S30 commits on `dev` (`5486de8`→ the CHANGELOG/STATUS closeout).
+**▶ ON RETURN, do this first:** re-run the soak health check (container `RestartCount`, `rxCheckPercent`
+still flowing/sane, no new errors, any rain-glitch rejections) — see the S30 monitor pattern in
+`~/.claude/jobs/*/tmp/soak_monitor.sh` or just query the archive. If clean, proceed to cut the release:
+
+1. **Promote `dev` → `main`** via the already-open **draft [PR #11](https://github.com/WeatheredScientist/weewx-rtldavis/pull/11)**
+   (mark ready + merge; explicit approval — never force-push/merge to main) + **tag `v2.0.3`** and
+   **`prod-baseline-20260705`** so `main` = what's actually running. Release notes drafted in the S30 job
+   tmp (`RELEASE_NOTES_v2.0.3.md`).
 2. **GitHub release** (v2.0.3 notes) + **push image to Docker Hub** (`weatheredscientist/weewx-rtldavis`
    `:v2.0.3` + `:latest` — first public image that actually contains the driver fixes). Image built on the
    NAS; `docker login` + `docker push` are owner creds. *(Old `rw250-test` tag is a misnomer now —
