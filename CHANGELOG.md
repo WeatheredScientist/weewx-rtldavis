@@ -6,6 +6,46 @@ under [Pre-S16].
 
 ---
 
+## [S32] — 2026-07-08 — v2.0.3 RELEASED (`v2.0.3` + `prod-baseline-20260705`); S31 monitor live; Gmail app-password rotation
+
+**v2.0.3 released end-to-end.** Soak day 4 = clean, so the S30 hold cleared: 24 h `rxCheckPercent`
+avg **75.4%** (1427/1429 records populated, min 50 / max 105 — the known floor-division cosmetic),
+**0** rain-glitch rejections since the Jul-5 deploy, `RestartCount=0`, and the container rode out an
+*unplanned NAS reboot* (~06:57) with a clean dongle handoff — the strongest soak evidence we could
+have asked for. Only third-party upload blips (Windy/WOW 429s, a transient OWM outage). Steps:
+
+- **PR #15** — `main`'s independent S26 secret-gate commits (PR #7) conflicted with `dev`'s (PR #6) on
+  `ci.yml`, making the promotion PR un-mergeable; merged `main` into `dev` once, keeping `dev`'s
+  DEC-0027 `ci.yml` (no `ruff format` gate). *(First attempt took the wrong side of the conflict —
+  caught by CI's lint job doing exactly what DEC-0027 built it for, fixed before merge.)*
+- **PR #11 merged** — `dev` → `main` (`f64f8d8`); `main` = production truth again.
+- **Tagged `v2.0.3` + `prod-baseline-20260705`**; **GitHub release** published with the S30-drafted
+  notes; **Docker Hub push `:v2.0.3` + `:latest`** (same digest `9dfd9b57…`, 281 MB) — the first
+  public image that actually contains the driver fixes (rain filter, `rxCheckPercent` H2, honest-null
+  wind, clobber fix).
+
+**S31 monitor deployed + verified live — after diagnosing a reboot-broken boot task.** The morning's
+NAS reboot restarted the `weewx_monitor` esynoscheduler task as a **non-root user**: its
+`/etc/sudoers` append got Permission-denied and `sudo -u weewx-monitor` failed every 5 min ("a
+terminal is required"), so the monitor was **down 06:56→17:28** with sudo-spam filling its log. Owner
+reset the task user to root. Since the monitor was down, the S31 deploy needed no kill: scp'd `dev`'s
+`weewx_monitor.py` (sha `23dfa03d…` verified; backup `weewx_monitor.py.bak-20260708-105410`), owner
+ran the task, and the new code came up clean — pidfile written, incremental byte-offset polling,
+startup email delivered ("Eagle Hunt PWS": `STATION_NAME` is now set, closing that housekeeping
+item). First 6 h dropped-packets summary due at the next 00/06/12/18 boundary.
+
+**Security — Gmail app password exposed in public history; rotated same-day (DEC-0028).** Found the
+monitor's Gmail app password hardcoded in the legacy NAS `weewx_monitor.sh` *and* in two public-repo
+history commits of `weewx_monitor.py` (`d2fb080` May 22, `eff3f56` May 24 — reachable from `main`+
+`dev`, exposed ~6 weeks; the DEC-0012 gate scans trees/diffs, not history, so it never fired). Owner
+revoked the credential, issued a replacement into the NAS `monitor.env` (via a clipboard-pipe
+one-liner after interactive-prompt approaches failed through the `!` runner), and the monitor's
+startup email verified SMTP auth on the new value. Legacy script's copy neutered to a placeholder.
+**No history rewrite** — rotation kills the credential's value; force-pushing a public repo's history
+doesn't un-leak it (DEC-0028).
+
+---
+
 ## [S31] — 2026-07-08 — RF reception metric audited; daily email re-sourced from rxCheckPercent
 
 **Audit finding:** the daily RF-reception email measured publish *liveness*, not reception. It counted
