@@ -211,8 +211,11 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
 1. **Deploy the S31 monitor** (owner-run, monitor-only — independent of the release): the new
    `weewx_monitor.py` is on `dev` but **not yet on the NAS**. `scp -P <SSH_PORT> -O weewx_monitor.py
    patarroyo@<NAS_IP>:/volume1/docker/weewx-rtldavis/weewx_monitor.py`, then `sudo kill <pid>` (pidfile
-   `logs/weewx_monitor.pid`); esynoscheduler respawns ≤5 min. The first **dropped-packets** email lands at
-   the next midnight rollover — confirm it reads sanely (~75% mean, thousands dropped/day, not ~100%).
+   `logs/weewx_monitor.pid`); esynoscheduler respawns ≤5 min. This one deploy delivers **both** the
+   dropped-packets summary **and** the new **every-6 h cadence** (`RF_REPORT_INTERVAL_HOURS`, default 6 =
+   00/06/12/18 local; set 12 or 24 in `monitor.env` to slow it down later). The first **dropped-packets**
+   email lands at the next 6 h block boundary — confirm it reads sanely (~75% mean, ~1,900 dropped per
+   6 h window, not ~100%).
 2. **Re-run the soak health check** (now day 4+): `RestartCount`, `rxCheckPercent` still flowing/sane, no
    new errors, any rain-glitch rejections. If clean, cut the release below.
 

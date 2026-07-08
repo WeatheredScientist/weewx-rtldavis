@@ -27,6 +27,14 @@ on any hiccup; real-time `WINDOW` logging + outage alerting left unchanged (No-R
 done.** Driver-side follow-up (persist raw packet counts; fix the ~1–2 pt floor-division optimism)
 folds into a later driver build.
 
+**Reception summary cadence: daily → every 6 h (env-tunable).** A once-a-day midnight report was being
+read the next morning — too late to act. The summary email now fires every `RF_REPORT_INTERVAL_HOURS`
+(default **6** = 00/06/12/18 local; set 12 for twice-daily or 24 for the old daily cadence), aligned to
+local-midnight blocks and reporting the window that just closed. Generalized `db_reception_summary` to
+explicit epoch bounds + added `period_floor`/`period_label`; the formatter now labels the window and
+lists only its hours. Verified live (mean 75%, ~1,900 dropped per 6 h window). `+2` tests, **suite
+63/63**. Ships with the same monitor deploy as Layer A above.
+
 **Also this session — CI lint made honestly green (DEC-0027).** The `lint` job had been red on every
 branch (incl. `dev`) — a broken check erodes the "`main` = production truth" signal. Audited the debt:
 27 `ruff check` findings (17 in vendored code, 10 ours) + `ruff format --check` wanting to reformat 25
