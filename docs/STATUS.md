@@ -19,11 +19,16 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 > per S30's decision — nothing promoted today. **Main work: audited the RF reception metric** (owner:
 > "the email numbers are all over the place, no confidence — I want dropped packets, not windows above a
 > threshold"). Found the daily email measured publish *liveness*, not reception (pinned ~100 % while the
-> driver's `rxCheckPercent` showed ~75 %; bimodal 100↔0). **Built Layer A** (`feature/s31-reception-metric`,
-> commit `8dc98ae`): daily email now sourced from `rxCheckPercent`, reporting packets
-> transmitted/received/**dropped** (2026-07-06: ~7,701 dropped of 30,720). +7 tests, suite 61/61,
-> verified against the live DB. **Needs: PR → `dev`, then owner-run monitor-restart deploy.** See DEC-0024
-> (S31 update) + CHANGELOG [S31].
+> driver's `rxCheckPercent` showed ~75 %; bimodal 100↔0). **Built Layer A**: daily email now sourced
+> from `rxCheckPercent`, reporting packets transmitted/received/**dropped** (2026-07-06: ~7,701 dropped
+> of 30,720). +7 tests, suite 61/61, verified against the live DB. **Merged to `dev` (PR #12).** Still
+> needs the **owner-run monitor-restart deploy** (scp + `sudo kill`). See DEC-0024 (S31 update) +
+> CHANGELOG [S31].
+> **Also this session: CI lint made honestly green (DEC-0027, PR #13 merged to `dev`).** The `lint` job
+> was red on every branch; scoped ruff (dropped the `ruff format --check` gate — deliberate alignment +
+> baked driver; excluded vendored uploaders via `ruff.toml`) and fixed the 10 findings in our own code.
+> `ruff check .` passes; driver logic + formatting untouched. **Both S31 PRs are now on `dev`; nothing
+> new on `main`.**
 >
 > **Prior session S30** (2026-07-05) — shipping v2.0.3, and found the reason the driver fixes never
 > took. **Major finding: weewx imports the driver from the BAKED venv `site-packages/user/`, and
@@ -47,10 +52,12 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 > as the rain glitch) rather than StdQC/carry-forward bandaids — a dedicated future session (after v2.0.3),
 > with a model suited to deep RF-decode debugging (BACKLOG §Data integrity; DEC-0022).
 
-_Last updated: 2026-07-08 (S31 — soak day 3 clean; RF-reception metric audited + Layer A built:
-daily email re-sourced from `rxCheckPercent`, now reports packets dropped, not "windows above a
-threshold" (commit `8dc98ae` on `feature/s31-reception-metric`, +7 tests / suite 61/61, DEC-0024 S31
-update). Pending PR → `dev` + owner monitor-restart deploy. Release still HELD for soak.)_
+_Last updated: 2026-07-08 (S31 — soak day 3 clean; RF-reception metric audited + Layer A: daily email
+re-sourced from `rxCheckPercent`, now reports packets **dropped**, not "windows above a threshold"
+(DEC-0024 S31 update); **CI lint made honestly green** (DEC-0027 — scoped ruff, dropped format gate,
+excluded vendored code, fixed 10 findings). **Both merged to `dev` (PR #12 + #13); suite 61/61; `ruff
+check` clean.** Remaining owner actions: monitor-restart deploy of the new `weewx_monitor.py`; cut the
+v2.0.3 release once soak clears (~July 8–9). Release still HELD.)_
 
 _Prior S30: 2026-07-05 (S30 — v2.0.3 assembly + the clobber discovery. Committed to `dev`: dewpoint
 wind honest-null, receiveWindow→upstream default, **Dockerfile clobber fix** (weewx imports the baked
@@ -117,8 +124,8 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
   emit `ChannelIdx`/`FreqError` (BACKLOG said it didn't; re-confirmed live S28). See DEC-0024 + BACKLOG.
   **S31 update — the epoch-dedup fixed the count, but the *source* was still wrong.** An audit found the
   WU-publish scrape measures publish *liveness*, not reception: it reads ~100 % while `rxCheckPercent`
-  shows ~75 %. **Layer A (S31, `feature/s31-reception-metric`, commit `8dc98ae`, pending PR → `dev` +
-  deploy):** the daily email is now sourced from the archive's `rxCheckPercent` and reports packets
+  shows ~75 %. **Layer A (S31, merged to `dev` via PR #12 — owner-run monitor deploy still owed):** the
+  daily email is now sourced from the archive's `rxCheckPercent` and reports packets
   transmitted/received/**dropped** (per record) instead of a WU-scrape %. Real-time `WINDOW` logging +
   outage alerting unchanged. Driver **Layer B** (persist raw `count`/`missed`; stop dataless freqError
   publishes; fix the ~1–2 pt floor-division optimism) still deferred under No-Rewrite. See DEC-0024 (S31).
@@ -185,9 +192,32 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
   its only driver-relevant bit (wind-warmup `3f5470f`) was already in `dev`. Also deleted merged
   `s20-governance-hardening`; `s27-p3-deployed` was already auto-gone on #9's merge.
 
-## Next session actions (S30 remaining → S31 if unfinished)
+## Next session actions (S31 done → S32)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
+
+**✅ Done in S31 (2026-07-08, all merged to `dev`):**
+- **Soak health check, day 3 — clean** (container Up 2 days, `RestartCount=0`, `:v2.0.3`; `rxCheckPercent`
+  59–95%, 24 h median 75%; 0 errors; 0 rain-glitch rejections). Release stayed HELD.
+- **RF-reception metric audit + Layer A (PR #12).** The daily email measured publish *liveness* (~100%
+  pinned) not reception (~75% real). Re-sourced the daily summary from the archive's `rxCheckPercent`;
+  it now reports packets **transmitted/received/dropped** (2026-07-06: ~7,701 dropped of 30,720). Verified
+  live. DEC-0024 (S31 update). **Still owed: the owner-run monitor-restart deploy** (see ON RETURN #1).
+- **CI lint made honestly green (PR #13, DEC-0027).** Scoped ruff (dropped `ruff format --check`; excluded
+  vendored uploaders via `ruff.toml`); fixed the 10 findings in our code. `ruff check .` passes; driver
+  untouched. Suite **61/61**.
+
+**▶ ON RETURN (S32), do this first:**
+1. **Deploy the S31 monitor** (owner-run, monitor-only — independent of the release): the new
+   `weewx_monitor.py` is on `dev` but **not yet on the NAS**. `scp -P <SSH_PORT> -O weewx_monitor.py
+   patarroyo@<NAS_IP>:/volume1/docker/weewx-rtldavis/weewx_monitor.py`, then `sudo kill <pid>` (pidfile
+   `logs/weewx_monitor.pid`); esynoscheduler respawns ≤5 min. The first **dropped-packets** email lands at
+   the next midnight rollover — confirm it reads sanely (~75% mean, thousands dropped/day, not ~100%).
+2. **Re-run the soak health check** (now day 4+): `RestartCount`, `rxCheckPercent` still flowing/sane, no
+   new errors, any rain-glitch rejections. If clean, cut the release below.
+
+**Then: cut the v2.0.3 release (owner-approval-gated, still HELD for soak ~July 8–9).** Steps unchanged from
+S30 (below). This is the big remaining item.
 
 **✅ Done in S30 (committed to `dev`, pushed):** dewpoint **wind honest-null** (ported byte-identical
 from the reviewed Jun-16 draft; `_filter_wind` no longer substitutes stale `windSpeed` — wind is in every

@@ -2,7 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """weewx monitor: USB watchdog + service downtime alerting + reception tracking"""
 
-import time, smtplib, os, sys, re, sqlite3
+import time
+import smtplib
+import os
+import sys
+import re
+import sqlite3
 from email.mime.text import MIMEText
 from datetime import datetime
 

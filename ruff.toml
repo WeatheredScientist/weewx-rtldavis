@@ -1,0 +1,18 @@
+# Ruff configuration — weewx-rtldavis (S31, DEC-0027)
+#
+# We lint the code THIS project maintains. Third-party WeeWX uploaders that are
+# vendored verbatim from upstream (Matthew Wall's influx.py / wcloud.py, the OgoXe
+# uploader) carry intentional Python 2/3 `try/except import` shims that ruff reads
+# as unused-import / import-order errors. We do not modify vendored code, so they
+# are excluded from linting.
+#
+# Formatting is intentionally NOT enforced (CI runs `ruff check`, not
+# `ruff format --check`): the codebase uses deliberate column alignment for
+# readability, and the driver (rtldavis.py) is baked into the shipped Docker image,
+# so auto-reformatting it would churn a prod-sacred file. See DEC-0027.
+
+extend-exclude = [
+    "influx.py",
+    "wcloud.py",
+    "ogoxeUploader.py",
+]

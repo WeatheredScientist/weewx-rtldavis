@@ -420,3 +420,33 @@ whole rain pipeline (glitch → filter behavior → archive → correction). Rea
 If a fresh glitch does appear post-release and reveals a gap, we fix forward (the DEC-0021 filter + the
 DEC-0021 email alert + the DEC-0025 errata process all still apply). Supersedes the "watch for the first
 real glitch" release gate noted in prior STATUS/ROADMAP; does not change DEC-0021 itself.
+
+## DEC-0027 — Lint scope: enforce `ruff check`, not `ruff format`; exclude vendored uploaders (S31)
+
+**Status:** Decided · **Date:** 2026-07-08 (S31)
+
+CI's `lint` job had been red on every branch (incl. `dev`) — a broken check erodes the "`main` =
+production truth" signal and trains everyone to ignore CI. Audited the actual debt: **27 `ruff check`
+findings** (17 in vendored third-party code, 10 in ours) **and `ruff format --check` wanting to reformat
+25 files** — nearly the whole tree, including the baked driver and the vendored uploaders.
+
+**Decision — lint what we maintain; don't police style or vendored code:**
+
+1. **Drop the `ruff format --check` CI gate** (keep `ruff check`). Two reasons: (a) the codebase uses
+   **deliberate column alignment** for readability (e.g. `weewx_monitor.py`'s aligned `=`, the
+   `THRESHOLDS` dict) that the formatter would flatten; (b) the driver `rtldavis.py` is **baked into the
+   shipped image** (ARCHITECTURE §3) — auto-reformatting a prod-sacred file to satisfy a style checker is
+   exactly the churn No-Rewrite (DEC-0014) guards against. `ruff check` still catches the real bug classes
+   (unused imports, bare excepts, ambiguous names).
+2. **Exclude vendored third-party uploaders** (`influx.py`, `wcloud.py` — Matthew Wall; `ogoxeUploader.py`)
+   via `ruff.toml` `extend-exclude`. They are copied verbatim from upstream and carry intentional
+   Python 2/3 `try/except import` shims that ruff misreads as `F401`/`E402`. We do not modify vendored code.
+3. **Fix the 10 findings in our own code:** `rtldavis.py` (removed unused `calendar.timegm`/`fnmatch`/
+   `string`; bare `except:` → `except Exception:`), `weewx_monitor.py` (split the one multi-import line),
+   `tests/test_reception_dedup.py` (ambiguous `l` → `ln`), `ops/*` (removed unused `json`, `datetime`).
+
+**Result:** `ruff check .` passes cleanly; CI `lint` is honestly green; the driver's runtime logic and the
+codebase's formatting are untouched. *Alternatives rejected:* full `ruff format` adoption (huge diff,
+reformats the baked driver — No-Rewrite) and relaxing lint to non-blocking (defeats the point — we want
+real green, and `ruff check` catches genuine issues). If a formatter is ever wanted, adopt it deliberately
+per-file with the alignment trade-off understood, not as a blanket gate.

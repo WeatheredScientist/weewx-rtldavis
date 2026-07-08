@@ -39,8 +39,11 @@ jobs:
       - name: Ruff lint
         run: python -m ruff check .
 
-      - name: Ruff format (check only)
-        run: python -m ruff format --check .
+      # Note: no `ruff format --check` gate. The codebase uses deliberate column
+      # alignment for readability, and the driver (rtldavis.py) is baked into the
+      # shipped image — auto-reformatting it would churn a prod-sacred file. We
+      # enforce lint (real bug classes) but not the formatter's style. See ruff.toml
+      # + DEC-0027 (S31). Vendored third-party uploaders are excluded via ruff.toml.
 
       - name: Mypy
         run: python -m mypy --ignore-missing-imports --no-strict-optional . || true
