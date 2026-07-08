@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """weewx monitor: USB watchdog + service downtime alerting + reception tracking"""
 
-import time, smtplib, os, sys, re
+import time, smtplib, os, sys, re, sqlite3
 from email.mime.text import MIMEText
 from datetime import datetime
 
@@ -51,6 +51,23 @@ WU_RF_LOG_INTERVAL = 300   # log reception summary every 5 min
 # publishes freqError freq-hop channel packets as extra dataless loop packets, so
 # each real reading is posted to WU several times under the SAME epoch (DEC-0024).
 WU_RECORD_RE = re.compile(r'\((\d+)\)\s*$')
+
+# --- Archive-DB reception source (Layer A, S31) ---
+# The WU-publish scrape above measures publish LIVENESS, not RF reception. It runs
+# ~21+/min (padded by the freqError freq-hop publishes, DEC-0024) and reads ~100%
+# even when the driver's own decode metric shows ~75% packet reception (S31 audit:
+# 14 straight minutes at "100%" while rxCheckPercent ran 59-95%). The honest metric
+# is the driver's rxCheckPercent (pct_good_all in rtldavis.py) -- good CRC-decoded
+# packets / theoretical max per archive period -- already stored per record in the
+# archive DB. The daily reception summary is sourced from there instead of the
+# scrape; the real-time WINDOW logging + outage alerting are left unchanged (they
+# still catch a total stall). Read-only; a DB hiccup falls back to the old summary.
+ARCHIVE_DB = os.environ.get('WEEWX_ARCHIVE_DB', f'{BASE_DIR}/weewx-data/archive/weewx.sdb')
+# True physical ISS transmit rate (packets/min) for the dropped-packet estimate:
+# 60 / 2.8125s = 21.33. This is the UN-rounded WU_RF_EXPECTED; the driver itself
+# floor-divides the period, so rxCheckPercent runs ~1-2 pts optimistic (documented,
+# minor -- S31). Override per station (different transmitter id) via the env var.
+RF_TX_PER_MIN = float(os.environ.get('RF_TX_PER_MIN', 60.0 / 2.8125))
 
 # --- PID guard ---
 # '--test-alert' bypasses the guard entirely: it sends one test email and exits,
@@ -226,6 +243,107 @@ def format_daily_summary(hourly_buckets, date_str):
         lines.append(f"{'Daily avg':<8} {'':>10} {day_avg:>9.0f}%")
     return "\n".join(lines)
 
+def summarize_reception_rows(rows, tx_per_min):
+    """Pure reception math over archive rows -> summary dict (no DB, unit-testable).
+
+    ROWS: iterable of (dateTime_utc_epoch, interval_minutes, rxCheckPercent-or-None).
+    rxCheckPercent is the driver's honest metric: good CRC-decoded packets over the
+    theoretical max for that archive period. Per record the ISS transmits
+    interval*tx_per_min packets; received ~= expected * pct/100, dropped = the rest.
+    NULL-rxCheckPercent records (first record after a restart, or the pre-fix
+    deadlock era) carry no reception info, so they are counted as 'gaps' and left
+    out of the expected/received totals -- a conservative under-count of drops.
+    Returns None when there is nothing for the day."""
+    hours = {}
+    for dt, interval_min, pct in rows:
+        hour = time.localtime(dt).tm_hour
+        h = hours.setdefault(hour, {'pcts': [], 'expected': 0.0, 'received': 0.0, 'gaps': 0})
+        if pct is None:
+            h['gaps'] += 1
+            continue
+        exp = (interval_min or 1) * tx_per_min
+        h['pcts'].append(pct)
+        h['expected'] += exp
+        h['received'] += exp * pct / 100.0
+    day = {'expected': 0.0, 'received': 0.0, 'gaps': 0, 'records': 0, 'hours': {}}
+    for hour, h in hours.items():
+        exp, rec, n = h['expected'], h['received'], len(h['pcts'])
+        day['hours'][hour] = {
+            'records': n, 'gaps': h['gaps'],
+            'mean_pct': (100.0 * rec / exp) if exp else None,
+            'min_pct': min(h['pcts']) if h['pcts'] else None,
+            'expected': exp, 'received': rec, 'dropped': exp - rec,
+        }
+        day['expected'] += exp
+        day['received'] += rec
+        day['gaps'] += h['gaps']
+        day['records'] += n
+    if not day['records'] and not day['gaps']:
+        return None
+    day['mean_pct'] = (100.0 * day['received'] / day['expected']) if day['expected'] else None
+    day['dropped'] = day['expected'] - day['received']
+    return day
+
+
+def db_reception_summary(date, db_path=None):
+    """Read one LOCAL day's rxCheckPercent from the archive DB (read-only) and
+    return the reception summary dict, or None if the DB can't be read / is empty.
+
+    DATE is a datetime.date; its local-midnight epoch bounds the query. Any DB
+    error is logged and swallowed so the monitor never dies on a DB hiccup (the
+    caller falls back to the legacy WU-scrape summary)."""
+    db_path = db_path or ARCHIVE_DB
+    start = int(time.mktime(date.timetuple()))
+    end = start + 86400
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        try:
+            rows = con.execute(
+                "SELECT dateTime, interval, rxCheckPercent FROM archive "
+                "WHERE dateTime >= ? AND dateTime < ? ORDER BY dateTime",
+                (start, end)).fetchall()
+        finally:
+            con.close()
+    except Exception as e:
+        log(f"DB RECEPTION SUMMARY ERROR: {e}")
+        return None
+    return summarize_reception_rows(rows, RF_TX_PER_MIN)
+
+
+def format_db_daily_summary(summary, date_str):
+    """Format the archive-sourced daily reception summary (S31) as a text table.
+    Reports packets dropped -- not just windows above a threshold."""
+    lines = [
+        f"{STATION_NAME} — RF Reception Summary for {date_str}",
+        "Source: driver rxCheckPercent (good decoded packets / transmitted, per record)",
+        f"Physical TX rate: {RF_TX_PER_MIN:.1f} packets/min",
+        "",
+        f"{'Hour':<6} {'Recept.':>8} {'Min':>6} {'Dropped':>9} {'Recs':>6}",
+        "-" * 40,
+    ]
+    for hour in range(24):
+        h = summary['hours'].get(hour)
+        if h and h['records']:
+            lines.append(f"{hour:02d}:00 {h['mean_pct']:>6.0f}% {h['min_pct']:>5.0f}% "
+                         f"{h['dropped']:>9.0f} {h['records']:>6}")
+        else:
+            gaps = f"gap x{h['gaps']}" if h and h['gaps'] else "--"
+            lines.append(f"{hour:02d}:00 {'--':>6}  {'--':>5} {'--':>9} {gaps:>6}")
+    lines.append("-" * 40)
+    mean = summary['mean_pct']
+    lines.append(f"Daily mean reception:      {mean:.0f}%" if mean is not None else
+                 "Daily mean reception:      --")
+    lines.append(f"Packets transmitted (est): {summary['expected']:.0f}")
+    lines.append(f"Packets received (est):    {summary['received']:.0f}")
+    lines.append(f"Packets dropped (est):     {summary['dropped']:.0f}")
+    if summary['gaps']:
+        lines.append(f"Records with no reception data (gaps/restarts): {summary['gaps']}")
+    lines.append("")
+    lines.append("Note: estimate = per-record rxCheckPercent x physical TX rate; the driver "
+                 "floor-divides per period so it runs ~1-2 pts optimistic (S31, DEC-0024).")
+    return "\n".join(lines)
+
+
 def wu_record_key(line):
     """Dedup key for a 'Wunderground-RF ... Published' line — the record epoch.
 
@@ -399,10 +517,20 @@ def main():
         # --- Daily summary at midnight ---
         today = datetime.now().date()
         if today != wu_current_date:
-            if wu_hourly_buckets:
-                summary = format_daily_summary(wu_hourly_buckets, str(wu_current_date))
-                log(f"DAILY SUMMARY: sending for {wu_current_date}")
-                send_email(f"{STATION_NAME}: Daily RF Reception — {wu_current_date}", summary)
+            # Prefer the honest archive-sourced summary (rxCheckPercent, S31); fall
+            # back to the legacy WU-scrape summary only if the DB read yields nothing,
+            # so the daily email is never lost to a DB hiccup.
+            db_summary = db_reception_summary(wu_current_date)
+            if db_summary:
+                body = format_db_daily_summary(db_summary, str(wu_current_date))
+                log(f"DAILY SUMMARY (rxCheckPercent): sending for {wu_current_date}")
+            elif wu_hourly_buckets:
+                body = format_daily_summary(wu_hourly_buckets, str(wu_current_date))
+                log(f"DAILY SUMMARY (WU-scrape fallback): sending for {wu_current_date}")
+            else:
+                body = None
+            if body:
+                send_email(f"{STATION_NAME}: Daily RF Reception — {wu_current_date}", body)
             wu_hourly_buckets = {}
             wu_current_date   = today
 
