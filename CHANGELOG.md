@@ -6,6 +6,29 @@ under [Pre-S16].
 
 ---
 
+## [S31] — 2026-07-08 — RF reception metric audited; daily email re-sourced from rxCheckPercent
+
+**Audit finding:** the daily RF-reception email measured publish *liveness*, not reception. It counted
+`Wunderground-RF: Published` log lines ÷ expected/min — a count padded by the freqError freq-hop
+publishes (DEC-0024) so it reads ~100% even during real ~25% packet loss. Live proof: 14 straight
+minutes pinned at "100%" while the driver's own `rxCheckPercent` ran 59–95% (median 75%); the metric's
+only movement off 100% is a crash to 0% during a total stall. That bimodal 100↔0 behaviour, plus the
+denominator churn (24→dedup→21) and the old ~150% reading, is why the numbers had been "all over the
+place." The honest metric — the driver's `rxCheckPercent` (good CRC-decoded packets / theoretical max
+per archive period) — was already in the archive DB; the email just wasn't using it.
+
+**Layer A (monitor-only, no image rebuild):** re-source the daily summary from the archive's
+`rxCheckPercent`. The email now reports packets **transmitted / received / dropped** plus hourly mean +
+min — not "windows above a threshold." Verified against the live DB: 2026-07-06 = mean **75%**, 30,720
+transmitted, **~7,701 dropped**. Read-only DB access with a safe fallback to the legacy scrape summary
+on any hiccup; real-time `WINDOW` logging + outage alerting left unchanged (No-Rewrite, DEC-0014).
+`tests/test_reception_db_summary.py` (+7); **suite 61/61**. Refines DEC-0024 (its epoch-dedup fixed the
+*count*; this fixes the *source*). **Deploy = monitor restart (owner-run scp + `sudo kill`), not yet
+done.** Driver-side follow-up (persist raw packet counts; fix the ~1–2 pt floor-division optimism)
+folds into a later driver build.
+
+---
+
 ## [S30] — 2026-07-05 — v2.0.3: driver fixes finally go live (clobber fix + build)
 
 **Built (native amd64 on the NAS) and deployed to prod.** After deploy, `rxCheckPercent` went
