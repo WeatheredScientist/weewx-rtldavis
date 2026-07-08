@@ -15,7 +15,6 @@ matching the existing schema established by the influx2 uploader.
 import sqlite3
 import urllib.request
 import urllib.error
-import json
 import argparse
 import datetime
 import time
