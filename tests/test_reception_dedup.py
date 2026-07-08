@@ -46,7 +46,7 @@ def test_key_is_trailing_epoch():
 
 def test_duplicate_lines_collapse():
     # 8 raw publish lines -> 4 unique records: the exact ~2x over-read (DEC-0024).
-    keys = {wu_record_key(l) for l in LIVE_SAMPLE}
+    keys = {wu_record_key(ln) for ln in LIVE_SAMPLE}
     assert keys == LIVE_EXPECTED_EPOCHS
     assert len(LIVE_SAMPLE) == 8 and len(keys) == 4
 
@@ -54,7 +54,7 @@ def test_duplicate_lines_collapse():
 def test_dedup_would_have_fixed_the_metric():
     # Raw-line count over-reads; unique-epoch count is the true reading.
     raw = len(LIVE_SAMPLE)                       # what the OLD code counted
-    unique = len({wu_record_key(l) for l in LIVE_SAMPLE})  # what the NEW code counts
+    unique = len({wu_record_key(ln) for ln in LIVE_SAMPLE})  # what the NEW code counts
     assert raw > unique                          # the over-count existed
     assert unique == 4                           # and dedup gives the real number
 
@@ -92,7 +92,7 @@ ALL_TESTS = [
 
 if __name__ == "__main__":
     passed = 0
-    raw, unique = len(LIVE_SAMPLE), len({wu_record_key(l) for l in LIVE_SAMPLE})
+    raw, unique = len(LIVE_SAMPLE), len({wu_record_key(ln) for ln in LIVE_SAMPLE})
     print(f"live sample: {raw} raw publish lines -> {unique} unique records "
           f"({raw / unique:.2f}x over-read before the fix)\n")
     for t in ALL_TESTS:

@@ -12,7 +12,6 @@ Optionally plots a chart if matplotlib is available.
 import sys
 import csv
 import os
-from datetime import datetime
 
 DEFAULT_CSV = "/volume1/docker/weewx-rtldavis/gain_sweep_results.csv"
 
