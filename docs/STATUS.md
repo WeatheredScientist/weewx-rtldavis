@@ -13,7 +13,19 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-> **Current session: S30** (2026-07-05) — shipping v2.0.3, and found the reason the driver fixes never
+> **Current session: S31** (2026-07-08) — **v2.0.3 soak day 3 = clean** (read-only check: container
+> Up 2 days, `RestartCount=0`, on `:v2.0.3`; `rxCheckPercent` flowing 59–95%, 24 h median 75 %; 0
+> errors; 0 rain-glitch rejections to date). Release stays **HELD** through the soak window (~July 8–9)
+> per S30's decision — nothing promoted today. **Main work: audited the RF reception metric** (owner:
+> "the email numbers are all over the place, no confidence — I want dropped packets, not windows above a
+> threshold"). Found the daily email measured publish *liveness*, not reception (pinned ~100 % while the
+> driver's `rxCheckPercent` showed ~75 %; bimodal 100↔0). **Built Layer A** (`feature/s31-reception-metric`,
+> commit `8dc98ae`): daily email now sourced from `rxCheckPercent`, reporting packets
+> transmitted/received/**dropped** (2026-07-06: ~7,701 dropped of 30,720). +7 tests, suite 61/61,
+> verified against the live DB. **Needs: PR → `dev`, then owner-run monitor-restart deploy.** See DEC-0024
+> (S31 update) + CHANGELOG [S31].
+>
+> **Prior session S30** (2026-07-05) — shipping v2.0.3, and found the reason the driver fixes never
 > took. **Major finding: weewx imports the driver from the BAKED venv `site-packages/user/`, and
 > `Dockerfile:101` was clobbering the patched `rtldavis.py` with the STOCK `weectl extension install`
 > copy** — so every built image shipped the stock driver (no rain filter, no H1/H2/M3), and driver
@@ -35,7 +47,12 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 > as the rain glitch) rather than StdQC/carry-forward bandaids — a dedicated future session (after v2.0.3),
 > with a model suited to deep RF-decode debugging (BACKLOG §Data integrity; DEC-0022).
 
-_Last updated: 2026-07-05 (S30 — v2.0.3 assembly + the clobber discovery. Committed to `dev`: dewpoint
+_Last updated: 2026-07-08 (S31 — soak day 3 clean; RF-reception metric audited + Layer A built:
+daily email re-sourced from `rxCheckPercent`, now reports packets dropped, not "windows above a
+threshold" (commit `8dc98ae` on `feature/s31-reception-metric`, +7 tests / suite 61/61, DEC-0024 S31
+update). Pending PR → `dev` + owner monitor-restart deploy. Release still HELD for soak.)_
+
+_Prior S30: 2026-07-05 (S30 — v2.0.3 assembly + the clobber discovery. Committed to `dev`: dewpoint
 wind honest-null, receiveWindow→upstream default, **Dockerfile clobber fix** (weewx imports the baked
 venv driver; `Dockerfile:101` was shipping the STOCK driver over the patched one → rain filter + H1/H2/M3
 never live → explains rxCheckPercent NULL + the July-4 phantom), v2.0.3 header, +5 tests (suite 54/54),
@@ -98,6 +115,13 @@ remote-URL casing already correct. Prior: S27 — secret gate landed + required,
   dataless freqError packets + disable `RAW_*` debug logging; also fixes 15 MB `weewx.log` bloat) is
   deeper, No-Rewrite applies — still deferred. Doc-vs-reality flag stands: the running binary **does**
   emit `ChannelIdx`/`FreqError` (BACKLOG said it didn't; re-confirmed live S28). See DEC-0024 + BACKLOG.
+  **S31 update — the epoch-dedup fixed the count, but the *source* was still wrong.** An audit found the
+  WU-publish scrape measures publish *liveness*, not reception: it reads ~100 % while `rxCheckPercent`
+  shows ~75 %. **Layer A (S31, `feature/s31-reception-metric`, commit `8dc98ae`, pending PR → `dev` +
+  deploy):** the daily email is now sourced from the archive's `rxCheckPercent` and reports packets
+  transmitted/received/**dropped** (per record) instead of a WU-scrape %. Real-time `WINDOW` logging +
+  outage alerting unchanged. Driver **Layer B** (persist raw `count`/`missed`; stop dataless freqError
+  publishes; fix the ~1–2 pt floor-division optimism) still deferred under No-Rewrite. See DEC-0024 (S31).
 - **M-A/L-B — monitor incremental byte-offset read (S28, PR #10 → `dev`, draft, NOT deployed).** The
   monitor re-read the whole ~10 MB/day `weewx.log` twice per 30 s poll (`get_linecount()` +
   `get_new_lines()`). Rewrote it as a single byte-offset `seek()` (`get_log_size()` +
