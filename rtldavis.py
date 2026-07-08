@@ -82,13 +82,10 @@ from __future__ import with_statement
 
 from subprocess import check_output
 import signal
-from calendar import timegm
-import fnmatch
 import os
 import re
 import subprocess
 import math
-import string
 import threading
 import time
 
@@ -503,7 +500,7 @@ class ProcManager():
             for pid in pid_list:
                 os.kill(int(pid), signal.SIGKILL)
                 loginf("rtldavis with pid %s killed" % pid)
-        except:
+        except Exception:
             pass
 
         self._cmd = cmd
