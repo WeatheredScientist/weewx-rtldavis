@@ -27,6 +27,16 @@ on any hiccup; real-time `WINDOW` logging + outage alerting left unchanged (No-R
 done.** Driver-side follow-up (persist raw packet counts; fix the ~1–2 pt floor-division optimism)
 folds into a later driver build.
 
+**Also this session — CI lint made honestly green (DEC-0027).** The `lint` job had been red on every
+branch (incl. `dev`) — a broken check erodes the "`main` = production truth" signal. Audited the debt:
+27 `ruff check` findings (17 in vendored code, 10 ours) + `ruff format --check` wanting to reformat 25
+files incl. the baked driver. Decision: lint what we maintain, don't police style or vendored code —
+(1) dropped the `ruff format --check` CI gate (the codebase uses deliberate column alignment; the
+driver is baked → reformatting it is No-Rewrite churn), (2) excluded vendored uploaders (`influx.py`,
+`wcloud.py`, `ogoxeUploader.py`) via new `ruff.toml`, (3) fixed the 10 findings in our code
+(`rtldavis.py` unused imports + bare `except`; `weewx_monitor.py` import split; test ambiguous `l`→`ln`;
+`ops/*` unused imports). `ruff check .` now passes; driver logic + formatting untouched. Merged via PR #13.
+
 ---
 
 ## [S30] — 2026-07-05 — v2.0.3: driver fixes finally go live (clobber fix + build)
