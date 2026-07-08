@@ -59,3 +59,7 @@ loopdata.py
 @eaDir/
 #recycle/
 node_modules/
+
+# --- Local-only infra / scanner identifier list (real values; never commit) ---
+docs/LOCAL_INFRA.md
+scripts/.identifiers

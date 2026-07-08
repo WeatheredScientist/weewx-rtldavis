@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 #-----------------------------------------------------------------
 #         WeeWX OgoXe uploader v1.0.1
 #
@@ -64,8 +65,8 @@ class OgoxeUploader(weewx.restx.StdWunderground):
         log.info("OgoxeUploader: Configuration loaded for station %s", 
                  _ambient_dict.get('station', 'UNKNOWN'))
 
-        # server_url is hardcoded, and not provided _ambient_dict from get_site_dict
-        log.debug("OgoxeUploader server_url: %s", _ambient_dict.get('server_url'))
+        # server_url is hardcoded (OGOXE_API_URL below), not from get_site_dict
+        log.debug("OgoxeUploader server_url: %s", OGOXE_API_URL)
 
         # Get the manager dictionary:
         _manager_dict = weewx.manager.get_manager_dict_from_config(
@@ -76,7 +77,7 @@ class OgoxeUploader(weewx.restx.StdWunderground):
         do_archive_post = to_bool(_ambient_dict.pop('archive_post', True))
 
         if do_archive_post:
-            # server_url is already set from get_site_dict, no setdefault needed
+            # server_url is the hardcoded OGOXE_API_URL constant, passed explicitly below
             self.archive_queue = queue.Queue()
             self.archive_thread = weewx.restx.AmbientThread(
                 self.archive_queue,

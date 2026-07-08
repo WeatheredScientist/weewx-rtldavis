@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """weewx monitor: USB watchdog + service downtime alerting + reception tracking"""
 
-import time, smtplib, os, sys
+import time
+import smtplib
+import os
+import sys
+import re
+import sqlite3
 from email.mime.text import MIMEText
 from datetime import datetime
 
 # --- Config ---
-LOG      = '/volume1/docker/weewx-rtldavis/logs/weewx_monitor.log'
-PIDFILE  = '/volume1/docker/weewx-rtldavis/logs/weewx_monitor.pid'
+# Paths default to the NAS layout but are env-overridable for parity with the
+# credentials, which already come from env (S24 L-D).
+BASE_DIR = os.environ.get('WEEWX_RTLDAVIS_DIR', '/volume1/docker/weewx-rtldavis')
+LOG      = os.environ.get('MONITOR_LOG', f'{BASE_DIR}/logs/weewx_monitor.log')
+PIDFILE  = os.environ.get('MONITOR_PIDFILE', f'{BASE_DIR}/logs/weewx_monitor.pid')
 POLL     = 30
 RESET_CD = 300
 REPEAT   = 7200
@@ -29,22 +38,62 @@ THRESHOLDS = {
 }
 
 # --- Reception tracking config ---
-WU_RF_EXPECTED     = 24    # expected WU-RF posts per 60s window (one per ~2.5s)
-WU_RF_MIN_PCT      = 60    # alert threshold % (normal baseline is 65-75% at 150ft through walls)
+# WU_RF_EXPECTED is the number of records the ISS *physically transmits* per 60s
+# window -- the correct denominator for a reception %. It is NOT a fixed 24. The
+# Davis ISS transmit period depends on the transmitter id (driver loop_times run
+# 2.5625s..3.0s); this station's ISS (Transmitter 4) transmits every ~2.8125s, so
+# 60 / 2.8125 = ~21.3 records/min. The old value 24 ("one per 2.5s") assumed the
+# fastest channel and under-reported reception by ~13%: a full-reception window
+# read 22/24 = 92% when it was really ~22/21 = ~100% (S29). Override per station
+# with the WU_RF_EXPECTED env var when re-pointing to a different transmitter id.
+WU_RF_EXPECTED     = int(os.environ.get('WU_RF_EXPECTED', 21))  # physical TX/min = 60 / 2.8125s
+WU_RF_MIN_PCT      = 60    # alert threshold %: a window below this is a real >~40% packet loss
 WU_RF_WINDOW       = 60    # seconds per reception window
 WU_RF_SUSTAIN      = 5     # consecutive bad windows before alert
 WU_RF_LOG_INTERVAL = 300   # log reception summary every 5 min
 
+# Every WeeWX "Published record ..." line ends in "(<unix_epoch>)". The driver
+# publishes freqError freq-hop channel packets as extra dataless loop packets, so
+# each real reading is posted to WU several times under the SAME epoch (DEC-0024).
+WU_RECORD_RE = re.compile(r'\((\d+)\)\s*$')
+
+# --- Archive-DB reception source (Layer A, S31) ---
+# The WU-publish scrape above measures publish LIVENESS, not RF reception. It runs
+# ~21+/min (padded by the freqError freq-hop publishes, DEC-0024) and reads ~100%
+# even when the driver's own decode metric shows ~75% packet reception (S31 audit:
+# 14 straight minutes at "100%" while rxCheckPercent ran 59-95%). The honest metric
+# is the driver's rxCheckPercent (pct_good_all in rtldavis.py) -- good CRC-decoded
+# packets / theoretical max per archive period -- already stored per record in the
+# archive DB. The periodic reception summary is sourced from there instead of the
+# scrape; the real-time WINDOW logging + outage alerting are left unchanged (they
+# still catch a total stall). Read-only; a DB hiccup falls back to the old summary.
+ARCHIVE_DB = os.environ.get('WEEWX_ARCHIVE_DB', f'{BASE_DIR}/weewx-data/archive/weewx.sdb')
+# True physical ISS transmit rate (packets/min) for the dropped-packet estimate:
+# 60 / 2.8125s = 21.33. This is the UN-rounded WU_RF_EXPECTED; the driver itself
+# floor-divides the period, so rxCheckPercent runs ~1-2 pts optimistic (documented,
+# minor -- S31). Override per station (different transmitter id) via the env var.
+RF_TX_PER_MIN = float(os.environ.get('RF_TX_PER_MIN', 60.0 / 2.8125))
+# How often to email the reception summary. Default 6 h (00/06/12/18 local) so a
+# reception problem surfaces within ~6 h and can be acted on the same day, rather than
+# read the next morning in a once-a-day midnight report. Set 12 for twice-daily or 24
+# for the original daily cadence. Windows align to local midnight. Clamped to [1, 24].
+# Env-overridable (e.g. RF_REPORT_INTERVAL_HOURS in monitor.env).
+RF_REPORT_INTERVAL_HOURS = max(1, min(24, int(os.environ.get('RF_REPORT_INTERVAL_HOURS', 6))))
+
 # --- PID guard ---
-if os.path.exists(PIDFILE):
-    old = open(PIDFILE).read().strip()
-    if old and os.path.exists(f'/proc/{old}'):
-        print(f'Already running (PID {old}), exiting')
-        sys.exit(0)
-with open(PIDFILE, 'w') as f:
-    f.write(str(os.getpid()))
-import atexit
-atexit.register(lambda: os.remove(PIDFILE) if os.path.exists(PIDFILE) else None)
+# '--test-alert' bypasses the guard entirely: it sends one test email and exits,
+# and must NOT touch the running monitor's pidfile.
+_TEST_ALERT = '--test-alert' in sys.argv
+if not _TEST_ALERT:
+    if os.path.exists(PIDFILE):
+        old = open(PIDFILE).read().strip()
+        if old and os.path.exists(f'/proc/{old}'):
+            print(f'Already running (PID {old}), exiting')
+            sys.exit(0)
+    with open(PIDFILE, 'w') as f:
+        f.write(str(os.getpid()))
+    import atexit
+    atexit.register(lambda: os.remove(PIDFILE) if os.path.exists(PIDFILE) else None)
 
 # --- Helpers ---
 def log(msg):
@@ -66,22 +115,78 @@ def send_email(subject, body):
     except Exception as e:
         log(f"EMAIL error: {e}")
 
-WEEWX_LOG_PATH = '/volume1/docker/weewx-rtldavis/logs/weewx.log'
+WEEWX_LOG_PATH = os.environ.get('WEEWX_LOG', f'{BASE_DIR}/logs/weewx.log')
 
-def get_linecount():
+def get_log_size():
+    """Current size of the weewx log in bytes (0 if missing). The caller compares
+    this to the last byte-offset to detect rotation/truncation (file shrank)."""
     try:
-        with open(WEEWX_LOG_PATH) as f:
-            return sum(1 for _ in f)
-    except:
+        return os.path.getsize(WEEWX_LOG_PATH)
+    except OSError:
         return 0
 
-def get_new_lines(from_line):
+def get_new_lines(offset):
+    """Read complete lines appended since byte OFFSET in a SINGLE open -- no
+    whole-file re-scan (M-A) and no separate size/read double-open race (L-B);
+    both used to re-read the growing 10 MB/day log twice per poll (DEC-0024).
+
+    Returns (lines, new_offset). A trailing partial line (still being written, no
+    final newline) is held back and new_offset stops before it, so it is parsed
+    once, whole, on a later poll -- never split or double-counted. Rotation is the
+    caller's job (get_log_size() < offset -> reset offset to 0)."""
     try:
-        with open(WEEWX_LOG_PATH) as f:
-            lines = f.readlines()
-        return [l.rstrip() for l in lines[from_line-1:]]
-    except:
-        return []
+        with open(WEEWX_LOG_PATH, 'rb') as f:
+            f.seek(offset)
+            data = f.read()
+    except OSError:
+        return [], offset
+    consumed = data.rfind(b'\n') + 1          # bytes up to and including last '\n'
+    if consumed == 0:                          # no complete line yet
+        return [], offset
+    lines = data[:consumed].decode('utf-8', 'replace').splitlines()
+    return lines, offset + consumed
+
+# --- Rain-counter glitch alert (DEC-0021) ---
+# rtldavis.py logs this exact phrase when it rejects an implausible rain-counter
+# delta -- an RF-decode glitch that, before the fix, would have become phantom
+# rain. Watching for it turns each catch into an email: confirmation the filter
+# earned its keep, plus a running record of how often the glitch actually fires.
+RAIN_GLITCH_MARKER = 'rejecting implausible counter delta'
+RAIN_GLITCH_CD     = 300   # seconds between glitch emails (dedupe a repeated line)
+
+def parse_rain_glitch(line):
+    """If LINE is a rain-glitch rejection, return (timestamp, detail, phantom_in);
+    else None. phantom_in = the false rainfall (inches) the OLD buggy code would
+    have recorded, for context in the alert."""
+    if RAIN_GLITCH_MARKER not in line:
+        return None
+    m = re.search(r'last=(\S+)\s+new=(\S+)', line)
+    detail = m.group(0) if m else '(counter values unparsed)'
+    phantom_in = None
+    if m:
+        try:
+            old = int(m.group(2)) - int(m.group(1))   # what the buggy code saw
+            if old < 0:
+                old += 128                             # its unconditional wraparound add
+            phantom_in = round(old * 0.01, 2)          # bucket_type 0 = 0.01 in/tip
+        except ValueError:
+            pass
+    ts = line[:19] if (len(line) >= 19 and line[4:5] == '-') else \
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return ts, detail, phantom_in
+
+def send_rain_glitch_alert(ts, detail, phantom_in, raw_line, test=False):
+    tag = '[TEST] ' if test else ''
+    body = (f"{tag}At {ts}, the rtldavis driver rejected an implausible "
+            f"rain-counter delta ({detail}).\n\n"
+            f"No phantom rain was recorded -- the DEC-0021 filter caught it.\n")
+    if phantom_in is not None:
+        body += f"Before the fix this would have logged a false +{phantom_in}\" of rain.\n"
+    if test:
+        body += "\nThis is a TEST of the rain-glitch email alert. If you got it, alerting works."
+    else:
+        body += f"\nLog line:\n{raw_line}"
+    send_email(f"{STATION_NAME}: {tag}rain-counter glitch rejected", body)
 
 def do_reset():
     try:
@@ -94,7 +199,7 @@ def do_reset():
         if result.returncode == 0:
             try:
                 vendor = open('/sys/bus/usb/devices/1-3/idVendor').read().strip()
-            except:
+            except OSError:
                 vendor = 'unknown'
             log(f"RESET: done, idVendor={vendor}")
             send_email(f"{STATION_NAME}: RTL-SDR reset", f"Dongle reset at {datetime.now()}. Vendor: {vendor}")
@@ -115,6 +220,14 @@ def reset_dongle(last_reset):
     t.start()
     return time.time()
 
+def wu_pct(count):
+    """Reception % = records received / records the ISS physically transmitted
+    (WU_RF_EXPECTED), capped at 100. You cannot receive more than were sent; a raw
+    value just over 100 only means a 60s window caught one extra phase-aligned
+    transmission. Single source of truth for every reception % the monitor reports."""
+    return min(100.0, 100.0 * count / WU_RF_EXPECTED)
+
+
 def format_daily_summary(hourly_buckets, date_str):
     """Format 24-hour reception summary as a text table."""
     lines = [
@@ -129,7 +242,7 @@ def format_daily_summary(hourly_buckets, date_str):
         buckets = hourly_buckets.get(hour, [])
         if buckets:
             avg_count = sum(buckets) / len(buckets)
-            avg_pct = (avg_count / WU_RF_EXPECTED) * 100
+            avg_pct = wu_pct(avg_count)
             day_counts.extend(buckets)
             status = "OK" if avg_pct >= WU_RF_MIN_PCT else "LOW"
             lines.append(f"{hour:02d}:00    {avg_count:>10.1f} {avg_pct:>9.0f}% {status:>8}")
@@ -137,16 +250,148 @@ def format_daily_summary(hourly_buckets, date_str):
             lines.append(f"{hour:02d}:00    {'--':>10} {'--':>9}  {'--':>8}")
     lines.append("-" * 42)
     if day_counts:
-        day_avg = (sum(day_counts) / len(day_counts) / WU_RF_EXPECTED) * 100
+        day_avg = wu_pct(sum(day_counts) / len(day_counts))
         lines.append(f"{'Daily avg':<8} {'':>10} {day_avg:>9.0f}%")
     return "\n".join(lines)
+
+def summarize_reception_rows(rows, tx_per_min):
+    """Pure reception math over archive rows -> summary dict (no DB, unit-testable).
+
+    ROWS: iterable of (dateTime_utc_epoch, interval_minutes, rxCheckPercent-or-None).
+    rxCheckPercent is the driver's honest metric: good CRC-decoded packets over the
+    theoretical max for that archive period. Per record the ISS transmits
+    interval*tx_per_min packets; received ~= expected * pct/100, dropped = the rest.
+    NULL-rxCheckPercent records (first record after a restart, or the pre-fix
+    deadlock era) carry no reception info, so they are counted as 'gaps' and left
+    out of the expected/received totals -- a conservative under-count of drops.
+    Returns None when there is nothing for the day."""
+    hours = {}
+    for dt, interval_min, pct in rows:
+        hour = time.localtime(dt).tm_hour
+        h = hours.setdefault(hour, {'pcts': [], 'expected': 0.0, 'received': 0.0, 'gaps': 0})
+        if pct is None:
+            h['gaps'] += 1
+            continue
+        exp = (interval_min or 1) * tx_per_min
+        h['pcts'].append(pct)
+        h['expected'] += exp
+        h['received'] += exp * pct / 100.0
+    day = {'expected': 0.0, 'received': 0.0, 'gaps': 0, 'records': 0, 'hours': {}}
+    for hour, h in hours.items():
+        exp, rec, n = h['expected'], h['received'], len(h['pcts'])
+        day['hours'][hour] = {
+            'records': n, 'gaps': h['gaps'],
+            'mean_pct': (100.0 * rec / exp) if exp else None,
+            'min_pct': min(h['pcts']) if h['pcts'] else None,
+            'expected': exp, 'received': rec, 'dropped': exp - rec,
+        }
+        day['expected'] += exp
+        day['received'] += rec
+        day['gaps'] += h['gaps']
+        day['records'] += n
+    if not day['records'] and not day['gaps']:
+        return None
+    day['mean_pct'] = (100.0 * day['received'] / day['expected']) if day['expected'] else None
+    day['dropped'] = day['expected'] - day['received']
+    return day
+
+
+def period_floor(ts, interval_h):
+    """Epoch of the start of the INTERVAL_H-hour reporting block (aligned to local
+    midnight) that contains TS. E.g. interval_h=12 -> 00:00 or 12:00 local; =6 ->
+    00/06/12/18; =24 -> local midnight (the original once-daily cadence)."""
+    lt = time.localtime(ts)
+    floored = (lt.tm_year, lt.tm_mon, lt.tm_mday,
+               (lt.tm_hour // interval_h) * interval_h, 0, 0, 0, 0, -1)
+    return int(time.mktime(floored))
+
+
+def period_label(start_ts, end_ts):
+    """Human label for a reporting window, e.g. '2026-07-08 00:00–12:00' (or with a
+    date on the end when the window crosses midnight)."""
+    s, e = time.localtime(start_ts), time.localtime(end_ts)
+    same_day = (s.tm_year, s.tm_yday) == (e.tm_year, e.tm_yday)
+    end_fmt = "%H:%M" if same_day else "%Y-%m-%d %H:%M"
+    return time.strftime("%Y-%m-%d %H:%M", s) + "–" + time.strftime(end_fmt, e)
+
+
+def db_reception_summary(start_ts, end_ts, db_path=None):
+    """Read rxCheckPercent for the [START_TS, END_TS) epoch window from the archive
+    DB (read-only) and return the reception summary dict, or None if the DB can't be
+    read / the window is empty. Any DB error is logged and swallowed so the monitor
+    never dies on a DB hiccup (the caller falls back to the legacy WU-scrape summary)."""
+    db_path = db_path or ARCHIVE_DB
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        try:
+            rows = con.execute(
+                "SELECT dateTime, interval, rxCheckPercent FROM archive "
+                "WHERE dateTime >= ? AND dateTime < ? ORDER BY dateTime",
+                (start_ts, end_ts)).fetchall()
+        finally:
+            con.close()
+    except Exception as e:
+        log(f"DB RECEPTION SUMMARY ERROR: {e}")
+        return None
+    return summarize_reception_rows(rows, RF_TX_PER_MIN)
+
+
+def format_reception_summary(summary, label):
+    """Format the archive-sourced reception summary (S31) as a text table. Reports
+    packets dropped -- not just windows above a threshold. LABEL names the reporting
+    window (e.g. '2026-07-08 00:00–12:00'); rows are the hours present in the window."""
+    lines = [
+        f"{STATION_NAME} — RF Reception Summary — {label}",
+        "Source: driver rxCheckPercent (good decoded packets / transmitted, per record)",
+        f"Physical TX rate: {RF_TX_PER_MIN:.1f} packets/min",
+        "",
+        f"{'Hour':<6} {'Recept.':>8} {'Min':>6} {'Dropped':>9} {'Recs':>6}",
+        "-" * 40,
+    ]
+    for hour in sorted(summary['hours']):
+        h = summary['hours'][hour]
+        if h['records']:
+            lines.append(f"{hour:02d}:00 {h['mean_pct']:>6.0f}% {h['min_pct']:>5.0f}% "
+                         f"{h['dropped']:>9.0f} {h['records']:>6}")
+        else:
+            lines.append(f"{hour:02d}:00 {'--':>6}  {'--':>5} {'--':>9} {('gap x%d' % h['gaps']):>6}")
+    lines.append("-" * 40)
+    mean = summary['mean_pct']
+    lines.append(f"Mean reception:            {mean:.0f}%" if mean is not None else
+                 "Mean reception:            --")
+    lines.append(f"Packets transmitted (est): {summary['expected']:.0f}")
+    lines.append(f"Packets received (est):    {summary['received']:.0f}")
+    lines.append(f"Packets dropped (est):     {summary['dropped']:.0f}")
+    if summary['gaps']:
+        lines.append(f"Records with no reception data (gaps/restarts): {summary['gaps']}")
+    lines.append("")
+    lines.append("Note: estimate = per-record rxCheckPercent x physical TX rate; the driver "
+                 "floor-divides per period so it runs ~1-2 pts optimistic (S31, DEC-0024).")
+    return "\n".join(lines)
+
+
+def wu_record_key(line):
+    """Dedup key for a 'Wunderground-RF ... Published' line — the record epoch.
+
+    The driver publishes freqError freq-hop channel packets as extra dataless
+    loop packets, so each real reading is posted to WU several times under the
+    SAME record epoch (DEC-0024, S21). Counting raw publish lines over-reads
+    reception (~1.66x, up to 2x), which is why the RF summary showed ~150%.
+    Collapsing on this key — the trailing "(<unix_epoch>)" WeeWX stamps on every
+    'Published record' line — counts unique records for a true reception %. Falls
+    back to the whole line if the epoch can't be parsed (rare); that still dedups
+    identical lines. Two real records in the same integer second collapse to one
+    (a conservative under-count, accepted per DEC-0024).
+    """
+    m = WU_RECORD_RE.search(line)
+    return m.group(1) if m else line
 
 def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
                             wu_in_alert, wu_alert_sent_at, wu_repeat_sent_at,
                             wu_hourly_buckets, now):
     """Close a 60s reception window. Returns updated state tuple."""
     try:
-        pct = (wu_window_count / WU_RF_EXPECTED) * 100
+        pct = wu_pct(wu_window_count)
         wu_period_counts.append(wu_window_count)
         log(f"WINDOW: {wu_window_count}/{WU_RF_EXPECTED} ({pct:.0f}%)")
 
@@ -160,7 +405,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             if wu_in_alert:
                 wu_in_alert = False
                 td = int(now - wu_alert_sent_at)
-                avg = (sum(wu_period_counts) / len(wu_period_counts) / WU_RF_EXPECTED) * 100
+                avg = wu_pct(sum(wu_period_counts) / len(wu_period_counts))
                 log(f"RECEPTION RECOVERY: {avg:.0f}% avg after {td//60}min")
                 send_email(
                     f"{STATION_NAME}: RF reception RECOVERED",
@@ -205,10 +450,11 @@ def main():
     last_repeat = {s: 0.0 for s in THRESHOLDS}
     in_outage   = {s: False for s in THRESHOLDS}
     last_reset  = 0.0
+    last_glitch_alert = 0.0
 
     # Reception tracking state
     wu_window_start   = time.time()
-    wu_window_count   = 0
+    wu_window_epochs  = set()   # unique record epochs seen this window (DEC-0024)
     wu_period_counts  = []
     wu_period_start   = time.time()
     wu_bad_windows    = 0
@@ -217,40 +463,47 @@ def main():
     wu_repeat_sent_at = 0.0
     wu_first_seen     = False
     wu_hourly_buckets = {}
-    wu_current_date   = datetime.now().date()
+    wu_report_start   = period_floor(time.time(), RF_REPORT_INTERVAL_HOURS)
 
     log("Monitor started")
     send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
 
-    last_line = get_linecount()
-    log(f"Starting at log line {last_line}")
+    last_offset = get_log_size()
+    log(f"Starting at log byte-offset {last_offset}")
 
     while True:
         time.sleep(POLL)
         now = time.time()
 
-        cur = get_linecount()
-        if cur < last_line:
-            log(f"Log reset detected (was {last_line}, now {cur}) - container restarted")
-            last_line = 0
+        cur = get_log_size()
+        if cur < last_offset:
+            log(f"Log reset detected (was {last_offset} bytes, now {cur}) - container restarted")
+            last_offset = 0
             for svc in last_seen:
                 last_seen[svc] = 0.0
             for svc in in_outage:
                 in_outage[svc] = False
             wu_window_start  = now
-            wu_window_count  = 0
+            wu_window_epochs = set()
             wu_period_counts = []
             wu_period_start  = now
             wu_bad_windows   = 0
             wu_first_seen    = False
 
-        if cur > last_line:
-            lines = get_new_lines(last_line + 1)
-            log(f"Poll: {len(lines)} new lines")
+        if cur > last_offset:
+            lines, last_offset = get_new_lines(last_offset)
+            if lines:
+                log(f"Poll: {len(lines)} new lines")
             for line in lines:
                 if 'rtldavis process stalled' in line:
                     log("STALL detected")
                     last_reset = reset_dongle(last_reset)
+                g = parse_rain_glitch(line)
+                if g and now - last_glitch_alert > RAIN_GLITCH_CD:
+                    ts, detail, phantom_in = g
+                    last_glitch_alert = now
+                    log(f"RAIN GLITCH rejected: {detail}")
+                    send_rain_glitch_alert(ts, detail, phantom_in, line)
                 for svc in THRESHOLDS:
                     if svc in line and ('Published' in line or 'published' in line):
                         if in_outage[svc]:
@@ -261,9 +514,9 @@ def main():
                                        f"{svc} recovered after {td//60}min at {datetime.now()}")
                         last_seen[svc] = time.time()
                 if 'Wunderground-RF' in line and 'Published' in line:
-                    wu_window_count += 1
+                    wu_window_epochs.add(wu_record_key(line))
                     wu_first_seen = True
-            last_line = cur
+            # last_offset already advanced by get_new_lines() above.
 
 
         # --- Reception: close window every 60s ---
@@ -271,11 +524,11 @@ def main():
             (wu_period_counts, wu_bad_windows, wu_in_alert,
              wu_alert_sent_at, wu_repeat_sent_at,
              wu_hourly_buckets) = close_reception_window(
-                wu_window_count, wu_period_counts, wu_bad_windows,
+                len(wu_window_epochs), wu_period_counts, wu_bad_windows,
                 wu_in_alert, wu_alert_sent_at, wu_repeat_sent_at,
                 wu_hourly_buckets, now)
             wu_window_start = wu_window_start + WU_RF_WINDOW
-            wu_window_count = 0
+            wu_window_epochs = set()
 
         # --- Reception: log 5-min summary ---
         if wu_first_seen and (now - wu_period_start) >= WU_RF_LOG_INTERVAL:
@@ -287,15 +540,27 @@ def main():
             wu_period_counts = []
             wu_period_start  = now
 
-        # --- Daily summary at midnight ---
-        today = datetime.now().date()
-        if today != wu_current_date:
-            if wu_hourly_buckets:
-                summary = format_daily_summary(wu_hourly_buckets, str(wu_current_date))
-                log(f"DAILY SUMMARY: sending for {wu_current_date}")
-                send_email(f"{STATION_NAME}: Daily RF Reception — {wu_current_date}", summary)
+        # --- Reception summary email, every RF_REPORT_INTERVAL_HOURS ---
+        # Fire when the wall clock crosses into a new reporting block; report the block
+        # that just ended, [wu_report_start, block). Prefer the honest archive-sourced
+        # summary (rxCheckPercent, S31); fall back to the legacy WU-scrape summary only
+        # if the DB read yields nothing, so a report is never lost to a DB hiccup.
+        block = period_floor(now, RF_REPORT_INTERVAL_HOURS)
+        if block > wu_report_start:
+            label = period_label(wu_report_start, block)
+            db_summary = db_reception_summary(wu_report_start, block)
+            if db_summary:
+                body = format_reception_summary(db_summary, label)
+                log(f"RECEPTION SUMMARY (rxCheckPercent): sending for {label}")
+            elif wu_hourly_buckets:
+                body = format_daily_summary(wu_hourly_buckets, label)
+                log(f"RECEPTION SUMMARY (WU-scrape fallback): sending for {label}")
+            else:
+                body = None
+            if body:
+                send_email(f"{STATION_NAME}: RF Reception — {label}", body)
             wu_hourly_buckets = {}
-            wu_current_date   = today
+            wu_report_start   = block
 
         # --- Service downtime checks ---
         for svc, thr in THRESHOLDS.items():
@@ -324,4 +589,11 @@ def main():
                            f"{svc} recovered after {td//60}min at {datetime.now()}")
 
 if __name__ == '__main__':
+    if _TEST_ALERT:
+        sample = ("2026-07-04 03:03:45 user.rtldavis ERROR rain: rejecting implausible "
+                  "counter delta last=70 new=6 (RF glitch, not rain -- DEC-0021)")
+        ts, detail, phantom_in = parse_rain_glitch(sample)
+        send_rain_glitch_alert(ts, detail, phantom_in, sample, test=True)
+        print("test alert sent (check email + weewx_monitor.log)")
+        sys.exit(0)
     main()
