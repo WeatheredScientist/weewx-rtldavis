@@ -450,3 +450,30 @@ codebase's formatting are untouched. *Alternatives rejected:* full `ruff format`
 reformats the baked driver — No-Rewrite) and relaxing lint to non-blocking (defeats the point — we want
 real green, and `ruff check` catches genuine issues). If a formatter is ever wanted, adopt it deliberately
 per-file with the alignment trade-off understood, not as a blanket gate.
+
+## DEC-0028 — Leaked credential in pushed public history: rotate immediately, don't rewrite (S32)
+
+**Status:** Decided · **Date:** 2026-07-08 (S32)
+
+S32 found the monitor's Gmail app password hardcoded in two *historical* commits of
+`weewx_monitor.py` (`d2fb080` 2026-05-22, `eff3f56` 2026-05-24) — reachable from public `main` and
+`dev` for ~6 weeks — plus a NAS-only copy in the legacy `weewx_monitor.sh`. The DEC-0012 secret gate
+never fired because it scans working trees and diffs, **not history**; the current file had long
+since moved the value to `monitor.env`.
+
+**Decision — for any secret discovered in already-pushed history: rotate the credential immediately;
+do not rewrite public history.**
+
+1. **Rotation is the fix.** Once pushed to a public repo for weeks, the value must be assumed
+   harvested (bots scrape GitHub for the app-password pattern); revoking it removes all residual
+   value. Done same-day: revoked, reissued into `monitor.env`, verified live by the monitor's
+   startup email.
+2. **History rewrite rejected.** `git filter-repo` + force-push of `main`/`dev` on a *published*
+   repo breaks every clone/fork, violates the never-force-push-main rule, and still doesn't un-leak
+   anything (forks, caches, archives). The dead credential in history is accepted residue.
+3. **Scope note for the gate:** DEC-0012's gate prevents *new* leaks; it cannot retro-scan. A
+   one-time full-history scan (e.g. `git log -p | grep` for token patterns, or `gitleaks`) is cheap
+   insurance after any gate hardening — this find came from exactly such an ad-hoc sweep.
+
+Related: the WU API key from the same pre-governance era (S16 find) is still awaiting owner rotation
+— same playbook applies.
