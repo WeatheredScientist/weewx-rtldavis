@@ -302,8 +302,9 @@ reversed before reaching `main`.)
 
 ## DEC-0024 — RF-reception metric reads ~150%: freqError channel packets published as loop packets (OPEN)
 
-**Status:** Layer A implemented (S22) — pending a monitor-restart deploy; Layer B deferred ·
-**Date:** 2026-07-04 (S21), updated 2026-07-05 (S22)
+**Status:** epoch-dedup deployed (S27); **daily-email source re-based to `rxCheckPercent` (S31,
+committed on `feature/s31-reception-metric` — pending a monitor-restart deploy)**; driver Layer B
+deferred · **Date:** 2026-07-04 (S21), updated 2026-07-05 (S22), 2026-07-08 (S31)
 
 > DEC-0023 (independent per-repo session numbering) landed via the S20 governance-hardening branch,
 > merged into this rain branch as **PR #2** (S22); this entry took the next number, DEC-0024. The two
@@ -351,6 +352,29 @@ A pure `wu_record_key()` helper dedups on the trailing `(<unix_epoch>)`; the rec
 counts unique record epochs instead of raw publish lines. `close_reception_window` and the driver are
 untouched; 6 offline tests (`tests/test_reception_dedup.py`) against a live-recorded 2× over-read.
 Deploy is a monitor restart only (respawn loop reloads on-disk code). **Layer B remains deferred.**
+
+**Update (S31, 2026-07-08) — the epoch-dedup treated a symptom; the *source* was wrong.** A skeptical
+audit of the daily emails (owner: "the numbers are all over the place, I have no confidence") found the
+`Wunderground-RF: Published` scrape measures publish **liveness**, not RF reception, and *cannot* show
+packet loss in the normal regime: WeeWX publishes on its loop/upload cadence (still padded by freqError
+freq-hop packets even post-dedup), so the count runs ~21+/min and the % pins at 100 regardless of how
+many packets were actually received. **Live proof:** over 21:10–21:23 the email read **100% every
+minute** while the driver's own `rxCheckPercent` ran **59–95% (median 75%)** for the same minutes; the
+scrape's *only* excursion off 100% was a crash to 0/0/5% during a ~90 s publish stall (an archive gap,
+not necessarily RF loss). Bimodal 100↔0 + the denominator churn (24→dedup→21→the old ~150%) explains
+the erratic emails end to end. **Fix (Layer A, monitor-only, commit `8dc98ae` on
+`feature/s31-reception-metric`):** stop scraping publish lines for the daily summary; read
+`rxCheckPercent` straight from the archive DB (`summarize_reception_rows` / `db_reception_summary` /
+`format_db_daily_summary`) and report packets **transmitted / received / dropped** + hourly mean & min.
+Verified against the live DB (2026-07-06: mean 75%, 30,720 tx, ~7,701 dropped). Read-only, safe
+fallback to the legacy summary; real-time `WINDOW` logging + outage alerting untouched (No-Rewrite);
++7 tests (suite 61/61). Deploy = monitor restart (owner-run). **Caveats, both minor & documented:**
+(1) the driver floor-divides the period (`max_count = period // loop_time`, `rtldavis.py:995`) so
+`rxCheckPercent` — and thus this estimate — runs ~1–2 pts optimistic; (2) the driver computes raw
+`count`/`max_count`/`missed` but persists only the percentage, so absolute drops are back-computed from
+`% × physical TX rate` rather than read exactly. Both fold into a future **driver Layer B** (persist raw
+counts / enable `ARCHIVE_STATS` logging + stop the dataless freqError publishes), still deferred under
+No-Rewrite.
 
 ## DEC-0025 — Known-bad data: preserve-and-flag, never delete
 
