@@ -1,5 +1,6 @@
 # $Id: wcloud.py 1797 2019-03-07 23:35:27Z tkeffer $
 # Copyright 2014 Matthew Wall
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 """
 This is a weewx extension that uploads data to WeatherCloud.

@@ -2,9 +2,15 @@
 
 A Docker image for running [weewx](https://weewx.com/) with the [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver, enabling a Davis Vantage weather station to upload data to multiple online weather services using an RTL-SDR USB dongle — no proprietary Davis hardware required.
 
-> **Current version:** v2.0.1  
+📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
+```bash
+docker pull weatheredscientist/weewx-rtldavis:v2.0.3   # or :latest
+```
+Pin a version tag (`:v2.0.3`) for reproducible deploys; `:latest` always tracks the newest release.
+
+> **Current version:** v2.0.3  
 > **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3  
-> **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.3.1  
+> **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.4.0  
 > **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)
 
 ---
@@ -433,25 +439,9 @@ docker build -t weewx-rtldavis .
 
 ## Changelog
 
-### v2.0.1
-- **dewpoint_service.py**: added wind packet filter — consistency check (windGust >= windSpeed), delta filter (rejects physically impossible speed changes), and cold-start warmup buffer to prevent stale values after restarts or signal gaps. Null fields on rejection rather than substituting stale values.
-- **weewx.conf**: wind direction calibration via `[StdCalibrate]` — corrects for magnetic declination and anemometer vane alignment
-- **weewx.conf**: RTL-SDR gain tuning documented (`-gain 400` recommended for challenging RF environments)
-- **weewx_monitor.py**: RF reception tracking — 60s windows, configurable alert threshold (default 60%), 5-minute summary logging, daily midnight email with hourly breakdown
-- **weewx_monitor.py**: WOW-BE added to service monitoring thresholds
-- **weewx_monitor.py**: daily summary email at midnight with hourly RF reception breakdown
-- **WOW-BE**: enabled and confirmed posting to wow.meteo.be
-- **Watchdog**: Task Scheduler script updated with proper single-instance PID check to prevent crashloop on DSM process kill
-
-### v2.0.0 (Ubuntu 26.04)
-- Rebuilt on Ubuntu 26.04 LTS, Python 3.14
-- Multistage Docker build — 278MB (72% reduction from v1)
-- All 9 upload services confirmed posting
-- weewx_monitor.py: USB watchdog, service downtime alerting, dedicated weewx-monitor user, sudo-scoped USB reset
-- See [v2.0-ubuntu26 release](https://github.com/WeatheredScientist/weewx-rtldavis/releases/tag/v2.0-ubuntu26) for full notes
-
-### v1.0 (Ubuntu 22.04, frozen)
-- See [v1.0-ubuntu22 release](https://github.com/WeatheredScientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22)
+The full, session-tagged history lives in **[CHANGELOG.md](CHANGELOG.md)** (single source of truth), and
+tagged releases with notes are on the **[GitHub Releases](https://github.com/WeatheredScientist/weewx-rtldavis/releases)**
+page. Highlights of the latest release are summarized at the top of `CHANGELOG.md`.
 
 ## Credits
 

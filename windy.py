@@ -1,6 +1,8 @@
 # weewx uploader for Windy.com Stations API v2
 # Uses weewx RESTThread pattern for reliable non-blocking operation
+# SPDX-License-Identifier: GPL-3.0-or-later
 
+import queue
 import urllib.parse
 import weewx
 import weewx.restx
@@ -23,7 +25,7 @@ class Windy(StdRESTbase):
         site_dict['manager_dict'] = weewx.manager.get_manager_dict_from_config(
             config_dict, 'wx_binding')
         self.archive_queue = weewx.restx.get_queue(config_dict, 'Windy', 'archive') \
-            if hasattr(weewx.restx, 'get_queue') else __import__('queue').Queue()
+            if hasattr(weewx.restx, 'get_queue') else queue.Queue()
         self.archive_thread = WindyThread(self.archive_queue, **site_dict)
         self.archive_thread.start()
         self.bind(weewx.NEW_ARCHIVE_RECORD, self.new_archive_record)

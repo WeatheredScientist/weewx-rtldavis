@@ -457,7 +457,13 @@ version = 5.3.1
         outHumidity = 0, 100
         inHumidity = 0, 100
         windSpeed = 0, 120, mile_per_hour
-        rain = 0, 10, inch
+        # rain/rainRate caps are a backstop for RF-decode glitches (see the
+        # rain_delta_tips filter in rtldavis.py and DEC-0021). At a 1-minute
+        # archive interval, 1.0 in = 60 in/hr and 16 in/hr are both far above
+        # anything physically possible here (world 1-min record ~1.23 in) yet
+        # well below the phantom values a counter glitch produces (1.28 in etc).
+        rain = 0, 1.0, inch
+        rainRate = 0, 16, inch_per_hour
 
 ##############################################################################
 
