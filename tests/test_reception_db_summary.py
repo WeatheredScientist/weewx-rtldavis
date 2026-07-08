@@ -24,6 +24,7 @@ Run:  python3 -m pytest tests/    OR    python3 tests/test_reception_db_summary.
 """
 import os
 import sys
+import time
 import sqlite3
 import tempfile
 from datetime import datetime
@@ -91,12 +92,14 @@ def test_db_reception_summary_reads_temp_sdb():
         con.commit()
         con.close()
 
-        day = datetime(2026, 7, 6).date()
-        s = wm.db_reception_summary(day, db_path=path)
+        # Query the [midnight 7/6, midnight 7/7) window by explicit epoch bounds.
+        start = int(datetime(2026, 7, 6).timestamp())
+        end = start + 86400
+        s = wm.db_reception_summary(start, end, db_path=path)
         assert s is not None
-        assert s['records'] == 2      # two non-null in-day rows; prior day excluded
+        assert s['records'] == 2      # two non-null in-window rows; prior day excluded
         assert s['gaps'] == 1
-        # mean over the two in-day rows = (100 + 50) / 2 = 75% (packet-weighted, equal expected)
+        # mean over the two in-window rows = (100 + 50) / 2 = 75% (packet-weighted, equal expected)
         assert abs(s['mean_pct'] - 75.0) < 1e-6
         assert s['dropped'] > 0
     finally:
@@ -104,17 +107,36 @@ def test_db_reception_summary_reads_temp_sdb():
 
 
 def test_db_reception_summary_missing_db_returns_none():
-    assert wm.db_reception_summary(datetime(2026, 7, 6).date(),
-                                   db_path="/nonexistent/weewx.sdb") is None
+    assert wm.db_reception_summary(0, 86400, db_path="/nonexistent/weewx.sdb") is None
 
 
 def test_format_reports_dropped_and_mean():
     rows = [(100000, 1, 100.0), (100060, 1, 50.0)]
     s = wm.summarize_reception_rows(rows, 20.0)
-    out = wm.format_db_daily_summary(s, "2026-07-06")
+    out = wm.format_reception_summary(s, "2026-07-08 00:00–12:00")
     assert "Packets dropped (est):" in out
-    assert "Daily mean reception:" in out
+    assert "Mean reception:" in out
     assert "rxCheckPercent" in out
+    assert "2026-07-08 00:00–12:00" in out   # window label in the header
+
+
+def test_period_floor_aligns_to_local_blocks():
+    # 13:30 local floors to the 12:00 block for both 12 h and 6 h cadences.
+    noon = int(datetime(2026, 7, 8, 13, 30, 0).timestamp())
+    assert time.localtime(wm.period_floor(noon, 12)).tm_hour == 12
+    assert time.localtime(wm.period_floor(noon, 6)).tm_hour == 12
+    # 03:00 local floors to midnight for a 12 h cadence; to 00:00 for 6 h too.
+    early = int(datetime(2026, 7, 8, 3, 0, 0).timestamp())
+    assert time.localtime(wm.period_floor(early, 12)).tm_hour == 0
+    assert time.localtime(wm.period_floor(early, 6)).tm_hour == 0
+
+
+def test_period_block_advances_after_interval():
+    # A block boundary is crossed only once per interval (drives the email trigger).
+    t0 = int(datetime(2026, 7, 8, 0, 0, 0).timestamp())
+    b0 = wm.period_floor(t0, 12)
+    assert wm.period_floor(t0 + 11 * 3600, 12) == b0            # still same block
+    assert wm.period_floor(t0 + 12 * 3600, 12) == b0 + 12 * 3600  # next block
 
 
 ALL_TESTS = [
@@ -125,6 +147,8 @@ ALL_TESTS = [
     test_db_reception_summary_reads_temp_sdb,
     test_db_reception_summary_missing_db_returns_none,
     test_format_reports_dropped_and_mean,
+    test_period_floor_aligns_to_local_blocks,
+    test_period_block_advances_after_interval,
 ]
 
 

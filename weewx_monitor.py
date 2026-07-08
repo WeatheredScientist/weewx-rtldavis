@@ -64,7 +64,7 @@ WU_RECORD_RE = re.compile(r'\((\d+)\)\s*$')
 # 14 straight minutes at "100%" while rxCheckPercent ran 59-95%). The honest metric
 # is the driver's rxCheckPercent (pct_good_all in rtldavis.py) -- good CRC-decoded
 # packets / theoretical max per archive period -- already stored per record in the
-# archive DB. The daily reception summary is sourced from there instead of the
+# archive DB. The periodic reception summary is sourced from there instead of the
 # scrape; the real-time WINDOW logging + outage alerting are left unchanged (they
 # still catch a total stall). Read-only; a DB hiccup falls back to the old summary.
 ARCHIVE_DB = os.environ.get('WEEWX_ARCHIVE_DB', f'{BASE_DIR}/weewx-data/archive/weewx.sdb')
@@ -73,6 +73,12 @@ ARCHIVE_DB = os.environ.get('WEEWX_ARCHIVE_DB', f'{BASE_DIR}/weewx-data/archive/
 # floor-divides the period, so rxCheckPercent runs ~1-2 pts optimistic (documented,
 # minor -- S31). Override per station (different transmitter id) via the env var.
 RF_TX_PER_MIN = float(os.environ.get('RF_TX_PER_MIN', 60.0 / 2.8125))
+# How often to email the reception summary. Default 6 h (00/06/12/18 local) so a
+# reception problem surfaces within ~6 h and can be acted on the same day, rather than
+# read the next morning in a once-a-day midnight report. Set 12 for twice-daily or 24
+# for the original daily cadence. Windows align to local midnight. Clamped to [1, 24].
+# Env-overridable (e.g. RF_REPORT_INTERVAL_HOURS in monitor.env).
+RF_REPORT_INTERVAL_HOURS = max(1, min(24, int(os.environ.get('RF_REPORT_INTERVAL_HOURS', 6))))
 
 # --- PID guard ---
 # '--test-alert' bypasses the guard entirely: it sends one test email and exits,
@@ -290,23 +296,38 @@ def summarize_reception_rows(rows, tx_per_min):
     return day
 
 
-def db_reception_summary(date, db_path=None):
-    """Read one LOCAL day's rxCheckPercent from the archive DB (read-only) and
-    return the reception summary dict, or None if the DB can't be read / is empty.
+def period_floor(ts, interval_h):
+    """Epoch of the start of the INTERVAL_H-hour reporting block (aligned to local
+    midnight) that contains TS. E.g. interval_h=12 -> 00:00 or 12:00 local; =6 ->
+    00/06/12/18; =24 -> local midnight (the original once-daily cadence)."""
+    lt = time.localtime(ts)
+    floored = (lt.tm_year, lt.tm_mon, lt.tm_mday,
+               (lt.tm_hour // interval_h) * interval_h, 0, 0, 0, 0, -1)
+    return int(time.mktime(floored))
 
-    DATE is a datetime.date; its local-midnight epoch bounds the query. Any DB
-    error is logged and swallowed so the monitor never dies on a DB hiccup (the
-    caller falls back to the legacy WU-scrape summary)."""
+
+def period_label(start_ts, end_ts):
+    """Human label for a reporting window, e.g. '2026-07-08 00:00–12:00' (or with a
+    date on the end when the window crosses midnight)."""
+    s, e = time.localtime(start_ts), time.localtime(end_ts)
+    same_day = (s.tm_year, s.tm_yday) == (e.tm_year, e.tm_yday)
+    end_fmt = "%H:%M" if same_day else "%Y-%m-%d %H:%M"
+    return time.strftime("%Y-%m-%d %H:%M", s) + "–" + time.strftime(end_fmt, e)
+
+
+def db_reception_summary(start_ts, end_ts, db_path=None):
+    """Read rxCheckPercent for the [START_TS, END_TS) epoch window from the archive
+    DB (read-only) and return the reception summary dict, or None if the DB can't be
+    read / the window is empty. Any DB error is logged and swallowed so the monitor
+    never dies on a DB hiccup (the caller falls back to the legacy WU-scrape summary)."""
     db_path = db_path or ARCHIVE_DB
-    start = int(time.mktime(date.timetuple()))
-    end = start + 86400
     try:
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
         try:
             rows = con.execute(
                 "SELECT dateTime, interval, rxCheckPercent FROM archive "
                 "WHERE dateTime >= ? AND dateTime < ? ORDER BY dateTime",
-                (start, end)).fetchall()
+                (start_ts, end_ts)).fetchall()
         finally:
             con.close()
     except Exception as e:
@@ -315,29 +336,29 @@ def db_reception_summary(date, db_path=None):
     return summarize_reception_rows(rows, RF_TX_PER_MIN)
 
 
-def format_db_daily_summary(summary, date_str):
-    """Format the archive-sourced daily reception summary (S31) as a text table.
-    Reports packets dropped -- not just windows above a threshold."""
+def format_reception_summary(summary, label):
+    """Format the archive-sourced reception summary (S31) as a text table. Reports
+    packets dropped -- not just windows above a threshold. LABEL names the reporting
+    window (e.g. '2026-07-08 00:00–12:00'); rows are the hours present in the window."""
     lines = [
-        f"{STATION_NAME} — RF Reception Summary for {date_str}",
+        f"{STATION_NAME} — RF Reception Summary — {label}",
         "Source: driver rxCheckPercent (good decoded packets / transmitted, per record)",
         f"Physical TX rate: {RF_TX_PER_MIN:.1f} packets/min",
         "",
         f"{'Hour':<6} {'Recept.':>8} {'Min':>6} {'Dropped':>9} {'Recs':>6}",
         "-" * 40,
     ]
-    for hour in range(24):
-        h = summary['hours'].get(hour)
-        if h and h['records']:
+    for hour in sorted(summary['hours']):
+        h = summary['hours'][hour]
+        if h['records']:
             lines.append(f"{hour:02d}:00 {h['mean_pct']:>6.0f}% {h['min_pct']:>5.0f}% "
                          f"{h['dropped']:>9.0f} {h['records']:>6}")
         else:
-            gaps = f"gap x{h['gaps']}" if h and h['gaps'] else "--"
-            lines.append(f"{hour:02d}:00 {'--':>6}  {'--':>5} {'--':>9} {gaps:>6}")
+            lines.append(f"{hour:02d}:00 {'--':>6}  {'--':>5} {'--':>9} {('gap x%d' % h['gaps']):>6}")
     lines.append("-" * 40)
     mean = summary['mean_pct']
-    lines.append(f"Daily mean reception:      {mean:.0f}%" if mean is not None else
-                 "Daily mean reception:      --")
+    lines.append(f"Mean reception:            {mean:.0f}%" if mean is not None else
+                 "Mean reception:            --")
     lines.append(f"Packets transmitted (est): {summary['expected']:.0f}")
     lines.append(f"Packets received (est):    {summary['received']:.0f}")
     lines.append(f"Packets dropped (est):     {summary['dropped']:.0f}")
@@ -442,7 +463,7 @@ def main():
     wu_repeat_sent_at = 0.0
     wu_first_seen     = False
     wu_hourly_buckets = {}
-    wu_current_date   = datetime.now().date()
+    wu_report_start   = period_floor(time.time(), RF_REPORT_INTERVAL_HOURS)
 
     log("Monitor started")
     send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
@@ -519,25 +540,27 @@ def main():
             wu_period_counts = []
             wu_period_start  = now
 
-        # --- Daily summary at midnight ---
-        today = datetime.now().date()
-        if today != wu_current_date:
-            # Prefer the honest archive-sourced summary (rxCheckPercent, S31); fall
-            # back to the legacy WU-scrape summary only if the DB read yields nothing,
-            # so the daily email is never lost to a DB hiccup.
-            db_summary = db_reception_summary(wu_current_date)
+        # --- Reception summary email, every RF_REPORT_INTERVAL_HOURS ---
+        # Fire when the wall clock crosses into a new reporting block; report the block
+        # that just ended, [wu_report_start, block). Prefer the honest archive-sourced
+        # summary (rxCheckPercent, S31); fall back to the legacy WU-scrape summary only
+        # if the DB read yields nothing, so a report is never lost to a DB hiccup.
+        block = period_floor(now, RF_REPORT_INTERVAL_HOURS)
+        if block > wu_report_start:
+            label = period_label(wu_report_start, block)
+            db_summary = db_reception_summary(wu_report_start, block)
             if db_summary:
-                body = format_db_daily_summary(db_summary, str(wu_current_date))
-                log(f"DAILY SUMMARY (rxCheckPercent): sending for {wu_current_date}")
+                body = format_reception_summary(db_summary, label)
+                log(f"RECEPTION SUMMARY (rxCheckPercent): sending for {label}")
             elif wu_hourly_buckets:
-                body = format_daily_summary(wu_hourly_buckets, str(wu_current_date))
-                log(f"DAILY SUMMARY (WU-scrape fallback): sending for {wu_current_date}")
+                body = format_daily_summary(wu_hourly_buckets, label)
+                log(f"RECEPTION SUMMARY (WU-scrape fallback): sending for {label}")
             else:
                 body = None
             if body:
-                send_email(f"{STATION_NAME}: Daily RF Reception — {wu_current_date}", body)
+                send_email(f"{STATION_NAME}: RF Reception — {label}", body)
             wu_hourly_buckets = {}
-            wu_current_date   = today
+            wu_report_start   = block
 
         # --- Service downtime checks ---
         for svc, thr in THRESHOLDS.items():
