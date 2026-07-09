@@ -209,6 +209,89 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
         return None
     return delta
 
+
+# --- Sensor plausibility filter (S33 bad-packet fix, DEC-0029) ---
+# The same RF failure class as the rain glitch (multi-bit corruption that
+# passes CRC) also hits the other sensor bit-fields, with characteristic
+# high-bit-flip magnitudes: humidity is raw %x10, so bit-7/bit-8 flips inject
+# +/-12.8 / +/-25.6 %RH per reading (18 one-minute archive spikes confirmed
+# 2026-05-19..07-08, deviations clustering at 25.6/3 and 12.8/2 as predicted
+# by 2-3 readings/min averaging); plus a physically impossible UV 16.29 under
+# overcast (2026-05-30) and a 201 mph loop-only wind spike (2026-07-05).
+# Rain got a decode-layer filter in S18 (rain_delta_tips above); this extends
+# the same idea to temperature/humidity/wind/UV/radiation at the same choke
+# point (_data_to_packet), so ALL consumers are covered -- including the
+# loop-JSON feed, which runs BEFORE StdQC/StdConvert/DewpointCacher and was
+# reaching the live dashboard unfiltered.
+#
+# Two layers (full rationale: docs/DECISIONS.md DEC-0029):
+#   1. Davis sensor-spec bounds: a value the sensor cannot physically report
+#      is by definition a decode error (site-agnostic, safe for any station).
+#   2. Per-reading delta vs the last accepted value (temperature/humidity/
+#      wind/UV only): glitch magnitudes sit far above any real change between
+#      consecutive readings (~2.5-60 s apart). NO delta for radiation --
+#      genuine cloud edges produce +/-900 W/m2 swings within a minute.
+# Delta rejections RESYNC the baseline to the rejected value (the rain
+# filter's trick): an isolated glitch costs 1-2 nulled readings, a genuine
+# step is accepted on the very next reading, and the filter can never
+# deadlock on a stale baseline. Bounds rejections do NOT move the baseline
+# (an impossible value carries no information). After QC_RESEED_SECONDS
+# without a check the baseline expires and the next in-bounds value reseeds
+# it (cold start behaves the same way).
+# Rejected values become None (honest null, DEC-0006) and log a
+# "rejecting implausible" line, the same signature family as the rain filter,
+# so rejections stay visible in weewx.log for alerting and forensics.
+#
+# Units are the driver-internal data-dict units (deg C, %, m/s, UV index,
+# W/m2). Deltas are overridable via [Rtldavis] qc_<field>_max_delta; the
+# whole filter via sensor_qc = false.
+
+QC_RESEED_SECONDS = 300
+
+# data-dict key: (min, max, max_delta or None), driver-internal units
+SENSOR_QC_DEFAULTS = {
+    'temperature':     (-40.0, 65.0, 4.0),    # spec -40..65 C; real <=~1 C/min, glitch >=7.1 C
+    'humidity':        (0.0, 100.0, 10.0),    # glitch >=12.8 %RH/reading, real <=~5 %
+    'wind_speed':      (0.0, 89.4, 20.0),     # 6410 spec 0..200 mph (89.4 m/s)
+    'uv':              (0.0, 16.0, 8.0),      # spec 0..16; real cloud flicker <=~5.5 observed
+    'solar_radiation': (0.0, 1800.0, None),   # spec 0..1800; no delta (cloud edges genuine)
+}
+
+
+class SensorQC(object):
+    """Plausibility-filter state machine. Pure logic, no I/O -- unit-tested in
+    tests/test_sensor_qc.py; the driver owns one instance and logs rejections."""
+
+    def __init__(self, limits=None, reseed_seconds=QC_RESEED_SECONDS):
+        self.limits = dict(SENSOR_QC_DEFAULTS)
+        if limits:
+            self.limits.update(limits)
+        self.reseed_seconds = reseed_seconds
+        self._baseline = {}  # key -> (value, time of last accepted or resynced)
+
+    def check(self, key, value, now):
+        """Return (value_or_None, reject_reason_or_None)."""
+        if value is None or key not in self.limits:
+            return value, None
+        lo, hi, max_delta = self.limits[key]
+        if value < lo or value > hi:
+            # impossible per sensor spec: reject, keep the old baseline
+            return None, "out of sensor range %g..%g" % (lo, hi)
+        if max_delta is not None:
+            last = self._baseline.get(key)
+            if last is not None and (now - last[1]) <= self.reseed_seconds:
+                delta = value - last[0]
+                # always resync, even on reject: a genuine step is accepted
+                # on the next reading (no stale-baseline deadlock)
+                self._baseline[key] = (value, now)
+                if abs(delta) > max_delta:
+                    return None, "delta %+g from %g exceeds %g" % (
+                        delta, last[0], max_delta)
+                return value, None
+        self._baseline[key] = (value, now)
+        return value, None
+
+
 def loader(config_dict, engine):
     return RtldavisDriver(engine, config_dict)
 
@@ -837,6 +920,15 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         loginf('sensor map is: %s' % self.sensor_map)
         self._init_stats()
         self.last_rain_count = None
+        # sensor plausibility filter (DEC-0029); deltas overridable per field
+        self._sensor_qc_enabled = tobool(stn_dict.get('sensor_qc', True))
+        qc_limits = {}
+        for qc_key, qc_default in SENSOR_QC_DEFAULTS.items():
+            opt = stn_dict.get('qc_%s_max_delta' % qc_key)
+            if opt is not None:
+                qc_limits[qc_key] = (qc_default[0], qc_default[1], float(opt))
+        self._sensor_qc = SensorQC(qc_limits)
+        loginf('sensor_qc %s' % self._sensor_qc_enabled)
         self._log_humidity_raw = tobool(stn_dict.get('log_humidity_raw', False))
         self._save_pct_good_per_transmitter = tobool(stn_dict.get('save_pct_good_per_transmitter', False))
         self._sensor_map = stn_dict.get('sensor_map', {})
@@ -914,6 +1006,24 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         return transmitters, trIdCount
 
     def _data_to_packet(self, data):
+        # decode-layer plausibility filter (DEC-0029): reject RF-glitch values
+        # at the source so every consumer (including the pre-QC loop-JSON
+        # feed) sees an honest null instead of a corrupt reading
+        if self._sensor_qc_enabled:
+            qc_now = time.time()
+            for qc_key in self._sensor_qc.limits:
+                if data.get(qc_key) is None:
+                    continue
+                qc_value, qc_reason = self._sensor_qc.check(
+                    qc_key, data[qc_key], qc_now)
+                if qc_reason is not None:
+                    logerr("%s: rejecting implausible value %s (%s -- "
+                           "RF glitch, not weather; DEC-0029)" %
+                           (qc_key, data[qc_key], qc_reason))
+                    data[qc_key] = None            # null-on-rejection, DEC-0006
+                    if qc_key == 'wind_speed':
+                        # the same-packet direction byte is equally suspect
+                        data['wind_dir'] = None
         packet = dict()
         # map sensor observations to database field names
         for k in self.sensor_map:
