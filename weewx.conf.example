@@ -95,7 +95,19 @@ version = 5.3.1
     # The pct_good per transmitter can be saved to the database
     # This has only effect with 2 transmitters or more
     save_pct_good_per_transmitter = False
-    
+
+    # Decode-layer sensor plausibility filter (DEC-0029). RF corruption that
+    # passes CRC can decode to wrong sensor values (the same failure class as
+    # the rain glitch, DEC-0021). The filter rejects values outside the Davis
+    # sensor spec, and per-reading jumps beyond any real weather, to an honest
+    # null. Enabled by default; per-field delta thresholds are in the driver's
+    # internal units (temperature degC, humidity %, wind_speed m/s, uv index).
+    #sensor_qc = True
+    #qc_temperature_max_delta = 4.0
+    #qc_humidity_max_delta = 10.0
+    #qc_wind_speed_max_delta = 20.0
+    #qc_uv_max_delta = 8.0
+
     # The driver to use:
     driver = user.rtldavis
 
