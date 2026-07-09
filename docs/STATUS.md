@@ -13,30 +13,32 @@ is actively in motion, parked, or needs a check.
 When something here becomes permanent (a decision is made, a feature ships), move it to
 DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
 
-> **Current session: S33** (2026-07-08) — **bad-packet root cause CONFIRMED + fixed (DEC-0029), not
-> yet merged/deployed.** Evidence-first per owner: the `RAW_CHANNEL_PAYLOAD` lines turned out to hold
-> only hop metadata (no payloads exist anywhere), so the archive DB became the evidence base — and it
-> was enough: 18 one-minute humidity glitch spikes with the exact bit-flip signature (25.6/3, 12.8/2),
-> an impossible UV 16.29 under overcast, midday-only pattern proven to be a StdQC+carry-forward
-> masking artifact. Built the decode-layer `SensorQC` filter in `rtldavis.py` (Davis-spec bounds +
-> per-reading delta with baseline-resync; no delta for radiation) and closed **DEC-0022** with the
-> DewpointCacher timeout-null (300 s). Suite **85/85**, ruff + secret scan clean. Work is on
-> `feature/s33-sensor-qc` (off `dev`). Post-release health check: clean. See CHANGELOG [S33] + DEC-0029.
+> **Current session: S34** (2026-07-08) — **S33 sensor-QC work merged to `dev` (PR #17,
+> `db763c8`); health check clean; parked in a stable spot.** Owner-approved goal: end somewhere that
+> holds for days/weeks. Health check: container on `:v2.0.3`, up 16 h, RestartCount=0;
+> `rxCheckPercent` 68–80% live, 6 h mean 74.6% with zero archive gaps (360/360 minute rows); 0 rain
+> rejections ever; monitor polling normally. **Reception Layer B (DEC-0024) decided: waits for
+> v2.0.5** — keep v2.0.4 single-purpose (data-integrity fix with its own live-verify plan; Layer B
+> is cosmetic + log bloat, undesigned, No-Rewrite applies; the S31 monitor fix already made the
+> emails honest). Verified the S33 Dockerfile bakes the patched driver (the S30 clobber trap is
+> guarded at Dockerfile L99–101), so the v2.0.4 rebuild will genuinely ship `SensorQC`.
 
-_Last updated: 2026-07-08 (S33 — sensor plausibility filter built + DEC-0022 closed; awaiting merge,
-then the v2.0.4 rebuild to ship it)._
+_Last updated: 2026-07-08 (S34 — PR #17 merged, prod healthy on v2.0.3; next move is the owner-run
+v2.0.4 rebuild whenever convenient)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S33 → S34).** The sensor-QC work is code-complete on `feature/s33-sensor-qc`;
-> next is merge → **v2.0.4 image rebuild → deploy → live-verify** (see "Next session actions").
+> **▶ Resume here (S34 → S35).** Sensor-QC (DEC-0029 + DEC-0022) is **merged to `dev`, undeployed**.
+> Prod is stable on `:v2.0.3` and can stay there indefinitely. The single next move is the
+> **owner-run v2.0.4 image rebuild → deploy → live-verify** (see "Next session actions"). Nothing
+> else is time-sensitive.
 
 ## Open threads (not yet shipped)
 
-- **Sensor plausibility filter (DEC-0029) — code-complete, unmerged, undeployed.** The driver is
-  baked, so this needs the v2.0.4 rebuild (same native-amd64-on-NAS procedure as S30). On deploy,
+- **Sensor plausibility filter (DEC-0029) — merged to `dev` (PR #17, S34), undeployed.** The driver
+  is baked, so this needs the v2.0.4 rebuild (same native-amd64-on-NAS procedure as S30). On deploy,
   live-verify: watch weewx.log for `rejecting implausible value` (expect ~0.4+/day humidity), confirm
   the dashboard gauges stop spiking, and confirm dewpoint goes null (not stale) during any sensor
   outage.
@@ -51,8 +53,9 @@ then the v2.0.4 rebuild to ship it)._
   "rejecting implausible counter delta" + clean archive + the alert email (~1 glitch/2–3 wk; 0 to
   date as of 2026-07-08).
 - **Reception Layer B (driver, DEC-0024):** persist raw `count`/`missed`; stop publishing dataless
-  freqError packets; fix the ~1–2 pt floor-division optimism. No-Rewrite applies; needs a rebuild —
-  natural v2.0.4 passenger *if* designed/approved in time, else v2.0.5.
+  freqError packets; fix the ~1–2 pt floor-division optimism. No-Rewrite applies; needs a rebuild.
+  **Decided S34: waits for v2.0.5** — v2.0.4 stays single-purpose so its live-verify and rollback
+  read cleanly. Needs its own design discussion + approval before any code.
 - **ERR-0001 InfluxDB honest-null** — the dashboard's InfluxDB copy still carries the July-4 phantom
   rain; cross-repo (DEC-0010), handle dashboard-side or via the Influx API (no `influx` CLI on NAS).
 - **Gain 372, interim** (DEC-0017) — awaiting a 24 h averaged no-preamp sweep to settle vs 207.
@@ -72,27 +75,26 @@ then the v2.0.4 rebuild to ship it)._
 - **Snow / freezing / no heating tape** (parked, owner's future thread) — cold-weather failure modes
   we haven't designed for. 2026 = learning year.
 
-## Next session actions (S33 done → S34)
+## Next session actions (S34 done → S35)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S33 (2026-07-08, on `feature/s33-sensor-qc`):** post-release health check clean
-(container `:v2.0.3`, RestartCount=0, monitor 21/21); bad-packet root cause confirmed from the
-archive (DEC-0029 has the full evidence chain); `SensorQC` decode-layer filter + DewpointCacher
-timeout-null (closes DEC-0022) built with 22 new tests (suite 85/85). PR + merge pending owner
-approval at session close.
+**✅ Done in S34 (2026-07-08):** health check clean (`:v2.0.3`, up 16 h, RestartCount=0;
+`rxCheckPercent` 6 h mean 74.6%, min 50, 360/360 rows; 0 rain rejections; monitor polling);
+**PR #17 merged → `dev`** (`db763c8`) — SensorQC (DEC-0029) + DewpointCacher timeout-null
+(DEC-0022) now staged; Layer B decided → v2.0.5; Dockerfile verified to bake the patched driver
+(S30 clobber trap guarded). **Stable parking spot: prod runs proven v2.0.3; the merge changed
+nothing live. No timer is running — resume whenever convenient.**
 
-**▶ ON RETURN (S34), do this first:**
-1. **Quick health check** (read-only): container on `:v2.0.3`, `rxCheckPercent` flowing ~70–90%,
-   0 rain rejections, 6 h dropped-packets emails arriving and reading sanely (~75% mean).
-2. **Merge the S33 PR** (`feature/s33-sensor-qc` → `dev`) if not already merged.
-3. **Build + deploy v2.0.4** (owner-run, same S30 procedure: native amd64 build on the NAS,
+**▶ ON RETURN (S35), the one thread that matters:**
+1. **Build + deploy v2.0.4** (owner-run, same S30 procedure: native amd64 build on the NAS,
    verify the baked driver contains `SensorQC` before `docker rm -f` + re-run, keep `:v2.0.3`
    for rollback). Then live-verify: `rejecting implausible value` rejections appear at a sane rate
    (~0.4+/day expected from the humidity evidence, more at night), gauges stop spiking, archive
    stays clean, and dewpoint nulls (not freezes) during sensor silence.
-4. Decide whether **Reception Layer B (DEC-0024)** rides the same v2.0.4 rebuild (design discussion
-   first, No-Rewrite applies) or waits.
+2. After v2.0.4 has ridden clean for a few days: merge `dev` → `main`, tag the release + new
+   `prod-baseline`, then pick up the deferred threads (Layer B design for v2.0.5, the S33
+   follow-up filters, branch/tag cleanup).
 
 **Live access:** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in gitignored
 `docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use `env -u GH_TOKEN` for
