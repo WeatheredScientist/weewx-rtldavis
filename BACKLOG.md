@@ -5,6 +5,14 @@ in-flight work in docs/STATUS.md. Carried forward from the pre-governance NAS `B
 open items from the retired root `cleanup_backlog.md` were folded in here (S27, S23 tail).
 
 ## Open ideas
+- **Tuning infrastructure (owner idea, S34) — control panel and/or designed sweep plan.** Two
+  complementary routes to better RF tuning, framing to be discussed in a future session:
+  (a) a **front-end control panel** (in this repo or standalone) for live-changing select runtime
+  variables — gain first, potentially receiveWindow etc. — without container rebuilds/restarts;
+  (b) a **proper sweep plan** with a sufficient number of acquisitions per setting for statistical
+  confidence (the 2026-06-01 sweeps and the pending DEC-0017 gain-372-vs-207 question suffered from
+  short, unaveraged samples) — possibly better than (a), possibly both. Ties into DEC-0017 and the
+  "Reception improvement beyond ~70%" idea below.
 - Reception improvement beyond ~70% (noise-floor limited at ~150 ft through walls).
 - Windows/macOS FHSS investigation (Docker Desktop USB passthrough findings for the README).
 - ESP32 secondary sensor node — lightning (AS3935), pressure (BMP390), air quality (SEN55);

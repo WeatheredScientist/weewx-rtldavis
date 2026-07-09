@@ -6,6 +6,25 @@ under [Pre-S16].
 
 ---
 
+## [S34] — 2026-07-08 — S33 sensor-QC merged to `dev` (PR #17); health check clean; parked stable on v2.0.3
+
+Short close-out session; owner goal: end in a place that holds for days/weeks. No production change.
+
+- **Health check (read-only): clean.** Container on `:v2.0.3`, up 16 h, `RestartCount=0`;
+  `rxCheckPercent` 68–80% live (6 h mean 74.6%, min 50, **360/360** minute rows — no archive gaps);
+  **0 rain rejections ever**; monitor polling normally.
+- **PR #17 merged → `dev`** (merge `db763c8`, checks green: secret-scan + lint): `SensorQC`
+  decode-layer filter (DEC-0029) + DewpointCacher timeout-null (closes DEC-0022). **Staged, not
+  deployed** — the driver is baked; ships with the owner-run v2.0.4 rebuild.
+- **Rebuild pre-verified:** the `dev` Dockerfile COPYs the patched `rtldavis.py` into the venv
+  (L99) with the S30 clobber trap explicitly guarded (L101 note) — the v2.0.4 image will genuinely
+  contain `SensorQC`.
+- **Reception Layer B (DEC-0024) decided: waits for v2.0.5.** v2.0.4 stays single-purpose so its
+  live-verification and rollback stay unambiguous; Layer B is cosmetic + log-bloat relief, still
+  undesigned (No-Rewrite), and the S31 monitor fix already made the reception emails honest.
+- **Backlog: tuning infrastructure idea captured** (owner, S34) — live-tuning control panel and/or
+  a statistically sufficient sweep plan (ties into DEC-0017); framing deferred to a future session.
+
 ## [S33] — 2026-07-08 — Bad-packet root cause + decode-layer sensor plausibility filter (DEC-0029, on `feature/s33-sensor-qc`, off `dev`)
 
 The owner-priority bad-packet session. Evidence-first (owner: "pull the raw packet logs first;
