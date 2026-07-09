@@ -1,7 +1,7 @@
 # CLAUDE.md — weewx-rtldavis
 
-**This is the entrypoint.** Read the documentation map below in order at the start of every
-session before touching code. This repo is the **driver + Docker build** for a Davis 6263 / VP2+
+**This is the entrypoint.** Follow the tiered session-start read below (DEC-0030) before touching
+code. This repo is the **driver + Docker build** for a Davis 6263 / VP2+
 ISS *passively intercepted* at 915 MHz via an **RTL-SDR Blog v3** dongle — the "escape the
 WeatherLink lock" tool. It is a **public, published** WeeWX extension (Docker Hub +
 GitHub releases). The **dashboard** that consumes this data lives in a **separate repo**
@@ -11,23 +11,39 @@ Its real contract is the **data it produces** — the loop-JSON file + the Influ
 schema — not any single consumer. Keep it re-pointable so non-Davis WeeWX and eventually CumulusMX
 can use it (PRINCIPLES §1, docs/INTERFACES.md).
 
-## Documentation map (read in this order)
+## Documentation map — tiered session-start read (DEC-0030)
 
-| # | Doc | Answers |
-|---|-----|---------|
-| 1 | `CLAUDE.md` (this) | where everything is + the rules that must never break |
-| 2 | `docs/STATUS.md` | **where we are right now** — current session + active thread + next actions (single source of truth) |
-| 3 | `docs/CONVENTIONS.md` | how we operate — paths, commands, workflow, infra constants |
-| 4 | `docs/PRINCIPLES.md` | durable intent behind the design |
-| 5 | `docs/DECISIONS.md` | ADR log — settled choices; **do not re-litigate**, supersede with a new DEC |
-| 6 | `docs/ARCHITECTURE.md` | the ISS→RTL-SDR→driver→WeeWX→sinks chain; volume-mount map; entrypoint |
-| 7 | `docs/INTERFACES.md` | the data contract — loop-JSON fields + InfluxDB schema (what consumers depend on) |
-| 8 | `docs/ROADMAP.md` | what's next, in what order |
-| 9 | `CHANGELOG.md` | what changed recently (read the latest entry); `BACKLOG.md` = open ideas |
+The docs outgrew "read everything in order" (~130 KB ≈ ~32K tokens per session boot, measured S35 —
+the pattern the dashboard fixed at its S57/DEC-0081 and hyperlocal at its S143/DEC-0095). The
+protocol is now two tiers. **The current docs live on `dev`** — check
+`git log origin/main..origin/dev --oneline` and read docs from `dev`'s tip if `main` lags.
 
-Also: `docs/ASSESSMENT.md` — current strategic anchor (cross-repo governance alignment); `AGENTS.md` —
-cross-agent entrypoint (points here + at STATUS); `docs/DATA_ERRATA.md` — append-only log of known-bad
-observations + how they were corrected/reconciled (DEC-0025); `LICENSE` — GPLv3.
+**Tier 1 — read at every session start:**
+
+| Doc | Answers |
+|-----|---------|
+| `CLAUDE.md` (this) | where everything is + the rules that must never break |
+| `docs/STATUS.md` | **where we are right now** — current session + active thread + next actions (single source of truth) |
+| `docs/CONVENTIONS.md` | how we operate — paths, commands, workflow, infra constants |
+| `docs/PRINCIPLES.md` | durable intent behind the design |
+| `docs/DECISIONS.md` | **index** of settled choices — scan it; **do not re-litigate** anything listed |
+| `CHANGELOG.md` | the last few sessions (older entries: `CHANGELOG-ARCHIVE.md`) |
+
+**Tier 2 — read on demand, when the task touches them (never skip because of the tier —
+"working near it" means read it):**
+
+| Doc | Read when |
+|-----|-----------|
+| `docs/DECISIONS-FULL.md` | full ADR text — grep the DEC id whenever a listed decision is near your change |
+| `docs/ARCHITECTURE.md` | touching the ISS→RTL-SDR→driver→WeeWX→sinks chain, volume mounts, entrypoint |
+| `docs/INTERFACES.md` | touching the data contract — loop-JSON fields + InfluxDB schema |
+| `docs/ROADMAP.md` | choosing or re-prioritizing what to work on next |
+| `BACKLOG.md` | open ideas / durable RF findings |
+| `CHANGELOG-ARCHIVE.md` | history older than the live CHANGELOG |
+| `docs/ASSESSMENT.md` | the strategic anchor (cross-repo governance alignment) |
+| `docs/DATA_ERRATA.md` | known-bad observations + corrections (DEC-0025) |
+
+Also: `AGENTS.md` — cross-agent entrypoint (points here + at STATUS); `LICENSE` — GPLv3.
 
 If a doc is missing or contradicts another, stop and flag it — don't guess.
 
@@ -64,12 +80,17 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
 
 ## Session ritual
 
-- **Start:** read this map (STATUS.md first); `git fetch && git status`; read STATUS.md "Active
-  thread" + "Next session actions". A clean-pickup check: `git status` clean and `pytest` green
-  before new work.
+- **Start:** read the Tier 1 set (STATUS.md first, **from `dev`'s tip if the checkout lags**);
+  `git fetch && git status`; read STATUS.md "Active thread" + "Next session actions". A clean-pickup
+  check: `git status` clean and `pytest` green before new work.
 - **End:** update STATUS.md (session #, active thread, next actions — it's the source of truth),
   append to CHANGELOG.md, `git status` should show *up to date*. Don't strand the next session's
   handoff in private memory — it lives in STATUS.md so it's visible on GitHub.
+- **Docs-diet ritual at close (DEC-0030):** prune STATUS to bench state (shipped → CHANGELOG
+  pointer, settled → DEC pointer, superseded → delete); roll CHANGELOG entries beyond ~3 sessions
+  to `CHANGELOG-ARCHIVE.md` verbatim; new DECs = full body in `DECISIONS-FULL.md` + index row in
+  `DECISIONS.md`. **Move text, never delete or rewrite history** — and because this repo is public,
+  run `scripts/check_secrets.sh` over anything a doc move rehomes.
 - Sessions use **this repo's own independent counter** — a session number means something only within
   this repo (cross-repo refs are prefixed, e.g. `weewx S23` vs `dash S40`). **`docs/STATUS.md` is the
   single source of truth for the current session number** — take it from there (+1 for a new session),

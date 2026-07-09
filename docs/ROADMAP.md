@@ -3,8 +3,8 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see STATUS.md (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-07-05 (S24 — added **P0.6** code-quality review + fixes (H1/H2/M3/U3 done, rest
-→ S25); marked the P0.5 review follow-on done. See CHANGELOG `[S24]`, docs/CODE_REVIEW_S24.md.)
+**Last updated:** 2026-07-09 (S35 — docs diet DEC-0030: collapsed DONE sections to pointer
+summaries; reconciled P0.6/P1/P1.5 to reality — v2.0.3 shipped S32, sensor-QC resolved S33.)
 
 STATUS.md holds what's *in motion right now*; this holds the ordered plan. BACKLOG.md holds
 unordered ideas not yet scheduled.
@@ -37,10 +37,8 @@ coding, and the **No-Rewrite Rule** (DEC-0014).
 # SHORT TERM (P0–P1) — the current focus
 
 ## P0 — Governance bootstrap (S16–S20) — ✅ DONE
-- [x] Reconcile repo with production truth; tag `prod-baseline-20260704` (S16).
-- [x] Docs bootstrap: nine-file governance model, backfilled DECs, INTERFACES (S17).
-- [x] Pre-commit + CI: ruff / ruff-format / mypy + the `check_secrets.sh` gate (S17–S20, DEC-0015).
-- [x] Independent per-repo session numbering (S20, DEC-0023 supersedes DEC-0013).
+Prod-truth reconcile + `prod-baseline-20260704`, nine-file governance, CI/pre-commit + secret gate,
+independent session numbering. See CHANGELOG-ARCHIVE `[S16]`–`[S20]`, DEC-0010…0017, DEC-0023.
 
 ## P0.5 — Governance alignment across the family (S23, this initiative) — IN PROGRESS
 Bring this repo's *form* into line with the sibling repos and external best practice, keeping content
@@ -56,51 +54,26 @@ isolated (ASSESSMENT.md §2). Docs-only; zero prod risk.
       + the bare `additions` artifact a documented home or remove them (S23).
 - [x] **Code-quality review of rtldavis.py + monitor + uploaders** — done S24; promoted to its own
       workstream (see **P0.6** below). Per-file SPDX headers folded into P0.6.
+- [x] **Docs diet (DEC-0030)** — tiered session read, DECISIONS index+FULL split, CHANGELOG roll,
+      STATUS prune ritual; the family-wide pattern (dash DEC-0081 → hyperlocal DEC-0095 → here) — S35.
 - [ ] **Follow-on (own session):** Keep-a-Changelog headings + DECISIONS entry-skeleton convergence (S25).
 - Two remaining P0 housekeeping stragglers, tracked here: fix remote URL casing (lowercase →
   canonical `WeatheredScientist/`); review + clean the stale public `origin/feature/influxdb-grafana`
   branch (cherry-pick the driver-relevant `3f5470f` wind-warmup fix, move dashboard JSON out per
   DEC-0010, delete the branch from the remote).
 
-## P0.6 — Code-quality review + fixes (S24) — IN PROGRESS
-Outcome of the P0.5 review follow-on. Ranked findings in `docs/CODE_REVIEW_S24.md`; fixes on
-`feature/s24-code-quality-review` (draft **PR #5**, stacked on the S23 branch). No-Rewrite honored;
-each fix ships with a proven regression test (offline suite 29/29).
-- [x] Full read + ranked findings across `rtldavis.py`, `weewx_monitor.py`, and all uploaders +
-      `loop_json_writer.py` (`docs/CODE_REVIEW_S24.md`, PR #5) — S24.
-- [x] **H1** — `parse_raw` unknown-channel `raw`→`pkt` NameError crash; fix + test (`0929952`).
-- [x] **H2** — `pct_good_all` deadlock that left the driver's own `rxCheckPercent` permanently null;
-      fix + test (`970c47e`). **Live-confirm rxCheckPercent starts populating on deploy.**
-- [x] **M3 + U3** — gate the per-packet `RAW_*` (driver) / per-record `loginf` (influx) INFO logging
-      out of `weewx.log` — the bloat (`8872947`).
-- [ ] **U1/U2** — re-base `owm.py` on the standard RESTThread overrides (regains retry/backoff),
-      modelled on `windy.py`; delete its dead `format_url`/`post_request`/`import time` (S25).
-- [ ] **U4** — restore TLS verification in `influx.py` with an opt-out flag (S25).
-- [ ] **M-A** — `weewx_monitor.py` incremental (byte-offset) log read — **after** the Layer A deploy
-      (P1.5), since both edit the monitor and Layer A is tested + queued (S25).
-- [ ] **M4 + nits + SPDX** — delete dead `_fmt` / `parse_readings`; L5/L6/L-B/L-C/L-D/U5 cleanups;
-      per-file SPDX `GPL-3.0-or-later` headers (S25).
-- **Deploy note:** H1/H2/M3 are branch-only — they need a rebuild + hot-swap; fold into the next
-  driver deploy (the P1 v2.0.3 / dewpoint rebuild cycle).
+## P0.6 — Code-quality review + fixes (S24–S25, M-A S28) — ✅ DONE
+Ranked findings in `docs/CODE_REVIEW_S24.md`; all fixes landed with regression tests — H1/H2/M3/U3
+(S24), U1/U2 owm rebase, U4 TLS, M4 dead code, nits + SPDX headers (S25), M-A/L-B monitor
+incremental read (S28). See CHANGELOG-ARCHIVE `[S24]`, `[S25]`, `[S28]`. Driver fixes shipped in
+v2.0.3 (S30/S32).
 
-## P1 — The false-rain fix → v2.0.3 (the proving run) — IN PROGRESS
-First real change through the governed workflow. Defense in depth (DEC-0006 null-on-rejection):
-1. [x] **Confirm root cause** — lone +128 rain-counter step-and-return (0x80 bit-flip) at pre-dawn
-       battery/reception dips (S18, DEC-0021).
-2. [x] **StdQC tightening** — `[StdQC]` `rain 0,10 → 0,1.0`, added `rainRate 0,16` (S18, live).
-3. [x] **Driver spike filter** — reject implausible single-packet rain-counter deltas in `rtldavis.py`
-       (S18, `be72832`, 13/13 tests); email alert on rejection (`3aabee8`). Deployed live 2026-07-04
-       via reversible hot-swap; monitor restarted (PID 584).
-4. [~] **Verify in the wild** — a live storm right after deploy (0.44", peak ~1.5 in/hr) flowed through
-       with zero false rejections. **Still awaiting the first real glitch** to confirm fix + alert
-       together (calendar-bound, ~1 glitch / 2–3 wk; none as of S22). **This gates promotion.**
-5. [ ] **Reception-metric Layer A fix** (DEC-0024, S22, draft PR #3 `feature/reception-dedup`) — dedup
-       WU publishes on record epoch so the daily RF summary reads ≤100% (was ~150%). Built + 6 tests;
-       **deploy = monitor restart only**; not yet deployed. Review + merge.
-6. [ ] **Release v2.0.3** — once the rain fix has ridden clean a few days: merge
-       `feature/rain-spike-filter` → `dev` → `main`, tag, release on GitHub + Docker Hub. **Fold in the
-       pending honest-null dewpoint rewrite** (Jun-16 host version — dewpoint is baked, so this needs an
-       **image rebuild**, a bigger deploy than the hot-swap; plan it). May also address DEC-0022 #1.
+## P1 — The false-rain fix → v2.0.3 (the proving run) — ✅ DONE
+Root cause DEC-0021, StdQC tightening + driver spike filter + email alert (S18), reception-metric
+Layer A (S22/S27) then re-based on `rxCheckPercent` (S31, DEC-0024), honest-null dewpoint + clobber
+fix baked (S30). **v2.0.3 released S32** (`v2.0.3` + `prod-baseline-20260705`, GitHub + Docker Hub)
+— the wild-glitch gate was consciously waived on live evidence (DEC-0026); still 0 rejections to
+date (watch continues, STATUS). See CHANGELOG-ARCHIVE `[S18]`–`[S32]`.
 
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
 bound and done via reversible live hot-swap with an instant rollback path.
@@ -109,12 +82,10 @@ bound and done via reversible live hot-swap with an instant rollback path.
 
 # MEDIUM TERM (P2–P3) — after v2.0.3
 
-## P1.5 — Sensor-QC hardening (DEC-0022) — after v2.0.3
-- [ ] Fix the stale-substitution DEC-0006 violation in `dewpoint_service.py`: null
-      temp/humidity/radiation/UV after a sensor-failure timeout instead of holding the last value
-      forever — while still caching across the VP2+'s normal sparse-packet field rotation. Likely folds
-      into the pending dewpoint rewrite.
-- [ ] Add minor `[StdQC]` bounds: high-side `windGust`, `radiation`, `UV`.
+## P1.5 — Sensor-QC hardening (DEC-0022) — ✅ RESOLVED (DEC-0029, S33) · deploy pending
+Both items superseded by the decode-layer `SensorQC` filter + DewpointCacher timeout-null
+(DEC-0029, merged to `dev` S34). **Ships with the owner-run v2.0.4 rebuild** — the live-verify plan
+is STATUS's active thread.
 
 ## P2 — RF optimization, done honestly (PRINCIPLES §3)
 - [ ] 24 h+ **averaged gain sweep, no inline preamp**, to settle gain 372-vs-207 (DEC-0017). ~1–2 wk.
