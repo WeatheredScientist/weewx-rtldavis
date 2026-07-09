@@ -242,9 +242,9 @@ enforced, so these are multi-bit/mis-decode glitches that pass CRC — the filte
 the *class* of implausible value, not a specific bit. The rainRate bound is minor insurance: the
 driver fix already closes the main rainRate-pollution path (StdRainRater computing from phantom rain).
 
-## DEC-0022 — Sensor-QC hardening deferred to S19 (OPEN)
+## DEC-0022 — Sensor-QC hardening deferred to S19 (RESOLVED by DEC-0029, S33)
 
-**Status:** Deferred · **Date:** 2026-07-04 (S18)
+**Status:** Resolved (S33 — see DEC-0029; wind was already fixed honest-null in v2.0.3) · **Date:** 2026-07-04 (S18)
 
 Two similar-vein issues found during the S18 rain audit, deferred to a dedicated S19 pass so the
 rain fix stays tightly scoped:
@@ -477,3 +477,53 @@ do not rewrite public history.**
 
 Related: the WU API key from the same pre-governance era (S16 find) is still awaiting owner rotation
 — same playbook applies.
+
+## DEC-0029 — Decode-layer sensor plausibility filter (temp/humidity/wind/UV/radiation)
+
+**Status:** Accepted · **Date:** 2026-07-08 (S33) · **Resolves:** DEC-0022 · **Extends:** DEC-0021/DEC-0006
+
+**Problem.** The rain glitch's failure class — multi-bit RF corruption that passes CRC and decodes
+to a wrong bit-field — hits every sensor, but only rain had a decode-layer filter (DEC-0021). S33
+evidence (50 days of archive, 68,877 records):
+
+- **outHumidity:** 18 confirmed one-minute glitch spikes (flat radiation + flat temp rules out the
+  cloud/shield explanation). Deviations cluster at **25.6/3 ≈ 8.5%** and **12.8/2 ≈ 6.4%** — exactly
+  single bit-7/bit-8 flips of the raw %×10 field averaged over the minute's 2–3 readings. The
+  midday-only pattern is a **selection effect**: at night (RH ~90%) the same flips land >100%, StdQC
+  nulls them, and the DewpointCacher carry-forward hides the null — so the archive *understates* the
+  true rate.
+- **UV:** one physically impossible record (16.29 under 320 W/m² overcast, 2026-05-30 15:50).
+- **Wind:** the 201 mph loop-only spike (S30) — never archived because StdQC/DewpointCacher run
+  *behind* `LoopJsonWriter` (a `data_service`), which is exactly why only the decode layer protects
+  the live dashboard. (S30's suspected `MAX_WIND_DELTA` unit mismatch was **disproven**: DewpointCacher
+  runs after StdConvert with `target_unit = US`, so 75.0 is correctly mph.)
+- **outTemp/windGust:** archive clean — dashboard temp spikes were loop-path-only, same as wind.
+
+**Decision.** A two-layer filter (`SensorQC` in `rtldavis.py`) applied in `_data_to_packet` (rain's
+choke point), so all consumers — loop-JSON included — see honest nulls (DEC-0006), never corrupt values:
+
+1. **Davis sensor-spec bounds** (site-agnostic, safe for any station of this public driver):
+   temperature −40..65 °C, humidity 0..100%, wind 0..89.4 m/s (200 mph), UV 0..16, radiation
+   0..1800 W/m². An impossible value never moves the delta baseline.
+2. **Per-reading delta** vs the last accepted value, for temperature (4 °C), humidity (10%), wind
+   (20 m/s), UV (8) — glitch magnitudes sit far above real inter-reading changes. **Radiation gets
+   no delta filter**: genuine cloud edges swing ±900 W/m² in a minute (enhancement to 1579 W/m²
+   observed), so bounds only. Delta rejections **resync the baseline** (the rain-filter trick): an
+   isolated glitch costs 1–2 nulled readings, a genuine step is accepted on the very next reading,
+   and no stale-baseline deadlock (the S24-H2 failure mode) is possible. Baselines expire after
+   300 s (reception gaps reseed cleanly).
+
+Rejections log `"rejecting implausible value"` (the rain filter's signature family) — the forward
+packet-evidence capture this repo lacked (the old `RAW_CHANNEL_PAYLOAD` lines held only hop metadata,
+and v2.0.3's upstream-default binary silenced even those). Config: `sensor_qc = false` master switch,
+`qc_<field>_max_delta` overrides (`weewx.conf.example` §[Rtldavis]).
+
+**Companion (closes DEC-0022 #1).** `dewpoint_service.py` carry-forward → **timeout-null**: the
+temp/humidity/radiation/UV cache still bridges the ISS message-type rotation, but expires after
+300 s of sensor silence (`CACHE_TIMEOUT_SECONDS`) — a failed sensor now reads null, not frozen.
+dewpoint/heatindex are computed only from fresh values. DEC-0022 #2 (StdQC radiation/UV bounds) is
+superseded at the decode layer; the windGust>windSpeed consistency check stays in `_filter_wind`.
+
+**Deploy:** the driver is baked (S30) — ships with the next image rebuild (v2.0.4), not a hot-swap.
+Tests: `tests/test_sensor_qc.py` (16) + `tests/test_dewpoint_timeout_null.py` (6), recorded-signature
+based, suite 85/85.
