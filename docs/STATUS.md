@@ -11,26 +11,25 @@ is actively in motion, parked, or needs a check.
   copy. Handoff state lives here (in the repo, visible on GitHub), never only in private memory.
 
 When something here becomes permanent (a decision is made, a feature ships), move it to
-DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short.
+DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune at every session
+close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
+the story, this file only points at it.
 
-> **Current session: S34** (2026-07-08) — **S33 sensor-QC work merged to `dev` (PR #17,
-> `db763c8`); health check clean; parked in a stable spot.** Owner-approved goal: end somewhere that
-> holds for days/weeks. Health check: container on `:v2.0.3`, up 16 h, RestartCount=0;
-> `rxCheckPercent` 68–80% live, 6 h mean 74.6% with zero archive gaps (360/360 minute rows); 0 rain
-> rejections ever; monitor polling normally. **Reception Layer B (DEC-0024) decided: waits for
-> v2.0.5** — keep v2.0.4 single-purpose (data-integrity fix with its own live-verify plan; Layer B
-> is cosmetic + log bloat, undesigned, No-Rewrite applies; the S31 monitor fix already made the
-> emails honest). Verified the S33 Dockerfile bakes the patched driver (the S30 clobber trap is
-> guarded at Dockerfile L99–101), so the v2.0.4 rebuild will genuinely ship `SensorQC`.
+> **Current session: S35** (2026-07-09) — **Docs diet (DEC-0030): tiered session read ported from
+> the siblings.** The dashboard's DEC-0081 playbook (`docs/reference/docs-diet-playbook.md` there)
+> + hyperlocal's DEC-0095 port, applied here: DECISIONS split into index + `DECISIONS-FULL.md`,
+> CHANGELOG rolled to ~3 live sessions + `CHANGELOG-ARCHIVE.md`, CLAUDE.md doc map now two-tier,
+> STATUS prune + CHANGELOG roll added to the close ritual. Session boot: ~32K → ~8K tokens.
+> Docs-only — **no code, no prod change**; prod still on `:v2.0.3`, S34's parked state unchanged.
 
-_Last updated: 2026-07-08 (S34 — PR #17 merged, prod healthy on v2.0.3; next move is the owner-run
+_Last updated: 2026-07-09 (S35 — docs diet, DEC-0030; substantive next move is still the owner-run
 v2.0.4 rebuild whenever convenient)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S34 → S35).** Sensor-QC (DEC-0029 + DEC-0022) is **merged to `dev`, undeployed**.
+> **▶ Resume here (S35 → S36).** Sensor-QC (DEC-0029 + DEC-0022) is **merged to `dev`, undeployed**.
 > Prod is stable on `:v2.0.3` and can stay there indefinitely. The single next move is the
 > **owner-run v2.0.4 image rebuild → deploy → live-verify** (see "Next session actions"). Nothing
 > else is time-sensitive.
@@ -75,18 +74,15 @@ v2.0.4 rebuild whenever convenient)._
 - **Snow / freezing / no heating tape** (parked, owner's future thread) — cold-weather failure modes
   we haven't designed for. 2026 = learning year.
 
-## Next session actions (S34 done → S35)
+## Next session actions (S35 done → S36)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S34 (2026-07-08):** health check clean (`:v2.0.3`, up 16 h, RestartCount=0;
-`rxCheckPercent` 6 h mean 74.6%, min 50, 360/360 rows; 0 rain rejections; monitor polling);
-**PR #17 merged → `dev`** (`db763c8`) — SensorQC (DEC-0029) + DewpointCacher timeout-null
-(DEC-0022) now staged; Layer B decided → v2.0.5; Dockerfile verified to bake the patched driver
-(S30 clobber trap guarded). **Stable parking spot: prod runs proven v2.0.3; the merge changed
-nothing live. No timer is running — resume whenever convenient.**
+**✅ Done in S35 (2026-07-09):** docs diet (DEC-0030) — see CHANGELOG `[S35]`. Docs-only; prod
+untouched, still the S34 parked state (see CHANGELOG `[S34]`): `:v2.0.3` healthy, SensorQC staged
+on `dev`, no timer running — resume whenever convenient.
 
-**▶ ON RETURN (S35), the one thread that matters:**
+**▶ ON RETURN (S36), the one thread that matters:**
 1. **Build + deploy v2.0.4** (owner-run, same S30 procedure: native amd64 build on the NAS,
    verify the baked driver contains `SensorQC` before `docker rm -f` + re-run, keep `:v2.0.3`
    for rollback). Then live-verify: `rejecting implausible value` rejections appear at a sane rate
