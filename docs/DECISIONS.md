@@ -22,9 +22,9 @@ a later entry.
 | DEC-0001 | Passive 915 MHz interception via RTL-SDR | Accepted | ~2026-04 (S1) |
 | DEC-0002 | Ubuntu 26.04 / Python 3.14 multistage Docker build | Accepted | ~2026-05 |
 | DEC-0003 | Same-repo tags for versioning (Option 2) | Accepted | ~2026-05-26 |
-| DEC-0004 | Volume-mount extensions for hot iteration; bake stable code | Accepted | ~2026-06 |
+| DEC-0004 | Volume-mount extensions for hot iteration; bake stable code | Accepted · **driver half superseded** by DEC-0031 | ~2026-06 |
 | DEC-0005 | Custom `loop_json_writer.py`; weewx-loopdata rejected | Accepted | ~2026-06 |
-| DEC-0006 | Null-on-rejection filter philosophy | Accepted | ~2026-06 |
+| DEC-0006 | Null-on-rejection filter philosophy (**runtime only** — see DEC-0032) | Accepted · **clarified** by DEC-0032 | ~2026-06 |
 | DEC-0007 | Upload services use the WeeWX RESTThread pattern | Accepted | ~2026-05 |
 | DEC-0008 | `docker kill`, never `docker stop` | Accepted | ~2026-05 |
 | DEC-0009 | Dedicated limited user for the NAS-side monitor | Accepted | ~2026-06 |
@@ -46,6 +46,8 @@ a later entry.
 | DEC-0028 | Leaked credential in pushed public history: rotate immediately, don't rewrite | Decided | 2026-07-08 (S32) |
 | DEC-0029 | Decode-layer sensor plausibility filter (temp/humidity/wind/UV/radiation) | Accepted · **resolves** DEC-0022 | 2026-07-08 (S33) |
 | DEC-0030 | Docs diet: tiered session read, DEC index+full split, CHANGELOG roll, STATUS prune | Accepted | 2026-07-09 (S35) |
+| DEC-0031 | The driver is BAKED into the image, never bind-mounted (supersedes DEC-0004's driver half) | Accepted | 2026-07-12 (S36) |
+| DEC-0032 | Retrospective correction: correct to the KNOWN value, flag it in-band (`rain_qc`) | Accepted · **clarifies** DEC-0006 | 2026-07-12 (S36) |
 
 ## Open / deferred
 

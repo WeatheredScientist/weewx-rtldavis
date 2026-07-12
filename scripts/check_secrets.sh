@@ -48,14 +48,32 @@ for f in "${files[@]}"; do
 
   # (b) assignment-style secrets with a real value.
   # Allow-list (not a secret): YOUR_* / ${ENV} / env lookups / empty / self-assign /
-  # config lookups / comments / an ALL_CAPS constant reference (= FOO_KEY) / a
-  # docstring param description (: WeatherCloud key).
+  # config lookups / comment-only lines / an ALL_CAPS constant reference (= FOO_KEY) /
+  # a docstring param description (: WeatherCloud key, i.e. prose, not a token).
+  #
+  # THE ALLOW-LIST MUST BE CASE-SENSITIVE (`grep -vE`, NOT `grep -viE`).
+  # Its [A-Z] terms carry the whole distinction between a constant reference and a
+  # literal secret, and `-i` erases it: with -i, the ALL_CAPS rule (= FOO_KEY) also
+  # matches `token = abc12345678`, so essentially every unquoted real secret was
+  # whitelisted. The gate looked green and caught nothing. (Same bug, same fix, as
+  # the dashboard repo's DEC-0063.) The secret_re grep below KEEPS -i, so Token /
+  # TOKEN / token are all still detected -- it is only the allow-list that is strict.
+  #
+  # Two further holes closed at the same time (both were live here and upstream):
+  #   - `# ` matched a comment ANYWHERE on the line, so `api_key = REAL  # note`
+  #     passed. Now anchored to comment-ONLY lines.
+  #   - the docstring rule matched a capitalized single token, so `api_key: Secret123`
+  #     passed. Now it requires a capitalized word FOLLOWED BY ANOTHER WORD, i.e.
+  #     actual prose ("key: WeatherCloud key"), which a bare credential never is.
+  #     `api_key: Secret123` and `api_key: SecretValue` are both caught; only a
+  #     multi-word description is let through.
+  #
   # NOTE: the allow-list runs against `grep -n` output, so every line carries a
   # leading "<lineno>:" prefix. The docstring-param rule must require an ALPHA char
   # immediately before the colon ([A-Za-z]:) — otherwise it matches that numeric
   # prefix's colon (e.g. "1:api_key = ...") and silently whitelists real secrets.
   hits=$(grep -nEi "$secret_re" "$f" 2>/dev/null \
-    | grep -viE 'YOUR_|\$\{|os\.environ|getenv|argv|input\(|= *""|= *None|= *-1\b|self\.(password|token|key|api[_a-z]*)|options\.|\.get\(|site_dict|config_dict|# |description|Authorization|InfluxDB 2\.x|=[[:space:]]*[A-Z][A-Z0-9_]{3,}\b|[A-Za-z]:[[:space:]]*[A-Z][a-z]')
+    | grep -vE 'YOUR_|your_|\$\{|os\.environ|getenv|argv|input\(|= *""|= *None|= *-1\b|self\.(password|token|key|api[_a-z]*)|options\.|\.get\(|site_dict|config_dict|^[0-9]+:[[:space:]]*#|description|Authorization|InfluxDB 2\.x|=[[:space:]]*[A-Z][A-Z0-9_]{3,}\b|[A-Za-z]:[[:space:]]*[A-Z][A-Za-z]*[[:space:]]+[A-Za-z]')
   if [ -n "$hits" ]; then
     echo "SECRET-SCAN: possible embedded secret in $f:"; echo "$hits"; status=1
   fi
