@@ -570,3 +570,48 @@ repos measured 4–8× reductions with no history loss. Consistency across the f
 meta-goal (docs/ASSESSMENT.md): all three repos now share the same tiered-read + index/archive
 skeleton. Extends DEC-0010 (the governance model) rather than superseding it — the nine files
 remain; only the default read protocol changes.
+
+---
+
+## DEC-0031 — The driver is BAKED into the image, never bind-mounted
+
+**Date:** 2026-07-12 (S36) · **Status:** Accepted · **Supersedes:** the driver half of DEC-0004
+
+**Context.** weewx imports `user.*` from the venv — `/opt/weewx-venv/lib/python3.14/site-packages/user/`
+— and **not** from `weewx-data/bin/user/`. That single fact has now caused the same silent failure
+twice, by two different mechanisms, and cost roughly two sessions of debugging each time:
+
+1. **Build time (found S30).** `Dockerfile` did `cp /opt/weewx-data/bin/user/rtldavis.py` over the
+   patched driver it had just `COPY`'d in. `weectl extension install` lays the **stock** upstream
+   driver down at that path, so every image ever built shipped the stock driver. This is why
+   `rxCheckPercent` was NULL for weeks and why the July-4 phantom rain (ERR-0001) entered the archive
+   with a rain filter supposedly deployed: the filter was never in the running code.
+2. **Run time (found S36).** `docker-compose.yml` bind-mounted that same host path over the baked
+   driver, `:ro`. The running prod container happened to escape it (it was hand-run without the
+   mount), but the mount shipped in the **public** compose file — so downstream users of the
+   published image have been running the stock driver regardless of what the image contains.
+
+Both failures are **silent and actively misleading**: the version tag, the logs, and the file the
+operator just edited all agree the fix is present, while the process runs different code. The S69
+dashboard handoff independently recommended a `weewx-data` `scp` hot-fix as the cheap deploy path —
+which would have been a no-op for exactly this reason. The trap is not obvious; it is *anti*-obvious.
+
+**Decision.**
+1. **The driver (`rtldavis.py`) is baked into the image. It is never bind-mounted, at build or run
+   time, in any compose file, on any host.** To change the driver you rebuild the image. There is no
+   hot-swap path for the driver, and one must not be reintroduced for convenience.
+2. **Services and uploaders may still be mounted** (`influx.py`, `loop_json_writer.py`,
+   `ogoxeUploader.py`, …). Nothing bakes over them, so DEC-0004's hot-iteration benefit is retained
+   where it is actually safe. It is the *driver* that is carved out, not the whole idea.
+3. **Verification is mandatory before declaring a driver deploy done** — the version tag is not
+   evidence. Assert against the running process:
+   `docker exec <ctr> /opt/weewx-venv/bin/python3 -c "import user.rtldavis as m; print(m.__file__, hasattr(m,'SensorQC'))"`
+   and confirm `docker inspect` shows **no** mount landing on `.../site-packages/user/rtldavis.py`.
+4. Both the `Dockerfile` and `docker-compose.yml` carry an explicit "do NOT re-add this" comment at
+   the exact line where the clobber used to live, naming the consequence.
+
+*Rationale:* a hot-swap that silently does nothing is far worse than no hot-swap at all — it
+manufactures false confidence and sends the next session hunting a phantom bug in the wrong layer.
+Baking is slower per iteration and honest; mounting was faster and lied. Given the data this driver
+produces is uploaded to WU/CWOP → NOAA MADIS, where it is **immutable** (DATA_ERRATA "external"),
+false confidence in a QC fix is a data-integrity hazard, not just a developer annoyance.
