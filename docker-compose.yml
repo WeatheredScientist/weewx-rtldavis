@@ -42,9 +42,22 @@ services:
       # Core data + logs
       - /your/path/weewx-rtldavis/weewx-data:/opt/weewx-data
       - /your/path/weewx-rtldavis/logs:/var/log/weewx
-      # Hot-swappable extensions (see note above). Mounting these lets you
-      # iterate on the driver/uploaders without rebuilding the image.
-      - /your/path/weewx-rtldavis/weewx-data/bin/user/rtldavis.py:/opt/weewx-venv/lib/python3.14/site-packages/user/rtldavis.py:ro
+      #
+      # DO NOT mount rtldavis.py here. The driver is BAKED into the image
+      # (Dockerfile COPYs the patched rtldavis.py into the venv, which is where
+      # weewx actually imports user.* from). This file used to carry:
+      #
+      #   - .../weewx-data/bin/user/rtldavis.py:/opt/weewx-venv/.../user/rtldavis.py:ro
+      #
+      # and that line mounted the host's copy -- which for most installs is the
+      # STOCK driver that `weectl extension install` lays down -- straight over
+      # the patched, baked one. The result was silent: the container ran the
+      # stock driver, with no rain-glitch filter and no SensorQC, while every
+      # log line and version tag insisted otherwise. It cost us two sessions of
+      # "the fix isn't live" (S30, DEC-0029). Bake the driver; don't mount it.
+      #
+      # Hot-swappable extensions (see note above). These ARE safe to mount --
+      # they are services/uploaders, not the driver, so nothing bakes over them.
       - /your/path/weewx-rtldavis/influx.py:/opt/weewx-venv/lib/python3.14/site-packages/user/influx.py:ro
       - /your/path/weewx-rtldavis/loop_json_writer.py:/opt/weewx-venv/lib/python3.14/site-packages/user/loop_json_writer.py:ro
       - /your/path/weewx-rtldavis/weewx-data/bin/user/ogoxeUploader.py:/opt/weewx-venv/lib/python3.14/site-packages/user/ogoxeUploader.py:ro
