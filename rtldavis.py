@@ -220,9 +220,17 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
 # overcast (2026-05-30) and a 201 mph loop-only wind spike (2026-07-05).
 # Rain got a decode-layer filter in S18 (rain_delta_tips above); this extends
 # the same idea to temperature/humidity/wind/UV/radiation at the same choke
-# point (_data_to_packet), so ALL consumers are covered -- including the
-# loop-JSON feed, which runs BEFORE StdQC/StdConvert/DewpointCacher and was
-# reaching the live dashboard unfiltered.
+# point (_data_to_packet), so ALL consumers are covered -- every sink reads a
+# packet the driver has already vetted, whatever the service order happens to be.
+#
+# History (do not re-derive): when DEC-0029 was written the loop-JSON feed ran
+# in data_services, i.e. BEFORE StdQC/StdConvert/DewpointCacher, and was
+# reaching the live dashboard unfiltered -- that was this filter's original
+# motivation. Since 2026-07-12 LoopJsonWriter runs at the END of
+# process_services, so it now sees StdQC and the derived fields too. The two
+# guards are complementary, not redundant: this filter catches decode errors at
+# the source for every consumer; the service order is what gives the loop feed
+# its derived fields (barometer/dewpoint/heatindex), which this filter cannot.
 #
 # Two layers (full rationale: docs/DECISIONS.md DEC-0029):
 #   1. Davis sensor-spec bounds: a value the sensor cannot physically report
