@@ -6,6 +6,56 @@ under [Pre-S16].
 
 ---
 
+## [S36] — 2026-07-12 — v2.0.4 SHIPPED: SensorQC live; the driver-clobber found and killed; rain errata closed
+
+The deploy that three sessions had staged and never shipped. Triggered by a handoff from dashboard
+session S69, which had walked into this repo's territory, changed the live station, and found that the
+bug it was chasing was already fixed here and never deployed. **Prod is v2.0.4; the bad data flowing to
+WU/CWOP → NOAA MADIS (where it is immutable) has stopped.**
+
+- **The handoff's recommended deploy path was wrong, and finding out why was the session.** It advised
+  hot-fixing the driver by `scp`-ing to the bind-mounted `weewx-data/bin/user/rtldavis.py`. That path is
+  **not what weewx imports** — `weewxd` loads `user.*` from the baked venv — and the running container
+  had **no `rtldavis.py` mount at all**. The "fix" would have been a silent no-op.
+- **The real find: `docker-compose.yml` was mounting the STOCK driver over the baked one.** Line 33 (and
+  line 47 of the **public**, committed compose) bind-mounted `weewx-data/bin/user/rtldavis.py` — the
+  stock driver `weectl extension install` lays down — straight over the patched one. Prod escaped it only
+  because the live container was hand-run without the mount; **every downstream user of the published
+  image was running the stock driver** (no rain filter, no SensorQC), regardless of image contents. This
+  is the run-time twin of the S30 build-time `cp` clobber. Removed, with a "do NOT re-add" note at the
+  exact line. → **DEC-0031** (driver is BAKED, never mounted; supersedes DEC-0004's driver half).
+- **v2.0.4 built + deployed** (native amd64 on the NAS, `docker kill` per DEC-0008). Verified against the
+  **running process**, not the version tag: `import user.rtldavis` → `SensorQC: True`, `sensor_qc True` in
+  the log, `RestartCount: 0`, no driver mount. Reception came back **75–80%** (up from 63–70%). `:v2.0.3`
+  retained for rollback. The live `docker-compose.yml` now genuinely describes production (it still said
+  `:rw250-test`, an image two releases stale — a loaded gun for any future `compose up`).
+- **Rain errata closed — all three phantoms, both stores.** A full-history sweep of InfluxDB and the
+  SQLite archive finds **exactly three** implausible rain points ever. ERR-0002 (**new**, 2026-05-25
+  23:22 EDT, +1.28" — a bit-7 flip; S69 spotted it, re-verified from scratch here) is now logged and
+  corrected; ERR-0001's long-pending InfluxDB correction is finally applied. Both stores now agree
+  exactly (2026-07-04 = 0.56", 2026-05-25 = 0.06"), which fixes the public water-balance charts.
+  The "no `influx` CLI on the NAS" blocker in STATUS was **false** — there is one in the container.
+- **DEC-0032 — retrospective correction: correct to the KNOWN value, flag it in-band.** DEC-0006's
+  null-on-rejection rule governs the **runtime filter**, not retrospective correction. The phantoms are
+  bracketed by zeros for ±20 min, so `0.0` is a *known fact* and `NULL` would have understated what we
+  know. Corrected points carry a sparse **`rain_qc = 1`** flag (3 points in all of history; InfluxDB is
+  schemaless, so it costs ~nothing and normal queries never see it) — WMO/MADIS practice, and it gives
+  the dashboard its "corrected" marker without a parallel list. `DATA_ERRATA.md` stays narrative truth.
+  → **INTERFACES.md** documents `*_qc` as an optional sparse field + pins the `record,binding=archive`
+  series key.
+- **`scripts/check_secrets.sh` never worked — fixed.** The allow-list ran with `grep -viE`; the `-i`
+  erased the `[A-Z]` terms that carry the whole constant-vs-literal distinction, so the ALL_CAPS rule
+  (meant to allow `= FOO_KEY`) also swallowed any unquoted lowercase literal — i.e. essentially every
+  real secret written without quotes. **The gate was green because it caught nothing.** Now
+  case-sensitive (the secret pattern keeps `-i`), plus two further holes closed that were live here *and*
+  upstream: `# ` matched a comment anywhere on the line, and the docstring rule passed a capitalized
+  single token. Verified 6/6 planted forms blocked, whole tracked tree clean. (Ports the dashboard's
+  DEC-0063.)
+- **Doc staleness swept:** ARCHITECTURE §6 claimed the running image was `rw250-test` and the Dockerfile
+  "an rw350 experiment" (both stale since S30); CLAUDE.md + CONVENTIONS named the same dead tag. All now
+  state the real image and the baked-driver rule. `weewx.conf.example` reconciled with the live station
+  (S69's service reorder + tightened StdQC bounds); the stale DEC-0029 comment in `rtldavis.py` fixed.
+
 ## [S35] — 2026-07-09 — Docs diet (DEC-0030): tiered session read, DEC index+full split, CHANGELOG roll
 
 Docs-only; no code, no prod change. Ports the family docs-diet pattern — born on the dashboard
