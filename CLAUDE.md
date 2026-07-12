@@ -70,7 +70,9 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
   `scp -P <SSH_PORT> -O` · no `bc`/`tmux`/`screen` (use bash integer arithmetic + `nohup`).
   Real values in gitignored `docs/LOCAL_INFRA.md`.
 - Docker: `/usr/local/bin/docker` (no sudo); container `weewx-rtldavis-v2`,
-  image `weatheredscientist/weewx-rtldavis:rw250-test`
+  image `weatheredscientist/weewx-rtldavis:v2.0.4` (prod since 2026-07-12; `:v2.0.3` kept for rollback)
+- **The driver is BAKED, never mounted** (DEC-0031) — `weewx-data/bin/user/rtldavis.py` is NOT what
+  runs. A driver fix needs an image rebuild; an `scp`/hot-swap there is a silent no-op.
 - Project root on NAS: `/volume1/docker/weewx-rtldavis/` · live config:
   `.../weewx-data/weewx.conf` · container venv user files:
   `/opt/weewx-venv/lib/python3.14/site-packages/user/`

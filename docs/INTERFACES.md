@@ -70,6 +70,15 @@ fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.
   suffixed names — renaming a field is a breaking change.
 - `ops/backfill_influx.py` / `backfill_container.py` write **missing** archive rows to InfluxDB from
   the WeeWX SQLite archive using this same schema — use them to repair gaps, never to duplicate.
+- **Series key:** `record,binding=archive` (measurement `record`, one tag `binding`). A correction or
+  backfill MUST reuse this exact series key, or it forks a parallel series instead of overwriting.
+- **QC flag fields (`<field>_qc`) — sparse, added S36 (DEC-0032).** A retrospectively corrected point
+  carries an integer flag at the *same* timestamp and series: currently only **`rain_qc = 1`** = "this
+  value was corrected; see `docs/DATA_ERRATA.md`". It is written **only at corrected timestamps** (3
+  points in all of history), never on normal records — InfluxDB is schemaless, so an absent field costs
+  nothing and normal queries never see it. **Consumers must treat `*_qc` as optional**: its absence is
+  the common case and means "not corrected". It is a *pointer* to the errata log, not a substitute for
+  it — the flag says *that* a point was corrected, DATA_ERRATA says *what, why, and how far it spread*.
 
 > The dashboard reads InfluxDB only through its own `eh-proxy` (token injected server-side there);
 > this repo never sees the dashboard's read path. Our responsibility ends at writing the documented
