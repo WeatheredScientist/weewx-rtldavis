@@ -615,3 +615,55 @@ manufactures false confidence and sends the next session hunting a phantom bug i
 Baking is slower per iteration and honest; mounting was faster and lied. Given the data this driver
 produces is uploaded to WU/CWOP → NOAA MADIS, where it is **immutable** (DATA_ERRATA "external"),
 false confidence in a QC fix is a data-integrity hazard, not just a developer annoyance.
+
+---
+
+## DEC-0032 — Retrospective correction: correct to the KNOWN value, flag it in-band
+
+**Date:** 2026-07-12 (S36) · **Status:** Accepted · **Clarifies:** DEC-0006 · **Serves:** DEC-0025
+
+**Context.** DEC-0006 ("null on rejection, never stale substitution") was read as *"every correction
+must be NULL."* Applying that to the phantom rain events produces a worse record, not a better one.
+All three phantoms (ERR-0001 ×2, ERR-0002) are **bracketed by zeros for ±20 minutes**: we know, as a
+matter of positive evidence, that it did not rain. Writing `NULL` there says *"we don't know"* — which
+is false, and understates what we know. Writing `0.0` states the fact.
+
+The apparent conflict dissolves once the two acts are separated:
+
+- **Runtime rejection** (DEC-0006): the driver has just rejected a reading and has **no idea** what the
+  true value was. Substituting anything — a stale cached value, an interpolation, a zero — fabricates
+  data. It must emit `None`. **Unchanged.**
+- **Retrospective correction** (this DEC): we are looking at the surrounding record, offline, with
+  full context, and can often establish the true value with confidence. Recording that value is not
+  fabrication; it is the correction.
+
+`NULL` is not "safe by default" — it is itself a claim ("unknown"), and an incorrect one when the
+value is in fact known.
+
+**Decision.**
+1. **Correct to the known value where positive evidence establishes it; correct to `NULL` only where
+   the true value is genuinely unknown.** For an isolated rain bit-flip bracketed by zeros, the
+   corrected value is **`0.0`** — a fact, not a guess. For, say, a corrupt temperature with no way to
+   recover the real reading, `NULL` remains correct.
+2. **The evidence must be stated in the errata entry.** A correction to a known value is only
+   admissible if `DATA_ERRATA.md` records *why* we know it (here: "every minute for ±20 min reads
+   exactly 0.0"). No evidence → `NULL`.
+3. **Flag the correction in-band, sparsely.** InfluxDB corrected points carry a **`rain_qc = 1`** field
+   written **only at the corrected timestamps**. InfluxDB is schemaless, so an absent field costs
+   nothing: the flag's storage scales with the number of *corrections* (3 points, well under 1 KB), not
+   with data volume, and it adds **zero** overhead to queries that don't ask for it. This mirrors
+   WMO/NOAA-MADIS practice — keep the value, attach a quality flag — and gives the dashboard a way to
+   render a "corrected" marker straight from the data instead of maintaining a parallel list.
+4. **`DATA_ERRATA.md` remains the narrative source of truth.** The in-band flag is a pointer to it, not
+   a replacement: the flag says *"this was corrected"*, the errata says *what, why, and how far it
+   spread*. A consumer must never have to reconstruct the story from flags alone.
+5. **Both stores must agree.** A correction is applied to the SQLite archive *and* InfluxDB in the same
+   session, with matching values. (ERR-0001 sat as `NULL` in the archive and uncorrected in InfluxDB
+   for a week — two stores disagreeing about one event is exactly the unauditable state this forbids.)
+
+*Rationale:* DEC-0025's "preserve and flag, never delete" is honored at the layer that actually holds
+raw data — the immutable `weewx.log` and the external WU/CWOP→MADIS copies, neither of which we touch.
+The archive and InfluxDB are explicitly the **corrected best-estimate** layer (DATA_ERRATA "Three
+layers"), so putting our best estimate in them is their purpose, not a violation of it. What must never
+happen is a corrected value that is *indistinguishable* from a measured one — which is precisely what
+the errata entry plus the in-band `rain_qc` flag prevent.

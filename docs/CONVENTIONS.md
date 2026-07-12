@@ -13,7 +13,8 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 | SSH / SCP | `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` · `scp -P <SSH_PORT> -O` (capital `-P`, `-O` for the legacy protocol) |
 | Real values | gitignored `docs/LOCAL_INFRA.md` (this repo is public — placeholders only in committed docs, DEC-0012) |
 | Docker binary | `/usr/local/bin/docker` (no sudo needed; not on the default PATH) |
-| Container | `weewx-rtldavis-v2` · image `weatheredscientist/weewx-rtldavis:rw250-test` |
+| Container | `weewx-rtldavis-v2` · image `weatheredscientist/weewx-rtldavis:v2.0.4` (rollback: `:v2.0.3`) |
+| Driver location | **BAKED** in the image venv (`site-packages/user/rtldavis.py`) — *not* `weewx-data/bin/user/`. Never bind-mount it (DEC-0031); a driver change needs a rebuild. |
 | Project root (NAS) | `/volume1/docker/weewx-rtldavis/` |
 | Live config | `.../weewx-data/weewx.conf` (bind-mounted; gain/ppm edits need only a restart) |
 | Container venv user files | `/opt/weewx-venv/lib/python3.14/site-packages/user/` |
