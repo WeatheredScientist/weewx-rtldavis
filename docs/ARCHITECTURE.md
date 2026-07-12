@@ -102,12 +102,27 @@ and lacked the bias-tee — reconciled in S16.)
 | gain / ppm / fc / a mounted `.py` / weewx.conf | container restart (`docker kill` + `docker start`) — no rebuild |
 | a baked `.py` / `entrypoint.sh` / Dockerfile / the Go binary | **image rebuild** + retag + redeploy |
 
-## 6. Known image/build provenance gaps (S16)
+## 6. Image/build provenance
 
-- Running image is tagged `rw250-test` (built 2026-06-01 14:20). The host `Dockerfile` patches the
-  Go decoder `receiveWindow 300→350` — so the **committed Dockerfile is an rw350 experiment**, while
-  the running binary is most likely **rw250**. `docker history` doesn't expose the value (patched in a
-  discarded builder layer). A clean rebuild + a 24 h receiveWindow sweep is backlogged to settle this.
+**The driver is BAKED, never mounted — this is the single most expensive trap in this repo.**
+weewx imports `user.*` from the venv (`/opt/weewx-venv/lib/python3.14/site-packages/user/`), *not*
+from `weewx-data/bin/user/`. Two separate mechanisms have each silently shipped the **stock** driver
+(no rain filter, no SensorQC) while every version tag and log line insisted otherwise:
+
+1. `Dockerfile` used to `cp weewx-data/bin/user/rtldavis.py` over the patched copy at build time —
+   fixed in S30, and the file now carries an explicit "do NOT re-add this" note.
+2. `docker-compose.yml` used to bind-mount that same host path over the baked driver at **run** time
+   — found and removed in S36. This one shipped in the **public** compose file, so downstream users
+   of the published image were running the stock driver too.
+
+If a driver fix appears not to take effect, check these two before anything else. Verify what is
+actually running with `docker exec <ctr> /opt/weewx-venv/bin/python3 -c "import user.rtldavis as m;
+print(m.__file__, hasattr(m,'SensorQC'))"` — and confirm `docker inspect` shows **no** mount landing
+on `.../site-packages/user/rtldavis.py`.
+
+*(Resolved S30: the old `receiveWindow 300→350` sed patch was dropped from the Dockerfile, so builds
+now ship the **upstream-default** receiveWindow. The rw350 experiment and its 24 h sweep remain
+backlogged; the `rw250-test` tag is a retired misnomer kept only for rollback.)*
 - The compiled `rtldavis` Go binary does **not** emit `FreqError`/`ChannelIdx` telemetry (confirmed via
   `strings`), so `-ppm`/`-fc` cannot be data-driven with the current binary — a source-rebuild
   investigation is backlogged (BACKLOG RF history).
