@@ -1,5 +1,5 @@
 #--------------------------------------------
-# weewx-rtldavis v2.0.3
+# weewx-rtldavis v2.0.4
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
@@ -94,7 +94,8 @@ COPY influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py
 #--------------------------------------------
 # Copy the patched rtldavis.py — the driver weewx actually imports (user.* resolves
 # to venv site-packages/user). Carries: windDir fix (v2.0.2), rain spike filter,
-# and the S24 H1/H2/M3 fixes (H2 revives rxCheckPercent). v2.0.3.
+# the S24 H1/H2/M3 fixes (H2 revives rxCheckPercent), and the SensorQC
+# decode-layer plausibility filter (DEC-0029). v2.0.4.
 #--------------------------------------------
 COPY rtldavis.py /opt/weewx-venv/lib/python3.14/site-packages/user/rtldavis.py
 

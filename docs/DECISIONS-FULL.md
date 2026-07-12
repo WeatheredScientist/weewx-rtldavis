@@ -570,3 +570,100 @@ repos measured 4–8× reductions with no history loss. Consistency across the f
 meta-goal (docs/ASSESSMENT.md): all three repos now share the same tiered-read + index/archive
 skeleton. Extends DEC-0010 (the governance model) rather than superseding it — the nine files
 remain; only the default read protocol changes.
+
+---
+
+## DEC-0031 — The driver is BAKED into the image, never bind-mounted
+
+**Date:** 2026-07-12 (S36) · **Status:** Accepted · **Supersedes:** the driver half of DEC-0004
+
+**Context.** weewx imports `user.*` from the venv — `/opt/weewx-venv/lib/python3.14/site-packages/user/`
+— and **not** from `weewx-data/bin/user/`. That single fact has now caused the same silent failure
+twice, by two different mechanisms, and cost roughly two sessions of debugging each time:
+
+1. **Build time (found S30).** `Dockerfile` did `cp /opt/weewx-data/bin/user/rtldavis.py` over the
+   patched driver it had just `COPY`'d in. `weectl extension install` lays the **stock** upstream
+   driver down at that path, so every image ever built shipped the stock driver. This is why
+   `rxCheckPercent` was NULL for weeks and why the July-4 phantom rain (ERR-0001) entered the archive
+   with a rain filter supposedly deployed: the filter was never in the running code.
+2. **Run time (found S36).** `docker-compose.yml` bind-mounted that same host path over the baked
+   driver, `:ro`. The running prod container happened to escape it (it was hand-run without the
+   mount), but the mount shipped in the **public** compose file — so downstream users of the
+   published image have been running the stock driver regardless of what the image contains.
+
+Both failures are **silent and actively misleading**: the version tag, the logs, and the file the
+operator just edited all agree the fix is present, while the process runs different code. The S69
+dashboard handoff independently recommended a `weewx-data` `scp` hot-fix as the cheap deploy path —
+which would have been a no-op for exactly this reason. The trap is not obvious; it is *anti*-obvious.
+
+**Decision.**
+1. **The driver (`rtldavis.py`) is baked into the image. It is never bind-mounted, at build or run
+   time, in any compose file, on any host.** To change the driver you rebuild the image. There is no
+   hot-swap path for the driver, and one must not be reintroduced for convenience.
+2. **Services and uploaders may still be mounted** (`influx.py`, `loop_json_writer.py`,
+   `ogoxeUploader.py`, …). Nothing bakes over them, so DEC-0004's hot-iteration benefit is retained
+   where it is actually safe. It is the *driver* that is carved out, not the whole idea.
+3. **Verification is mandatory before declaring a driver deploy done** — the version tag is not
+   evidence. Assert against the running process:
+   `docker exec <ctr> /opt/weewx-venv/bin/python3 -c "import user.rtldavis as m; print(m.__file__, hasattr(m,'SensorQC'))"`
+   and confirm `docker inspect` shows **no** mount landing on `.../site-packages/user/rtldavis.py`.
+4. Both the `Dockerfile` and `docker-compose.yml` carry an explicit "do NOT re-add this" comment at
+   the exact line where the clobber used to live, naming the consequence.
+
+*Rationale:* a hot-swap that silently does nothing is far worse than no hot-swap at all — it
+manufactures false confidence and sends the next session hunting a phantom bug in the wrong layer.
+Baking is slower per iteration and honest; mounting was faster and lied. Given the data this driver
+produces is uploaded to WU/CWOP → NOAA MADIS, where it is **immutable** (DATA_ERRATA "external"),
+false confidence in a QC fix is a data-integrity hazard, not just a developer annoyance.
+
+---
+
+## DEC-0032 — Retrospective correction: correct to the KNOWN value, flag it in-band
+
+**Date:** 2026-07-12 (S36) · **Status:** Accepted · **Clarifies:** DEC-0006 · **Serves:** DEC-0025
+
+**Context.** DEC-0006 ("null on rejection, never stale substitution") was read as *"every correction
+must be NULL."* Applying that to the phantom rain events produces a worse record, not a better one.
+All three phantoms (ERR-0001 ×2, ERR-0002) are **bracketed by zeros for ±20 minutes**: we know, as a
+matter of positive evidence, that it did not rain. Writing `NULL` there says *"we don't know"* — which
+is false, and understates what we know. Writing `0.0` states the fact.
+
+The apparent conflict dissolves once the two acts are separated:
+
+- **Runtime rejection** (DEC-0006): the driver has just rejected a reading and has **no idea** what the
+  true value was. Substituting anything — a stale cached value, an interpolation, a zero — fabricates
+  data. It must emit `None`. **Unchanged.**
+- **Retrospective correction** (this DEC): we are looking at the surrounding record, offline, with
+  full context, and can often establish the true value with confidence. Recording that value is not
+  fabrication; it is the correction.
+
+`NULL` is not "safe by default" — it is itself a claim ("unknown"), and an incorrect one when the
+value is in fact known.
+
+**Decision.**
+1. **Correct to the known value where positive evidence establishes it; correct to `NULL` only where
+   the true value is genuinely unknown.** For an isolated rain bit-flip bracketed by zeros, the
+   corrected value is **`0.0`** — a fact, not a guess. For, say, a corrupt temperature with no way to
+   recover the real reading, `NULL` remains correct.
+2. **The evidence must be stated in the errata entry.** A correction to a known value is only
+   admissible if `DATA_ERRATA.md` records *why* we know it (here: "every minute for ±20 min reads
+   exactly 0.0"). No evidence → `NULL`.
+3. **Flag the correction in-band, sparsely.** InfluxDB corrected points carry a **`rain_qc = 1`** field
+   written **only at the corrected timestamps**. InfluxDB is schemaless, so an absent field costs
+   nothing: the flag's storage scales with the number of *corrections* (3 points, well under 1 KB), not
+   with data volume, and it adds **zero** overhead to queries that don't ask for it. This mirrors
+   WMO/NOAA-MADIS practice — keep the value, attach a quality flag — and gives the dashboard a way to
+   render a "corrected" marker straight from the data instead of maintaining a parallel list.
+4. **`DATA_ERRATA.md` remains the narrative source of truth.** The in-band flag is a pointer to it, not
+   a replacement: the flag says *"this was corrected"*, the errata says *what, why, and how far it
+   spread*. A consumer must never have to reconstruct the story from flags alone.
+5. **Both stores must agree.** A correction is applied to the SQLite archive *and* InfluxDB in the same
+   session, with matching values. (ERR-0001 sat as `NULL` in the archive and uncorrected in InfluxDB
+   for a week — two stores disagreeing about one event is exactly the unauditable state this forbids.)
+
+*Rationale:* DEC-0025's "preserve and flag, never delete" is honored at the layer that actually holds
+raw data — the immutable `weewx.log` and the external WU/CWOP→MADIS copies, neither of which we touch.
+The archive and InfluxDB are explicitly the **corrected best-estimate** layer (DATA_ERRATA "Three
+layers"), so putting our best estimate in them is their purpose, not a violation of it. What must never
+happen is a corrected value that is *indistinguishable* from a measured one — which is precisely what
+the errata entry plus the in-band `rain_qc` flag prevent.

@@ -15,83 +15,95 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S35** (2026-07-09) — **Docs diet (DEC-0030): tiered session read ported from
-> the siblings.** The dashboard's DEC-0081 playbook (`docs/reference/docs-diet-playbook.md` there)
-> + hyperlocal's DEC-0095 port, applied here: DECISIONS split into index + `DECISIONS-FULL.md`,
-> CHANGELOG rolled to ~3 live sessions + `CHANGELOG-ARCHIVE.md`, CLAUDE.md doc map now two-tier,
-> STATUS prune + CHANGELOG roll added to the close ritual. Session boot: ~32K → ~8K tokens.
-> Docs-only — **no code, no prod change**; prod still on `:v2.0.3`, S34's parked state unchanged.
+> **Current session: S36** (2026-07-12) — **v2.0.4 SHIPPED.** SensorQC (DEC-0029) is finally live in
+> prod after three sessions staged and never deployed it; the *reason* it kept not shipping was found
+> and killed (a compose bind-mount laying the stock driver over the baked one — DEC-0031). All three
+> phantom rain events are corrected in both stores (ERR-0001 + new ERR-0002, DEC-0032). The secret
+> gate, which had never actually worked, is fixed. Full story: CHANGELOG `[S36]`.
 
-_Last updated: 2026-07-09 (S35 — docs diet, DEC-0030; substantive next move is still the owner-run
-v2.0.4 rebuild whenever convenient)._
+_Last updated: 2026-07-12 (S36)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S35 → S36).** Sensor-QC (DEC-0029 + DEC-0022) is **merged to `dev`, undeployed**.
-> Prod is stable on `:v2.0.3` and can stay there indefinitely. The single next move is the
-> **owner-run v2.0.4 image rebuild → deploy → live-verify** (see "Next session actions"). Nothing
-> else is time-sensitive.
+> **▶ Resume here (S36 → S37).** Prod is on **`:v2.0.4`** and healthy (reception 75–80%,
+> `RestartCount: 0`, `sensor_qc True`). Nothing is on fire. The one thing that needs *watching* rather
+> than doing: **the first live SensorQC rejections.** Expect `rejecting implausible value` in
+> `weewx.log` at ~0.4+/day, clustering at night. Zero so far (deployed 15:49 EDT). If a week passes with
+> **zero** rejections, be suspicious — the humidity evidence says they should appear.
+>
+> Then the promotion: **merge `dev` → `main`, tag `v2.0.4` + a new `prod-baseline`, push the image to
+> Docker Hub, cut the GitHub release.** Deliberately held until v2.0.4 has ridden clean for a few days.
 
 ## Open threads (not yet shipped)
 
-- **Sensor plausibility filter (DEC-0029) — merged to `dev` (PR #17, S34), undeployed.** The driver
-  is baked, so this needs the v2.0.4 rebuild (same native-amd64-on-NAS procedure as S30). On deploy,
-  live-verify: watch weewx.log for `rejecting implausible value` (expect ~0.4+/day humidity), confirm
-  the dashboard gauges stop spiking, and confirm dewpoint goes null (not stale) during any sensor
-  outage.
-- **Follow-up filters anticipated (S33, not yet designed):** (1) **monitor alert** on the new
-  rejection signature — extend `weewx_monitor.py`'s rain-glitch email to the sensor rejections
-  (deliberately distinct log text; needs its own pattern + a rate cap so a flapping sensor doesn't
-  spam); (2) **cross-sensor consistency** (UV↔radiation ratio would have caught UV 16.29 even
-  in-bounds; dewpoint≤temp) — marginal value until the delta filter's live rejection data says
-  otherwise; (3) **rainRate plausibility** (`time_between_tips` corruption) — StdQC `rainRate 0,16`
-  backstop exists, low priority.
-- **Watch for the first real rain glitch in the wild** — filter live + released; expect log
-  "rejecting implausible counter delta" + clean archive + the alert email (~1 glitch/2–3 wk; 0 to
-  date as of 2026-07-08).
-- **Reception Layer B (driver, DEC-0024):** persist raw `count`/`missed`; stop publishing dataless
-  freqError packets; fix the ~1–2 pt floor-division optimism. No-Rewrite applies; needs a rebuild.
-  **Decided S34: waits for v2.0.5** — v2.0.4 stays single-purpose so its live-verify and rollback
-  read cleanly. Needs its own design discussion + approval before any code.
-- **ERR-0001 InfluxDB honest-null** — the dashboard's InfluxDB copy still carries the July-4 phantom
-  rain; cross-repo (DEC-0010), handle dashboard-side or via the Influx API (no `influx` CLI on NAS).
+- **Promote v2.0.4** — `dev` → `main`, tag + `prod-baseline-2026MMDD`, Docker Hub push, GitHub release.
+  **The Docker Hub push matters more than usual:** the published compose file was mounting the stock
+  driver over the baked one (DEC-0031), so *every downstream user* has been running an unpatched driver.
+  The fix is only real for them once the new image + compose are published.
+- **The CRC question — the true root cause, and the owner wants a community bug report.** How is
+  multi-bit corruption passing `_check_crc()` at all? Three rain phantoms are clean 2⁶/2⁷ flips and the
+  humidity glitches are clean 2⁷/2⁸ flips — all CRC-valid. SensorQC is a *symptom* filter; the decoder
+  accepting corrupt frames is the disease. This is the highest-value remaining thread.
+- **Cross-sensor consistency filter (S33 follow-up #2) — now has a concrete, validated discriminator.**
+  From dash S69: *a humidity move >6 %/min with temperature essentially flat is physically impossible*
+  (a real moist parcel is also a cooler one). It correctly spares the 2026-05-23 gust front, where temp
+  and humidity moved *together*. 3-for-3 on the bad events, 0 false positives. Design for v2.0.5.
+- **Monitor alert on the new rejection signature (S33 follow-up #1)** — extend `weewx_monitor.py`'s
+  rain-glitch email to SensorQC rejections; needs its own pattern + a rate cap so a flapping sensor
+  can't spam. Only worth doing once we see the real rejection rate.
+- **Reception Layer B (DEC-0024)** — driver stops publishing dataless freqError packets + persists raw
+  `count`/`missed`. Deferred to **v2.0.5** (S34) so v2.0.4 stayed single-purpose. Needs design + approval
+  (No-Rewrite).
+- **Cold-load Fix B (`current.json`)** — `loop_json_writer.py` also writes an atomic `current.json` the
+  dashboard fetches first at boot, so a *first-time* visitor doesn't see em-dashes. Richer than
+  originally scoped now: the loop packet gained `barometer`/`dewpoint`/`heatindex`.
+- **`DewpointCacher` × `SensorQC` interaction (S36, undecided).** The cacher carries `outTemp`/
+  `outHumidity`/`radiation`/`UV` forward for up to 300 s, so a value SensorQC *rejects* gets refilled
+  with the last good reading (~40 s old) rather than left null. The bad value never propagates either
+  way — so this did **not** block v2.0.4 — but a rejected reading is currently indistinguishable from an
+  absent one in the data (the rejection is still logged loudly). Decide whether that's right.
+- **`qc-capture` is still running on the NAS** (`/volume1/docker/weewx-rtldavis/qc-capture/`, a detached
+  `sh` loop appending loop packets to `loop-raw.jsonl`, started by dash S69). It is now capturing
+  *post*-fix data. **Harvest it or kill it** — don't leave it running unowned; it won't survive a reboot.
 - **Gain 372, interim** (DEC-0017) — awaiting a 24 h averaged no-preamp sweep to settle vs 207.
 - **Vestigial `loopdata.py`** — mounted + `[LoopData]` present but in no active service list; safe to
   remove, not urgent.
+- **Errata → dashboard contract (cross-repo, dash S69 Q3).** The owner wants corrected points visibly
+  asterisked on the water-balance chart. **Half-solved:** InfluxDB corrected points now carry a sparse
+  `rain_qc = 1` flag (DEC-0032, documented in INTERFACES.md), so the dashboard can render the marker
+  straight from the data with no parallel list. The dashboard side still has to *read* it.
 
 ## Needs a check / housekeeping
 
+- **Rotate the exposed WU API key** (NAS `wxcheck.sh`; scrubbed from repo S16, real key still live).
+  Owner-acknowledged; **still owed** — and now the only known live exposure.
+- **Unported from the dashboard:** its `.claude/agents/` routing definitions (its DEC-0093). The
+  docs-diet half (DEC-0081) landed here as DEC-0030 in S35.
 - **NAS boot task fragility (S32):** after the next DSM update/reboot, verify the `weewx_monitor`
   scheduler task still runs as root (symptom: `sudo: a terminal is required` spam, no pidfile).
-- **Rotate the exposed WU API key** (NAS `wxcheck.sh`; scrubbed from repo S16, real key still live).
-  Owner-acknowledged; still owed.
-- **Docker Hub README auto-sync:** add repo secrets `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` to
-  activate `.github/workflows/dockerhub-description.yml` (green no-op until then). Owner action.
-- **Branch/tag cleanup:** delete merged `feature/rain-spike-filter` + `s32-reconcile-main`; retire
-  the misnomer `rw250-test` image tag when rollback confidence allows.
-- **Snow / freezing / no heating tape** (parked, owner's future thread) — cold-weather failure modes
-  we haven't designed for. 2026 = learning year.
+- **Docker Hub README auto-sync:** add repo secrets `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` to activate
+  `.github/workflows/dockerhub-description.yml` (green no-op until then). Owner action.
+- **Branch/tag cleanup:** delete merged `feature/rain-spike-filter` + `s32-reconcile-main`; retire the
+  misnomer `rw250-test` image tag (nothing references it now that compose is fixed).
+- **Snow / freezing / no heating tape** (parked, owner's future thread) — cold-weather failure modes we
+  haven't designed for. 2026 = learning year.
 
-## Next session actions (S35 done → S36)
+## Next session actions (S36 done → S37)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S35 (2026-07-09):** docs diet (DEC-0030) — see CHANGELOG `[S35]`. Docs-only; prod
-untouched, still the S34 parked state (see CHANGELOG `[S34]`): `:v2.0.3` healthy, SensorQC staged
-on `dev`, no timer running — resume whenever convenient.
+**✅ Done in S36 (2026-07-12):** v2.0.4 deployed + verified; DEC-0031 (driver is baked, never mounted);
+DEC-0032 (retrospective correction + in-band `rain_qc` flag); ERR-0002 logged and corrected; ERR-0001's
+InfluxDB correction finally applied; secret gate fixed; doc staleness swept. See CHANGELOG `[S36]`.
 
-**▶ ON RETURN (S36), the one thread that matters:**
-1. **Build + deploy v2.0.4** (owner-run, same S30 procedure: native amd64 build on the NAS,
-   verify the baked driver contains `SensorQC` before `docker rm -f` + re-run, keep `:v2.0.3`
-   for rollback). Then live-verify: `rejecting implausible value` rejections appear at a sane rate
-   (~0.4+/day expected from the humidity evidence, more at night), gauges stop spiking, archive
-   stays clean, and dewpoint nulls (not freezes) during sensor silence.
-2. After v2.0.4 has ridden clean for a few days: merge `dev` → `main`, tag the release + new
-   `prod-baseline`, then pick up the deferred threads (Layer B design for v2.0.5, the S33
-   follow-up filters, branch/tag cleanup).
+**▶ ON RETURN (S37):**
+1. **Check the rejection log first** — `grep -c "rejecting implausible" weewx.log`. This is the single
+   number that tells you whether v2.0.4 is doing its job. Nonzero and nocturnal = working as designed.
+2. **Promote v2.0.4** if it has ridden clean (see Active thread) — merge, tag, Docker Hub, release.
+3. Then pick up **the CRC bug report** (highest value) or the **temp/humidity coupling filter** (v2.0.5).
 
 **Live access:** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in gitignored
 `docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use `env -u GH_TOKEN` for
-any `git push` (keyring token, not the PAT).
+any `git push` (keyring token, not the PAT). **The driver is BAKED — never `scp` it (DEC-0031).**

@@ -4,11 +4,11 @@ A Docker image for running [weewx](https://weewx.com/) with the [rtldavis](https
 
 📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
 ```bash
-docker pull weatheredscientist/weewx-rtldavis:v2.0.3   # or :latest
+docker pull weatheredscientist/weewx-rtldavis:v2.0.4   # or :latest
 ```
-Pin a version tag (`:v2.0.3`) for reproducible deploys; `:latest` always tracks the newest release.
+Pin a version tag (`:v2.0.4`) for reproducible deploys; `:latest` always tracks the newest release.
 
-> **Current version:** v2.0.3  
+> **Current version:** v2.0.4 — adds a decode-layer sensor plausibility filter (SensorQC)  
 > **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3  
 > **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.4.0  
 > **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)
