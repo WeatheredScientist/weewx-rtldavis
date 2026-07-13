@@ -73,10 +73,13 @@ fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.
 - **Series key:** `record,binding=archive` (measurement `record`, one tag `binding`). A correction or
   backfill MUST reuse this exact series key, or it forks a parallel series instead of overwriting.
 - **QC flag fields (`<field>_qc`) — sparse, added S36 (DEC-0032).** A retrospectively corrected point
-  carries an integer flag at the *same* timestamp and series: currently only **`rain_qc = 1`** = "this
-  value was corrected; see `docs/DATA_ERRATA.md`". It is written **only at corrected timestamps** (3
-  points in all of history), never on normal records — InfluxDB is schemaless, so an absent field costs
-  nothing and normal queries never see it. **Consumers must treat `*_qc` as optional**: its absence is
+  carries an integer flag at the *same* timestamp and series. Currently **`rain_qc = 1`** (3 points) and
+  **`rainRate_qc = 1`** (33 points) = "this value was corrected; see `docs/DATA_ERRATA.md`". Note the two
+  are **independent**: `rain` and `rainRate` are decoded from *different* ISS messages (counter = type
+  0xE, rate = type 0x5 via `time_between_tips`), so a correction to one does **not** imply the other —
+  S36 corrected `rain` first and had to come back for `rainRate`. Flags are written **only at corrected
+  timestamps** (36 points in all of history), never on normal records — InfluxDB is schemaless, so an
+  absent field costs nothing and normal queries never see it. **Consumers must treat `*_qc` as optional**: its absence is
   the common case and means "not corrected". It is a *pointer* to the errata log, not a substitute for
   it — the flag says *that* a point was corrected, DATA_ERRATA says *what, why, and how far it spread*.
 

@@ -47,9 +47,11 @@ Corrected points in InfluxDB now carry a sparse QC flag, so you can render the "
 straight from the data instead of maintaining a parallel list:
 
 - measurement `record`, series key **`record,binding=archive`** (one tag: `binding`)
-- field **`rain_qc = 1`** means *"this value was retrospectively corrected; see `docs/DATA_ERRATA.md`"*
-- it is written **only at corrected timestamps** — currently **3 points in all of history**. InfluxDB
-  is schemaless, so an absent field costs nothing and your existing queries never see it.
+- fields **`rain_qc = 1`** (3 points) and **`rainRate_qc = 1`** (33 points) mean *"this value was
+  retrospectively corrected; see `docs/DATA_ERRATA.md`"*. **They are independent** — `rain` and
+  `rainRate` come from different ISS messages, so a correction to one says nothing about the other.
+- flags are written **only at corrected timestamps** — 36 points in all of history. InfluxDB is
+  schemaless, so an absent field costs nothing and your existing queries never see it.
 - **Treat `*_qc` as optional.** Its absence is the overwhelmingly common case and means "not corrected".
 - It is a **pointer**, not a replacement: the flag says *that* a point was corrected;
   `weewx-rtldavis/docs/DATA_ERRATA.md` says *what, why, and how far it spread*. Don't reconstruct the
@@ -58,8 +60,15 @@ straight from the data instead of maintaining a parallel list:
 Documented as a contract in our `docs/INTERFACES.md` (which also now pins the series key — a correction
 or backfill **must** reuse `record,binding=archive` or it forks a parallel series).
 
-**The three corrected timestamps** (all `rain_in` → `0.0`, all flagged):
+**The three corrected `rain_in` timestamps** (all → `0.0`, all flagged `rain_qc = 1`):
 `2026-05-26T03:22:00Z`, `2026-07-04T07:04:00Z`, `2026-07-04T07:05:00Z`.
+
+**⚠️ ALSO: `rainRate` was corrected in a second pass** (the owner spotted it on the dashboard — our
+first pass fixed the accumulation and missed the rate). `rain` and `rainRate` come from **different ISS
+messages**, so they fail independently. 33 points across two windows (2026-05-26 03:22–03:37Z and
+2026-07-04 07:04–07:20Z) carried a phantom rate up to **4.736 in/hr with zero rain**; all are now `0.0`
+and flagged **`rainRate_qc = 1`**. Highest `rainRate` anywhere in history is now **1.88 in/hr** (a real
+June 15 storm). If your charts still show a ~4.7 in/hr spike on July 4, that's caching.
 
 **Resulting daily totals** (both stores now agree exactly): **2026-07-04 = 0.56"** (was 1.84"),
 **2026-05-25 = 0.06"** (was 1.34"). If your water-balance chart still shows the old numbers, it's
