@@ -2,8 +2,13 @@
 
 **Written:** 2026-07-13, weewx-rtldavis session **S38**.
 **Audience:** the owner, and any project of ours that runs a container on the Synology NAS.
-**Status:** **a recommendation, and a request for a decision.** No changes have been made in your
-repos. Two of the three moves below are already done *here* and can be copied when you want them.
+**Status:** **decided and largely built.** The owner confirmed the recommendation live during S38, so the
+enforcement layer below is **installed and tested**, not proposed. **No changes have been made in your
+repos** — the two findings addressed to you (the dashboard's gate escape hatches; HLF having no gate at
+all) are still yours to act on, and the NAS log-driver question is settled but needs nothing from you.
+
+**The one thing still open is §Etiquette at the end** — the human/agent protocol *between* repos, which
+is where a small 4th coordinating project probably does earn its keep.
 
 This answers the question left open by
 [`S37-to-all-projects-stdout-freeze.md`](S37-to-all-projects-stdout-freeze.md):
@@ -58,31 +63,23 @@ Guard the two commands we have already written rules about and broken anyway:
 - **`docker logs` without `--tail`** — the trigger that wedged the daemon (DEC-0036).
 - **`docker stop`** — DEC-0008 says `kill`, never `stop`.
 
-Ready to paste, not installed (it is your global config, and it would affect dashboard and HLF
-sessions mid-flight, so it is your call, not mine):
+**INSTALLED AND PROVEN (S38).** Both guards ship with their own tests, because a guard nobody tested is
+the thing this whole document is about:
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -r '.tool_input.command' | grep -qE 'docker[[:space:]]+(-[^[:space:]]+[[:space:]]+)*logs' && ! jq -r '.tool_input.command' | grep -qE '(--tail|-n[[:space:]])' && { echo 'BLOCKED: bare `docker logs` wedged the Synology daemon and froze prod for 7h18m (DEC-0036). Use --tail N.' >&2; exit 2; }; exit 0"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+| guard | what it blocks | test |
+|---|---|---|
+| `~/.claude/hooks/docker-guard.sh` (`PreToolUse`) | bare `docker logs`; `docker stop` | `test-docker-guard.sh` — **19/19**, incl. a `docker logs` hidden inside `ssh nas "..."` that beat the first draft |
+| `~/.claude/hooks/eaglehunt-status.sh` (`SessionStart`) | *reports*: draft PRs, branches ahead of `dev`, uncommitted work — across **all three repos** | found a live stranded draft PR in the dashboard (#22) on its **first run** |
+| `~/.zshrc` `docker()` function | same two commands, for the **human** | **6/6** |
 
-**Caveat, stated plainly:** we never established *who* ran the bare `docker logs` — it was plausibly
-an agent session, possibly the owner at a terminal, and we killed the process before capturing its
-parentage. A Claude hook only guards the agent. Guard the human too, with a shell function in
-`.zshrc` that refuses a bare `docker logs`. Both are cheap; neither is sufficient alone.
+The Claude hook was verified live: it blocked a real bare `docker logs` the moment it went in. It also
+(correctly, and slightly annoyingly) blocks commands that merely *quote* the dangerous string — a
+deliberate trade, since a false block costs one retype and a false allow cost seven hours. Escape hatch
+in both: prefix with `command`.
+
+**The `.zshrc` guard matters as much as the hook.** We never established *who* ran the fatal bare
+`docker logs` — plausibly an agent session, possibly the owner at a terminal; the process was killed
+before its parentage was captured. A Claude hook guards only the agent.
 
 ### Move 2 — Share the *test*, not the *regex*
 
@@ -274,3 +271,69 @@ codebase.** If you are staying private indefinitely, this is a much smaller deal
 
 You also run `hyperlocal-forecast-api` on the same daemon, with the same uncapped `db` log driver, so
 Move 3 applies to you whether or not Move 2 does.
+
+---
+
+# §Etiquette — the 4th-project question (added at S38 close, owner requested)
+
+DEC-0040 answered **enforcement**: no master repo, guards in `~/.claude/`, share the test not the regex.
+It did **not** answer **etiquette** — the protocol *between* repos and the agents working in them. That
+is a different problem and it does want a small home. Short version:
+
+## The one rule that matters
+
+**A repo owns its own prod. Nobody else deploys into it — they file.**
+
+Everything else follows from that. This session is the proof: we found a real hazard affecting
+`hyperlocal-forecast-api` and `eh-proxy` (uncapped `db` log driver on a daemon that wedged), and the
+right move was **not** to go fix their compose files. It was to verify what we could, state plainly what
+we had not verified, and hand it over. That is DEC-0031's lesson generalized: *infrastructure advice
+across a repo boundary must be verified in the target repo before it is given.*
+
+## What a 4th project should and should not be
+
+**Yes — a coordination repo, if it holds only these three things:**
+
+1. **The NAS runtime contract.** One page. Who owns which container, which log driver each uses and why,
+   the `docker logs --tail` rule, the monitor. Today this is nowhere, which is how it bit three repos.
+2. **A shared inbox.** One issue tracker where cross-repo findings get *filed* rather than pasted into
+   handoff docs that only get read at the next session start. A handoff doc is a letter; an issue is a
+   queue with state.
+3. **The shared executables** (`check_secrets.sh`'s payload test, the hooks) — with a CI drift check, or
+   it rots into option (b) from DEC-0040.
+
+**No — it must not become:**
+- a place decisions live (they belong in the repo that owns the code — DECs stay put);
+- a fourth session-start read (that is the cost DEC-0030 just bought down; the coordination repo is
+  read **on demand**, not at boot);
+- a dumping ground for anything that does not fit elsewhere.
+
+**Litmus test for any file you are about to put in it:** *does this belong to more than one repo?* If
+not, it goes home. That single question is what keeps it from becoming a junk drawer, and it is the
+thing that kills most coordination repos.
+
+## The agent protocol, in four lines
+
+1. **Read-only across the boundary.** An agent in repo A may *read* repo B to verify a claim. It may not
+   edit, commit, or deploy there. (This session: I read the dashboard's gate to find its escape hatches,
+   and changed nothing.)
+2. **File, don't fix.** A finding about repo B becomes an issue in the coordination repo (or B's tracker),
+   with the evidence and an explicit statement of what was *not* verified.
+3. **Prod is owned by exactly one repo, and only in an attended window.** No unattended deploys into
+   someone else's service, ever — and note that this session took prod down for two restarts, both of
+   which the owner explicitly approved.
+4. **State your confidence.** "Measured", "cited", and "inferred" are three different things, and this
+   session's worst mistake (v2.0.5's incomplete fix) came from presenting the third as the first.
+
+## The honest cost
+
+You will maintain a fourth repo for what is, today, roughly three pages and a hook directory. That is a
+real cost and it is why DEC-0040 said *not yet* for the enforcement half. **Etiquette is the part that
+actually justifies it** — because unlike the guards, etiquette cannot live in `~/.claude/` (it is about
+humans and boundaries, not commands), and it cannot live in any one repo (it is precisely the thing that
+is *between* them).
+
+**Recommendation:** create it, keep it under ~5 files, and give it an issue tracker. The tracker is the
+point; the docs are almost incidental. If in three months it has fewer than a dozen issues and nobody
+reads the runtime contract, delete it — that is a clean, cheap experiment, and a null result is a real
+answer.
