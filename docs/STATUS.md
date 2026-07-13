@@ -71,26 +71,15 @@ _Last updated: 2026-07-13 (S38)._
 
 ## Open threads (backlog — none of these block anything)
 
-- **⚠️ rainRate's 15-minute hold — OPEN, and the best lead we have (S37).** The phantom rain also
-  produced a phantom rain *RATE* (peaks 4.736 / 4.216 in/hr, `rain = 0.0` throughout). **The data is
-  corrected** in both stores (S36, 2nd pass — see DATA_ERRATA), but the *mechanism* is not explained: a
-  single corrupt packet gives ONE bad reading, yet we see ~16 min of a *stable* rate (raw tip-interval
-  drifting only ~7.6 s → 9.6 s), starting at the exact phantom timestamps, twice. That shape resembles
-  the **Davis rain-rate timeout** (ISS holds a rate ~15 min after tips), which would mean the ISS itself
-  held a non-zero rate state — which DEC-0033's spurious-frame model does **not** explain. `rain` (type
-  0xE counter) and `rainRate` (type 0x5 `time_between_tips`) are **separate messages**, so the two
-  corruptions co-occurring is a strong clue, not a coincidence. **Don't guess.** The `debug_rtld = 2` capture is
-  **off** (DEC-0036: leaving prod at DEBUG is what set the trap for the 7 h freeze). The right instrument
-  is the **always-on duplicate/rain-frame counter** proposed in DEC-0035 — one INFO line per archive
-  period — not another open-ended debug expedition. This also matters for what we propose
-  upstream: `rain_delta_tips` guards the counter and does **nothing** for the rate, whose failure mode
-  is a corrupted "no rain" sentinel (`time_between_tips_raw == 0x3FF`).
-- **The CRC question is CLOSED (DEC-0033 + DEC-0035).** The demodulator double-decodes a single RF
-  burst: **61 duplicate frames in 2 h, median 2.0 ms after the original, ~722/day** — the ISS cannot
-  transmit twice 2 ms apart. Confirmed on our own hardware, so the owner's precondition for posting
-  upstream is met. **What remains is a WRITING task, not research:** the draft
-  (`docs/upstream/rain-wraparound-bug.md`, gitignored) must be rewritten in the owner's voice — balancing
-  technical substance with human warmth — and **posted only on an explicit go.**
+- **✅ rainRate — ANSWERED (DEC-0042).** It is an **ISS-side sensor artifact**, not RF and not the
+  driver. Reconstructed from a pre-correction DB backup: the rate held for exactly the ISS's ~15-min
+  timeout, the implied tip interval stayed in an 8.5–10 s band, and **the tip counter never advanced**.
+  Reaching those raw values from the `0x3FF` sentinel needs ~6 bit-flips *per packet for 16 minutes* — RF
+  corruption cannot do that. Conditions both times: overnight, 94 % RH, 1.7 °F dewpoint spread, 0 mph
+  wind. Condensation trips the reed switch enough to start the rate timer, never enough to tip the
+  bucket. **Next step is physical (inspect the bucket + reed switch), not software.** A third event is
+  predictable on the next calm, saturated, cooling night.
+
 - **Cross-sensor consistency filter (S33 follow-up #2) — now has a concrete, validated discriminator.**
   From dash S69: *a humidity move >6 %/min with temperature essentially flat is physically impossible*
   (a real moist parcel is also a cooler one). It correctly spares the 2026-05-23 gust front, where temp
