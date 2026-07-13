@@ -12,6 +12,13 @@
 #
 # Run it after ANY change to check_secrets.sh:   scripts/test_check_secrets.sh
 #
+# S40 (DEC-0045) sharpened the lesson. A test is not automatically evidence either:
+# this file used to assert, under "must PASS", that `# api_key = <real value>` was
+# fine. The gate did not merely have a blind spot — ITS PROOF CERTIFIED THE BLIND
+# SPOT. Two of the payloads below (holes 15 and 16) are those exact lines, moved
+# from `good` to `bad`. When you add a case here, ask which array it belongs in and
+# why, because that judgement IS the gate.
+#
 # This file is the ONE file check_secrets.sh exempts (by exact path) — its job is
 # to contain secret-shaped strings. None of the values below is real.
 set -u
@@ -35,11 +42,25 @@ bad=(
   'token = "abc123def456"  # Authorization: Bearer xyz'          # free-floating Authorization (hole 6)
   'token = REALSECRETVALUE'                                      # bare ALL_CAPS, NO underscore (hole 7)
   # --- S38: the free-floating "excuse" class the dashboard gate still allows ---
+  # "the excuse on the right" — bug class 2 in check_secrets.sh
   'token = deadbeef123456  # falls back to os.environ'           # (hole 8)
   'password = hunter2hunter2  # comes from config_dict'          # (hole 9)
   'api_key = liveKey1234567  # replace with YOUR_API_KEY'        # (hole 10)
   "token = tok_abc123456  # see cfg.get('token')"                # (hole 11)
   'secret = s3cr3tvalue123  # ${NOT_ACTUALLY_INTERPOLATED}'      # (hole 12)
+  'token = REALSECRET1234   # falls back to os.environ'          # (hole 13) the S38 header's own example
+  'token = "abc123def456"   # Authorization: Bearer xyz'         # (hole 14) ditto
+  # --- S40 (DEC-0045): the COMMENTED-OUT credential ---
+  # These five were NOT merely unguarded — the two marked (was GOOD) sat in the
+  # `good` array below, so the gate's own proof CERTIFIED that a commented
+  # credential must ship. `git push` does not strip comments. Neither does a reader.
+  '# api_key = abc123def456xyz'                                  # (hole 15) was GOOD
+  '// const token = "tok_abc12345";'                             # (hole 16) was GOOD (JS)
+  '/* password = hunter2hunter2 */'                              # (hole 17) block comment
+  ' * api_key = liveKey1234567'                                  # (hole 18) JSDoc continuation
+  '    # secret = s3cr3tvalue123'                                # (hole 19) indented comment
+  '#token=deadbeef123456'                                        # (hole 20) no spaces
+  '# self.password = hunter2hunter2'                             # (hole 21) NOT constructor plumbing
 )
 
 # --- must PASS (exit zero) ------------------------------------------------------
@@ -53,11 +74,20 @@ good=(
   'token = INFLUX_TOKEN'                                         # ALL_CAPS underscored REFERENCE
   "api_key = config_dict.get('api_key')"                         # config plumbing
   "password = stn_dict.get('password')"                          # config plumbing
-  '# api_key = abc123def456xyz'                                  # comment-only line
-  '// const token = "tok_abc12345";'                             # comment-only line (JS)
   ' * api_key: the upload credential'                            # JSDoc continuation
   'key: WeatherCloud upload key'                                 # multi-word prose
   '"description": "set api_key = abc123def456 here"'             # description in KEY position
+  # --- S40 (DEC-0045): a comment earns NO exemption, but its VALUE still can. ---
+  # Commenting out a line must not change the verdict in EITHER direction: these
+  # are the same placeholder/prose/empty values as above, wearing a comment marker.
+  # This is what keeps the fix from becoming a false-positive machine — it is the
+  # half of the change that the docs and the README depend on.
+  '# api_key = YOUR_API_KEY_HERE'                                # placeholder, commented
+  '# token = "${INFLUX_TOKEN}"'                                  # interpolation, commented
+  '#         token: InfluxDB 2.x Authorization Token'            # prose, commented (influx.py docstring)
+  '# api_key = ""'                                               # empty, commented
+  '# token = INFLUX_TOKEN'                                       # ALL_CAPS reference, commented
+  "# password = os.environ.get('WEEWX_PW')"                      # runtime lookup, commented
 )
 
 echo "── planted BAD payloads (each MUST be caught) ──────────────────────────"

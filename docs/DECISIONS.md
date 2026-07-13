@@ -58,6 +58,9 @@ a later entry.
 | DEC-0040 | The cross-repo gap is an **enforcement** gap, not a documentation gap — **no master repo** | Accepted · owner-confirmed (S38) | 2026-07-13 (S38) |
 | DEC-0041 | **StdPrint removed** — the v2.0.5 console-handler fix was necessary but NOT sufficient | Accepted · **completes** DEC-0036 · corrects DEC-0038 | 2026-07-13 (S38) |
 | DEC-0042 | The phantom **rainRate is ISS-side** (condensation trips the reed switch, never tips the bucket) — not RF, not the driver | Accepted · **bounds** DEC-0033/0035 · closes the rainRate thread | 2026-07-13 (S38) |
+| DEC-0043 | Override the **root** logger, not just `weewx`/`user` — weewx's default root points at a syslog socket a container does not have | Accepted · **completes** DEC-0036/0041 | 2026-07-13 (S39) |
+| DEC-0044 | The **nibble theory is not supported** by the archive, and the archive can never settle it — **instrument, don't filter** | Accepted · **bounds** DEC-0029 · **parks** the coupling filter | 2026-07-13 (S39) |
+| DEC-0045 | **A comment is not an exemption** — the secret gate scans comments like code. A commented-out credential in a public repo is still leaked, and the gate's *own test* had asserted it was fine | Accepted · **amends** DEC-0039 · **extends** DEC-0012 | 2026-07-13 (S40) |
 
 ## Open / deferred
 

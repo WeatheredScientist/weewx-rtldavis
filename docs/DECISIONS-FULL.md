@@ -1306,3 +1306,203 @@ a backup happened to predate our own correction. DEC-0025 (*preserve and flag, n
 evidence existed at all — but the live rows had been overwritten in place (DEC-0032), and only luck
 supplied a pre-correction copy. **Snapshot the affected rows before a retrospective correction, not
 after.**
+
+---
+
+## DEC-0043 — Override the ROOT logger, not just `weewx` and `user` (S39)
+
+**Status:** Accepted · **completes** DEC-0036 / DEC-0041 · 2026-07-13 (S39)
+
+**Context.** A routine post-deploy health check on `:v2.0.6` found the container emitting **15
+logging-error tracebacks (~515 lines) to stderr on every start**. Steady state was clean — 0 lines
+in 90 s, so DEC-0041's StdPrint removal genuinely holds — but every start dumped a wall of
+`FileNotFoundError: /dev/log` at anyone running `docker logs`.
+
+**Root cause.** weewx's own defaults (`weeutil/logger.py`, `LOGGING_STR`) set:
+
+```
+    [[root]]
+      level = {log_level}
+      handlers = syslog,
+```
+
+with `address = /dev/log` on Linux. **There is no syslog daemon in a container.** Our
+`logging.additions` overrode the `weewx` and `user` loggers (giving them their own handlers and
+`propagate = 0`), so those were always safe — but `weewxd` and `weeutil.*` are in **neither**
+namespace. They fall through to root, hit the syslog handler, and `SysLogHandler.emit()` raises;
+Python's logging module then prints the whole traceback to stderr.
+
+**The quieter half, which matters more.** Those records were not merely noisy — they were **lost**.
+`weewx.log` has **never** contained a single `weewxd` or `weeutil` line: not the version banner, not
+the config path, not the group list. They only ever went to the handler that was failing. We had been
+running without startup diagnostics and had not noticed, because the failure announced itself on a
+stream nobody reads.
+
+**Decision.** Add a `[[root]]` override to `logging.additions` (baked image: `rotate, console`) and
+to `weewx.conf.example` (`rotate` — it defines no console handler). A **build-time assertion** fails
+the image build if `[[root]]` is absent from the baked config, in the same spirit as DEC-0041's.
+
+**Verified, not assumed** — A/B in the real container, as a separate process:
+
+| Config | root handlers | Result |
+|---|---|---|
+| without `[[root]]` (prod today) | `SysLogHandler` | traceback reproduced exactly |
+| with `[[root]]` (the fix) | `TimedRotatingFileHandler` | no traceback; `weewxd INFO Starting up weewx version 5.4.0` **lands in the file** |
+
+**Consequences.** Not a freeze hazard: the burst is bounded (~515 lines/start) and steady state stays
+at 0, so this never threatened DEC-0036's pipe. It is a *downstream* fix — every user of the
+published image sees the tracebacks on first `docker run` — and an *observability* fix for us. Ships
+in **v2.0.7**.
+
+**The pattern, stated once.** Overriding a child logger does not protect you from a bad handler on
+its parent. `propagate = 0` on `weewx` and `user` made those two namespaces safe and left every
+*other* logger in the process still pointed at the broken handler — which is why the bug was
+invisible for the entire life of the image.
+
+---
+
+## DEC-0044 — The nibble theory is not supported by the archive, and the archive can never settle it: instrument, don't filter (S39)
+
+**Status:** Accepted · **bounds** DEC-0029 · **parks** the temp/humidity coupling filter · 2026-07-13 (S39)
+
+**Context.** The S39 backlog carried a "cross-sensor consistency filter" inherited from dashboard S69:
+*a humidity move >6 %/min with temperature essentially flat is physically impossible*, reported as
+3-for-3 on the bad events with 0 false positives. Behind it sat an unproven mechanism — the **nibble
+theory**: the ISS message-type nibble (`pkt[0] >> 4`) suffers a bit flip, so **another sensor's
+payload is decoded as humidity**. S69 proposed a falsifiable arithmetic test, started a raw capture,
+and never finished; the theory was recorded as "under investigation" and the statistical filter became
+the plan. S39 ran the test.
+
+**Finding 1 — the theory's own arithmetic does not fit its story.** Humidity is type `0xA` = `1010`.
+Its **single-bit-flip neighbours are `0x2` (supercap), `0x8` (temperature), `0xB` (undefined) and
+`0xE` (rain counter)**. Solar (`0x6`) is **two** bits away; UV (`0x4`) is **three**. S69's "why always
+midday? — a misdecoded solar/UV payload" is therefore *not reachable by a single bit flip*, which was
+the theory's central claim.
+
+**Finding 2 — every testable variant fails.** Each type reads the same `pkt[3]`/`pkt[4]`, so a bogus
+humidity value pins those bytes and the re-decode is exact arithmetic, not a guess:
+
+| Candidate | Decode from the bogus RH | Verdict |
+|---|---|---|
+| UV (`0x4`) | `sr_raw / 50` | **Dead** — implied UV ≈ 2× actual on *every* spike |
+| Temperature (`0x8`) | `((pkt3 << 4) + p4hi) / 10` | **Dead** — implied 200–400 °F |
+| Solar (`0x6`) | `sr_raw * 1.757936` | **Not supported** — see below |
+| Supercap (`0x2`) | `sr_raw / 300` | Fails where testable; `supplyVoltage` null at nearly every spike |
+
+**Finding 3 — the solar "match" was fitted noise, and a control proves it.** The archive stores
+1-minute *averages*, so recovering the raw bogus reading needs `raw = n·spike − (n−1)·baseline` with
+`n` (readings/minute) **unknown**. Letting `n` range over {1,2,3} produced 12/28 hits within ±10 % —
+but the winning `n` came out uniformly **{1:4, 2:4, 3:4}**, the signature of a meaningless parameter.
+Scored against **2000 shuffled pairings** (each spike's implied solar vs some *other* spike's actual
+radiation): true 12/28 (43 %) vs shuffled mean 9.9 (35 %), **p = 0.248**. The real pairing does not
+beat chance.
+
+**Finding 4 — this is structural, not a failure of effort.** The free parameter `n` *is* the thing
+that manufactures false matches, and it exists only because the archive averages. **No analysis of
+1-minute archive data can settle the nibble theory.** Neither can InfluxDB: it stores the same
+1-minute records (verified — bucket `weewx`, retention infinite, timestamps on the minute).
+
+**Decision.**
+
+1. **Do not build the coupling filter.** Its premise does not survive the data twice over. "Temperature
+   essentially flat" describes **90 % of all minutes** (66,743 of 74,538 samples at |ΔT| ≤ 0.1 °F), so
+   the flatness test carries almost no discriminating power — the humidity rate does nearly all the
+   work. And every spike large enough to see in the archive (8–12 %RH/min, implying a **raw** glitch of
+   16–37 %RH) is **already rejected by DEC-0029's existing 10 %RH-per-reading cap**. The filter would
+   have targeted a residual we have not shown exists, using a threshold we could not honestly derive.
+   *The direction of the S69 insight is right* — mean |ΔRH| does climb with |ΔT| (0.29 → 0.44 → 0.82 →
+   1.1 → 1.32 → 1.66), exactly as physics predicts, and every jump above 8 %/min occurs only in
+   flat-temp bands. It is the *discriminator* that is not there.
+2. **Instrument instead.** Enable **`log_humidity_raw`** — an option that **already exists upstream**
+   (`rtldavis.py`, Luc Heijst's modification) and logs `(pkt[4] << 8) + pkt[3]`: **both payload bytes,
+   in full**. With real `pkt[4]` there is no averaging and no free parameter, and the inversion becomes
+   deterministic. It is a config flag, not a code change, and it emits at INFO to the *file* handler —
+   prod's `weewx.conf` has no console handler, so it adds **nothing** to stdout and carries no DEC-0036
+   risk.
+3. **Correct the record.** The 2026-05-23 "gust front" cited as the filter's key
+   false-positive test shows a **maximum humidity move of 1.0 %/min** in our archive (90 %RH, 50 °F,
+   wind ≤ 2.5 mph — a calm, saturated day). It would be spared by *any* threshold. It was never
+   evidence.
+
+**Consequences.** The spike mechanism is **open** and stays open — honestly. DEC-0029's filter keeps
+catching the large glitches at the source, which is what protects the data today. The next midday
+spike, with `log_humidity_raw` armed, settles the question deterministically.
+
+**The pattern, stated once.** *A statistical filter is what you build when you have given up on the
+mechanism.* Before shipping one, check whether the decisive instrument is already sitting in the code
+— here it was, an upstream option nobody had switched on. And when a remembered constant arrives from
+another repo's session ("6 %/min, 3-for-3"), **re-derive it against your own data before you build on
+it**: both the threshold and its headline test evaporated on contact.
+
+---
+
+## DEC-0045 — A comment is not an exemption: the secret gate scans comments like code (S40)
+
+**Status:** Accepted · **amends** DEC-0039 (which certified the hole) · **extends** DEC-0012 · 2026-07-13 (S40)
+
+**Context.** `scripts/check_secrets.sh` is the only thing standing between a credential and a **public**
+repo. Since it was written it carried an `ALLOW (1)`: *if the whole line is a comment (`#`, `//`,
+`/* */`, ` *`), allow it.* So this shipped clean:
+
+    # api_key = <a real credential>
+
+**In a public repo a commented-out credential is still a leaked credential.** `git push` does not strip
+comments; neither does anyone reading the file on GitHub. Commenting a line out is precisely what a
+person does with a secret they are "not using right now" — which is exactly when it gets committed.
+
+**What makes this DEC necessary rather than a bug fix.** The rule was not an oversight that slipped past
+the test. **The test asserted it.** `scripts/test_check_secrets.sh` listed, under *"must PASS"*, a
+commented Python assignment of a real-looking API key and a commented JS assignment of a real-looking
+token — both with literal 8+ character values, both marked *"comment-only line"*. (They are now BAD
+payloads 15 and 16 in that file; per point 3 below, the literals live **there**, not here.)
+
+Those two lines were part of DEC-0039's celebrated **"28/28 planted payloads, proven"**. The gate did not
+merely have a blind spot — **its proof certified the blind spot.** DEC-0039's own thesis is *"a green exit
+code is not evidence."* S40's correction: **a passing test is not evidence either, if the assertion is
+wrong.** A test encodes a judgement about what *ought* to happen, and that judgement is as fallible as the
+code. It is the fourth member of the family this repo keeps meeting — an interface that accepts an
+instruction and silently discards it (DEC-0031's bind-mount, DEC-0036's `max-size`, DEC-0040's prose).
+
+**Decision.**
+
+1. **`ALLOW (1)` is deleted.** There is no comment rule. Comments are scanned exactly like code.
+2. **A comment earns no exemption; only its VALUE can.** `# api_key = YOUR_API_KEY_HERE`,
+   `# token = "${INFLUX_TOKEN}"` and `# token: InfluxDB 2.x Authorization Token` still pass — via the
+   placeholder / interpolation / prose rules, which test the value. Commenting a line out does not change
+   the verdict **in either direction**.
+3. **No new exemptions were added.** The gate's own header had illustrated three past bugs with six
+   real-looking credential literals, which the fix would now flag. The tempting move was
+   to exempt `check_secrets.sh` by path, as `test_check_secrets.sh` already is. **Rejected** — that is a
+   130-line blind spot in the one file that most needs scanning. Instead the literals **moved into
+   `test_check_secrets.sh`, where they execute as planted payloads**, and the header now points at them.
+   This is DEC-0040 applied to the gate itself: *prose does not execute.* The gate scans 100 % of tracked
+   files, including its own source.
+
+**Evidence (the whole point of DEC-0039 — a green run proves nothing on its own).**
+
+| Check | Result |
+|---|---|
+| Blast radius of deleting `ALLOW (1)` over the whole tracked tree | **6 hits, all inside the gate's own header comments.** Every legitimate comment elsewhere (README's `YOUR_*` blocks, `influx.py`'s docstring, the handoff docs) already passed on its *value*. The exemption was doing **no legitimate work in this repo** — it was close to pure hole. |
+| Planted-payload suite | **41 passed, 0 failed** (was 28). 7 new BAD payloads: every comment marker form (`#`, `//`, `/* */`, ` *`, indented, no-spaces) plus a commented `self.x = x`. 6 new GOOD payloads: the same placeholder/prose/empty values wearing a comment marker. |
+| **Mutation test** — re-add `ALLOW (1)` | Suite goes **red: 7 LEAKED**. The fix is load-bearing; the test can actually fail. |
+| **Full-history scan** — every blob that ever existed (333 unique, all refs) for a commented credential | **0.** Positive-controlled: the same scan with the gate's own files re-included finds the 11 known header examples, so the scanner demonstrably sees things. |
+| **The ADR you are reading** | The first draft quoted the planted payloads verbatim, and **the new gate blocked this file** — 4 hits. Working as designed. The literals were removed rather than exempted, which is the same call as point 3, made a second time under real pressure. If a doc needs to *show* a credential shape, it has one correct home: the test. |
+
+**Consequences.**
+
+- **The hole was never exploited.** Nothing needs revoking, and no history rewrite is warranted. This is
+  prophylactic. (The separately-tracked WU API key exposure is a *different* incident, still owed a
+  rotation, and was never a comment.)
+- A commented-out constructor line (`self.<field> = <field>` plumbing) is now **caught**. The `self.` rule
+  stays anchored to line start and was deliberately **not** widened to tolerate a comment marker. The fix
+  for a hit is to delete the dead comment — which is the right thing to do with it anyway.
+- The `key: value` docstring style (`influx.py`) and the README's `YOUR_*` config blocks are unaffected —
+  verified, not assumed.
+- **Do not re-add a marker-based exemption.** It is bug class 4 in the gate's header, and the test now
+  encodes it in both directions.
+
+**The pattern, stated once.** *We proved the gate, and the proof was wrong.* A test is a claim about what
+should happen; writing one does not make the claim true. When a test asserts that something dangerous is
+fine, it converts a bug into a **certified** bug — and the green checkmark then actively defends it. So
+when you add a case to a security test, the question is not "does it pass?" but **"which array does it
+belong in, and why?"** That judgement *is* the gate. The code is just how it is enforced.
