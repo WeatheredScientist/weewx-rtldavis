@@ -1655,3 +1655,87 @@ reason a five-alarm claim was not filed. `is_placeholder()` is now a first-class
 has already been transmitted. That asymmetry is exactly why the *read* path deserves a guard as strong as
 the write path. Credential hygiene follow-ups are tracked in the **gitignored** local-infra doc, never in
 this public repo.
+
+
+---
+
+## DEC-0048 — Reception testing is a designed experiment, not a pile of image tags (S41)
+
+**Status:** Accepted · **supersedes** the ad-hoc `rw*-test` images · **absorbs** DEC-0017's pending sweep ·
+2026-07-13 (S41)
+
+**Context.** Three images sat on the NAS for six weeks — `rw250-test`, `rw350-test`, `rw400-test` — built
+during an ad-hoc `receiveWindow` sweep. They were **misnomers by the time they were a day old**:
+`receiveWindow` ships at the upstream default, so the tag names described a configuration nothing was
+actually running. They were never published to Docker Hub (verified: the public tag list is `latest` +
+`v1.0-ubuntu22`, `v2-ubuntu26`, `v2.0.1/.3/.5/.6/.7`), so the confusion was ours alone — but a tag that
+lies about what is inside it is exactly the failure DEC-0038 exists to prevent (*an image tag denotes
+exactly one tree*).
+
+**The deeper problem is that the sweep was never a controlled experiment.** It varied one parameter,
+eyeballed the result over an uncontrolled window, and left artifacts behind. **DEC-0017 has been open since
+S16 for the same reason** — gain is held at 372 "pending an averaged re-test" that never happened, because
+there was no agreed method for running one.
+
+**Decision.**
+
+1. **Retire the ad-hoc tags.** `rw250-test` is deleted. (`rw350-test` and `rw400-test` are the same class
+   and should follow.)
+2. **A proper RX test is deferred, deliberately — it is not abandoned.** When we do it, it is a *designed*
+   experiment, not a tag: a stated hypothesis, a fixed observation window long enough to average out
+   propagation and weather, a control arm, and a pre-registered success metric. It settles **DEC-0017**
+   (gain 372 vs 207, averaged, no preamp) and any `receiveWindow` question **in the same run**, because
+   they share the same apparatus and the same confound.
+3. **Until then, gain stays at 372 and `receiveWindow` stays at the upstream default.** Reception is
+   noise-floor limited at ~67–70 %, which is a *known* baseline, not a mystery. **Do not tune either
+   parameter by feel.**
+
+**Why this is a DEC and not a chore.** The temptation with radio work is to twiddle a parameter, glance at
+a number, and keep the tag "just in case". That produces artifacts that outlive their meaning and a
+baseline nobody trusts. **An experiment we cannot describe before running it is not an experiment.** The
+cleanup is trivial; the commitment is the point.
+
+
+---
+
+## DEC-0049 — The ISS hardware is new and has been inspected: the rainRate artifact is not a broken part (S41)
+
+**Status:** Accepted · **bounds** DEC-0042 · closes DEC-0042's "next step is physical" action ·
+2026-07-13 (S41)
+
+**Owner-supplied hardware facts (2026-07-13):**
+
+- The **ISS hardware is new**.
+- It was **recently inspected**, and **no hardware problems were found** — including the tipping bucket and
+  the reed switch, which DEC-0042 named as the things to look at.
+- The **one** component that did fail has already been **replaced: the anemometer, circa 16–17 June 2026**.
+
+**What this settles.** DEC-0042 concluded that the phantom `rainRate` is **ISS-side, not RF and not the
+driver** — condensation trips the reed switch enough to start the rate timer but never enough to tip the
+bucket — and its closing action was *"next step is physical: inspect the bucket, the reed switch and its
+wiring."* **That action is now closed, and it came back clean.**
+
+**A clean inspection does not falsify DEC-0042 — it sharpens it.** The two readings were always:
+
+1. a **defective** bucket or reed switch (a sticky, mis-seated or corroded part), or
+2. a **functioning** switch responding to an environmental condition it cannot distinguish from a tip.
+
+**Reading 1 is now excluded.** The hardware is new and sound, so the artifact is an **interaction between
+working hardware and the environment**, not a fault. That is consistent with everything DEC-0042 measured:
+both events were overnight, at 94 % RH, with a 1.7 °F dewpoint spread and 0 mph wind, and the tip counter
+**never advanced**. Condensation bridging a healthy reed switch produces exactly this signature. **A part
+you can replace was never going to fix it.**
+
+**Consequences.**
+
+- **Do not "fix" the rainRate by swapping hardware.** There is nothing to swap. Anyone who reads DEC-0042's
+  "next step is physical" without this entry will order a part for no reason.
+- **The remaining levers are environmental or software-side** (a shield/drip path, or a rate-plausibility
+  guard that requires the tip counter to advance) — but **nothing is being built yet**: the event is rare,
+  benign, already corrected in the data (DEC-0032 `rain_qc`), and understood.
+- **A third event remains a free test.** It is predictable on the next calm, saturated, cooling night, and
+  now has a sharper prediction attached: the counter still will not advance.
+
+**The anemometer replacement (16–17 June 2026) is also a dating anchor** — wind data before and after that
+window comes from **different physical hardware**. Worth remembering before attributing any wind-series
+step change to software.
