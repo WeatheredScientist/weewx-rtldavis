@@ -74,6 +74,24 @@ is not about picking a winner — it's about **preserving the mapping** so each 
   genuinely patchy and hard to spatially validate), and 0.64"/5-min, while extreme, is not *grossly*
   impossible, so a jump-then-flat accumulation reads as legitimate rain. Treat as in the external record.
 
+**rainRate — corrected 2026-07-12 (S36), a SECOND pass.** The first S36 correction fixed `rain` and
+missed `rainRate`: they are **separate fields decoded from separate ISS messages** (rain counter =
+type 0xE; rain rate = type 0x5, from `time_between_tips`), so nulling the accumulation left the rate
+standing. 17 archive rows (07:04–07:20 UTC) carried a phantom rate peaking at **4.736 in/hr** with
+`rain = 0.0` throughout — a rate that, sustained, implies ~1.15" that never accumulated. All set to
+`0.0` in the archive (+ `weectl rebuild-daily`) and in InfluxDB (+ sparse `rainRate_qc = 1`). Daily max
+rainRate for 2026-07-04 is now **1.482 in/hr**, which is the genuine evening rain. *Found by the owner
+looking at the public dashboard — the fix had to be checked at the consumer, not just at the source.*
+
+**⚠️ OPEN — the rate's 15-minute hold is NOT yet explained (S37).** A single corrupt packet explains one
+bad reading. It does **not** explain ~16 minutes of a *stable* rate (raw tip-interval drifting only
+~7.6 s → 9.6 s). Random per-packet corruption would scatter; this holds steady, then stops. That shape
+resembles the **Davis rain-rate timeout** (the ISS holds a computed rate ~15 min after tips, then
+resets), which would imply the ISS itself held a non-zero rate state — something our
+spurious-frame model (DEC-0033) does not account for. It happened at the *exact* timestamps as the
+counter corruption, twice, so the two almost certainly share a cause. **Do not guess it; investigate.**
+The `debug_rtld = 2` capture now running will record the raw type-0x5 frames if it recurs.
+
 **Lesson (2026 is a learning year):** the rain counter is the highest-risk field for RF glitches, and
 downstream rain QC will not save us — our own filter is the only guard. Watch for the same pattern in
 cold-weather failure modes (sensor freeze / stuck counters) we have not yet designed for.
@@ -108,6 +126,13 @@ and the SQLite archive before any correction was applied. A full-history sweep o
   MADIS record, on the same reasoning as ERR-0001 (MADIS barely quality-controls precipitation). Not
   retractable; this entry is the only reconciliation. **This is the harm the v2.0.4 deploy exists to
   stop:** every glitch that reached an external network before 2026-07-12 is permanent.
+
+**rainRate — corrected 2026-07-12 (S36), same second pass as ERR-0001.** 16 archive rows
+(03:22–03:37 UTC) carried a phantom rate peaking at **4.216 in/hr** with `rain = 0.0` throughout
+(~0.98" implied, never accumulated). Set to `0.0` in the archive (+ `weectl rebuild-daily --date=2026-05-25`,
+the LOCAL date) and in InfluxDB (+ sparse `rainRate_qc = 1`). Daily max rainRate for 2026-05-25 is now
+**0.039 in/hr**. Same open question as ERR-0001 about the 15-minute hold. Backup:
+`weewx.sdb.bak-rainrate-*`.
 
 **Lesson:** two of the three phantoms fired in the small hours (03:04 and 23:22 local) — consistent
 with the nocturnal clustering noted for the humidity glitches (DEC-0029). Nothing about the rain
