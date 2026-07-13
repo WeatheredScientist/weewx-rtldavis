@@ -49,6 +49,13 @@ _Last updated: 2026-07-13 (S41)._
 > `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette. DEC-0040 settled the *enforcement* half
 > (no master repo; guards in `~/.claude/hooks/`); this is only the *etiquette* half.
 >
+> **New rule to carry (DEC-0047):** **the transcript is an egress path.** The secret gate guards *commits*;
+> it has nothing to say about *reads*. Anything a tool prints lands in `~/.claude/projects/*.jsonl` in
+> plaintext and goes to the model provider. A `PreToolUse` hook now blocks dumping any secret-bearing file
+> (`~/.claude/hooks/secret-read-guard.sh`); use **`readconf`** to read a config — section-scoped, values
+> fingerprinted — and **`scan-transcripts`** to audit. **Never use a line-count window (`+44p`, `head -n`)
+> on a sectioned config — sections move, the window does not.** Editing is deliberately not blocked.
+>
 > **New rule to carry (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
 > (DEC-0046). They are inverses. A release that changes shipped config **must patch the live
@@ -80,6 +87,11 @@ _Last updated: 2026-07-13 (S41)._
   config is shadowed by the prod bind-mount; `log_humidity_raw` now active): CHANGELOG `[S41]`.
   **Rollback:** `:v2.0.6` (`e23cabd53591`) is still on the NAS; the pre-deploy config is at
   `weewx-data/weewx.conf.bak-pre-v2.0.7`.
+- **S41 (security)** — **DEC-0047**: the secret gate guards commits, not reads. A `sed -n '…,+44p'` on the
+  live `weewx.conf` overran its section and leaked live credentials into the transcript. Now guarded
+  mechanically: `~/.claude/hooks/secret-read-guard.sh` (38/38 both directions; mutation test → 18 red),
+  `~/.claude/bin/readconf` (section-scoped, fingerprinted), `~/.claude/bin/scan-transcripts` (self-tests
+  before every run). **Rotation still owed — see the section below.**
 - **S40** (the secret gate scans comments like code — DEC-0045; suite 28 → 41; a full-history scan of all
   333 blobs proved the hole was never exploited): CHANGELOG `[S40]`. **DEC-0039's "28/28 proven" is
   superseded** — two of those 28 asserted a *commented-out* credential must PASS.
@@ -140,11 +152,15 @@ _Last updated: 2026-07-13 (S41)._
   `rm` → `run` in quick succession). **Not a blocker and nothing is owed** — but if a stall shows up on the
   *next* restart too, it is a real startup race and needs a settle-delay between `rm` and `run`.
 
-- **Rotate the exposed WU API key** (NAS `wxcheck.sh`; scrubbed from repo S16, real key still live).
-  Owner-acknowledged; **still owed** — and it remains the only known live exposure. **S40 confirmed nothing
-  else joined it:** a scan of every blob that ever existed in this repo (333 unique, all refs) for a
-  *commented-out* credential — the class DEC-0045 just closed — found **zero**. The gate's hole was real
-  but never exploited, so no revocation and no history rewrite is warranted.
+- **Security follow-ups are tracked in the gitignored local-infra doc, not here.** This repo is public;
+  operational security state does not belong in it. Read that file when picking up security work.
+
+- **✅ No real credential has ever been committed to any of the three repos.** S40 scanned all 333 blobs for
+  commented credentials (zero). S41 scanned every live config value against the full history of all refs in
+  all three repos (zero). One scare — a password apparently sitting in `weewx.conf.example` on `main` since
+  S16 — was the example's own placeholder string. False positive, caught by re-checking evidence that looked
+  internally weird (DEC-0047).
+
 - **Unported from the dashboard:** its `.claude/agents/` routing definitions (its DEC-0093).
 - **The dashboard has a stranded draft PR (#22, S71 Beaufort)** — found by the new session-start hook on
   its first run. Not ours to merge; flag it when next in that repo.
@@ -202,7 +218,7 @@ bucket. **A third event is predictable on the next calm, saturated, cooling nigh
 [issue #15](https://github.com/lheijst/weewx-rtldavis/issues/15) and
 [david-lutz#1](https://github.com/david-lutz/weewx-influx2/pull/1).
 
-**Also owed:** rotate the exposed WU API key (NAS `wxcheck.sh`) — the only known live exposure. The
+**Also owed:** the security follow-ups tracked in the gitignored local-infra doc — not listed here, because this repo is public. The
 dashboard has a stranded draft PR (#22) that our session-start hook found; flag it when next in that repo.
 
 **Live access:** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in gitignored

@@ -158,7 +158,7 @@ Real credentials live only in gitignored files (`weewx.conf`, `monitor.env`); co
 
 *Rationale:* the repo is public, indexed, and permanent — a pushed secret is exposed even if later
 deleted. S16 caught and scrubbed three real leaks (WU API key + PWS id in `wxcheck.sh`, a place-name
-chart title, the InfluxDB org name). *Follow-up:* rotate the exposed WU key (BACKLOG).
+chart title, the InfluxDB org name). *Follow-up:* credential hygiene, tracked in the gitignored local-infra doc (DEC-0047).
 
 ## DEC-0013 — Session numbering continues the shared lineage at S16
 
@@ -1573,3 +1573,85 @@ just passed. **The assertion was not wrong. It was answering a question nobody w
 contain `weewxd INFO Starting up weewx version 5.4.0`* — is behavioral, reads prod, and would have caught
 this even if the pre-flight grep had not. **Post-deploy checks must observe the running system, never the
 artifact.** An image check would have said PASS.
+
+---
+
+## DEC-0047 — The secret gate guards commits, not reads: the transcript is an egress path (S41)
+
+**Status:** Accepted · **extends** DEC-0012 · **completes** DEC-0039/0045 (which hardened only the write
+path) · **applies** DEC-0040 (prose does not execute) · 2026-07-13 (S41)
+
+**The gap.** Every secret control in this repo is a **commit-time** control. DEC-0012: *the live
+`weewx.conf` must never enter a commit.* `scripts/check_secrets.sh`: scans staged and tracked files. The
+CI `secret-scan` job. The 41-payload proof suite (DEC-0039, DEC-0045). Four hardenings across S26 → S40.
+
+**All of them guard the write path to GitHub. None of them has anything to say about reading.** Whatever a
+tool prints is written to `~/.claude/projects/*.jsonl` in **plaintext on local disk** and **transmitted to
+the model provider**. That is an egress path, and it had never been modeled as one.
+
+The `.gitignore` entry actively feeds the blind spot: the live config is *deliberately* excluded from the
+repo, which makes it feel handled. **"Not in the repo" is not "not in the transcript."**
+
+DEC-0040 said *prose does not execute*. This is a level worse: **there was no prose.** No rule was broken,
+because no rule existed.
+
+**What surfaced it (S41).** Inspecting the live config during the v2.0.7 deploy:
+
+    sed -n "/^\[Logging\]/,+44p" .../weewx-data/weewx.conf
+
+A fixed **line-count window** on a file that holds credentials. `[Logging]` is ~22 lines long, so the
+window ran off the end of its section and printed the *following* sections into the transcript. The
+section-scoped form was tried first (`awk '/^\[Logging\]/,/^\[[A-Z]/'`), returned only the header because
+the range pattern matched its own start, and `+44` was reached for as a quick fix. Nobody asked what lived
+at line 45.
+
+**A line-count window on a sectioned config is a loaded gun.** Sections move; the window does not.
+
+**Decision — three mechanical controls, in `~/.claude/`** (global, per DEC-0040's *no master repo; guards
+live in hooks*).
+
+1. **`hooks/secret-read-guard.sh`** — a `PreToolUse` hook on `Bash`, `Read` and `Grep`. Blocks
+   *(secret-bearing path)* × *(content-emitting verb)*: `cat`, `head`, `tail`, `sed` (without `-i`), `awk`,
+   `grep`, `cut`, `less`, `xxd`, `diff`, `scp`, … It sees through `ssh "…"` wrapping. **Editing is
+   deliberately untouched** — `cp`, `chmod`, `sed -i` and python heredocs all pass, because patching the
+   live `weewx.conf` is the DEC-0046 release workflow, and **a guard that blocks the work gets switched
+   off and protects nothing.** Path matching is **per-token, not per-string**: a string-level allowlist is
+   a hole, since `cat weewx.conf.example && cat weewx.conf` would see `.example`, conclude "sanitized",
+   and wave the live config through. `weewx.conf.bak-*` is treated as sensitive as the original, because
+   it is a verbatim copy of it.
+
+2. **`bin/readconf`** — the escape hatch that makes the guard livable. **Section-scoped: it structurally
+   cannot take a line window**, so it cannot repeat the failure above. Credential values are replaced by a
+   stable `<REDACTED:sha256-xxxxxxxx>` fingerprint, which still answers the two questions we actually ask
+   of a config — *does prod match the repo?* and *did this drift?* — with nothing disclosed. Redaction
+   keys off credential-shaped **key names** or high-entropy **values**, so `handlers = rotate,` and
+   `level = INFO` stay readable: those are precisely the lines a DEC-0046 deploy must verify.
+
+3. **`bin/scan-transcripts`** — the detection half, because prevention fails eventually. Correlates config
+   values against every transcript on the machine and the full git history of all three repos. Never
+   prints a value.
+
+**Both new tools ship with a positive control, and it is not decoration.**
+
+The guard's test asserts in **both directions** — 38 cases. The leaking command must block; and
+`cat weewx.conf.example`, `sed -i`, `cp`, `readconf` must all still pass, because the MUST-ALLOW half is
+what keeps the guard from being disabled. A **mutation test** (neuter the path check) turns it red — 18
+failures — proving it is load-bearing. The scanner **self-tests before every run**: it plants a canary,
+asserts it finds it, and asserts a placeholder is *not* reported. It refuses to report "0" if the harvest
+returned nothing, because that zero would be a lie.
+
+This is DEC-0039 and DEC-0045 compounding. *A green exit code is not evidence* (0039). *A passing test is
+not evidence either, if the assertion is wrong* (0045). **And a scan that finds nothing is not evidence
+unless you have proved the scanner can see.**
+
+**A scanner that cries wolf is its own failure mode.** The first pass of this analysis reported a real
+password sitting in `weewx.conf.example` in the current tree of the **public** repo — which would have
+been a live exposure and a fifth gate hole. It was the example's own placeholder string. The evidence was
+internally weird (the same "password" appeared as three different keys), and re-checking it is the only
+reason a five-alarm claim was not filed. `is_placeholder()` is now a first-class part of both tools.
+**A full scan of all refs confirms no real credential has ever been committed to any of the three repos.**
+
+**Operational note.** Anything printed into a transcript cannot be recalled by deleting the `.jsonl` — it
+has already been transmitted. That asymmetry is exactly why the *read* path deserves a guard as strong as
+the write path. Credential hygiene follow-ups are tracked in the **gitignored** local-infra doc, never in
+this public repo.
