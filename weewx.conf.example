@@ -666,6 +666,14 @@ version = 5.3.1
             filename = /var/log/weewx/weewx.log
             when = midnight
             backupCount = 30
+    # Override ROOT, not just weewx/user (DEC-0043). weewx's defaults point the
+    # root logger at a syslog handler on /dev/log, which does not exist in a
+    # container: every record reaching root then dumps a traceback to stderr,
+    # and weewxd/weeutil.* startup lines (the version banner, the config path)
+    # never reach this log file at all.
+    [[root]]
+        level = INFO
+        handlers = rotate,
     [[loggers]]
         [[[weewx]]]
             level = INFO
