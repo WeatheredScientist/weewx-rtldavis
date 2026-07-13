@@ -28,6 +28,57 @@ _Last updated: 2026-07-13 (S41)._
 
 ---
 
+## 🔬 SOAK IN PROGRESS — v2.0.7, started 2026-07-13 15:27 EDT
+
+**Run ── SOAK CHECK — weewx-rtldavis-v2 ─────────────────────────────────────────────
+   image weatheredscientist/weewx-rtldavis:v2.0.7 · up 2h · window: since container start
+
+  [32mPASS[0m  container running                  
+  [32mPASS[0m  image is the expected tag          weatheredscientist/weewx-rtldavis:v2.0.7
+  [32mPASS[0m  no container restarts              
+  [32mPASS[0m  archive records still arriving     last 28s ago
+  [32mPASS[0m  no logging-error tracebacks        (DEC-0043)
+  [32mPASS[0m  stdout quiet                       6 lines (DEC-0041)
+  [32mPASS[0m  weewxd startup banner in weewx.log (DEC-0043)
+  [32mPASS[0m  patched driver 0.20+ws.1           (DEC-0031)
+  [32mPASS[0m  sensor_qc enabled                  
+  [32mPASS[0m  log_humidity_raw ACTIVE            (DEC-0044 instrument)
+  [32mPASS[0m  rtldavis stalls                    1 (<=1 startup stall is known)
+  [32mPASS[0m  no tracebacks                      
+  [32mPASS[0m  uploaders publishing               6574 records
+  [32mPASS[0m  InfluxDB receiving                 
+  [32mPASS[0m  reception window                   100%
+
+── THE TWO OPEN EXPERIMENTS ────────────────────────────────────────────
+  [32m●[0m  humidity_raw capture: 89 samples logged (DEC-0044)
+     A midday SPIKE is what settles the nibble question — grep the log for the
+     spike, invert pkt[4]/pkt[3], re-decode under 0x2/0x8/0xE. Method: DEC-0044.
+  [32m●[0m  phantom rainRate: 0 rows (rainRate>0 while rain=0) in 123 archive rows
+     A THIRD event is predicted on the next calm, saturated, cooling night.
+     DEC-0049: the hardware is sound, so the counter must NOT advance.
+
+[32mSOAK: 15 passed, 0 warnings, 0 failures.[0m to get a verdict.** It is the acceptance criteria, not a vibe: 15 checks,
+exit 0 = green, exit 1 = needs a human. It re-asserts every claim the v2.0.7 deploy made, and it can
+actually fail (proven with a positive control).
+
+**It catches the two things that have lied to us before.** *Archive continuity* catches DEC-0036 (weewx
+froze for 7h18m mid-log-write while the container still reported "Up" — data arriving is health;
+"Up" is not). *Driver identity* catches DEC-0031 (the image ran the STOCK driver for weeks with a
+correct version tag and normal logs).
+
+**A 24 h window is the right length because it covers both open experiments for free:**
+
+1. **The midday humidity spike** (11:00–16:00, ~2–3/week) — the  capture is live and
+   accumulating. A spike settles the nibble question deterministically (DEC-0044). The soak reports the
+   sample count; **you still have to look for the spike and do the inversion.**
+2. **The overnight calm/saturated window** — a third phantom-rainRate event is predicted. **The soak
+   auto-detects it** ( while , straight from the archive DB). If it fires:
+   **snapshot the raw rows BEFORE any correction** (the S38 lesson), then confirm the tip counter did
+   **not** advance, as DEC-0049 requires.
+
+**Baseline at T+2 h: 15/15 pass, 0 warnings.** No stalls beyond the one known startup stall, stdout
+silent (6 lines), reception 100 %, archive current.
+
 ## Active thread
 
 > **▶ Resume here (S41 → S42). The release is DONE. Nothing is half-shipped and no PR is open.**
