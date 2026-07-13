@@ -15,28 +15,27 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S39** (2026-07-13) — **the root logger nobody overrode, and a theory that did not
-> survive its own test.** A health check found prod dumping **15 tracebacks per start** to stderr:
-> weewx's default **ROOT** logger points at a syslog socket a container does not have, and overriding
-> `weewx`/`user` never protected it — so `weewx.log` has *never* held a single startup line (DEC-0043,
-> fixed, ships in v2.0.7). And the **nibble theory is not supported** by our data — nor can the archive
-> ever settle it. The coupling filter is **parked, not built**; the raw-byte capture is **armed**
-> instead (DEC-0044). Full story: CHANGELOG `[S39]`.
+> **Current session: S40** (2026-07-13) — **a comment is not an exemption.** The secret gate let a
+> commented-out credential into a **public** repo — and its own planted-payload test **asserted that was
+> correct**, as part of DEC-0039's "28/28, proven". The proof had certified the hole. `ALLOW (1)` is
+> deleted, comments are now scanned exactly like code, **no exemption was added**, and a **full-history
+> scan of all 333 blobs found the hole was never exploited** (DEC-0045). S39's PR #34 also merged to
+> `dev`. Full story: CHANGELOG `[S40]`.
 
-_Last updated: 2026-07-13 (S39)._
+_Last updated: 2026-07-13 (S40)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S39 → S40).**
+> **▶ Resume here (S40 → S41).**
 >
-> **1. v2.0.7 is built but NOT released.** The `[[root]]` logging fix (DEC-0043) is on
-> `worktree-s39-v207-logging-coupling` / PR. It needs: merge → `dev` → `main`, tag, **Docker Hub push**,
-> GitHub release. Until it ships, every downstream user still sees 15 tracebacks on `docker run` and
-> loses their startup diagnostics. Prod is **not** affected by the noise (bounded burst, steady state
-> silent), so there is no urgency to restart the station for it — fold the prod deploy into the release
-> in an attended window.
+> **1. v2.0.7 is built but NOT released — this is the biggest open item.** The `[[root]]` logging fix
+> (DEC-0043) is **merged to `dev`** (PR #34, S39) but not shipped. It needs: `dev` → `main`, tag, **Docker
+> Hub push**, GitHub release. Until it ships, every downstream user still sees 15 tracebacks on
+> `docker run` and loses their startup diagnostics. Prod is **not** affected by the noise (bounded burst,
+> steady state silent), so there is no urgency to restart the station for it — fold the prod deploy into
+> the release in **one attended window**, which also activates the raw-humidity capture below.
 >
 > **2. The raw-humidity capture is ARMED but NOT ACTIVE.** `log_humidity_raw = true` is in the live
 > `weewx.conf` and parses, but **weewx reads its config only at startup — it takes effect on the next
@@ -78,7 +77,9 @@ _Last updated: 2026-07-13 (S39)._
 - **The enforcement layer is live and tested** (DEC-0040): `~/.claude/hooks/docker-guard.sh` (19/19),
   `~/.claude/hooks/eaglehunt-status.sh` (finds stranded draft PRs across all three repos), and a
   `.zshrc` guard for the human (6/6). `enforce_admins: true` on `main` + `dev`; CI runs the 67 tests.
-- **The secret gate is proven** (DEC-0039): 28/28 planted payloads, in CI, ahead of the scan.
+- **The secret gate is proven** (DEC-0039): 28/28 planted payloads, in CI, ahead of the scan. **Superseded
+  by DEC-0045 (S40)** — two of those 28 asserted that a *commented-out* credential must PASS. Now 41/41,
+  and comments are scanned like code.
 - **47 MB reclaimed** — `/weewx`, a container dead since 2026-05-04, still held the largest `log.db` on
   the NAS. Dead containers keep their log store forever.
 
@@ -142,7 +143,10 @@ _Last updated: 2026-07-13 (S39)._
   only if a container starts generating real stdout volume.**
 
 - **Rotate the exposed WU API key** (NAS `wxcheck.sh`; scrubbed from repo S16, real key still live).
-  Owner-acknowledged; **still owed** — and now the only known live exposure.
+  Owner-acknowledged; **still owed** — and it remains the only known live exposure. **S40 confirmed nothing
+  else joined it:** a scan of every blob that ever existed in this repo (333 unique, all refs) for a
+  *commented-out* credential — the class DEC-0045 just closed — found **zero**. The gate's hole was real
+  but never exploited, so no revocation and no history rewrite is warranted.
 - **Unported from the dashboard:** its `.claude/agents/` routing definitions (its DEC-0093).
 - **The dashboard has a stranded draft PR (#22, S71 Beaufort)** — found by the new session-start hook on
   its first run. Not ours to merge; flag it when next in that repo.
@@ -154,29 +158,27 @@ _Last updated: 2026-07-13 (S39)._
   misnomer `rw250-test` image tag.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S39 done → S40)
+## Next session actions (S40 done → S41)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S39 (2026-07-13).** **DEC-0043** — weewx's default **ROOT** logger points at a syslog socket
-(`/dev/log`) that does not exist in a container; overriding only the `weewx`/`user` loggers never
-protected it, so every start dumped **15 tracebacks (~515 lines)** to stderr *and* `weewx.log` has
-**never** held a single `weewxd`/`weeutil` startup line. Fixed with a `[[root]]` override in
-`logging.additions` + `weewx.conf.example`, a Dockerfile build-time assertion, and 5 new tests (67 → 72);
-verified A/B in the real container. **DEC-0044** — the **nibble theory is not supported** by our data, and
-the archive can *never* settle it (1-minute averaging introduces a free parameter that manufactures false
-matches: true 43 % vs shuffled-control 35 %, p = 0.248). The coupling filter is **parked, not built**;
-`log_humidity_raw` (an upstream option nobody had switched on) is **armed** in the live config instead.
-See CHANGELOG `[S39]`.
+**✅ Done in S40 (2026-07-13).** **DEC-0045 — a comment is not an exemption.** The secret gate's `ALLOW (1)`
+waved through *any* full-line comment, so a commented-out credential shipped clean into a **public** repo.
+The rule was not a blind spot the test missed: **the test asserted it** — two commented credentials sat
+under *"must PASS"* and were part of DEC-0039's "28/28, proven". The proof had certified the hole.
+`ALLOW (1)` is deleted, comments are scanned like code, **no exemption was added** (the gate's own
+illustrative literals moved into the test, where they execute — DEC-0040 applied to the gate itself), and a
+**full-history scan of all 333 blobs confirmed the hole was never exploited.** Suite 28 → **41/41**; a
+mutation test proves the fix is load-bearing. Also **merged S39's PR #34** to `dev`. See CHANGELOG `[S40]`.
 
-**▶ ON RETURN (S40), in order:**
+**▶ ON RETURN (S41), in order:**
 
-1. **Release v2.0.7 and deploy prod — one attended window, two jobs at once.** Merge the S39 PR → `dev` →
-   `main`, tag, **push to Docker Hub**, GitHub release. Then recreate prod on `:v2.0.7`. That restart is
-   also what **activates `log_humidity_raw`** (weewx reads its config only at startup), so the release and
-   the instrument arm together. Verify after: `docker logs --tail 40` shows **no** `--- Logging error ---`,
-   and `weewx.log` now contains `weewxd INFO Starting up weewx version 5.4.0` — a line that has never
-   appeared there before.
+1. **Release v2.0.7 and deploy prod — one attended window, two jobs at once.** The S39 fix is already on
+   `dev` (PR #34 merged in S40). Remaining: `dev` → `main`, tag, **push to Docker Hub**, GitHub release.
+   Then recreate prod on `:v2.0.7`. That restart is also what **activates `log_humidity_raw`** (weewx reads
+   its config only at startup), so the release and the instrument arm together. Verify after:
+   `docker logs --tail 40` shows **no** `--- Logging error ---`, and `weewx.log` now contains
+   `weewxd INFO Starting up weewx version 5.4.0` — a line that has never appeared there before.
 
 2. **Then watch for the next humidity spike.** ~2–3/week, clustered **11:00–16:00**. With the capture
    running it logs `rtldavis-luc: humidity_raw= XXXX` — the full `pkt[4]`/`pkt[3]`. That settles the
