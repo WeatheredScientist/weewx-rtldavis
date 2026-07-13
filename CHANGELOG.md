@@ -6,6 +6,73 @@ under [Pre-S16].
 
 ---
 
+## [S38] — 2026-07-13 — v2.0.5 SHIPPED to Docker Hub; the gates now execute instead of asking nicely
+
+**The headline: `v2.0.5` and `latest` are on Docker Hub.** Downstream users had been getting the
+**stock driver** (DEC-0031) *and* the **console-handler freeze hazard** (DEC-0036) on every `docker
+pull` since 2026-07-08. That stopped at 12:55 today. It is the only item in this session that had an
+ongoing external cost, and it is closed.
+
+**Why v2.0.5 and not v2.0.4 (DEC-0038).** The `v2.0.4` image on the NAS was built at **15:44 on
+07-12 — eight hours before the freeze that produced DEC-0036**, so it never contained the fix the
+release was being cut for. A rebuild was mandatory either way. Republishing different content under
+`v2.0.4` would have made one tag name two different images, which is the *same* lie as DEC-0031 and
+DEC-0034 — the artifact asserting one thing and being another. `v2.0.4` was never on Hub, so nothing
+public breaks. **Prod deliberately stays on `:v2.0.4`** and `prod-baseline` has NOT moved: the delta is
+behaviorally nil here (prod's `weewx.conf` has no console handler at all — the config drift that spared
+us), and redeploying prod unattended, hours after a seven-hour outage, to fix something that does not
+affect prod, is the wrong trade. **A catch-up deploy is owed.**
+
+**S37 never landed, and that is its own lesson.** All of S37 — three ADRs, the fork-identity audit, the
+duplicate-frame confirmation — was sitting in **draft PR #23** and had never merged to `dev`. CI green,
+branch pushed, nothing shipped. Found and merged at the top of this session. It is the direct
+motivation for the session-start hook below.
+
+**The secret gate, hardened and PROVEN (DEC-0039).** The bug class, stated once: *an allow term that
+can match anywhere on the line is not an allow-list, it is an escape hatch — the secret sits on the
+left and the excuse on the right.* `token = REAL  # falls back to os.environ` passed the old gate
+clean. Every allow term is now **anchored** or **positioned against the key the detector matched**, and
+the `grep -n` prefix bug is fixed at the root (bash parameter expansion; the allow-list runs on raw
+lines) rather than compensated for with `^[0-9]+:` anchors. Ships with
+`scripts/test_check_secrets.sh`: **13 planted payloads that must be caught, 14 good lines that must
+pass, plus a clean-tree check — 28/28.** It runs in CI *before* the scan. It earned its keep
+immediately by catching a hole in **the fix being written to close the previous hole**, and then by
+catching the ADR that described it. CI also now runs the **67 unit tests**, which it never did.
+
+**The cross-repo question, answered (DEC-0040): the gap is an ENFORCEMENT gap, not a documentation
+gap.** All three options on the table (shared ops repo / vendored fragment / status quo) distribute
+*documentation* — and in the worst incident **the rule was already written down**. "`docker logs`
+always with `--tail N`" was in `CLAUDE.md` *and* `CONVENTIONS.md` before the freeze; it was followed
+for thirty-odd sessions and broken once, and once cost seven hours. **Prose does not execute.**
+Decision: **no master repo.** Build a shared enforcement layer instead —
+- `~/.claude/hooks/docker-guard.sh` (`PreToolUse`): blocks bare `docker logs` and `docker stop`.
+  **19/19 tests**, including a `docker logs` hidden inside `ssh nas "..."` that beat the first draft.
+  Verified live.
+- `~/.claude/hooks/eaglehunt-status.sh` (`SessionStart`): reports draft PRs, stranded branches and
+  uncommitted work **across all three repos**. **On its first run it found a live stranded draft PR in
+  the dashboard (#22)** that nobody knew about.
+- Branch protection: **`enforce_admins: true`** on `main` and `dev` (checks: `secret-scan`, `lint`,
+  `tests`). The S36 bypass is now mechanically impossible, for everyone.
+
+**The Synology `db` log driver cannot be capped — proven, not assumed.** A container run with
+`--log-opt max-size=1m` emitted 200,000 lines and **kept all 200,000**. `db` is a proprietary Synology
+driver with no published options; the cap is *unsupported*, not undocumented. The daemon accepts the
+option and discards it — **the third time in one session** that "the configuration was accepted" did
+not mean "the configuration does anything" (cf. the green secret gate, the silent compose clobber).
+Also demonstrated, rather than inferred, the DEC-0036 mechanism: retrieving that log **hung for over
+three minutes**, and that was a `--tail`-bounded read. Prod was never at risk.
+
+**Provenance, outward half — prepared, NOT sent.** Both upstreams forked separately, both fixes
+committed and pushed to our forks, both verified. **No PR opened, nothing posted.**
+- `lheijst/weewx-rtldavis` → the rain-counter wraparound. Proven against LloydR's own numbers from
+  issue #15: `115 → 49 → 115` now yields missing/missing instead of a phantom 1.28″, while genuine
+  wraparounds still work (`127 → 0` = 1 tip).
+- `david-lutz/weewx-influx2` → five fixes, led by a **silent TLS-verification bypass**
+  (`ssl._create_unverified_context()` applied unconditionally to every https endpoint, so every user
+  posting to InfluxDB Cloud has certificate verification off and their token on an unauthenticated
+  connection).
+- Drafts in the owner's voice: `docs/upstream/` (gitignored). **Awaiting an explicit go.**
+
 ## [S37] — 2026-07-12→13 — A 7-hour prod freeze, the CRC question answered, and the fork finally admits it is one
 
 Three unrelated things collided. In order of how much they matter.
