@@ -62,45 +62,26 @@ _Last updated: 2026-07-13 (S40)._
 
 **Watch for replies.** `lheijst` was active as recently as 2026-07-09.
 
-## Shipped and closed in S38 — nothing to do here
+## Shipped — nothing to do here
 
-- **v2.0.5 → v2.0.6 on Docker Hub** (`latest` too). Downstream users get the patched driver (DEC-0031),
-  the console handler at `WARNING` (DEC-0036) **and StdPrint removed** (DEC-0041 — the real stdout
-  writer, ~25 MB/day, which v2.0.5 missed).
-- **Prod is on `:v2.0.6`**, recreated 2026-07-13 11:09 EDT. Verified: `driver version is 0.20+ws.1 (fork
-  of lheijst 0.20)`, `sensor_qc True`, `influx service version 0.20+ws.1`, **stdout silent** (0 LOOP
-  lines), every uploader publishing, `RestartCount: 0`. `prod-baseline-20260713` tagged — **DEC-0011's
-  `main` = production truth invariant is restored.**
-- **`influx.py` drift closed.** Prod's bind-mounted copy now matches the repo (md5 `5f58c204`).
-- **Both upstream PRs OPEN:** [lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22) (rain
-  wraparound), [david-lutz#1](https://github.com/david-lutz/weewx-influx2/pull/1) (TLS verification + 4).
-- **The enforcement layer is live and tested** (DEC-0040): `~/.claude/hooks/docker-guard.sh` (19/19),
-  `~/.claude/hooks/eaglehunt-status.sh` (finds stranded draft PRs across all three repos), and a
-  `.zshrc` guard for the human (6/6). `enforce_admins: true` on `main` + `dev`; CI runs the 67 tests.
-- **The secret gate is proven** (DEC-0039): 28/28 planted payloads, in CI, ahead of the scan. **Superseded
-  by DEC-0045 (S40)** — two of those 28 asserted that a *commented-out* credential must PASS. Now 41/41,
-  and comments are scanned like code.
-- **47 MB reclaimed** — `/weewx`, a container dead since 2026-05-04, still held the largest `log.db` on
-  the NAS. Dead containers keep their log store forever.
+- **S38** (v2.0.5 → **v2.0.6** on Docker Hub; prod recreated + verified; `prod-baseline-20260713` tagged;
+  `influx.py` drift closed; the `~/.claude/hooks/` enforcement layer live and tested; 47 MB reclaimed):
+  see CHANGELOG `[S38]` and DEC-0038/0039/0040/0041/0042.
+- **S39** (root-logger fix DEC-0043; nibble theory falsified DEC-0044): CHANGELOG `[S39]`. **On `dev`,
+  not released** — see "Active thread" item 1.
+- **S40** (the secret gate scans comments like code — DEC-0045; suite 28 → 41; a full-history scan of all
+  333 blobs proved the hole was never exploited): CHANGELOG `[S40]`. **DEC-0039's "28/28 proven" is
+  superseded** — two of those 28 asserted a *commented-out* credential must PASS.
 
 ## Open threads (backlog — none of these block anything)
 
-- **✅ rainRate — ANSWERED (DEC-0042).** It is an **ISS-side sensor artifact**, not RF and not the
-  driver. Reconstructed from a pre-correction DB backup: the rate held for exactly the ISS's ~15-min
-  timeout, the implied tip interval stayed in an 8.5–10 s band, and **the tip counter never advanced**.
-  Reaching those raw values from the `0x3FF` sentinel needs ~6 bit-flips *per packet for 16 minutes* — RF
-  corruption cannot do that. Conditions both times: overnight, 94 % RH, 1.7 °F dewpoint spread, 0 mph
-  wind. Condensation trips the reed switch enough to start the rate timer, never enough to tip the
-  bucket. **Next step is physical (inspect the bucket + reed switch), not software.** A third event is
-  predictable on the next calm, saturated, cooling night.
-
-- **✅ Cross-sensor coupling filter — PARKED, DELIBERATELY NOT BUILT (DEC-0044).** Do **not** pick this
-  up again as specced. The premise failed on our own data: *"temperature essentially flat"* describes
-  **90 % of all minutes**, so it discriminates almost nothing; every spike visible in the archive is
-  **already caught** by DEC-0029's 10 %RH/reading cap; and the 2026-05-23 "gust front" cited as its
-  false-positive test shows a max humidity move of **1.0 %/min** (it was never evidence). The remembered
-  "6 %/min, 3-for-3" arrived from dash S69 and did not survive re-derivation. **The mechanism is the open
-  question, not the threshold** — see the raw-byte capture in "Active thread".
+- **✅ rainRate — ANSWERED (DEC-0042).** ISS-side sensor artifact, not RF and not the driver: condensation
+  trips the reed switch enough to start the rate timer, never enough to tip the bucket. **Next step is
+  physical (inspect the bucket + reed switch), not software** — a third event is predictable on the next
+  calm, saturated, cooling night. Full evidence in DEC-0042; **do not re-derive it.**
+- **✅ Cross-sensor coupling filter — PARKED, DELIBERATELY NOT BUILT (DEC-0044).** Do **not** pick this up
+  as specced; its premise failed on our own data. **The mechanism is the open question, not the
+  threshold** — the raw-byte capture in "Active thread" is what settles it. Full reasoning in DEC-0044.
 - **Monitor alert on the new rejection signature (S33 follow-up #1)** — extend `weewx_monitor.py`'s
   rain-glitch email to SensorQC rejections; needs its own pattern + a rate cap so a flapping sensor
   can't spam. Only worth doing once we see the real rejection rate.
@@ -124,9 +105,6 @@ _Last updated: 2026-07-13 (S40)._
   straight from the data with no parallel list. The dashboard side still has to *read* it.
 
 ## Needs a check / housekeeping
-
-- **✅ CLOSED IN S38:** see "Shipped and closed" above. Prod on `:v2.0.6`, `main` == prod, both upstream
-  PRs open, guards installed + tested, secret gate proven, 47 MB reclaimed, `influx.py` drift closed.
 
 - **⚠️ The freeze MECHANISM is still open (DEC-0036) — but the trigger and the fuel are both gone.**
   We never proved exactly which write blocked, and the evidence is gone. Do **not** invent one. What we
