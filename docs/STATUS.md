@@ -93,6 +93,17 @@ _Last updated: 2026-07-12 (S36)._
 
 ## Needs a check / housekeeping
 
+- **⚠️ Our driver lies about its identity (owner question, S36).** `DRIVER_VERSION = '0.20'` — we log as
+  **stock upstream v0.20** while carrying the rain-glitch filter (DEC-0021), SensorQC (DEC-0029), the
+  H1/H2/M3 reception fixes, the windDir fix and dewpoint honest-null. **None of that exists upstream.**
+  We are a fork that hasn't admitted it, and the log line misleads anyone debugging — including us, and
+  including anyone we help on upstream issue #15. Same class of dishonesty as the compose clobber: the
+  artifact says one thing and does another. **Fix:** (1) version it as a fork (`'0.20+ws.1'` or similar);
+  (2) state the relationship plainly in the README (a Docker distribution of Luc Heijst's driver, with
+  these patches, not affiliated — GPLv3, attribution already intact); (3) shrink the delta by upstreaming
+  (the issue #15 contribution is exactly this). **Keep the repo/image name** — it's published, and
+  renaming breaks every downstream `docker pull`.
+
 - **⚠️ PROD IS IN A DEBUG STATE — revert when the Lloyd test is done (S36).** To capture raw frames we
   set, in the live `weewx.conf`: `[Rtldavis] debug_rtld = 2` and `[Logging][[loggers]][[[user]]]
   level = DEBUG`. This adds log volume (raw `data:` line per packet, ~21/min). **Revert both to
