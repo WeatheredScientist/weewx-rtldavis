@@ -68,6 +68,42 @@ its raw `pkt[3]`/`pkt[4]`** and settles the nibble question deterministically �
 parameter. Spikes run ~2–3/week, clustered 11:00–16:00. The inversion method is in DEC-0044; do not
 re-derive it.
 
+### Security — DEC-0047: the secret gate guards commits, not reads
+
+> **The transcript is an egress path, and nobody had modeled it as one.**
+
+- **The gap.** Every secret control in this repo is a **commit-time** control — DEC-0012,
+  `check_secrets.sh`, the CI secret-scan, the 41-payload proof suite. Four hardenings across S26 → S40, all
+  of them guarding the **write** path to GitHub. **None says anything about reading.** Whatever a tool
+  prints lands in `~/.claude/projects/*.jsonl` in plaintext and is transmitted to the model provider. The
+  `.gitignore` entry feeds the blind spot: the live config is *deliberately* excluded from the repo, which
+  makes it feel handled. **"Not in the repo" is not "not in the transcript."** DEC-0040 said *prose does not
+  execute*; this is worse — **there was no prose.** No rule was broken because no rule existed.
+- **What surfaced it:** a `sed -n "/^[Logging]/,+44p"` on the live config during this deploy. A fixed
+  **line-count** window on a sectioned file: `[Logging]` is ~22 lines, so it ran off the end and printed the
+  following sections into the transcript. **A line-count window on a sectioned config is a loaded gun —
+  sections move, the window does not.**
+- **Three mechanical controls, in `~/.claude/`** (global — DEC-0040's "no master repo"):
+  `hooks/secret-read-guard.sh` (PreToolUse on Bash/Read/Grep; blocks *secret path* × *emitting verb*, sees
+  through `ssh "…"`, **leaves editing alone** so the DEC-0046 release workflow still works — a guard that
+  blocks the work gets switched off; matches **per-token**, so `cat weewx.conf.example && cat weewx.conf`
+  cannot launder the live config through the `.example` carve-out);
+  `bin/readconf` (**section-scoped — it structurally cannot take a line window**; values become stable
+  `sha256` fingerprints while `handlers = rotate,` and `level = INFO` stay readable, because a DEC-0046
+  deploy has to verify exactly those); and `bin/scan-transcripts` (the detection half).
+- **Proven, not merely green.** The guard's suite asserts **both directions** (38/38 — the leaking command
+  blocks; `cat weewx.conf.example`, `sed -i`, `cp`, `readconf` all still pass), and a **mutation test**
+  turns it **red — 18 failures.** The scanner **self-tests before every run** and refuses to report "0" if
+  the harvest returned nothing. **Verified live:** re-running the original command is now blocked by the
+  hook.
+- **A scanner that cries wolf is its own failure mode.** The first pass reported a real password sitting in
+  `weewx.conf.example` on public `main` since S16 — which would have been a live exposure and a fifth gate
+  hole. It was the example's own placeholder string. The evidence looked internally weird (the same
+  "password" appeared as three different keys), and re-checking it is the only reason a five-alarm claim was
+  not filed. DEC-0039: *a green exit code is not evidence.* DEC-0045: *a passing test is not evidence
+  either.* **S41: a scan that finds nothing is not evidence unless you have proved the scanner can see.**
+- **A full scan of all refs confirms no real credential has ever been committed to any of the three repos.**
+
 ## [S40] — 2026-07-13 — a comment is not an exemption: the gate's proof had certified the hole
 
 > **The secret gate let commented-out credentials into a PUBLIC repo — and its own test said that was
