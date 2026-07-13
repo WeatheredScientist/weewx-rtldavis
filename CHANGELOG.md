@@ -35,10 +35,12 @@ ongoing external cost, and it is closed.
 release was being cut for. A rebuild was mandatory either way. Republishing different content under
 `v2.0.4` would have made one tag name two different images, which is the *same* lie as DEC-0031 and
 DEC-0034 — the artifact asserting one thing and being another. `v2.0.4` was never on Hub, so nothing
-public breaks. **Prod deliberately stays on `:v2.0.4`** and `prod-baseline` has NOT moved: the delta is
+public breaks. Prod deliberately stayed on `:v2.0.4` **at that point in the session** — the delta was
 behaviorally nil here (prod's `weewx.conf` has no console handler at all — the config drift that spared
-us), and redeploying prod unattended, hours after a seven-hour outage, to fix something that does not
-affect prod, is the wrong trade. **A catch-up deploy is owed.**
+us), and redeploying prod unattended, hours after a seven-hour outage, to fix something that did not
+affect prod, was the wrong trade. *(Resolved later the same day: once v2.0.6 existed and the owner was
+present, prod was deployed to `:v2.0.6` in an attended window and `prod-baseline-20260713` was tagged —
+see below.)*
 
 **S37 never landed, and that is its own lesson.** All of S37 — three ADRs, the fork-identity audit, the
 duplicate-frame confirmation — was sitting in **draft PR #23** and had never merged to `dev`. CI green,
@@ -89,9 +91,23 @@ fork), both PRs **open**:
   by a **silent TLS-verification bypass** (`ssl._create_unverified_context()` applied unconditionally to
   every https endpoint, so every user posting to InfluxDB Cloud has certificate verification off and
   their token on an unauthenticated connection). That repo's first-ever PR.
-- **The issue-#15 thread response is drafted and NOT posted** — `docs/upstream/issue-15-response.md`,
-  awaiting the owner's review for tone. The PR needs nothing; this is the half that explains the
-  mechanism to the three people who have been living with it since 2022.
+- **[The issue-#15 comment is POSTED](https://github.com/lheijst/weewx-rtldavis/issues/15#issuecomment-4960224128)**
+  (owner-approved, 2026-07-13) — **the first comment on that thread since 2022-11-14.** It explains the
+  duplicate-frame mechanism, the wraparound bug, and that the phantom **rainRate is ISS-side, not a driver
+  bug** (DEC-0042) — which the three people there had been hunting in software for four years.
+
+**DEC-0042 — the phantom rainRate is ISS-side, and the rainRate thread is CLOSED.** Reconstructed from a
+2026-05-29 DB backup that happened to predate our own S36 correction: no real rain that day at all; the
+rate held **03:22–03:37 UTC, sharp on and sharp off** — exactly the ISS's ~15-min timeout; the implied tip
+interval stayed in a tight **8.5–10.0 s** band; and **the tip counter never advanced** (`rain = 0.0000` in
+all sixteen records). Decisive: reaching those raw values from the `0x3FF` "no rain" sentinel needs **~6
+bit-flips in every packet for sixteen consecutive minutes** — RF corruption gives *one* bad packet, not a
+coherent stream. **The ISS sent them.** Conditions both events: overnight, 94 % RH, 1.7 °F dewpoint
+spread, 0 mph wind. **Condensation trips the reed switch enough to start the rate timer, never enough
+water to tip the bucket.** So DEC-0033/0035 are now explicitly *bounded* — they explain the rain
+**counter**, and no decode-layer filter will ever touch the rate. **The next step is physical, not
+software.** Method lesson kept in the ADR: this was only answerable because a backup predated our own
+correction — **snapshot the affected rows BEFORE a retrospective correction, not after.**
 
 **Prod finished the session on `:v2.0.6`, and `main` == prod again.** Recreated 11:09 EDT; verified
 `driver version is 0.20+ws.1 (fork of lheijst 0.20)`, `sensor_qc True`, `influx service version 0.20+ws.1`,
