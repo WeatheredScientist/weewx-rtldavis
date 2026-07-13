@@ -167,11 +167,18 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
 
     WHY THIS FILTER EXISTS (the false-rain bug it fixes):
     ------------------------------------------------------
-    This RTL-SDR link runs near the RF noise floor (~150 ft through walls,
-    ~67-70% reception). CRC is enforced, so simple single-bit errors are
-    dropped -- but a multi-bit corruption or a mis-decoded packet can still
-    pass CRC and deliver a wrong rain-counter byte, characteristically with a
-    high bit (64 or 128) wrong. The ORIGINAL driver treated *any* negative
+    Corrupt rain-counter readings DO arrive with a valid CRC. CRC-16 cannot miss
+    a SINGLE-bit error (verified: 0 of 64 single-bit flips of a valid 8-byte
+    message pass) -- but a MULTI-bit error pattern can be a valid codeword and
+    slip through, and upstream issue #15 has the receipts: two frames 262 us
+    apart (the ISS transmits every ~2.5 s), differing in 4 bits, BOTH passing
+    CRC. The likely mechanism is the rtldavis Go demodulator emitting a spurious
+    near-duplicate frame; most such frames fail CRC and are dropped silently,
+    but ~1 in 65536 passes by chance and delivers garbage. The driver's own
+    dedup (`data != self._last_pkt`, ~L1209) is EXACT-equality, so a *corrupted*
+    near-duplicate is not a duplicate and sails past it.
+    So CRC is not a defense here, and a decode-layer plausibility check is the
+    only one available at this layer. The ORIGINAL driver treated *any* negative
     counter delta as a 127->0 wraparound and unconditionally added 128 to
     recover the true count. That is correct for a genuine wraparound, but a
     corrupted reading can produce a SMALL negative delta (e.g. -64) -- and
@@ -211,8 +218,11 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
 
 
 # --- Sensor plausibility filter (S33 bad-packet fix, DEC-0029) ---
-# The same RF failure class as the rain glitch (multi-bit corruption that
-# passes CRC) also hits the other sensor bit-fields, with characteristic
+# The same failure class as the rain glitch -- multi-bit corruption that passes
+# CRC (see rain_delta_tips above and DEC-0033: upstream issue #15 shows two
+# frames 262 us apart differing in 4 bits, both CRC-valid; CRC-16 catches every
+# single-bit error but a multi-bit pattern can be a valid codeword). It hits the
+# other sensor bit-fields too, with characteristic
 # high-bit-flip magnitudes: humidity is raw %x10, so bit-7/bit-8 flips inject
 # +/-12.8 / +/-25.6 %RH per reading (18 one-minute archive spikes confirmed
 # 2026-05-19..07-08, deviations clustering at 25.6/3 and 12.8/2 as predicted
