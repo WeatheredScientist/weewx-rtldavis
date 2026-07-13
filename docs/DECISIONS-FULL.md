@@ -1306,3 +1306,130 @@ a backup happened to predate our own correction. DEC-0025 (*preserve and flag, n
 evidence existed at all — but the live rows had been overwritten in place (DEC-0032), and only luck
 supplied a pre-correction copy. **Snapshot the affected rows before a retrospective correction, not
 after.**
+
+---
+
+## DEC-0043 — Override the ROOT logger, not just `weewx` and `user` (S39)
+
+**Status:** Accepted · **completes** DEC-0036 / DEC-0041 · 2026-07-13 (S39)
+
+**Context.** A routine post-deploy health check on `:v2.0.6` found the container emitting **15
+logging-error tracebacks (~515 lines) to stderr on every start**. Steady state was clean — 0 lines
+in 90 s, so DEC-0041's StdPrint removal genuinely holds — but every start dumped a wall of
+`FileNotFoundError: /dev/log` at anyone running `docker logs`.
+
+**Root cause.** weewx's own defaults (`weeutil/logger.py`, `LOGGING_STR`) set:
+
+```
+    [[root]]
+      level = {log_level}
+      handlers = syslog,
+```
+
+with `address = /dev/log` on Linux. **There is no syslog daemon in a container.** Our
+`logging.additions` overrode the `weewx` and `user` loggers (giving them their own handlers and
+`propagate = 0`), so those were always safe — but `weewxd` and `weeutil.*` are in **neither**
+namespace. They fall through to root, hit the syslog handler, and `SysLogHandler.emit()` raises;
+Python's logging module then prints the whole traceback to stderr.
+
+**The quieter half, which matters more.** Those records were not merely noisy — they were **lost**.
+`weewx.log` has **never** contained a single `weewxd` or `weeutil` line: not the version banner, not
+the config path, not the group list. They only ever went to the handler that was failing. We had been
+running without startup diagnostics and had not noticed, because the failure announced itself on a
+stream nobody reads.
+
+**Decision.** Add a `[[root]]` override to `logging.additions` (baked image: `rotate, console`) and
+to `weewx.conf.example` (`rotate` — it defines no console handler). A **build-time assertion** fails
+the image build if `[[root]]` is absent from the baked config, in the same spirit as DEC-0041's.
+
+**Verified, not assumed** — A/B in the real container, as a separate process:
+
+| Config | root handlers | Result |
+|---|---|---|
+| without `[[root]]` (prod today) | `SysLogHandler` | traceback reproduced exactly |
+| with `[[root]]` (the fix) | `TimedRotatingFileHandler` | no traceback; `weewxd INFO Starting up weewx version 5.4.0` **lands in the file** |
+
+**Consequences.** Not a freeze hazard: the burst is bounded (~515 lines/start) and steady state stays
+at 0, so this never threatened DEC-0036's pipe. It is a *downstream* fix — every user of the
+published image sees the tracebacks on first `docker run` — and an *observability* fix for us. Ships
+in **v2.0.7**.
+
+**The pattern, stated once.** Overriding a child logger does not protect you from a bad handler on
+its parent. `propagate = 0` on `weewx` and `user` made those two namespaces safe and left every
+*other* logger in the process still pointed at the broken handler — which is why the bug was
+invisible for the entire life of the image.
+
+---
+
+## DEC-0044 — The nibble theory is not supported by the archive, and the archive can never settle it: instrument, don't filter (S39)
+
+**Status:** Accepted · **bounds** DEC-0029 · **parks** the temp/humidity coupling filter · 2026-07-13 (S39)
+
+**Context.** The S39 backlog carried a "cross-sensor consistency filter" inherited from dashboard S69:
+*a humidity move >6 %/min with temperature essentially flat is physically impossible*, reported as
+3-for-3 on the bad events with 0 false positives. Behind it sat an unproven mechanism — the **nibble
+theory**: the ISS message-type nibble (`pkt[0] >> 4`) suffers a bit flip, so **another sensor's
+payload is decoded as humidity**. S69 proposed a falsifiable arithmetic test, started a raw capture,
+and never finished; the theory was recorded as "under investigation" and the statistical filter became
+the plan. S39 ran the test.
+
+**Finding 1 — the theory's own arithmetic does not fit its story.** Humidity is type `0xA` = `1010`.
+Its **single-bit-flip neighbours are `0x2` (supercap), `0x8` (temperature), `0xB` (undefined) and
+`0xE` (rain counter)**. Solar (`0x6`) is **two** bits away; UV (`0x4`) is **three**. S69's "why always
+midday? — a misdecoded solar/UV payload" is therefore *not reachable by a single bit flip*, which was
+the theory's central claim.
+
+**Finding 2 — every testable variant fails.** Each type reads the same `pkt[3]`/`pkt[4]`, so a bogus
+humidity value pins those bytes and the re-decode is exact arithmetic, not a guess:
+
+| Candidate | Decode from the bogus RH | Verdict |
+|---|---|---|
+| UV (`0x4`) | `sr_raw / 50` | **Dead** — implied UV ≈ 2× actual on *every* spike |
+| Temperature (`0x8`) | `((pkt3 << 4) + p4hi) / 10` | **Dead** — implied 200–400 °F |
+| Solar (`0x6`) | `sr_raw * 1.757936` | **Not supported** — see below |
+| Supercap (`0x2`) | `sr_raw / 300` | Fails where testable; `supplyVoltage` null at nearly every spike |
+
+**Finding 3 — the solar "match" was fitted noise, and a control proves it.** The archive stores
+1-minute *averages*, so recovering the raw bogus reading needs `raw = n·spike − (n−1)·baseline` with
+`n` (readings/minute) **unknown**. Letting `n` range over {1,2,3} produced 12/28 hits within ±10 % —
+but the winning `n` came out uniformly **{1:4, 2:4, 3:4}**, the signature of a meaningless parameter.
+Scored against **2000 shuffled pairings** (each spike's implied solar vs some *other* spike's actual
+radiation): true 12/28 (43 %) vs shuffled mean 9.9 (35 %), **p = 0.248**. The real pairing does not
+beat chance.
+
+**Finding 4 — this is structural, not a failure of effort.** The free parameter `n` *is* the thing
+that manufactures false matches, and it exists only because the archive averages. **No analysis of
+1-minute archive data can settle the nibble theory.** Neither can InfluxDB: it stores the same
+1-minute records (verified — bucket `weewx`, retention infinite, timestamps on the minute).
+
+**Decision.**
+
+1. **Do not build the coupling filter.** Its premise does not survive the data twice over. "Temperature
+   essentially flat" describes **90 % of all minutes** (66,743 of 74,538 samples at |ΔT| ≤ 0.1 °F), so
+   the flatness test carries almost no discriminating power — the humidity rate does nearly all the
+   work. And every spike large enough to see in the archive (8–12 %RH/min, implying a **raw** glitch of
+   16–37 %RH) is **already rejected by DEC-0029's existing 10 %RH-per-reading cap**. The filter would
+   have targeted a residual we have not shown exists, using a threshold we could not honestly derive.
+   *The direction of the S69 insight is right* — mean |ΔRH| does climb with |ΔT| (0.29 → 0.44 → 0.82 →
+   1.1 → 1.32 → 1.66), exactly as physics predicts, and every jump above 8 %/min occurs only in
+   flat-temp bands. It is the *discriminator* that is not there.
+2. **Instrument instead.** Enable **`log_humidity_raw`** — an option that **already exists upstream**
+   (`rtldavis.py`, Luc Heijst's modification) and logs `(pkt[4] << 8) + pkt[3]`: **both payload bytes,
+   in full**. With real `pkt[4]` there is no averaging and no free parameter, and the inversion becomes
+   deterministic. It is a config flag, not a code change, and it emits at INFO to the *file* handler —
+   prod's `weewx.conf` has no console handler, so it adds **nothing** to stdout and carries no DEC-0036
+   risk.
+3. **Correct the record.** The 2026-05-23 "gust front" cited as the filter's key
+   false-positive test shows a **maximum humidity move of 1.0 %/min** in our archive (90 %RH, 50 °F,
+   wind ≤ 2.5 mph — a calm, saturated day). It would be spared by *any* threshold. It was never
+   evidence.
+
+**Consequences.** The spike mechanism is **open** and stays open — honestly. DEC-0029's filter keeps
+catching the large glitches at the source, which is what protects the data today. The next midday
+spike, with `log_humidity_raw` armed, settles the question deterministically.
+
+**The pattern, stated once.** *A statistical filter is what you build when you have given up on the
+mechanism.* Before shipping one, check whether the decisive instrument is already sitting in the code
+— here it was, an upstream option nobody had switched on. And when a remembered constant arrives from
+another repo's session ("6 %/min, 3-for-3"), **re-derive it against your own data before you build on
+it**: both the threshold and its headline test evaporated on contact.

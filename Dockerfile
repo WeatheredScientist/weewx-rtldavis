@@ -80,6 +80,13 @@ RUN python3 -m venv --copies /opt/weewx-venv && \
 COPY logging.additions /tmp/logging.additions
 RUN cat /tmp/logging.additions >> /opt/weewx-data/weewx.conf && \
     rm /tmp/logging.additions
+# The [[root]] override must survive into the baked config (DEC-0043). Without it
+# weewx's default root logger keeps `handlers = syslog,` -> /dev/log, which does
+# not exist in a container: ~15 tracebacks to stderr per start, and every
+# weewxd/weeutil startup line silently lost instead of landing in weewx.log.
+# Assert rather than assume -- the same reason DEC-0041's assertion exists.
+RUN grep -q '^[[:space:]]*\[\[root\]\]$' /opt/weewx-data/weewx.conf || \
+    (echo "FATAL: [[root]] logger override missing — the image would ship the syslog-traceback bug" && exit 1)
 
 #--------------------------------------------
 # Remove StdPrint from the baked default config (DEC-0041)

@@ -15,35 +15,39 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S38** (2026-07-13) — **v2.0.6 IS ON DOCKER HUB.** The downstream harm is over:
-> every `docker pull` now gets the patched driver (DEC-0031), the console-handler fix (DEC-0036) **and
-> StdPrint removed (DEC-0041)** — the last was the *real* stdout writer, ~25 MB/day, and v2.0.5 had
-> missed it. The secret gate is **proven** rather than merely green (DEC-0039), and the cross-repo
-> question is answered: the gap is an **enforcement** gap, not a documentation gap — no master repo
-> (DEC-0040). **Prod was fixed and restarted; stdout is now silent.** Full story: CHANGELOG `[S38]`.
+> **Current session: S39** (2026-07-13) — **the root logger nobody overrode, and a theory that did not
+> survive its own test.** A health check found prod dumping **15 tracebacks per start** to stderr:
+> weewx's default **ROOT** logger points at a syslog socket a container does not have, and overriding
+> `weewx`/`user` never protected it — so `weewx.log` has *never* held a single startup line (DEC-0043,
+> fixed, ships in v2.0.7). And the **nibble theory is not supported** by our data — nor can the archive
+> ever settle it. The coupling filter is **parked, not built**; the raw-byte capture is **armed**
+> instead (DEC-0044). Full story: CHANGELOG `[S39]`.
 
-_Last updated: 2026-07-13 (S38)._
+_Last updated: 2026-07-13 (S39)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S38 → S39). The session is CLOSED and everything is shipped.** Prod runs `:v2.0.6`,
-> `main` == prod (`prod-baseline-20260713`), the image is published, and **all three upstream
-> contributions are live**. Nothing is half-done, nothing is stranded, no PR is open.
+> **▶ Resume here (S39 → S40).**
 >
-> **ONE thing is deliberately parked, and it is not ours to move:**
+> **1. v2.0.7 is built but NOT released.** The `[[root]]` logging fix (DEC-0043) is on
+> `worktree-s39-v207-logging-coupling` / PR. It needs: merge → `dev` → `main`, tag, **Docker Hub push**,
+> GitHub release. Until it ships, every downstream user still sees 15 tracebacks on `docker run` and
+> loses their startup diagnostics. Prod is **not** affected by the noise (bounded burst, steady state
+> silent), so there is no urgency to restart the station for it — fold the prod deploy into the release
+> in an attended window.
 >
-> **Cross-repo etiquette / the 4th-project question — PARKED FOR FABLE (owner's call, ~2026-07-14).**
-> Do **not** re-litigate or start building it. The advice is written up in
-> `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette: *a repo owns its own prod — nobody else
-> deploys into it, they file*; a coordinating repo earns its keep only if it holds the NAS runtime
-> contract, a shared **issue tracker**, and the shared executables, is read **on demand** (never at
-> session boot), and passes the litmus test *"does this belong to more than one repo?"*. DEC-0040 already
-> settled the **enforcement** half (no master repo; guards in `~/.claude/hooks/`) — this is only the
-> **etiquette** half. Fable reviews it, then the owner decides.
+> **2. The raw-humidity capture is ARMED but NOT ACTIVE.** `log_humidity_raw = true` is in the live
+> `weewx.conf` and parses, but **weewx reads its config only at startup — it takes effect on the next
+> container restart.** The v2.0.7 deploy is the natural moment. Once running, the **next midday humidity
+> spike** logs its raw `pkt[3]`/`pkt[4]` and settles the nibble question deterministically (DEC-0044).
+> Spikes run ~2–3/week, clustered 11:00–16:00.
 >
-> **S39 picks up the ordinary backlog** (below). Nothing blocks it.
+> **3. Cross-repo etiquette / the 4th-project question — STILL PARKED FOR FABLE** (owner's call). Do
+> **not** re-litigate or start building it. Everything is in
+> `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette. DEC-0040 settled the *enforcement* half
+> (no master repo; guards in `~/.claude/hooks/`); this is only the *etiquette* half.
 
 ## Upstream — all three landed (S38)
 
@@ -89,10 +93,13 @@ _Last updated: 2026-07-13 (S38)._
   bucket. **Next step is physical (inspect the bucket + reed switch), not software.** A third event is
   predictable on the next calm, saturated, cooling night.
 
-- **Cross-sensor consistency filter (S33 follow-up #2) — now has a concrete, validated discriminator.**
-  From dash S69: *a humidity move >6 %/min with temperature essentially flat is physically impossible*
-  (a real moist parcel is also a cooler one). It correctly spares the 2026-05-23 gust front, where temp
-  and humidity moved *together*. 3-for-3 on the bad events, 0 false positives. Design for v2.0.5.
+- **✅ Cross-sensor coupling filter — PARKED, DELIBERATELY NOT BUILT (DEC-0044).** Do **not** pick this
+  up again as specced. The premise failed on our own data: *"temperature essentially flat"* describes
+  **90 % of all minutes**, so it discriminates almost nothing; every spike visible in the archive is
+  **already caught** by DEC-0029's 10 %RH/reading cap; and the 2026-05-23 "gust front" cited as its
+  false-positive test shows a max humidity move of **1.0 %/min** (it was never evidence). The remembered
+  "6 %/min, 3-for-3" arrived from dash S69 and did not survive re-derivation. **The mechanism is the open
+  question, not the threshold** — see the raw-byte capture in "Active thread".
 - **Monitor alert on the new rejection signature (S33 follow-up #1)** — extend `weewx_monitor.py`'s
   rain-glitch email to SensorQC rejections; needs its own pattern + a rate cap so a flapping sensor
   can't spam. Only worth doing once we see the real rejection rate.
@@ -147,37 +154,44 @@ _Last updated: 2026-07-13 (S38)._
   misnomer `rw250-test` image tag.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S38 done → S39)
+## Next session actions (S39 done → S40)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S38 (2026-07-13).** A long one. Merged S37's stranded draft PR #23 (an entire session had
-never landed); shipped **v2.0.5 then v2.0.6** to Docker Hub and deployed prod to `:v2.0.6`; **posted the
-issue-#15 response** and opened both upstream PRs; answered the rainRate question. New decisions:
-**DEC-0038** (an image tag denotes exactly one tree), **DEC-0039** (the secret gate, hardened and
-*proven* — 28/28, in CI), **DEC-0040** (the cross-repo gap is an *enforcement* gap — no master repo;
-guards in `~/.claude/hooks/`), **DEC-0041** (**StdPrint removed** — the real stdout writer that v2.0.5
-missed), **DEC-0042** (**the phantom rainRate is ISS-side**, not RF and not the driver). Plus
-`enforce_admins: true`, CI now runs the 67 tests, and 47 MB reclaimed from a container dead since May.
-See CHANGELOG `[S38]`.
+**✅ Done in S39 (2026-07-13).** **DEC-0043** — weewx's default **ROOT** logger points at a syslog socket
+(`/dev/log`) that does not exist in a container; overriding only the `weewx`/`user` loggers never
+protected it, so every start dumped **15 tracebacks (~515 lines)** to stderr *and* `weewx.log` has
+**never** held a single `weewxd`/`weeutil` startup line. Fixed with a `[[root]]` override in
+`logging.additions` + `weewx.conf.example`, a Dockerfile build-time assertion, and 5 new tests (67 → 72);
+verified A/B in the real container. **DEC-0044** — the **nibble theory is not supported** by our data, and
+the archive can *never* settle it (1-minute averaging introduces a free parameter that manufactures false
+matches: true 43 % vs shuffled-control 35 %, p = 0.248). The coupling filter is **parked, not built**;
+`log_humidity_raw` (an upstream option nobody had switched on) is **armed** in the live config instead.
+See CHANGELOG `[S39]`.
 
-**▶ ON RETURN (S39):**
+**▶ ON RETURN (S40), in order:**
 
-**Do NOT touch the cross-repo / 4th-project question.** It is parked for Fable's review (~2026-07-14) and
-is the owner's call. Everything needed is in `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette.
+1. **Release v2.0.7 and deploy prod — one attended window, two jobs at once.** Merge the S39 PR → `dev` →
+   `main`, tag, **push to Docker Hub**, GitHub release. Then recreate prod on `:v2.0.7`. That restart is
+   also what **activates `log_humidity_raw`** (weewx reads its config only at startup), so the release and
+   the instrument arm together. Verify after: `docker logs --tail 40` shows **no** `--- Logging error ---`,
+   and `weewx.log` now contains `weewxd INFO Starting up weewx version 5.4.0` — a line that has never
+   appeared there before.
 
-**Pick up the ordinary backlog — nothing blocks any of it:**
+2. **Then watch for the next humidity spike.** ~2–3/week, clustered **11:00–16:00**. With the capture
+   running it logs `rtldavis-luc: humidity_raw= XXXX` — the full `pkt[4]`/`pkt[3]`. That settles the
+   nibble question **deterministically**: invert the bytes, re-decode under `0x2`/`0x8`/`0xE` (humidity's
+   real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits away), and compare with the
+   concurrent archived sensor. The method and the arithmetic are in DEC-0044; **do not re-derive them.**
 
-1. **Cold-load Fix B (`current.json`)** — `loop_json_writer.py` also writes an atomic `current.json` the
-   dashboard fetches first at boot, so a first-time visitor doesn't see em-dashes. Richer than originally
-   scoped: the loop packet now carries `barometer`/`dewpoint`/`heatindex`.
-2. **The temp/humidity coupling filter** (v2.0.7) — a humidity move >6 %/min with temperature essentially
-   flat is physically impossible. From dash S69: 3-for-3 on the bad events, 0 false positives, and it
-   correctly spares the 2026-05-23 gust front.
-3. **Reception Layer B (DEC-0024)** — driver stops publishing dataless freqError packets + persists raw
-   `count`/`missed`. Needs design + approval (No-Rewrite).
-4. **The always-on duplicate-frame counter (DEC-0035)** — one INFO line per archive period, replacing any
-   future open-ended `debug_rtld = 2` expedition.
+3. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
+   is the open question, not the threshold.
+
+4. Then the ordinary backlog: **cold-load Fix B (`current.json`)**, **Reception Layer B (DEC-0024)**, and
+   the **always-on duplicate-frame counter (DEC-0035)**.
+
+**Still parked for Fable, not ours to move:** the cross-repo / 4th-project etiquette question
+(`docs/handoffs/S38-cross-repo-architecture.md` §Etiquette).
 
 **Physical, not software (DEC-0042):** inspect the tipping bucket, the reed switch and its wiring. The
 phantom rainRate is an ISS sensor artifact — condensation trips the rate timer without tipping the
