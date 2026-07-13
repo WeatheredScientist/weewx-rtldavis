@@ -57,6 +57,7 @@ a later entry.
 | DEC-0039 | Secret gate: every allow term **anchored or positioned**; a gate ships with its planted-payload test | Accepted · **extends** DEC-0012 · adopts dash DEC-0063/0100 | 2026-07-13 (S38) |
 | DEC-0040 | The cross-repo gap is an **enforcement** gap, not a documentation gap — **no master repo** | Accepted · owner-confirmed (S38) | 2026-07-13 (S38) |
 | DEC-0041 | **StdPrint removed** — the v2.0.5 console-handler fix was necessary but NOT sufficient | Accepted · **completes** DEC-0036 · corrects DEC-0038 | 2026-07-13 (S38) |
+| DEC-0042 | The phantom **rainRate is ISS-side** (condensation trips the reed switch, never tips the bucket) — not RF, not the driver | Accepted · **bounds** DEC-0033/0035 · closes the rainRate thread | 2026-07-13 (S38) |
 
 ## Open / deferred
 
