@@ -1,5 +1,5 @@
 #--------------------------------------------
-# weewx-rtldavis v2.0.6
+# weewx-rtldavis v2.0.7
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
