@@ -15,11 +15,12 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S38** (2026-07-13) — **v2.0.5 IS ON DOCKER HUB.** The downstream harm is over:
-> every `docker pull` now gets the patched driver (DEC-0031) *and* the console-handler freeze fix
-> (DEC-0036). Published as `v2.0.5`, not `v2.0.4`, deliberately (DEC-0038). The secret gate is now
-> **proven** rather than merely green (DEC-0039), and the cross-repo question is answered: the gap is an
-> **enforcement** gap, not a documentation gap — no master repo (DEC-0040). Full story: CHANGELOG `[S38]`.
+> **Current session: S38** (2026-07-13) — **v2.0.6 IS ON DOCKER HUB.** The downstream harm is over:
+> every `docker pull` now gets the patched driver (DEC-0031), the console-handler fix (DEC-0036) **and
+> StdPrint removed (DEC-0041)** — the last was the *real* stdout writer, ~25 MB/day, and v2.0.5 had
+> missed it. The secret gate is **proven** rather than merely green (DEC-0039), and the cross-repo
+> question is answered: the gap is an **enforcement** gap, not a documentation gap — no master repo
+> (DEC-0040). **Prod was fixed and restarted; stdout is now silent.** Full story: CHANGELOG `[S38]`.
 
 _Last updated: 2026-07-13 (S38)._
 
@@ -27,14 +28,17 @@ _Last updated: 2026-07-13 (S38)._
 
 ## Active thread
 
-> **▶ Resume here (S38 → S39). Prod is healthy and prod was not touched this session.**
+> **▶ Resume here (S38 → S39). Prod is healthy.** It WAS touched: `StdPrint` removed from the live
+> `weewx.conf` and the container restarted (DEC-0041). Verified after: stdout growth **0 lines/60 s**
+> (was ~36), `Influx: Published record` continuing, `RestartCount: 0`. Backup:
+> `weewx.conf.bak-S38-stdprint-*`.
 >
 > **One thing is owed, and one thing is waiting on the owner:**
 >
-> 1. **A catch-up deploy of `:v2.0.5` to prod** — attended window, `:v2.0.4` is the rollback. Prod is
->    deliberately one patch behind (DEC-0038) and the behavior delta is **nil** (prod's `weewx.conf` has
->    no console handler at all). **`prod-baseline` has NOT been moved** and must not be until this
->    happens. This is the only thing keeping `main` ahead of the station.
+> 1. **A catch-up deploy of `:v2.0.6` to prod** — attended window, `:v2.0.4` is the rollback. Prod still
+>    runs the **`:v2.0.4` image** (its *config* is fixed, but the image is two patches behind). The
+>    behavior delta is now **nil** — the config fix already did the work that matters here.
+>    **`prod-baseline` has NOT been moved** and must not be until this happens.
 > 2. **The upstream contributions are PREPARED but NOT SENT.** Both upstreams forked, both fixes
 >    committed, pushed and verified; **no PR opened, nothing posted.** Drafts in the owner's voice at
 >    `docs/upstream/` (gitignored). One command each opens them — see that folder. **Explicit go still
@@ -42,9 +46,18 @@ _Last updated: 2026-07-13 (S38)._
 
 ## Open threads (not yet shipped)
 
-- **⚠️ Prod is one patch behind `main` (DEC-0038, deliberate).** Published `:v2.0.5` ≠ running `:v2.0.4`.
-  Behaviorally identical *here*; the difference protects downstream users. Catch-up deploy owed; do not
-  move `prod-baseline` until it lands.
+- **⚠️ Prod runs the `:v2.0.4` IMAGE (DEC-0038/0041, deliberate).** Published `:v2.0.6` ≠ running
+  `:v2.0.4`. Prod's *config* is already fixed by hand (StdPrint removed, no console handler), so the
+  behavior delta is nil; the image carries those same fixes for **downstream users**, who cannot hand-edit
+  our config. Catch-up deploy owed; do not move `prod-baseline` until it lands.
+
+- **⚠️ Prod's bind-mounted `influx.py` has DRIFTED from the repo — OWNER DECISION PENDING.** Running copy
+  md5 `8b0d05b3`; repo's is `5f58c204`. The live one still carries `VERSION = "0.20"` (not `0.20+ws.1`),
+  the unconditional `ssl._create_unverified_context()`, and the per-record `loginf` calls that spam
+  `weewx.log` on every record. **Not a live exposure** — the endpoint is `http://influxdb:8086`, so the
+  TLS branch is never taken — but it is the DEC-0031 class again (repo says one thing, prod runs another),
+  and it becomes a real hazard the moment anyone points this at InfluxDB Cloud. **`influx.py` IS
+  bind-mounted**, so unlike the driver an `scp` + pyc-clear + restart IS the correct deploy here.
 - **The log-driver decision — needs ONE command from the owner.** Synology's `db` driver **cannot be
   capped** (proven: `max-size=1m`, 200k lines emitted, 200k retained; it is a proprietary driver and the
   option is *unsupported*, not just undocumented). `json-file` + caps is the only way to bound a log

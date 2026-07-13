@@ -6,7 +6,24 @@ under [Pre-S16].
 
 ---
 
-## [S38] — 2026-07-13 — v2.0.5 SHIPPED to Docker Hub; the gates now execute instead of asking nicely
+## [S38] — 2026-07-13 — v2.0.5 → **v2.0.6** SHIPPED; the gates now execute instead of asking nicely
+
+> **v2.0.5 was an incomplete fix, and v2.0.6 finishes it (DEC-0041).** v2.0.5 moved the console log
+> handler to `WARNING` and I claimed that made weewx's stdout nearly silent. **It did not.**
+> `report_services = weewx.engine.StdPrint` `print()`s **every LOOP packet straight to stdout**,
+> bypassing the logging module entirely — no log level touches it. It was writing **~25 MB/day** into
+> the very pipe that froze prod for 7h18m, and because it is a **weewx stock default** it was in the
+> baked image *and* our `weewx.conf.example`, so **every downstream user had it too**.
+>
+> Found by finally checking the thing nobody had checked — the actual `log.db` sizes (needs root):
+> `weewx-rtldavis-v2` had accrued **15 MB in 14 hours**. The mitigation had been *reasoned about from
+> the architecture* instead of *measured at the source*. One `sudo du` would have caught it.
+>
+> **Fixed everywhere:** prod (`report_services =`, restarted — stdout growth now **0 lines/60 s**,
+> was ~36); the baked image config, **with a build-time assertion that fails the build if the edit
+> no-ops**; and `weewx.conf.example`. Shipped as **v2.0.6**. Also removed `/weewx`, a container **dead
+> since 2026-05-04** still holding the **largest `log.db` on the box (47 MB)** — dead containers keep
+> their log store forever.
 
 **The headline: `v2.0.5` and `latest` are on Docker Hub.** Downstream users had been getting the
 **stock driver** (DEC-0031) *and* the **console-handler freeze hazard** (DEC-0036) on every `docker
