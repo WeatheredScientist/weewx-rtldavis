@@ -95,7 +95,19 @@ version = 5.3.1
     # The pct_good per transmitter can be saved to the database
     # This has only effect with 2 transmitters or more
     save_pct_good_per_transmitter = False
-    
+
+    # Decode-layer sensor plausibility filter (DEC-0029). RF corruption that
+    # passes CRC can decode to wrong sensor values (the same failure class as
+    # the rain glitch, DEC-0021). The filter rejects values outside the Davis
+    # sensor spec, and per-reading jumps beyond any real weather, to an honest
+    # null. Enabled by default; per-field delta thresholds are in the driver's
+    # internal units (temperature degC, humidity %, wind_speed m/s, uv index).
+    #sensor_qc = True
+    #qc_temperature_max_delta = 4.0
+    #qc_humidity_max_delta = 10.0
+    #qc_wind_speed_max_delta = 20.0
+    #qc_uv_max_delta = 8.0
+
     # The driver to use:
     driver = user.rtldavis
 
@@ -458,12 +470,20 @@ version = 5.3.1
         inHumidity = 0, 100
         windSpeed = 0, 120, mile_per_hour
         # rain/rainRate caps are a backstop for RF-decode glitches (see the
-        # rain_delta_tips filter in rtldavis.py and DEC-0021). At a 1-minute
-        # archive interval, 1.0 in = 60 in/hr and 16 in/hr are both far above
-        # anything physically possible here (world 1-min record ~1.23 in) yet
-        # well below the phantom values a counter glitch produces (1.28 in etc).
-        rain = 0, 1.0, inch
+        # rain_delta_tips filter in rtldavis.py and DEC-0021, and SensorQC /
+        # DEC-0029 -- those are the real fix; these are only a safety net).
+        # The cap was 1.0 in until 2026-07-12. That was too loose to be a net:
+        # a rain-counter bit-7 flip injects 1.28 in (caught), but a bit-6 flip
+        # injects 0.64 in and sailed straight through -- which is exactly how
+        # the 2026-07-04 phantom (ERR-0001) got into the archive and into the
+        # permanent WU/CWOP record. At a 1-minute archive interval 0.3 in is
+        # 18 in/hr, already physically absurd (world 1-min record ~1.23 in),
+        # so it kills both flip classes with room to spare.
+        rain = 0, 0.3, inch
         rainRate = 0, 16, inch_per_hour
+        # windGust had NO bound at all, so corrupt gusts were unbounded in the
+        # archive; the loop feed showed >180 mph spikes.
+        windGust = 0, 120, mile_per_hour
 
 ##############################################################################
 
@@ -482,7 +502,11 @@ version = 5.3.1
         altimeter = prefer_hardware
         appTemp = software
         barometer = prefer_hardware
-        cloudbase = prefer_hardware
+        # No cloudbase hardware on the ISS, so this is equivalent to
+        # prefer_hardware (which falls back to software anyway). In WeeWX 5
+        # cloudbase is an XType and is NOT injected into LOOP packets either
+        # way -- consumers of the loop feed must derive it from outTemp/dewpoint.
+        cloudbase = software
         dewpoint = software
         ET = prefer_hardware
         heatindex = software
@@ -597,8 +621,16 @@ version = 5.3.1
     # This section specifies which services should be run and in what order.
     [[Services]]
         prep_services = weewx.engine.StdTimeSynch
-        data_services = user.loop_json_writer.LoopJsonWriter,
-        process_services = weewx.engine.StdConvert, weewx.engine.StdCalibrate, weewx.engine.StdQC, weewx.wxservices.StdWXCalculate, user.dewpoint_service.DewpointCacher, user.pressure_service.DavisPressureFetcher
+        # LoopJsonWriter MUST run at the END of process_services, not in
+        # data_services. data_services runs first, so a writer placed there
+        # reads each LOOP packet before StdConvert/StdCalibrate/StdQC/
+        # StdWXCalculate have touched it: un-converted, un-QC'd, and missing
+        # every derived field. That is how >180 mph gust spikes reached the
+        # live dashboard while never appearing in the archive (StdQC caught
+        # them, but only afterwards). Running last, the loop feed gains
+        # barometer/dewpoint/heatindex and inherits StdQC's bounds.
+        data_services =
+        process_services = weewx.engine.StdConvert, weewx.engine.StdCalibrate, weewx.engine.StdQC, weewx.wxservices.StdWXCalculate, user.dewpoint_service.DewpointCacher, user.pressure_service.DavisPressureFetcher, user.loop_json_writer.LoopJsonWriter
         xtype_services = weewx.wxxtypes.StdWXXTypes, weewx.wxxtypes.StdPressureCooker, weewx.wxxtypes.StdRainRater, weewx.wxxtypes.StdDelta
         archive_services = weewx.engine.StdArchive
         restful_services = weewx.restx.StdStationRegistry, weewx.restx.StdWunderground, weewx.restx.StdPWSweather, weewx.restx.StdCWOP, weewx.restx.StdWOW, weewx.restx.StdWOWBE, weewx.restx.StdAWEKAS, user.wcloud.WeatherCloud, user.windy.Windy, user.owm.OWM, user.influx.Influx, user.ogoxeUploader.OgoxeUploader

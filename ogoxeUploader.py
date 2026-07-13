@@ -17,6 +17,19 @@
 # that is present here for reference.
 #
 #-----------------------------------------------------------------
+# 2026 patched by WeatheredScientist
+#   github.com/WeatheredScientist/weewx-rtldavis
+#
+#   GPLv3 section 5(a) modification notice. Vendored from the OgoXe uploader
+#   v1.0.1 and modified:
+#
+#   2026-07-05  a log.debug() reported _ambient_dict.get('server_url'), a key that
+#               is never set (the URL is the hardcoded OGOXE_API_URL constant), so
+#               it always logged None. It now logs the URL actually used.
+#   2026-07-05  added the SPDX-License-Identifier line above.
+#
+#   See CHANGES-FROM-UPSTREAM.md.
+#-----------------------------------------------------------------
 
 import logging
 import queue

@@ -1,6 +1,34 @@
 # Copyright 2016-2020 Matthew Wall
 # Distributed under the terms of the GNU Public License (GPLv3)
 # SPDX-License-Identifier: GPL-3.0-or-later
+#
+#-------
+# 2026 patched by WeatheredScientist
+#   github.com/WeatheredScientist/weewx-rtldavis
+#
+#   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of the
+#   weewx-influx uploader. Chain: matthewwall/weewx-influx -> david-lutz/
+#   weewx-influx2 (InfluxDB 2.x port; the base we install) -> patched here.
+#   It reports VERSION '0.20+ws.1' so the difference is visible in the logs.
+#
+#   2026-07-04  handle_exception() called `e.read.decode()` -- a missing pair of
+#               parens, so it raised AttributeError on the method object instead
+#               of reporting the HTTP error body. Now `e.read().decode()`.
+#   2026-07-04  post_request() unconditionally used ssl._create_unverified_context()
+#               for https endpoints, silently disabling certificate verification.
+#               Now verifies by default; opt out with verify_ssl = false for a
+#               self-signed or internal endpoint.
+#   2026-07-04  the CLI read os.environ['INFLUX_HOST'/'INFLUX_ORG'/'INFLUX_TOKEN']
+#               directly, raising KeyError at option-parse time when they are unset.
+#               Now os.environ.get(). Also fixed the "InluxDfB" help-text typos.
+#   2026-07-05  per-record loginf() calls ("Add Bindding Tag", "tags = ...") demoted
+#               to logdbg -- they fired on every record and flooded weewx.log.
+#   2026-07-04  distutils StrictVersion replaced with a tuple compare (distutils is
+#               gone in Python 3.12+; this image runs 3.14).
+#
+#   Full narrative and upstreaming status: CHANGES-FROM-UPSTREAM.md.
+#
+#-------
 
 """
 Influx is a platform for collecting, storing, and managing time-series data.
@@ -157,7 +185,9 @@ import weewx.restx
 import weewx.units
 from weeutil.weeutil import to_bool, accumulateLeaves
 
-VERSION = "0.20"
+# '+ws.N' = PEP 440 local version: upstream base 0.20, WeatheredScientist rev 1.
+# Not stock upstream -- see the modification notice at the top of this file.
+VERSION = "0.20+ws.1"
 
 REQUIRED_WEEWX = "3.5.0"
 if _ver_tuple(weewx.__version__) < _ver_tuple(REQUIRED_WEEWX):

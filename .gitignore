@@ -63,3 +63,6 @@ node_modules/
 # --- Local-only infra / scanner identifier list (real values; never commit) ---
 docs/LOCAL_INFRA.md
 scripts/.identifiers
+
+# Upstream bug-report drafts: held out of git until we decide to post (public repo)
+docs/upstream/
