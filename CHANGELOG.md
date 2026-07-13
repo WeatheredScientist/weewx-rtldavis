@@ -6,6 +6,88 @@ under [Pre-S16].
 
 ---
 
+## [S37] — 2026-07-12→13 — A 7-hour prod freeze, the CRC question answered, and the fork finally admits it is one
+
+Three unrelated things collided. In order of how much they matter.
+
+### The outage: weewx froze for 7h18m (DEC-0036, ERR-0003)
+
+At 23:53:45 weewx stopped doing anything and stayed that way until 07:12. **It did not crash** — both
+processes alive, container reporting `Up`, and **no error or traceback ever written, because the thing
+that was stuck was the logging.** `weewx_monitor.py` emailed at 00:15 (22 min in — the monitor worked);
+the owner was asleep.
+
+- **Established:** weewx's main thread blocked in `pipe_wait`; the Docker daemon's path for *that one
+  container* was wedged (`logs`/`exec`/`kill` all hung, other three containers healthy); a **bare
+  `docker logs` with no `--tail`** had been hung since the previous day against Synology's SQLite
+  `log.db`. Only `synopkg restart ContainerManager` cleared it.
+- **NOT established, and the first answer was wrong.** The initial diagnosis — "the INFO console handler
+  filled the stdout pipe" — is **false for this station**: the live `weewx.conf` has *no console handler
+  at all*. `pipe_wait` covers a blocked pipe **read or write**, and it was read as a write without
+  checking. **Mechanism recorded as OPEN.** No causal story was invented to close the ticket.
+- **But the console-handler finding is real for the image we publish.** `logging.additions` (baked in by
+  the Dockerfile) *does* set the console handler to INFO. Prod escaped only because **the live config has
+  drifted from the repo**. Every downstream user has the hazard we did not — the same shape as DEC-0031.
+  Fixed to `WARNING`; it reaches users only when v2.0.4 is pushed.
+- **Recovery + backfill (ERR-0003):** ~438 one-minute records were **never captured** (nothing was
+  cached; the restart discarded nothing). Backfilled 29 records from the co-located WeatherLink Live
+  console via the WU history API — same ISS, **different receiver, 15-min cadence** — into both stores,
+  flagged in-band `backfill = 1`. The window was dry and dead calm, so the loss is small.
+
+### The CRC question is answered — and the test that answered it first was broken (DEC-0035)
+
+The S36 Lloyd test reported **0 suspicious pairs** over 1,863 frames, with gaps perfectly quantized at
+the 2.8 s ISS period. It looked like a decisive null. **It was an artifact — the instrument was blind to
+the thing it was built to detect**, twice over: it parsed the driver's `data:` lines, which are emitted
+*after* `main.go` has already dropped every duplicate; and its stated premise ("we see spurious frames
+even when they fail CRC") is false, because `protocol.go` L218 bails on CRC failure *inside the Go
+binary*.
+
+Counting Go's own `duplicate packet:` lines instead: **61 frames arriving 1.4–10 ms (median 2.0 ms) after
+a byte-identical frame — ~722/day.** A Davis ISS transmits every 2.8 s and cannot transmit twice 2 ms
+apart. **The receiver manufactured them.** DEC-0033 is confirmed on our hardware (LloydR's gap was
+262 µs; ours ~2 ms). The 712 duplicates at 2.8 s are just the transmitter repeating an unchanged payload.
+
+This **meets the owner's precondition for the upstream post** (he wanted local confirmation first). The
+post is still **not sent** — what remains is prose, in his voice, on his explicit go.
+
+### The fork admits it is a fork (DEC-0034)
+
+We shipped four GPLv3 files with our patches on top and said so **nowhere**, while `rtldavis.py` reported
+`DRIVER_VERSION = '0.20'` — stock upstream — carrying +263/−51 lines. Every other link in the chain had
+done this properly: Luc documents his merge in the header, and Vince Skahan added a dated
+`# 20-12-2025 patched by...` block to the very same file. We inherited the convention and skipped it.
+
+- **GPLv3 §5(a) modification notices** on `rtldavis.py`, `influx.py`, `ogoxeUploader.py`, and `wcloud.py`
+  (whose only change is an SPDX line — recorded honestly).
+- **Versioned honestly:** `0.20` → **`0.20+ws.1`** (PEP 440 local version) in the driver and the influx
+  uploader. The driver now logs `(fork of lheijst 0.20 … not stock upstream)`, which also replaces the
+  ad-hoc `RTLDAVIS_DRIVER_MARKER` canary — stock upstream cannot print that line.
+- **`CHANGES-FROM-UPSTREAM.md`** — the full inventory, built by diffing against the real upstream
+  sources, not from memory. It turned up **more than expected**: `influx.py` carries **five** patches, not
+  the one we thought — including `e.read.decode()` (missing parens: the HTTP error handler raises
+  `AttributeError` instead of reporting the error) and an unconditional `ssl._create_unverified_context()`
+  on https. `rtldavis.py` holds **four** real upstream bugs beyond the rain filter, including a windDir
+  branch that never populates wind data and a `NameError` crash path.
+- **README rewritten** — it read as though we ship Luc's driver. We don't.
+
+### Also
+
+- **ERR-0001 amendment / DEC-0037** — the phantom-rain correction never propagated to the *derived*
+  fields. The dashboard's S70 handoff caught `dayRain_in` still at **1.84″** against a corrected 0.56″;
+  auditing found **`rain24_in` (1.84″) and `hourRain_in` (1.28″ — entirely phantom) were wrong too.** All
+  three recomputed from the corrected SQLite series and rewritten in InfluxDB (5,394 points, in place,
+  idempotent). New rule: *a retrospective correction must propagate to every field derived from it.*
+- **Debug state reverted** (`debug_rtld` → 1, `user` logger → INFO). `qc-capture` on the NAS is gone.
+- **Cross-project handoff** written for the dashboard + HLF (advisory; **no changes made in their
+  repos**), carrying the owner's open architectural question about harmonizing shared NAS-level assets.
+
+*Two confident, internally-consistent, wrong conclusions were reached and retracted in this session — the
+"decisive null" and the console handler. Both collapsed the moment the actual artifact was inspected.
+Recorded because the pattern matters more than either error.*
+
+---
+
 ## [S36] — 2026-07-12 — v2.0.4 SHIPPED: SensorQC live; the driver-clobber found and killed; rain errata closed
 
 The deploy that three sessions had staged and never shipped. Triggered by a handoff from dashboard

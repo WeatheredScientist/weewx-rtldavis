@@ -15,26 +15,31 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S36** (2026-07-12) — **v2.0.4 SHIPPED.** SensorQC (DEC-0029) is finally live in
-> prod after three sessions staged and never deployed it; the *reason* it kept not shipping was found
-> and killed (a compose bind-mount laying the stock driver over the baked one — DEC-0031). All three
-> phantom rain events are corrected in both stores (ERR-0001 + new ERR-0002, DEC-0032). The secret
-> gate, which had never actually worked, is fixed. Full story: CHANGELOG `[S36]`.
+> **Current session: S37** (2026-07-12 → 07-13) — **a 7-hour prod outage, and the CRC question answered.**
+> weewx froze solid for 7h18m (DEC-0036, ERR-0003 — recovered, gap backfilled). The fork-identity /
+> provenance audit landed (DEC-0034). The duplicate-frame mechanism is **confirmed on our hardware**
+> (DEC-0035) — and the test that first said otherwise was broken. Full story: CHANGELOG `[S37]`.
 
-_Last updated: 2026-07-12 (S36)._
+_Last updated: 2026-07-13 (S37)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S36 → S37).** Prod is on **`:v2.0.4`** and healthy (reception 75–80%,
-> `RestartCount: 0`, `sensor_qc True`). Nothing is on fire. The one thing that needs *watching* rather
-> than doing: **the first live SensorQC rejections.** Expect `rejecting implausible value` in
-> `weewx.log` at ~0.4+/day, clustering at night. Zero so far (deployed 15:49 EDT). If a week passes with
-> **zero** rejections, be suspicious — the humidity evidence says they should appear.
+> **▶ Resume here (S37 → S38). Prod is healthy** — recovered 07:12 EDT 2026-07-13, `RestartCount: 0`,
+> `sensor_qc True`, debug state reverted (`debug_rtld = 1`, `user` logger `INFO`).
 >
-> Then the promotion: **merge `dev` → `main`, tag `v2.0.4` + a new `prod-baseline`, push the image to
-> Docker Hub, cut the GitHub release.** Deliberately held until v2.0.4 has ridden clean for a few days.
+> **Two things are NOT done and are the top of the list:**
+>
+> 1. **Promote v2.0.4** — `dev` → `main`, tag + `prod-baseline`, **Docker Hub push**, GitHub release.
+>    Still the highest-value outstanding item: until the image ships, every downstream user is running
+>    the **stock driver** (DEC-0031). Now doubly so — the published image also carries the
+>    console-handler hazard that DEC-0036 fixes in `logging.additions`.
+> 2. **The upstream post is NOT sent, by owner instruction.** The owner wants the problem fully worked
+>    out, then the prose tuned to strike a balance between technical content and human warmth — the
+>    draft still reads as Claude, not as him. **DEC-0035 removes the last technical blocker** (he wanted
+>    our own confirmation of the duplicate-frame fingerprint before posting; we now have it). Do not post
+>    without an explicit go.
 
 ## Open threads (not yet shipped)
 
@@ -50,18 +55,18 @@ _Last updated: 2026-07-12 (S36)._
   the **Davis rain-rate timeout** (ISS holds a rate ~15 min after tips), which would mean the ISS itself
   held a non-zero rate state — which DEC-0033's spurious-frame model does **not** explain. `rain` (type
   0xE counter) and `rainRate` (type 0x5 `time_between_tips`) are **separate messages**, so the two
-  corruptions co-occurring is a strong clue, not a coincidence. **Don't guess — the `debug_rtld = 2`
-  capture will record the raw type-0x5 frames if it recurs.** This also matters for what we propose
+  corruptions co-occurring is a strong clue, not a coincidence. **Don't guess.** The `debug_rtld = 2` capture is
+  **off** (DEC-0036: leaving prod at DEBUG is what set the trap for the 7 h freeze). The right instrument
+  is the **always-on duplicate/rain-frame counter** proposed in DEC-0035 — one INFO line per archive
+  period — not another open-ended debug expedition. This also matters for what we propose
   upstream: `rain_delta_tips` guards the counter and does **nothing** for the rate, whose failure mode
   is a corrupted "no rain" sentinel (`time_between_tips_raw == 0x3FF`).
-- **The CRC question is ANSWERED (DEC-0033) — what's left is a DECISION, not research.** The glitches
-  are CRC-valid multi-bit corruption, most likely spurious near-duplicate frames from the rtldavis Go
-  demodulator (one transmission decoded twice). Confirmed from raw packets in upstream issue
-  `lheijst/weewx-rtldavis#15`, open since Oct 2022 with three users reporting the same symptom class.
-  **An upstream comment is drafted but NOT posted and deliberately held out of git** (public repo):
-  `docs/upstream/rain-wraparound-bug.md`, gitignored. Owner is iffy on posting and wants (a) the prose
-  rewritten in his own voice — the draft reads as Claude, not as him — and (b) our own confirmation of
-  the duplicate-frame fingerprint first. **Do not post without an explicit go.**
+- **The CRC question is CLOSED (DEC-0033 + DEC-0035).** The demodulator double-decodes a single RF
+  burst: **61 duplicate frames in 2 h, median 2.0 ms after the original, ~722/day** — the ISS cannot
+  transmit twice 2 ms apart. Confirmed on our own hardware, so the owner's precondition for posting
+  upstream is met. **What remains is a WRITING task, not research:** the draft
+  (`docs/upstream/rain-wraparound-bug.md`, gitignored) must be rewritten in the owner's voice — balancing
+  technical substance with human warmth — and **posted only on an explicit go.**
 - **Cross-sensor consistency filter (S33 follow-up #2) — now has a concrete, validated discriminator.**
   From dash S69: *a humidity move >6 %/min with temperature essentially flat is physically impossible*
   (a real moist parcel is also a cooler one). It correctly spares the 2026-05-23 gust front, where temp
@@ -80,9 +85,6 @@ _Last updated: 2026-07-12 (S36)._
   with the last good reading (~40 s old) rather than left null. The bad value never propagates either
   way — so this did **not** block v2.0.4 — but a rejected reading is currently indistinguishable from an
   absent one in the data (the rejection is still logged loudly). Decide whether that's right.
-- **`qc-capture` is still running on the NAS** (`/volume1/docker/weewx-rtldavis/qc-capture/`, a detached
-  `sh` loop appending loop packets to `loop-raw.jsonl`, started by dash S69). It is now capturing
-  *post*-fix data. **Harvest it or kill it** — don't leave it running unowned; it won't survive a reboot.
 - **Gain 372, interim** (DEC-0017) — awaiting a 24 h averaged no-preamp sweep to settle vs 207.
 - **Vestigial `loopdata.py`** — mounted + `[LoopData]` present but in no active service list; safe to
   remove, not urgent.
@@ -93,58 +95,20 @@ _Last updated: 2026-07-12 (S36)._
 
 ## Needs a check / housekeeping
 
-- **⚠️ FORK-IDENTITY / PROVENANCE AUDIT — own S37 session, prompt below.** We are a **fork of a fork of a
-  fork** and we don't say so anywhere. The real chain, verified from the Dockerfile (we build from
-  **Vince Skahan's `src.tgz`**, not from Luc's repo directly):
-    - *Go decoder:* `bemasher/rtldavis` → `lheijst/rtldavis` → bundled in `weewx-contrib` src.tgz → us
-    - *Driver:* `matthewwall/weewx-sdr` + `weewx-meteostick` → merged by **lheijst** into weewx-rtldavis
-      v0.20 → repackaged by **Skahan** (`weewx-contrib/weewx-rtldavis`) → **patched by us**
-    - plus `steve-m/librtlsdr`, `jpoirier/gortlsdr`, **kobuki** (`calc_wind_speed_ec`), and
-      **`david-lutz/weewx-influx2`** — which we also **patched** (Py-3.14 `e.read().decode()`).
-  So there are **several modified upstream works** here, not just `rtldavis.py`. Scope:
-    1. **GPLv3 §5(a) gap (real, not a nit):** a modified work must "carry prominent notices stating that
-       you modified it, and giving a relevant date." `rtldavis.py` carries only *upstream's* header
-       (`Copyright 2019 Matthew Wall, Luc Heijst`) and says nothing about our 2026 changes. Same for the
-       other vendored/patched files. **Follow Luc's own example** — his header documents that his driver
-       is a merge of Matthew Wall's, with links. Inherit the pattern, add our line.
-    2. **`DRIVER_VERSION = '0.20'` misrepresents us** — we log as stock upstream while carrying
-       rain_delta_tips, SensorQC, H1/H2/M3, windDir, dewpoint honest-null. Use `'0.20+ws.1'` and log
-       "(fork of lheijst 0.20)". Same class of dishonesty as the compose clobber (DEC-0031): the
-       artifact asserts one thing and does another.
-    3. **`CHANGES-FROM-UPSTREAM.md`** — every divergence, with DEC links. Highest-value artifact: it is
-       both the "playing nice" document and the checklist for *shrinking* the fork.
-    4. **README opening rewrite** — line 3 currently reads as though we ship *Luc's* driver. We don't.
-       Say plainly: unofficial Docker distribution, patched driver, not affiliated, links upstream.
-    5. **Upstream-first posture:** to contribute, `gh repo fork lheijst/weewx-rtldavis` **separately** and
-       send ONE focused PR (the rain fix), not our whole divergence. Our repo correctly stays a normal
-       repo, not a GitHub fork — it is a *distribution*, not a fork of the driver.
-  **Keep the repo/image name** (published, GPLv3, attribution intact; renaming breaks every
-  `docker pull`). This is about honesty, not rebranding.
-- **(superseded detail) Our driver lies about its identity (owner question, S36).** `DRIVER_VERSION = '0.20'` — we log as
-  **stock upstream v0.20** while carrying the rain-glitch filter (DEC-0021), SensorQC (DEC-0029), the
-  H1/H2/M3 reception fixes, the windDir fix and dewpoint honest-null. **None of that exists upstream.**
-  We are a fork that hasn't admitted it, and the log line misleads anyone debugging — including us, and
-  including anyone we help on upstream issue #15. Same class of dishonesty as the compose clobber: the
-  artifact says one thing and does another. **Fix:** (1) version it as a fork (`'0.20+ws.1'` or similar);
-  (2) state the relationship plainly in the README (a Docker distribution of Luc Heijst's driver, with
-  these patches, not affiliated — GPLv3, attribution already intact); (3) shrink the delta by upstreaming
-  (the issue #15 contribution is exactly this). **Keep the repo/image name** — it's published, and
-  renaming breaks every downstream `docker pull`.
+- **✅ CLOSED IN S37:** the debug state is reverted (`debug_rtld = 1`, `user` logger `INFO`); the Lloyd
+  test is **answered** (DEC-0035); the fork-identity audit is **done** (DEC-0034); `qc-capture` on the NAS
+  is **gone** (it did not survive the restart — nothing to harvest, nothing to kill).
 
-- **⚠️ PROD IS IN A DEBUG STATE — revert when the Lloyd test is done (S36).** To capture raw frames we
-  set, in the live `weewx.conf`: `[Rtldavis] debug_rtld = 2` and `[Logging][[loggers]][[[user]]]
-  level = DEBUG`. This adds log volume (raw `data:` line per packet, ~21/min). **Revert both to
-  `1` / `INFO` and restart** (`docker kill` + `docker start`) once the test concludes. Backup:
-  `weewx-data/weewx.conf.bak-S36-debugrtld-*`.
-- **The Lloyd test (DEC-0033) is RUNNING.** `ops/find_duplicate_frames.py` looks for two frames from the
-  same transmitter <2 s apart — impossible for a real ISS (it transmits every ~2.5 s) and the fingerprint
-  LloydR posted upstream (262 µs apart, 4 bits different, both CRC-valid). The driver logs the raw
-  `data:` line *before* the CRC check, so spurious frames are visible **even when they fail CRC** — so
-  this should answer in hours, not weeks. Run it against the accumulating log:
-  `python3 /volume1/docker/weewx-rtldavis/find_duplicate_frames.py /volume1/docker/weewx-rtldavis/logs/weewx.log`
-  First pass (5 min, 34 frames): **0 suspicious pairs** — far too little data to mean anything yet.
-  If pairs appear, we can confirm the mechanism on our own hardware and post to upstream issue #15.
+- **⚠️ NEW — the published image carries a hazard our prod does not (DEC-0036).** `logging.additions`
+  (baked into the image) defines a console handler at **INFO**; the live bind-mounted `weewx.conf` has
+  **no console handler at all**. The repo and the running station have **drifted**. Every downstream user
+  is logging INFO to stdout, which is the DEC-0036 freeze hazard. Fixed in `logging.additions` (→
+  `WARNING`) but **it only reaches users when v2.0.4 is pushed to Docker Hub.** Same shape as DEC-0031.
 
+- **⚠️ The freeze mechanism is OPEN (DEC-0036).** Trigger identified (a bare `docker logs`, no `--tail`,
+  wedged the Synology daemon's log path for that container). The exact blocked write is **not** known and
+  the evidence is gone. Do not invent one. Mitigations are banked. If it recurs, capture
+  `/proc/1/task/*/wchan` and `/proc/1/fd/*` **before** restarting anything.
 
 - **Rotate the exposed WU API key** (NAS `wxcheck.sh`; scrubbed from repo S16, real key still live).
   Owner-acknowledged; **still owed** — and now the only known live exposure.
@@ -159,36 +123,50 @@ _Last updated: 2026-07-12 (S36)._
 - **Snow / freezing / no heating tape** (parked, owner's future thread) — cold-weather failure modes we
   haven't designed for. 2026 = learning year.
 
-## Next session actions (S36 done → S37)
+## Next session actions (S37 done → S38)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S36 (2026-07-12):** v2.0.4 deployed + verified (SensorQC live); DEC-0031 (driver is baked,
-never mounted — killed the compose clobber that had shipped the stock driver to every public user);
-DEC-0032 (retrospective correction + in-band `rain_qc` flag); DEC-0033 (the CRC question, answered, with
-a retraction recorded); ERR-0002 logged and corrected; ERR-0001's InfluxDB correction finally applied;
-secret gate fixed (it had never worked); doc staleness swept; cross-repo handoff written. See
-CHANGELOG `[S36]`.
+**✅ Done in S37 (2026-07-12 → 07-13):** health check + debug revert; **DEC-0034** fork-identity /
+provenance audit (modification notices on all four patched upstream files, `0.20+ws.1`,
+`CHANGES-FROM-UPSTREAM.md`, README rewrite); **DEC-0035** the duplicate-frame mechanism CONFIRMED here
+(~722/day) *and* the broken test that first denied it, fixed; **DEC-0036** the 7h18m freeze (recovered,
+mitigations banked, mechanism open); **DEC-0037** corrections must propagate to derived fields;
+**ERR-0003** the gap, backfilled; **ERR-0001 amendment** — `dayRain_in`/`rain24_in`/`hourRain_in` still
+carried the phantom, now recomputed. See CHANGELOG `[S37]`.
 
-**▶ ON RETURN (S37), in order:**
-1. **Check the two numbers that tell you whether v2.0.4 is working:**
-   `grep -c "rejecting implausible" weewx.log` (expect ~0.4+/day, nocturnal — **zero after a week is
-   suspicious, not good**), and the Lloyd test:
-   `python3 /volume1/docker/weewx-rtldavis/find_duplicate_frames.py /volume1/docker/weewx-rtldavis/logs/weewx.log`
-2. **Then REVERT the debug state** (see housekeeping — `debug_rtld` → 1, `user` logger → INFO, restart).
-   Don't leave prod logging raw frames indefinitely.
-3. **Promote v2.0.4** once it has ridden clean for a few days: merge `dev` → `main`, tag `v2.0.4` +
-   a new `prod-baseline`, **push the image to Docker Hub, cut the GitHub release.** The Docker Hub push
-   is the step that actually fixes downstream users — until it lands, everyone installing this extension
-   still gets the stock driver via the old compose file (DEC-0031).
-4. **Decide on the upstream post** (owner call — see the CRC thread above).
-5. Then: cold-load Fix B (`current.json`), the temp/humidity coupling filter, Reception Layer B (v2.0.5).
+**▶ ON RETURN (S38), in order:**
 
-**Cross-repo:** `docs/handoffs/S36-to-eaglehunt-dashboard.md` is written and answers all three of
-dashboard S69's open questions. **The dashboard should read the new `rain_qc` flag** (DEC-0032,
-INTERFACES.md) to render corrected-point markers. It also carries a reciprocal finding: the dashboard's
-own secret gate still has two live holes we closed here.
+1. **CROSS-REPO ARCHITECTURE — owner decision, do this FIRST.** It gates the other two repos.
+   `docs/handoffs/S37-to-all-projects-stdout-freeze.md` frames it: **three shared assets have each now
+   caused a cross-repo incident** — the NAS Docker daemon (DEC-0036), the driver-vs-image mismatch
+   (DEC-0031), and the secret gate (green-but-blind in *both* repos, independently). **None belongs to
+   any one repo, and no repo's session-start read covers the gap between them.** Options on the table:
+   a shared `ops/`-`infra/` repo owning NAS-level truth; a vendored CONVENTIONS fragment (cheap, drifts —
+   and drift *is* DEC-0031 and DEC-0036); or status quo + handoffs (reactive: every lesson costs one
+   outage in one repo before the others hear). **Decide the model, then propagate.**
+
+2. **Promote v2.0.4** — `dev` → `main`, tag + `prod-baseline`, **Docker Hub push**, GitHub release.
+   Carries **two** downstream fixes now: the **stock driver** still shipping to every user (DEC-0031)
+   *and* the **console-handler freeze hazard** (DEC-0036) that our own prod escaped only through config
+   drift. Neither is fixed for anyone until the image lands.
+
+3. **Upstream contribution (provenance follow-through).** DEC-0034 made us honest *internally*; the
+   outward half is unfinished. Fork `lheijst/weewx-rtldavis` **separately** and send **one focused PR**
+   (the rain-counter wraparound), not our whole divergence. The research is done (DEC-0035); what remains
+   is **prose in the owner's voice** — technical substance balanced with human warmth. Draft is gitignored
+   at `docs/upstream/rain-wraparound-bug.md`. **Do not post without an explicit go.**
+   Same for `david-lutz/weewx-influx2` (four real bugs, incl. a TLS-verification fix).
+
+4. **The five secret-gate holes** the dashboard found (their S70 §3). Our repo is **public**, so these
+   matter more here. Steal their `test_check_secrets.sh` harness (plant payloads that MUST be caught).
+   **Do not port their anchor verbatim** — theirs runs on raw lines, ours on `grep -n` output; a verbatim
+   port silently re-opens the hole it closes.
+
+5. Then: cold-load Fix B (`current.json`), temp/humidity coupling filter, Reception Layer B, and the
+   always-on duplicate-frame counter (DEC-0035, replaces ever running prod at `debug_rtld = 2` again).
 
 **Live access:** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in gitignored
-`docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use `env -u GH_TOKEN` for
-any `git push` (keyring token, not the PAT). **The driver is BAKED — never `scp` it (DEC-0031).**
+`docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use `env -u GH_TOKEN` for any
+`git push`. **The driver is BAKED — never `scp` it (DEC-0031).** **Never run `docker logs` without
+`--tail N`** — a bare one wedged the daemon and froze prod for 7 hours (DEC-0036).
