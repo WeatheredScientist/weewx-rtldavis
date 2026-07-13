@@ -35,6 +35,43 @@
 #   see https://groups.google.com/g/weewx-user/c/-KOh89ur7Y8/m/qbIFacJeCQAJ for details
 #
 #-------
+# 2026 patched by WeatheredScientist
+#   github.com/WeatheredScientist/weewx-rtldavis
+#
+#   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
+#   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.1'
+#   so the difference is visible in the logs. Bugs here are ours, not upstream's.
+#
+#   Changes, with the date each was recorded in git. Entries dated 2026-07-04
+#   include work done earlier (May-June 2026) and first committed on that date.
+#
+#   2026-07-04  windDir fix: upstream assigns wind_speed/wind_dir only inside one
+#               branch of the direction decode; the other branch leaves them unset.
+#   2026-07-04  calm-air gate: raw wind speed <= 2 with direction 0 is the 6410
+#               hall-sensor floor. Record 0 speed and a NULL direction rather than
+#               a false 2 mph out of due north.
+#   2026-07-04  freqError values are stored for the US and NZ bands too, not EU only.
+#   2026-07-04  rain_delta_tips(): reject implausible rain-counter deltas. Upstream
+#               treats ANY negative delta as a 127->0 wraparound and adds 128, which
+#               turns a single RF decode glitch into phantom rain. (DEC-0021)
+#   2026-07-05  unknown-channel handler logged an undefined name `raw` (NameError).
+#   2026-07-05  pct_good_all was gated on a field that _init_stats/_reset_stats set
+#               back to None every archive period, so the guard could never pass and
+#               the driver's own rxCheckPercent was never populated. pct_good (a
+#               list) was also compared against None rather than pct_good[i].
+#   2026-07-05  per-packet RAW/Hop logging moved behind debug_rtld levels; it was
+#               flooding weewx.log at INFO.
+#   2026-07-08  lint: dropped unused imports and the dead _fmt()/parse_readings().
+#   2026-07-08  SensorQC: decode-layer plausibility filter for temperature, humidity,
+#               wind, UV and radiation -- sensor-spec bounds plus a per-reading delta
+#               check. Rejected values become NULL, never a substituted reading.
+#               (DEC-0029)
+#
+#   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
+#   These fixes are offered upstream; this fork exists to ship them in the meantime.
+#
+#-------
 
 """
 Collect data from rtldavis  
@@ -117,7 +154,12 @@ def logerr(msg):
     log.error(msg)
 
 DRIVER_NAME = 'Rtldavis'
-DRIVER_VERSION = '0.20'
+# Fork of Luc Heijst's rtldavis v0.20. The '+ws.N' suffix is a PEP 440 local
+# version identifier: upstream base 0.20, WeatheredScientist revision 1. Never
+# report a bare '0.20' from this file -- it is not stock upstream and must not
+# claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
+DRIVER_VERSION = '0.20+ws.1'
+DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
 weewx.units.USUnits['group_frequency'] = 'hertz'
@@ -172,11 +214,17 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     message pass) -- but a MULTI-bit error pattern can be a valid codeword and
     slip through, and upstream issue #15 has the receipts: two frames 262 us
     apart (the ISS transmits every ~2.5 s), differing in 4 bits, BOTH passing
-    CRC. The likely mechanism is the rtldavis Go demodulator emitting a spurious
-    near-duplicate frame; most such frames fail CRC and are dropped silently,
-    but ~1 in 65536 passes by chance and delivers garbage. The driver's own
-    dedup (`data != self._last_pkt`, ~L1209) is EXACT-equality, so a *corrupted*
-    near-duplicate is not a duplicate and sails past it.
+    CRC. The mechanism is CONFIRMED on this station (DEC-0035): the rtldavis Go
+    demodulator sometimes decodes one RF burst TWICE, emitting a second frame a
+    few ms later. Census: 61 frames arriving 1.4-10 ms (median 2.0 ms) after a
+    byte-identical frame, in 2 hours -- ~722/day. The ISS transmits every ~2.8 s
+    and cannot transmit twice 2 ms apart, so the receiver made the second copy.
+    Most such copies pick up bit errors, fail CRC and are dropped silently inside
+    the Go binary (protocol.go ~L218), but ~1 in 65536 passes by chance and
+    delivers garbage. Neither dedup catches a CORRUPTED near-duplicate: Go's
+    (`seen == lastRecMsg`, main.go ~L394) and the driver's own
+    (`data != self._last_pkt`, ~L1209) are both EXACT-equality, so a corrupted
+    copy is not a duplicate and sails past both.
     So CRC is not a defense here, and a decode-layer plausibility check is the
     only one available at this layer. The ORIGINAL driver treated *any* negative
     counter delta as a 127->0 wraparound and unconditionally added 128 to
@@ -908,7 +956,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
 
 
     def __init__(self, engine, config_dict):
-        loginf('driver version is %s' % DRIVER_VERSION)
+        loginf('driver version is %s (fork of %s, patched by WeatheredScientist '
+               '-- not stock upstream)' % (DRIVER_VERSION, DRIVER_UPSTREAM))
         self.setup_units_rtld_schema()
 
         if engine:
@@ -982,7 +1031,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             channels['temp_hum_1'], channels['temp_hum_2'])
         loginf('using transmitters %d' % self.transmitters)
         loginf('log_humidity_raw %s' % self._log_humidity_raw)
-        loginf('RTLDAVIS_DRIVER_MARKER patched active file running')
+        # (The old RTLDAVIS_DRIVER_MARKER canary lived here. It proved which
+        # rtldavis.py was actually imported during the DEC-0031 hunt. The version
+        # line in __init__ now does that job honestly: stock upstream logs
+        # 'driver version is 0.20', this fork cannot.)
 
         self.cmd = self.cmd + " -tf " + str(self.frequency) + " -tr " + str(self.transmitters)
 
