@@ -635,7 +635,20 @@ version = 5.3.1
         archive_services = weewx.engine.StdArchive
         restful_services = weewx.restx.StdStationRegistry, weewx.restx.StdWunderground, weewx.restx.StdPWSweather, weewx.restx.StdCWOP, weewx.restx.StdWOW, weewx.restx.StdWOWBE, weewx.restx.StdAWEKAS, user.wcloud.WeatherCloud, user.windy.Windy, user.owm.OWM, user.influx.Influx, user.ogoxeUploader.OgoxeUploader
         #report_services = weewx.engine.StdPrint, weewx.engine.StdReport
-        report_services = weewx.engine.StdPrint
+        #
+        # StdPrint IS DELIBERATELY ABSENT (DEC-0041). It print()s every LOOP packet
+        # straight to the container's stdout, bypassing the logging handlers entirely
+        # -- so setting the console log level does NOT quiet it. In a container that
+        # stdout is a pipe drained by the Docker daemon, and on Synology the log store
+        # behind it (log.db) CANNOT be size-capped. If that consumer ever stalls, the
+        # 64 KB pipe fills and weewx BLOCKS FOREVER on its next print: no crash, no
+        # traceback, container still reporting "Up". That is a 7h18m outage we actually
+        # had (DEC-0036). StdPrint buys nothing here -- nothing reads container stdout;
+        # the full log goes to the rotating FILE, which is what you and any monitor read.
+        #
+        # Re-enable it only if you are running weewx in a terminal and want to watch
+        # packets scroll by. Do not ship it.
+        report_services =
 
 ##############################################################################
 #   This section configures logging.
