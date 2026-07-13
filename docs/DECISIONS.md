@@ -61,6 +61,7 @@ a later entry.
 | DEC-0043 | Override the **root** logger, not just `weewx`/`user` — weewx's default root points at a syslog socket a container does not have | Accepted · **completes** DEC-0036/0041 | 2026-07-13 (S39) |
 | DEC-0044 | The **nibble theory is not supported** by the archive, and the archive can never settle it — **instrument, don't filter** | Accepted · **bounds** DEC-0029 · **parks** the coupling filter | 2026-07-13 (S39) |
 | DEC-0045 | **A comment is not an exemption** — the secret gate scans comments like code. A commented-out credential in a public repo is still leaked, and the gate's *own test* had asserted it was fine | Accepted · **amends** DEC-0039 · **extends** DEC-0012 | 2026-07-13 (S40) |
+| DEC-0046 | **The baked config is shadowed by the prod bind-mount** — an image-only config fix reaches downstream users and *never* reaches prod. The exact mirror of DEC-0031 (where the *image* wins and the mount is the no-op) | Accepted · **mirrors** DEC-0031 · completes the delivery half of DEC-0043 | 2026-07-13 (S41) |
 
 ## Open / deferred
 
