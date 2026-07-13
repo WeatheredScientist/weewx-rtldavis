@@ -727,3 +727,251 @@ was fine and Davis was at fault. It survived until someone checked it against **
 bytes**. The lesson is narrow and worth keeping: *a proof about single-bit errors says nothing about
 multi-bit errors* — and when a conclusion depends on an inference rather than a measurement, go find
 the measurement.
+
+---
+
+## DEC-0034 — State the fork honestly: modification notices, `+ws` version, CHANGES-FROM-UPSTREAM
+
+**Date:** 2026-07-12 (S37) · **Status:** Accepted
+
+**Context.** This project ships several other people's GPLv3 files with our patches on top, and said so
+nowhere. Specifically:
+
+- `rtldavis.py` carried only *upstream's* header (`Copyright 2019 Matthew Wall, Luc Heijst`) and
+  reported `DRIVER_VERSION = '0.20'` — the stock upstream version — while actually carrying a rain
+  filter (DEC-0021), SensorQC (DEC-0029), the H1/H2/M3 fixes, a windDir fix and a calm-air gate.
+  Measured delta from the `src.tgz` base: **+263 / −51 lines.**
+- `influx.py` (from `david-lutz/weewx-influx2`) reported `VERSION = "0.20"` while carrying five
+  patches, including a TLS-verification security fix.
+- `ogoxeUploader.py` and `wcloud.py` were vendored with no modification notice.
+
+**GPLv3 section 5(a)** requires a modified work to "carry prominent notices stating that you modified
+it, and giving a relevant date." We were not doing that. Every other link in this chain was: Luc
+documents his merge of Matthew Wall's drivers in the file header, and Vince Skahan added a dated
+`# 20-12-2025 patched by vinceskahan@gmail.com` block to the very same file. We inherited the
+convention and skipped it.
+
+The practical harm is the same class as DEC-0031 (the compose clobber): **the artifact asserts one
+thing and does another.** A `0.20` in the logs tells a reader — including us, and including anyone we
+try to help on upstream issue #15 — that they are looking at stock upstream behavior. They are not.
+
+**Decision.**
+
+1. **Modification notices** in the header of every patched upstream file (`rtldavis.py`, `influx.py`,
+   `ogoxeUploader.py`), following the convention Luc and Skahan already established in these files:
+   who, when, what changed. `wcloud.py` gets a one-line notice recording that the *only* change is an
+   SPDX tag.
+2. **Version honestly** with a PEP 440 local identifier: `0.20` → **`0.20+ws.1`** in both
+   `rtldavis.py` and `influx.py`. The driver logs
+   `driver version is 0.20+ws.1 (fork of lheijst 0.20, patched by WeatheredScientist -- not stock
+   upstream)`. This also replaces the ad-hoc `RTLDAVIS_DRIVER_MARKER` canary from the DEC-0031 hunt:
+   stock upstream cannot print that line, so it proves which driver is loaded, honestly.
+3. **`CHANGES-FROM-UPSTREAM.md`** — the full inventory: provenance chain, every divergence with a
+   date and a reason, and an upstreaming status per item. It is both the "playing nice" document and
+   the checklist for *shrinking* the fork.
+4. **README opening rewritten.** It read as though we ship Luc's driver. It now says plainly:
+   unofficial Docker distribution, patched driver, not affiliated, links upstream and to the
+   divergence list.
+5. **Upstream-first posture.** To contribute we fork `lheijst/weewx-rtldavis` **separately** and send
+   one focused PR (starting with the rain fix). This repo correctly stays a normal repo, not a GitHub
+   fork of the driver — it is a *distribution*, not a driver fork.
+6. **Keep the repo and image name.** It is published and attribution is intact; renaming breaks every
+   downstream `docker pull`. This is about honesty, not rebranding.
+
+**Consequences.** The audit turned up more than expected: `influx.py` holds **five** upstream patches,
+not the one Py-3.14 fix we thought — including `e.read.decode()` (a missing pair of parens that makes
+the HTTP error handler raise `AttributeError` instead of reporting the error) and an unconditional
+`ssl._create_unverified_context()` on https endpoints. Four of the five are unambiguous upstream bugs.
+`rtldavis.py` holds four real upstream bugs beyond the rain filter. The fork is more valuable — and
+more obligated to upstream — than we assumed.
+
+---
+
+## DEC-0035 — The duplicate-frame mechanism is CONFIRMED on this station (and the test that said otherwise was broken)
+
+**Date:** 2026-07-12 (S37) · **Status:** Accepted · **Confirms** DEC-0033 locally (resolves its open item 5)
+
+**Context.** DEC-0033 concluded that the CRC-valid corruption here is caused by the `rtldavis` Go
+demodulator emitting a **spurious near-duplicate frame** microseconds after a good one — the fingerprint
+LloydR posted upstream (two frames 262 µs apart, 4 bits different, both CRC-valid). Its item 5 was
+explicit that this was **upstream-confirmed but locally unverified**, and set the follow-up: capture raw
+frames, look for sub-2-second pairs. S36 enabled `debug_rtld = 2` in prod and wrote
+`ops/find_duplicate_frames.py`.
+
+**The first answer was wrong.** The script reported **0 suspicious pairs** in 1,863 frames over two
+hours, with a beautifully clean gap distribution: minimum gap exactly 2.8000 s, every gap an exact
+integer multiple of the ISS period (2.8 / 5.6 / 8.4 / 11.2 s). That looks like a decisive null. It is an
+artifact. **The instrument was blind to the thing it was built to detect**, in two independent ways:
+
+1. **It parsed only `data:` lines — which are post-dedup.** `main.go` compares each message to the
+   previous one and, on a byte-for-byte match, logs `duplicate packet:` and `continue`s *before* the
+   message ever reaches the driver (`main.go` ~L394). So every exact duplicate had already been stripped
+   out upstream of the lines the script was reading. The gaps were perfectly quantized *because* Go had
+   removed everything that wasn't.
+2. **Its stated premise about CRC is false.** The docstring claims "the driver logs the raw `data:` line
+   BEFORE it checks the CRC, so we see the spurious frames even when they fail CRC." That confuses the
+   Python driver's CRC check with the Go decoder's. `protocol.go` ~L218 — *"If the checksum fails,
+   bail"* — drops every CRC-failing packet inside the Go binary. Python only ever sees CRC-valid frames.
+
+Both errors push the same way: they hide duplicates. The "answer in hours" reasoning was therefore also
+wrong — had the script been correct-but-limited to CRC-valid corrupted frames, the expected count in a
+2-hour window would have been ~0.005, and zero would have meant nothing either.
+
+**The measurement, done correctly.** Counting `duplicate packet:` lines (Go's own dedup log, surfaced at
+`debug_rtld = 1`) over the same 120-minute window, and matching each back to its original:
+
+| Gap from duplicate to its original | Count | Interpretation |
+|-----------------------------------|-------|----------------|
+| 1.4 – 10 ms | **61** | **Receiver artifact — the ISS cannot transmit twice this fast** |
+| 10 – 100 ms | 1 | same |
+| 2.0 – 3.2 s | 712 | Transmitter cadence — genuine ISS repeats of an unchanged payload |
+
+Representative event:
+
+```
+20:31:04.102918  E401BD56010ED10E  ACCEPTED
+20:31:04.104955  E401BD56010ED10E  DUP-DROPPED   +0.002037 s later, IDENTICAL bytes
+```
+
+**Decision — the mechanism is confirmed on this station.** The demodulator re-decodes a single RF burst
+twice, at a rate of **61 per 2 hours (~0.5/min, ~730/day)**, median gap **2.0 ms**. A Davis ISS transmits
+every ~2.8 s; a second frame 2 ms later cannot come from the transmitter. This is LloydR's mechanism on
+our hardware (his gap was 262 µs, ours ~2 ms — same class, different SDR timing).
+
+The full glitch chain:
+
+1. The demodulator double-decodes one transmission. **Observed: ~730/day** (lower bound — see below).
+2. The second decode is a marginal re-detection and sometimes carries bit errors.
+3. A **corrupted** second copy no longer matches the previous frame, so Go's **exact-equality** dedup
+   (`seen == lastRecMsg`) does not catch it. This is DEC-0033's point 2, now confirmed at the Go layer
+   as well as the Python one.
+4. It must still pass CRC to be emitted. Most fail and are dropped **invisibly** at `protocol.go` L218 —
+   which is why 730/day is a *lower bound* on double-decoding, counting only the copies that came
+   through clean enough to be byte-identical.
+5. The ~1-in-65536 that passes CRC by chance reaches the driver as a valid-looking packet carrying
+   garbage — phantom rain (DEC-0021), humidity and UV spikes (DEC-0029).
+
+**Consequences.**
+
+1. **The owner's precondition for the upstream post is met.** He asked for *"our own confirmation of the
+   duplicate-frame fingerprint"* before posting to issue #15. We have it, from our own hardware, with a
+   frame-gap census behind it. The post still needs his voice and his explicit go — that has not changed.
+2. **`ops/find_duplicate_frames.py` is fixed** to parse `duplicate packet:` lines and to state the CRC
+   pipeline correctly. The old version would have told anyone who ran it that their station was clean.
+   It is worth keeping precisely because it was wrong: it is the second time in two sessions that a
+   confident conclusion here rested on an unchecked assumption about *where in the pipeline* a check
+   happens (DEC-0031 was the same shape).
+3. **A rate this high is itself the finding.** ~730 double-decodes/day means the corruption path is not
+   exotic or marginal — it is running constantly, and only CRC and an exact-match dedup stand between it
+   and the database. Both are known to be insufficient. This strengthens the case for the decode-layer
+   filters, and it is the number to lead with upstream.
+4. **Instrumentation, not debug mode.** The `duplicate packet:` line is logged via `dbg_rtld(1)` → 
+   `log.debug`, so surfacing it requires the `user` logger at DEBUG — too noisy to leave on. Prod is back
+   at `debug_rtld = 1` / INFO. The right fix is a **permanent, cheap counter** in the driver: tally
+   duplicate-packet lines off the Go stderr stream and log one summary line per archive period at INFO.
+   Proposed for v2.0.5 — it turns a two-hour debug expedition into a standing measurement, and it is the
+   instrument that would also catch the rainRate mechanism (STATUS).
+
+*Lesson, stated plainly because it has now cost two sessions:* a null result from an instrument whose
+sensitivity you have not verified is not evidence of absence. Before trusting a "zero", prove the tool
+can see a "one".
+
+---
+
+## DEC-0036 — The 7h18m freeze: trigger known, mechanism OPEN; bank the mitigations
+
+**Date:** 2026-07-13 (S37) · **Status:** Accepted · **Mechanism deliberately left open**
+
+**What happened.** At 2026-07-12 23:53:45 weewx stopped doing anything for **7 h 18 m** (ERR-0003). It did
+not crash. Both processes stayed alive, the container reported "Up", and **no error or traceback was ever
+written** — because the thing that was stuck *was the logging*. `weewx_monitor.py` emailed at 00:15; the
+owner was asleep.
+
+**What is established (measured, not inferred):**
+
+- weewx's main thread (tid 1) was in kernel state **`pipe_wait`** — blocked on a pipe.
+- The Docker daemon's path for **this container only** was wedged: `docker logs`, `docker exec` and
+  `docker kill` all hung on it, while the other three containers (HLF, eh-proxy, influxdb) were
+  completely healthy.
+- A **bare `docker logs` with no `--tail`** (PID 15883) had been hung since Jul 12, along with two later
+  `--tail` invocations. Synology's Docker log store is a SQLite `log.db`.
+- Killing the hung clients did **not** free it. Only `synopkg restart ContainerManager` did.
+
+**What is NOT established — and the first answer was wrong.** The initial diagnosis was *"weewx's INFO
+console handler filled the container's stdout pipe."* **That is false for this station.** The live
+bind-mounted `weewx.conf` has **no console handler at all** (`handlers = rotate,` — file only), so weewx
+was not writing to stdout. `pipe_wait` is the kernel's wait state for a blocked pipe **read *or* write**;
+it was read as "write to stdout" without checking. **We do not know which write blocked, and the
+container has been restarted, so the evidence is gone.**
+
+**Decision: bank the mitigations, record the mechanism as OPEN.** Do not fabricate a causal chain to
+close the ticket. The mitigations below do not depend on knowing the exact blocked write:
+
+1. **`logging.additions`: console handler `INFO` → `WARNING`.** *This is not the fix for our outage* — it
+   is a fix for **the image we publish**. `logging.additions` (baked into the image by the Dockerfile)
+   **does** define a console handler at INFO with `handlers = rotate, console,`. Our prod escaped it only
+   because the **live config has drifted from the repo** and lost that handler. So **every downstream user
+   of the published image runs with INFO-level stdout logging that we do not.** Same shape as DEC-0031:
+   *the artifact we ship differs from what we run, and we did not know.* At WARNING the handler emits
+   ~nothing in normal operation, so the pipe cannot fill regardless of `docker logs` or `debug_rtld`;
+   errors stay visible; full detail is unaffected (it goes to the `rotate` file handler, which is what we
+   and the monitor actually read).
+2. **Never run `docker logs` without `--tail`.** The rule already existed in CONVENTIONS ("the log is
+   large"). It now has teeth: a bare `docker logs` can hang, wedge the daemon's log path for that
+   container, and take production down. It is not a style preference.
+3. **Cap the log driver** (`max-size`, `max-file`) so the store cannot bloat. Belt-and-braces.
+4. **The monitor is NOT the gap.** It detected the freeze in 22 minutes and emailed. An earlier draft of
+   this decision proposed "add a liveness check" — it already exists and it worked. Recorded so nobody
+   builds it twice.
+
+**Cross-project.** This is **not weewx-specific.** Any container whose process writes to stdout can be
+frozen by a wedged Docker log path. `hyperlocal-forecast-api` and `eh-proxy` have the same exposure.
+Handoff docs go to those repos; **we do not change them from here** (owner's instruction, and the
+DEC-0031 lesson: *infrastructure advice across a repo boundary must be verified in the target repo before
+it is given*).
+
+*Lesson, and it is the second time today:* reasoning past the evidence produced a confident, wrong,
+internally-consistent story — first that the duplicate-frame test was a decisive null (DEC-0035), then
+that the console handler froze prod. Both collapsed the moment someone checked the actual artifact. **The
+correction is not "think harder", it is "go look at the thing."**
+
+---
+
+## DEC-0037 — A retrospective correction must propagate to every derived field
+
+**Date:** 2026-07-13 (S37) · **Status:** Accepted · **Extends** DEC-0032
+
+**Context.** DEC-0032 established *how* to correct a known-bad observation (correct to the known value,
+flag it in-band). It did not say **how far** a correction must travel. ERR-0001 corrected the primary
+rain fields for the 2026-07-04 phantom and stopped there. Eight days later the dashboard's S70 handoff
+reported that `max(dayRain_in)` still read **1.84″** against a corrected `sum(rain_in)` of **0.56″** —
+the phantom, intact, in an infinite-retention bucket, in the field a reader would most naturally reach
+for as "the daily rain total."
+
+Auditing the rest found it was **worse than reported**: `rain24_in` was also 1.84″, and `hourRain_in` was
+1.28″ — *entirely* phantom. One report, three wrong fields.
+
+**Why it happened.** Cumulative and rolling fields **do not self-heal**. A running total absorbs a bad
+increment permanently. And these fields are invisible from inside this repo: they are not in our archive
+schema and not produced by our driver — weewx derives them via XTypes and the uploader freezes the
+result into InfluxDB. Correcting the source column does nothing to the snapshots already written.
+
+**Decision.** A retrospective correction to a primary observation is **not complete** until every field
+derived from it has been recomputed over every affected window.
+
+1. **Enumerate the derived fields before declaring a correction done.** For rain that is `dayRain`,
+   `rain24`, `hourRain` — and the list is schema-dependent, so *look*, do not recall.
+2. **Recompute from the system of record** (the SQLite archive), not from the derived store. Verify the
+   two agree on the primary field first — we confirmed `sum(rain) = 0.56` in both before touching
+   anything.
+3. **Rewrite over a window wide enough for the longest rolling lookback** (here: local-day + 24 h + 1 h →
+   a 30-hour window), overwriting in place (same measurement, tags and timestamps) so no duplicate series
+   is created. The operation must be **idempotent**: rewriting a correct value over a correct value is a
+   no-op, so it can be safely re-run.
+4. **A `*_qc` flag on the primary field under-reports the blast radius.** It says "this value was
+   corrected"; a reader reasonably infers the whole record at that timestamp is clean. It was not. Until
+   we have a better convention, the errata entry carries the full extent.
+
+**Credit where due:** the dashboard found this and, per their DEC-0096, deliberately did **not** patch our
+store — they display corrections, they never author them. That boundary is right, and it is why the bug
+came back to us as a report instead of a silent divergence between two stores.

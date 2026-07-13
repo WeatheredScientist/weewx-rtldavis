@@ -12,8 +12,22 @@
             filename = /var/log/weewx/weewx.log
             when = midnight
             backupCount = 30
+        # WARNING, not INFO -- deliberately. This handler writes to the container's
+        # stdout, which Docker drains into its log store. If that consumer ever
+        # wedges (on Synology it is a SQLite log.db, and a bare `docker logs` with
+        # no --tail can hang it), the 64 KB stdout pipe fills and the next log call
+        # BLOCKS FOREVER: a write() to a pipe has no timeout. weewx does not crash
+        # or degrade -- it freezes mid-log-line, with no error, no traceback, and a
+        # container that still reports "Up". That is exactly what happened on
+        # 2026-07-12 23:53 (a 7h18m outage, DEC-0036 / ERR-0003).
+        #
+        # At WARNING this handler emits ~nothing in normal operation, so the pipe
+        # cannot fill no matter what anyone does with `docker logs` or debug_rtld.
+        # Errors are still visible in `docker logs`. Full INFO/DEBUG detail is
+        # unaffected -- it goes to the `rotate` file handler below, which is what
+        # we and weewx_monitor.py actually read.
         [[[console]]]
-            level = INFO
+            level = WARNING
             formatter = standard
             class = logging.StreamHandler
             stream = ext://sys.stdout

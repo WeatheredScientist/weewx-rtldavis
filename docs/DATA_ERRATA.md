@@ -138,3 +138,74 @@ the LOCAL date) and in InfluxDB (+ sparse `rainRate_qc = 1`). Daily max rainRate
 with the nocturnal clustering noted for the humidity glitches (DEC-0029). Nothing about the rain
 counter is special; it is simply the field where a single bit-flip is most *visible*, because rain is
 a monotonic accumulator and a bad tip never averages out.
+
+---
+
+## ERR-0003 — 7h18m data gap (weewx froze), backfilled from the WeatherLink→WU path
+
+**Window:** 2026-07-12 23:54 → 2026-07-13 07:11 EDT (7 h 18 m) · **Logged:** 2026-07-13 (S37)
+**Cause:** not a sensor or decode fault — a **software freeze**. See [DEC-0036](DECISIONS.md).
+
+| | |
+|---|---|
+| **What happened** | weewx's main thread blocked on a pipe at 23:53:45 and never resumed. Both processes stayed alive, the container still reported "Up", no error and no traceback was ever written. The last archive record is `2026-07-12 23:53:00`; the next is `2026-07-13 07:12:00`. **Zero** records in between (~438 one-minute records missing). |
+| **Detected** | `weewx_monitor.py` emailed at **00:15** — 22 min after the freeze. The monitor worked. The outage ran long only because it was overnight. |
+| **Was anything cached?** | **No.** weewx never read a loop packet during the window, so nothing was buffered and nothing was lost in the restart — the data was never captured at all. Uploads (WU rapidfire, CWOP, Influx) did not run either. |
+
+**Correction applied — backfilled, with different provenance.** The same ISS was also being received by
+the co-located **Davis WeatherLink Live** console, which uploads to Weather Underground independently of
+us. We pulled that window back from the WU PWS history API and inserted it:
+
+- **weewx archive DB:** 29 records, `interval = 15` (**not** our usual 1 — recorded honestly, because
+  these are 15-minute observations, not our 1-minute cadence). Daily summaries rebuilt for 2026-07-13.
+- **InfluxDB:** 29 points, each carrying an in-band **`backfill = 1`** flag (the [DEC-0032](DECISIONS.md)
+  `rain_qc` pattern), so the dashboard can mark them without keeping a parallel list.
+- DB backed up first: `weewx.sdb.bak-S37-preBackfill-*`.
+
+**What the backfilled data is, precisely:** the same physical ISS, seen by a **different receiver**, at a
+**coarser cadence**. It is not our RTL-SDR path. Anyone analyzing this window must know the resolution
+differs — hence the flag and this entry.
+
+**Conditions during the gap (why the loss is small):** dry (`precipTotal` flat at 0.0 across the whole
+window, owner-confirmed no rain), dead calm (`windSpeed = 0` on all 29), overcast-free nocturnal cooling
+66 °F → 61 °F with humidity 82 % → 91 %. A smooth, featureless night — the 15-minute cadence loses very
+little. CWOP/NOAA-MADIS will not accept retroactive data, so that gap is permanent and external.
+
+---
+
+## ERR-0001 (amendment) — the correction did not propagate to the derived cumulative fields
+
+**Logged:** 2026-07-13 (S37) · **Found by:** eaglehunt-dashboard S70 handoff (they verified it and
+correctly declined to patch our store themselves)
+
+ERR-0001 corrected the *primary* rain fields (`rain`, `rainRate`) for the 2026-07-04 phantom. It did
+**not** recompute the fields **derived** from them. Cumulative fields do not self-heal — a running total
+absorbs a bad tip permanently.
+
+| local day 2026-07-04 | before | after |
+|---|---|---|
+| `sum(rain_in)` (primary) | 0.56″ | 0.56″ — was always right |
+| `max(dayRain_in)` | **1.84″** | **0.56″** |
+| `max(rain24_in)` | **1.84″** | **0.56″** |
+| `max(hourRain_in)` | **1.28″** | **0.47″** |
+
+`1.84 − 0.56 = 1.28` — precisely the phantom, carried to local midnight. The dashboard flagged
+`dayRain_in`; auditing the rest found **`rain24_in` and `hourRain_in` were wrong too** — and
+`hourRain_in`'s entire 1.28″ *was* the phantom. The corrected `hourRain_in` peak of 0.47″ is the real
+evening storm (20:31–22:39), which is physically sensible; 1.28″ in one hour was not.
+
+**Fix applied (S37):** all three fields recomputed from the corrected `rain` series in the **SQLite
+archive** (the system of record, verified to agree with InfluxDB at 0.56″) and rewritten in InfluxDB for
+every existing point across 2026-07-04 00:00 → 2026-07-05 06:00 local — a window wide enough to cover
+all three rolling lookbacks (daily, 24 h, 1 h). 5,394 points rewritten in place (same measurement, same
+`binding=archive` tag, same timestamps), so no duplicate series was created. The operation is idempotent.
+
+These fields are **not** in our archive schema and are **not** produced by our driver — weewx derives
+them via XTypes by summing `rain` over a trailing window, and the influx uploader froze those
+computations into the bucket. `rain` in SQLite is now correct, so they compute correctly going forward;
+only the historical InfluxDB snapshots were stale.
+
+**The general rule this earns — see [DEC-0037](DECISIONS.md):** *a retrospective correction to a primary
+field must be propagated to every field derived from it.* Correcting `rain` and stopping there left
+wrong data in an infinite-retention bucket for eight days, in the field a reader would most naturally
+reach for as "the daily total."

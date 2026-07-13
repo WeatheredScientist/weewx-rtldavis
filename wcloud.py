@@ -1,6 +1,11 @@
 # $Id: wcloud.py 1797 2019-03-07 23:35:27Z tkeffer $
 # Copyright 2014 Matthew Wall
 # SPDX-License-Identifier: GPL-3.0-or-later
+#
+# 2026, WeatheredScientist (github.com/WeatheredScientist/weewx-rtldavis):
+# vendored from matthewwall/weewx-wcloud. GPLv3 section 5(a) notice: the only
+# change from upstream is the SPDX-License-Identifier line above. The code is
+# otherwise unmodified. See CHANGES-FROM-UPSTREAM.md.
 
 """
 This is a weewx extension that uploads data to WeatherCloud.
