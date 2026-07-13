@@ -6,6 +6,70 @@ under [Pre-S16].
 
 ---
 
+## [S39] — 2026-07-13 — the root logger nobody overrode, and a theory that did not survive its own test
+
+> **Two findings, one shipped fix, and one filter deliberately NOT built.**
+>
+> A routine post-deploy health check on `:v2.0.6` found prod emitting **15 logging-error tracebacks
+> (~515 lines) to stderr on every container start**. Root cause: weewx's own defaults point the **ROOT
+> logger** at a syslog handler on `/dev/log` — a socket that does not exist in a container. Our
+> `logging.additions` had always overridden the `weewx` and `user` loggers, but `weewxd` and
+> `weeutil.*` are in **neither** namespace, so they fall through to root and blow up there.
+>
+> The louder half is cosmetic (bounded burst; steady state is still 0 lines/90 s, so DEC-0041 holds).
+> **The quieter half is not:** `weewx.log` has *never* contained a single `weewxd` or `weeutil` line —
+> no version banner, no config path, no group list. Those records were not noisy, they were **lost**,
+> and the failure announced itself only on a stream nobody reads. Fixed with a `[[root]]` override plus
+> a build-time assertion, and verified A/B inside the real container: with the fix, `weewxd INFO
+> Starting up weewx version 5.4.0` lands in the file for the first time. **DEC-0043.** Ships in v2.0.7.
+
+**The coupling filter was on the S39 plan. It is not being built, and that is the bigger result.**
+
+The inherited task was a "cross-sensor consistency filter" from dashboard S69: *a humidity move
+>6 %/min with temperature essentially flat is physically impossible*, reported 3-for-3 with 0 false
+positives. Underneath it sat an unproven mechanism — the **nibble theory**: the ISS message-type nibble
+(`pkt[0] >> 4`) takes a bit flip, so **another sensor's payload is decoded as humidity**. S69 proposed a
+falsifiable arithmetic test and never finished it. S39 finished it. **DEC-0044.**
+
+- **The theory's arithmetic contradicts its own story.** Humidity is `0xA` = `1010`. Its single-bit
+  neighbours are `0x2` (supercap), `0x8` (temp), `0xB` (undefined), `0xE` (rain). **Solar is 2 bits
+  away; UV is 3.** So "a misdecoded solar/UV payload — that's why it's always midday" is not reachable
+  by a single bit flip, and midday was the theory's headline evidence.
+- **Every testable variant fails.** UV: implied ≈ 2× actual on *every* spike. Temperature: implied
+  200–400 °F. Supercap: fails where testable.
+- **The solar "match" was fitted noise.** Recovering a raw reading from a 1-minute average needs
+  `raw = n·spike − (n−1)·baseline` with `n` unknown; letting `n` float over {1,2,3} scored 12/28, but
+  the winning `n` came out uniformly **{1:4, 2:4, 3:4}** — a meaningless parameter. Against **2000
+  shuffled pairings**: true 43 % vs chance 35 %, **p = 0.248**.
+- **This is structural.** The free parameter exists *because* the archive averages, and it is precisely
+  what manufactures false matches. **No analysis of 1-minute data can settle this** — and InfluxDB
+  stores the same 1-minute records (checked: bucket `weewx`, retention infinite).
+- **The filter's own premise is weak too.** "Temperature essentially flat" describes **90 % of all
+  minutes** (66,743 of 74,538 at |ΔT| ≤ 0.1 °F), so the flatness test discriminates almost nothing. And
+  every spike visible in the archive implies a *raw* glitch of 16–37 %RH — **already rejected by
+  DEC-0029's existing 10 %RH-per-reading cap**. The filter would have targeted a residual we never
+  showed exists.
+- **The cited false-positive test was not evidence.** The 2026-05-23 "gust front" shows a maximum
+  humidity move of **1.0 %/min** in our archive (90 %RH, 50 °F, wind ≤ 2.5 mph — a calm, saturated
+  day). Any threshold spares it.
+
+**So: instrument, don't filter.** The decisive instrument was already in the code — **`log_humidity_raw`**,
+an upstream option (Luc Heijst's) nobody had switched on. It logs `(pkt[4] << 8) + pkt[3]`: **both raw
+payload bytes**. With a real `pkt[4]` there is no averaging and no free parameter, and the inversion
+becomes deterministic. Armed in the live `weewx.conf` (INFO → file handler only; prod declares no
+console handler, so it adds nothing to stdout and carries no DEC-0036 risk). It activates on the next
+restart, and the next midday spike settles the question.
+
+**Also:** `iss_channel = 5` with every other channel `0` — there is exactly **one** transmitter, so
+"bleed from another *transmitter*" was never possible. A type-level misroute inside the ISS's own
+packets is the only mechanism the hardware permits.
+
+**Tests:** 67 → **72**. The five new ones assert the `[[root]]` override in both shipped configs and the
+Dockerfile's build-time assertion; deleting the `[[root]]` block fails three of them (planted-payload
+check, per DEC-0039).
+
+---
+
 ## [S38] — 2026-07-13 — v2.0.5 → **v2.0.6** SHIPPED; the gates now execute instead of asking nicely
 
 > **v2.0.5 was an incomplete fix, and v2.0.6 finishes it (DEC-0041).** v2.0.5 moved the console log
