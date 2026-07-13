@@ -35,7 +35,7 @@ a later entry.
 | DEC-0014 | No-Rewrite Rule | Accepted | 2026-07-04 (S16) |
 | DEC-0015 | Graft Python tooling from hyperlocal-forecast | Accepted | 2026-07-04 (S17) |
 | DEC-0016 | Claude Opus 4.8 at high/xhigh as the Claude Code driver | Accepted | 2026-07-04 (S16) |
-| DEC-0017 | Gain held at 372 pending an averaged re-test | Accepted (interim) · **OPEN** | 2026-07-04 (S16) |
+| DEC-0017 | Gain held at 372 pending an averaged re-test | Accepted (interim) · open, but **absorbed into DEC-0048's designed RX experiment** | 2026-07-04 (S16) |
 | DEC-0021 | Rain-counter glitch filter (the false-rain fix) | Accepted · released v2.0.3 | 2026-07-04 (S18) |
 | DEC-0022 | Sensor-QC hardening deferred to a dedicated pass | **Resolved** by DEC-0029 (S33) | 2026-07-04 (S18) |
 | DEC-0023 | Independent per-repo session counter | Accepted · **supersedes** DEC-0013 | 2026-07-04 (S20) |
@@ -63,9 +63,11 @@ a later entry.
 | DEC-0045 | **A comment is not an exemption** — the secret gate scans comments like code. A commented-out credential in a public repo is still leaked, and the gate's *own test* had asserted it was fine | Accepted · **amends** DEC-0039 · **extends** DEC-0012 | 2026-07-13 (S40) |
 | DEC-0046 | **The baked config is shadowed by the prod bind-mount** — an image-only config fix reaches downstream users and *never* reaches prod. The exact mirror of DEC-0031 (where the *image* wins and the mount is the no-op) | Accepted · **mirrors** DEC-0031 · completes the delivery half of DEC-0043 | 2026-07-13 (S41) |
 | DEC-0047 | **The secret gate guards commits, not reads — the transcript is an egress path.** A `sed -n '…,+44p'` overran its section and dumped credentials into the transcript; no control existed because nobody had modeled reading as a path. Guard + redacting reader + transcript scanner, all in `~/.claude/`. *(Rotation specifics: gitignored local-infra doc.)* | Accepted · **extends** DEC-0012 · completes DEC-0039/0045 (write path only) · applies DEC-0040 | 2026-07-13 (S41) |
+| DEC-0048 | **Reception testing is a designed experiment, not a pile of image tags.** The ad-hoc `rw*-test` images are retired; a proper RX test (hypothesis, control arm, averaged window) is deferred and will settle DEC-0017's gain question in the same run | Accepted · **absorbs** DEC-0017's pending sweep · applies DEC-0038 | 2026-07-13 (S41) |
+| DEC-0049 | **The ISS hardware is new and inspected — the phantom rainRate is not a broken part.** DEC-0042's "inspect the bucket + reed switch" action is CLOSED and came back clean, which excludes a defective part and sharpens DEC-0042: it is working hardware reacting to condensation. Anemometer replaced ~16–17 Jun 2026 | Accepted · **bounds** DEC-0042 | 2026-07-13 (S41) |
 
 ## Open / deferred
 
-- **DEC-0017** — gain 372 is interim; needs the 24 h averaged no-preamp sweep vs 207.
+- **DEC-0017** — gain 372 is interim; the averaged no-preamp sweep vs 207 is now **part of DEC-0048's designed RX experiment**, not a standalone errand.
 - **DEC-0024 Layer B** — driver stops publishing dataless freqError packets + persists raw
   `count`/`missed`; deferred to v2.0.5 (S34); No-Rewrite applies, needs its own design + approval.

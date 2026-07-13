@@ -98,10 +98,14 @@ _Last updated: 2026-07-13 (S41)._
 
 ## Open threads (backlog — none of these block anything)
 
-- **✅ rainRate — ANSWERED (DEC-0042).** ISS-side sensor artifact, not RF and not the driver: condensation
-  trips the reed switch enough to start the rate timer, never enough to tip the bucket. **Next step is
-  physical (inspect the bucket + reed switch), not software** — a third event is predictable on the next
-  calm, saturated, cooling night. Full evidence in DEC-0042; **do not re-derive it.**
+- **✅ rainRate — ANSWERED (DEC-0042) and the hardware action is now CLOSED (DEC-0049).** ISS-side sensor
+  artifact, not RF and not the driver. **The owner inspected the hardware: it is new, and there are no
+  faults** — the one failure, the anemometer, was replaced ~16–17 Jun 2026. That **excludes a defective
+  part** and sharpens DEC-0042: it is *working* hardware reacting to condensation, so **there is nothing
+  to swap and no part to order.** Nothing is being built — the event is rare, benign, corrected in-band
+  (`rain_qc`, DEC-0032) and understood. A third event on the next calm, saturated, cooling night remains a
+  free test, with a sharper prediction: **the tip counter still will not advance.** Do not re-derive
+  DEC-0042.
 - **✅ Cross-sensor coupling filter — PARKED, DELIBERATELY NOT BUILT (DEC-0044).** Do **not** pick this up
   as specced; its premise failed on our own data. **The mechanism is the open question, not the
   threshold** — the raw-byte capture in "Active thread" is what settles it. Full reasoning in DEC-0044.
@@ -119,7 +123,9 @@ _Last updated: 2026-07-13 (S41)._
   with the last good reading (~40 s old) rather than left null. The bad value never propagates either
   way — so this did **not** block v2.0.4 — but a rejected reading is currently indistinguishable from an
   absent one in the data (the rejection is still logged loudly). Decide whether that's right.
-- **Gain 372, interim** (DEC-0017) — awaiting a 24 h averaged no-preamp sweep to settle vs 207.
+- **Gain 372, interim** (DEC-0017) — the sweep is now **part of DEC-0048's designed RX experiment**, not a
+  standalone errand. Gain stays at 372 and `receiveWindow` stays at the upstream default until that runs.
+  **Do not tune either by feel.**
 - **Vestigial `loopdata.py`** — mounted + `[LoopData]` present but in no active service list; safe to
   remove, not urgent.
 - **Errata → dashboard contract (cross-repo, dash S69 Q3).** The owner wants corrected points visibly
@@ -162,14 +168,18 @@ _Last updated: 2026-07-13 (S41)._
   internally weird (DEC-0047).
 
 - **Unported from the dashboard:** its `.claude/agents/` routing definitions (its DEC-0093).
-- **The dashboard has a stranded draft PR (#22, S71 Beaufort)** — found by the new session-start hook on
-  its first run. Not ours to merge; flag it when next in that repo.
+- **✅ The dashboard's stranded draft PR is GONE** (checked S41: all three repos have **zero** open PRs, and
+  the dashboard's `promote-main` is no longer ahead of `dev`). Both sibling repos just have one uncommitted
+  file each in their working copies.
 - **NAS boot task fragility (S32):** after the next DSM update/reboot, verify the `weewx_monitor`
   scheduler task still runs as root (symptom: `sudo: a terminal is required` spam, no pidfile).
 - **Docker Hub README auto-sync:** add repo secrets `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` to activate
   `.github/workflows/dockerhub-description.yml` (green no-op until then). Owner action.
-- **Branch/tag cleanup:** delete merged `feature/rain-spike-filter` + `s32-reconcile-main`; retire the
-  misnomer `rw250-test` image tag.
+- **✅ Branch/tag cleanup DONE (S41).** The two branches this item named (`feature/rain-spike-filter`,
+  `s32-reconcile-main`) **no longer existed** — the item was stale. What *did* exist was 8 merged
+  `worktree-*` branches, all deleted (0 unmerged commits each; verified before deleting). The repo now has
+  exactly **`dev` and `main`**. `rw250-test` is retired (DEC-0048); it was **never on Docker Hub**, so the
+  misnomer was only ever ours. `rw350-test` / `rw400-test` are the same class and should follow.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
 ## Next session actions (S41 done → S42)
