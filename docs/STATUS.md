@@ -28,6 +28,34 @@ _Last updated: 2026-07-13 (S41)._
 
 ---
 
+## 🔬 SOAK IN PROGRESS — v2.0.7, started 2026-07-13 15:27 EDT
+
+**Run `ops/soak_check.sh` to get a verdict.** It *is* the acceptance criteria, not a vibe: 15 checks,
+**exit 0 = green, exit 1 = needs a human**, so a cron or a future session can trust it. It re-asserts every
+claim the v2.0.7 deploy made — and it can actually fail (proven with a positive control: told to expect a
+tag prod is not running, it goes red).
+
+**It catches the two things that have lied to us before.**
+
+- **Archive continuity** catches **DEC-0036** — weewx froze for 7h18m mid-log-write while the container
+  still reported `Up`. No crash, no traceback. **Data arriving is health; "Up" is not.**
+- **Driver identity** catches **DEC-0031** — the image ran the *stock* driver for weeks with a correct
+  version tag and perfectly normal logs. The filters were simply inert.
+
+**A 24 h window is the right length because it covers both open experiments for free:**
+
+1. **The midday humidity spike** (11:00–16:00, ~2–3/week). The `log_humidity_raw` capture is live and
+   accumulating. A spike settles the nibble question **deterministically** (DEC-0044). The soak reports the
+   running sample count, but **you still have to spot the spike and do the inversion** — that part is not
+   automated.
+2. **The overnight calm/saturated window.** A third phantom-`rainRate` event is predicted. **The soak
+   auto-detects it** — it queries the archive DB for `rainRate > 0` while `rain = 0`, which is exactly the
+   DEC-0042 signature. If it fires: **snapshot the raw rows BEFORE any correction** (the S38 lesson), then
+   confirm the tip counter did **not** advance, as DEC-0049 requires.
+
+**Baseline at T+2 h: 15/15 pass, 0 warnings.** Stdout silent (6 lines), reception 100 %, archive current,
+and no stalls beyond the single known startup one.
+
 ## Active thread
 
 > **▶ Resume here (S41 → S42). The release is DONE. Nothing is half-shipped and no PR is open.**
