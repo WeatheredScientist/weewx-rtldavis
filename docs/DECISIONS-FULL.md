@@ -1179,3 +1179,69 @@ point you have built the enforcement layer and the fragment is redundant.
 where it demonstrably works (the S37 handoff did its job; it is why this decision exists). It is the
 wrong mechanism for **rules**, because a rule delivered as prose is a rule enforced by memory, and
 memory is what failed at 23:53 on 2026-07-12.
+
+---
+
+## DEC-0041 — StdPrint is removed: the console-handler fix was necessary but NOT sufficient
+
+**Date:** 2026-07-13 (S38) · **Status:** Accepted
+**Completes:** DEC-0036 (the 7h18m freeze). **Corrects an overclaim made in DEC-0038 / v2.0.5.**
+
+**Context.** DEC-0036 identified the freeze mechanism: a container's stdout is a **pipe** drained by the
+Docker daemon. If that consumer stalls, the 64 KB buffer fills and the next write **blocks forever** —
+a `write()` to a pipe has no timeout. weewx does not crash; it freezes mid-write, silently, with a
+container still reporting `Up`. v2.0.5 responded by moving `logging.additions`' console handler from
+`INFO` to `WARNING`, on the theory that this made weewx's stdout nearly silent.
+
+**It did not, and I said it did.** Chasing the *actual* `log.db` sizes on the NAS (which required root,
+so it had not been checked) showed `weewx-rtldavis-v2` had accumulated **15 MB in ~14 hours**. The
+writer was not the logging subsystem at all:
+
+```
+report_services = weewx.engine.StdPrint
+```
+
+**`StdPrint` `print()`s every LOOP packet straight to stdout.** It does not go through the `logging`
+module, so **no log level touches it** — the console handler could be at `CRITICAL` and StdPrint would
+still write a line per loop packet, ~0.6/s, roughly **25 MB/day**, directly into the pipe that froze us.
+The v2.0.5 fix closed a door while the larger one stood open.
+
+It is enabled in **weewx's own stock defaults**, so it was in the baked image config *and* in our
+`weewx.conf.example` — meaning **every downstream user** had it too. And our example was the worst of
+both worlds: it commented out `StdReport` while leaving `StdPrint` on, so users got no reports *and* a
+stdout flood.
+
+**Decision. Remove `StdPrint` everywhere.**
+
+1. **Prod** — `report_services =` (empty) in the live `weewx.conf`; restarted (`kill`, not `stop` —
+   DEC-0008). Verified after: **stdout growth 0 lines/60 s** (was ~36), archive/upload traffic
+   unaffected, `Influx: Published record` continuing, `RestartCount: 0`.
+2. **The image** — a `RUN sed` strips `StdPrint` from the baked default config, **with a `grep`
+   assertion that fails the build if the substitution does not apply.** A config edit that silently
+   no-ops is the exact failure this session kept finding; the build must not be able to ship it.
+3. **`weewx.conf.example`** — `report_services =` with a comment explaining *why*, so a user does not
+   helpfully "fix" it back.
+4. Shipped as **v2.0.6**.
+
+**It buys nothing in a container.** Nothing reads container stdout — we read the rotating log *file*,
+and so does `weewx_monitor.py` (which is what actually detected the outage). StdPrint exists to watch
+packets scroll by in a terminal. In a daemonized container it is pure hazard.
+
+**The lesson, which is the session's lesson again.** The mitigation was reasoned about from the
+architecture (*"the console handler writes to stdout, so lower its level"*) instead of **measured at the
+source** (*"what is actually in the pipe?"*). One `sudo du` would have shown 15 MB and prompted the
+question. **We fixed the writer we knew about, and shipped a release claiming the hazard was closed.**
+
+**Consequence:** v2.0.5's release notes and DEC-0038 overstate the fix. They are **not rewritten** —
+this entry supersedes them, per the append-only rule (DEC-0030). v2.0.5 is not *wrong*, it is
+*incomplete*: the console handler genuinely was a hazard for users who route logging there. It simply
+was not the biggest one.
+
+**Related, found in the same sweep (not yet acted on):**
+- The **largest `log.db` on the NAS (47 MB) belonged to `/weewx`, a container exited since 2026-05-04.**
+  Dead containers keep their log store forever. Removed.
+- **Prod's bind-mounted `influx.py` has drifted from the repo's** (md5 `8b0d05b3` vs `5f58c204`). The
+  running copy still carries `VERSION = "0.20"`, the unconditional `ssl._create_unverified_context()`,
+  and the per-record `loginf` calls. **Not a live exposure** — the endpoint is
+  `http://influxdb:8086`, so the TLS branch is never taken — but it is the DEC-0031 class again, and
+  `influx.py` *is* bind-mounted, so an `scp` is the correct deploy for it. **Owner decision pending.**
