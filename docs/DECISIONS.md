@@ -44,10 +44,11 @@ a later entry.
 | DEC-0026 | v2.0.3 confidence gate waived: cut on tests + live evidence | Accepted | 2026-07-05 (S29) |
 | DEC-0027 | Lint scope: enforce `ruff check`, not `ruff format`; exclude vendored uploaders | Decided | 2026-07-08 (S31) |
 | DEC-0028 | Leaked credential in pushed public history: rotate immediately, don't rewrite | Decided | 2026-07-08 (S32) |
-| DEC-0029 | Decode-layer sensor plausibility filter (temp/humidity/wind/UV/radiation) | Accepted · **resolves** DEC-0022 | 2026-07-08 (S33) |
+| DEC-0029 | Decode-layer sensor plausibility filter (temp/humidity/wind/UV/radiation) | Accepted · **resolves** DEC-0022 · cause **confirmed** by DEC-0033 | 2026-07-08 (S33) |
 | DEC-0030 | Docs diet: tiered session read, DEC index+full split, CHANGELOG roll, STATUS prune | Accepted | 2026-07-09 (S35) |
 | DEC-0031 | The driver is BAKED into the image, never bind-mounted (supersedes DEC-0004's driver half) | Accepted | 2026-07-12 (S36) |
 | DEC-0032 | Retrospective correction: correct to the KNOWN value, flag it in-band (`rain_qc`) | Accepted · **clarifies** DEC-0006 | 2026-07-12 (S36) |
+| DEC-0033 | Glitches are CRC-valid multi-bit corruption from spurious duplicate frames (upstream #15) | Accepted · **confirms** DEC-0029 | 2026-07-12 (S36) |
 
 ## Open / deferred
 
