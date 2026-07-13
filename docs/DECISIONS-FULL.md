@@ -1433,3 +1433,76 @@ mechanism.* Before shipping one, check whether the decisive instrument is alread
 — here it was, an upstream option nobody had switched on. And when a remembered constant arrives from
 another repo's session ("6 %/min, 3-for-3"), **re-derive it against your own data before you build on
 it**: both the threshold and its headline test evaporated on contact.
+
+---
+
+## DEC-0045 — A comment is not an exemption: the secret gate scans comments like code (S40)
+
+**Status:** Accepted · **amends** DEC-0039 (which certified the hole) · **extends** DEC-0012 · 2026-07-13 (S40)
+
+**Context.** `scripts/check_secrets.sh` is the only thing standing between a credential and a **public**
+repo. Since it was written it carried an `ALLOW (1)`: *if the whole line is a comment (`#`, `//`,
+`/* */`, ` *`), allow it.* So this shipped clean:
+
+    # api_key = <a real credential>
+
+**In a public repo a commented-out credential is still a leaked credential.** `git push` does not strip
+comments; neither does anyone reading the file on GitHub. Commenting a line out is precisely what a
+person does with a secret they are "not using right now" — which is exactly when it gets committed.
+
+**What makes this DEC necessary rather than a bug fix.** The rule was not an oversight that slipped past
+the test. **The test asserted it.** `scripts/test_check_secrets.sh` listed, under *"must PASS"*, a
+commented Python assignment of a real-looking API key and a commented JS assignment of a real-looking
+token — both with literal 8+ character values, both marked *"comment-only line"*. (They are now BAD
+payloads 15 and 16 in that file; per point 3 below, the literals live **there**, not here.)
+
+Those two lines were part of DEC-0039's celebrated **"28/28 planted payloads, proven"**. The gate did not
+merely have a blind spot — **its proof certified the blind spot.** DEC-0039's own thesis is *"a green exit
+code is not evidence."* S40's correction: **a passing test is not evidence either, if the assertion is
+wrong.** A test encodes a judgement about what *ought* to happen, and that judgement is as fallible as the
+code. It is the fourth member of the family this repo keeps meeting — an interface that accepts an
+instruction and silently discards it (DEC-0031's bind-mount, DEC-0036's `max-size`, DEC-0040's prose).
+
+**Decision.**
+
+1. **`ALLOW (1)` is deleted.** There is no comment rule. Comments are scanned exactly like code.
+2. **A comment earns no exemption; only its VALUE can.** `# api_key = YOUR_API_KEY_HERE`,
+   `# token = "${INFLUX_TOKEN}"` and `# token: InfluxDB 2.x Authorization Token` still pass — via the
+   placeholder / interpolation / prose rules, which test the value. Commenting a line out does not change
+   the verdict **in either direction**.
+3. **No new exemptions were added.** The gate's own header had illustrated three past bugs with six
+   real-looking credential literals, which the fix would now flag. The tempting move was
+   to exempt `check_secrets.sh` by path, as `test_check_secrets.sh` already is. **Rejected** — that is a
+   130-line blind spot in the one file that most needs scanning. Instead the literals **moved into
+   `test_check_secrets.sh`, where they execute as planted payloads**, and the header now points at them.
+   This is DEC-0040 applied to the gate itself: *prose does not execute.* The gate scans 100 % of tracked
+   files, including its own source.
+
+**Evidence (the whole point of DEC-0039 — a green run proves nothing on its own).**
+
+| Check | Result |
+|---|---|
+| Blast radius of deleting `ALLOW (1)` over the whole tracked tree | **6 hits, all inside the gate's own header comments.** Every legitimate comment elsewhere (README's `YOUR_*` blocks, `influx.py`'s docstring, the handoff docs) already passed on its *value*. The exemption was doing **no legitimate work in this repo** — it was close to pure hole. |
+| Planted-payload suite | **41 passed, 0 failed** (was 28). 7 new BAD payloads: every comment marker form (`#`, `//`, `/* */`, ` *`, indented, no-spaces) plus a commented `self.x = x`. 6 new GOOD payloads: the same placeholder/prose/empty values wearing a comment marker. |
+| **Mutation test** — re-add `ALLOW (1)` | Suite goes **red: 7 LEAKED**. The fix is load-bearing; the test can actually fail. |
+| **Full-history scan** — every blob that ever existed (333 unique, all refs) for a commented credential | **0.** Positive-controlled: the same scan with the gate's own files re-included finds the 11 known header examples, so the scanner demonstrably sees things. |
+| **The ADR you are reading** | The first draft quoted the planted payloads verbatim, and **the new gate blocked this file** — 4 hits. Working as designed. The literals were removed rather than exempted, which is the same call as point 3, made a second time under real pressure. If a doc needs to *show* a credential shape, it has one correct home: the test. |
+
+**Consequences.**
+
+- **The hole was never exploited.** Nothing needs revoking, and no history rewrite is warranted. This is
+  prophylactic. (The separately-tracked WU API key exposure is a *different* incident, still owed a
+  rotation, and was never a comment.)
+- A commented-out constructor line (`self.<field> = <field>` plumbing) is now **caught**. The `self.` rule
+  stays anchored to line start and was deliberately **not** widened to tolerate a comment marker. The fix
+  for a hit is to delete the dead comment — which is the right thing to do with it anyway.
+- The `key: value` docstring style (`influx.py`) and the README's `YOUR_*` config blocks are unaffected —
+  verified, not assumed.
+- **Do not re-add a marker-based exemption.** It is bug class 4 in the gate's header, and the test now
+  encodes it in both directions.
+
+**The pattern, stated once.** *We proved the gate, and the proof was wrong.* A test is a claim about what
+should happen; writing one does not make the claim true. When a test asserts that something dangerous is
+fine, it converts a bug into a **certified** bug — and the green checkmark then actively defends it. So
+when you add a case to a security test, the question is not "does it pass?" but **"which array does it
+belong in, and why?"** That judgement *is* the gate. The code is just how it is enforced.

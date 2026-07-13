@@ -8,8 +8,10 @@
 #   - a known personal identifier (PWS id, place name, the NAS IP, …)
 #
 # ---------------------------------------------------------------------------
-# READ THIS BEFORE TOUCHING THE ALLOW-LIST. Three bug classes have already shipped
-# here, each of which made the gate GREEN WHILE CATCHING NOTHING:
+# READ THIS BEFORE TOUCHING THE ALLOW-LIST. Four bug classes have already shipped
+# here, each of which made the gate GREEN WHILE CATCHING NOTHING. Every one of them
+# is now a planted payload in scripts/test_check_secrets.sh — the literals live
+# THERE, where they execute, not here, where they would merely be prose (DEC-0040):
 #
 #   1. `grep -viE` (case-INSENSITIVE allow-list). Its [A-Z] terms then matched
 #      lowercase code, so the ALL_CAPS-constant rule swallowed nearly every
@@ -18,12 +20,12 @@
 #
 #   2. FREE-FLOATING ALLOW TERMS. An allow term that may match ANYWHERE on the
 #      line is not an allow-list, it is an escape hatch: THE SECRET SITS ON THE
-#      LEFT AND THE EXCUSE ON THE RIGHT.
-#          token = REALSECRET1234   # falls back to os.environ    <-- passed!
-#      Fixed S38 by making every allow term either ANCHORED (comment-only lines)
-#      or POSITIONED (it must appear as the assignment's VALUE, or in key
-#      position). No free-floating terms remain. Keep it that way: a new term that
-#      can match mid-line re-opens the hole.
+#      LEFT AND THE EXCUSE ON THE RIGHT — a real value, then a trailing "falls
+#      back to os.environ" that excused it. Fixed S38 by making every allow term
+#      either ANCHORED to line start or POSITIONED (it must appear as the
+#      assignment's VALUE, or in key position). No free-floating terms remain.
+#      Keep it that way: a new term that can match mid-line re-opens the hole.
+#      (test: BAD payloads "the excuse on the right")
 #
 #   3. THE `grep -n` PREFIX. The old version piped `grep -n` output into the
 #      allow-list, so every line arrived prefixed with "N:" — and a rule keyed on
@@ -32,6 +34,18 @@
 #      warns against porting our anchors verbatim. Fixed S38 by REMOVING THE
 #      CAUSE: the line number is stripped with bash parameter expansion, and the
 #      allow-list runs on the RAW line. Anchors are plain `^[[:space:]]*`.
+#
+#   4. THE COMMENT EXEMPTION (fixed S40, DEC-0045). The gate used to allow ANY
+#      full-line comment outright — `#`, `//`, `/* */`, ` *`. So a commented-out
+#      credential shipped clean. IN A PUBLIC REPO A COMMENTED-OUT CREDENTIAL IS
+#      STILL A LEAKED CREDENTIAL: `git push` does not strip comments, and neither
+#      does anyone reading the file. The rule was not merely a blind spot — the
+#      test ASSERTED it, listing commented secrets under "must PASS". The proof
+#      certified the hole.
+#      COMMENTS ARE NOW SCANNED EXACTLY LIKE CODE. A comment earns no exemption;
+#      only its VALUE can (a placeholder, an ${ENV} ref, prose — rules 2 and 3
+#      below). Do not re-add a marker-based exemption.
+#      (test: BAD payloads "commented-out credential", every marker form)
 #
 # A GREEN EXIT CODE IS NOT EVIDENCE THAT THIS WORKS. That belief is precisely how
 # the gate stayed broken for nine sessions. It ships with a planted-payload test:
@@ -67,11 +81,13 @@ fi
 _key='(password|passcode|api_?key|api_?secret|token|secret|[^A-Za-z_]key)'
 secret_re="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=-]{8,}'
 
-# --- ALLOW (1): the whole line is a comment. ANCHORED to line start. ---
-# Python/shell `#`, C/JS `//` and `/* … */`, and ` *` JSDoc continuations.
-allow_comment='^[[:space:]]*(#|//|/\*|\*)'
+# NOTE: there is deliberately NO "the line is a comment" allow rule. It was
+# removed in S40 (bug class 4 / DEC-0045). A comment marker is not evidence about
+# the VALUE, and a commented-out credential in a public repo is still leaked.
+# Comments are scanned exactly like code; only the rules below can excuse a line,
+# and every one of them tests the VALUE.
 
-# --- ALLOW (2): the VALUE is a placeholder or a reference, not a literal. ---
+# --- ALLOW (1): the VALUE is a placeholder or a reference, not a literal. ---
 # POSITIONED: each term must sit immediately after the key's `=` / `:`, so a
 # trailing comment or a stray mention elsewhere on the line CANNOT rescue a real
 # secret. This is the fix for bug class (2) above.
@@ -86,34 +102,36 @@ allow_comment='^[[:space:]]*(#|//|/\*|\*)'
 _val='(YOUR_|your_|\$\{|os\.environ|getenv|sys\.argv|argv|input\(|""|'"''"'|None|-1\b|self\.|options\.|[A-Za-z_][A-Za-z_0-9]*\.get\(|(site|config|stn)_dict|[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\b)'
 allow_value="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?'"$_val"
 
-# --- ALLOW (3): prose, as the value of THE SECRET KEY ITSELF. ---
-# A docstring / table row describing a field ("token: InfluxDB 2.x Authorization
-# Token") is not a credential. Requires a Capitalized word FOLLOWED BY another
-# word — genuine multi-word prose, which a bare token never is. A single
-# capitalized token (`api_key: Secret123x`) is still CAUGHT.
+# --- ALLOW (2): prose, as the value of THE SECRET KEY ITSELF. ---
+# A docstring / table row describing a field (influx.py's "InfluxDB 2.x
+# Authorization Token" line) is not a credential. Requires a Capitalized word
+# FOLLOWED BY another word — genuine multi-word prose, which a bare credential
+# never is. A single capitalized value is still CAUGHT.
+# (test: BAD payload "single Capitalized token")
 #
 # POSITIONED with $_key, and that is load-bearing. An earlier cut of this rule
-# began `[A-Za-z]:` — any letter, any colon, anywhere — which let a trailing
-# comment do the excusing:
-#     token = "abc123def456"   # Authorization: Bearer xyz      <-- passed!
+# began `[A-Za-z]:` — any letter, any colon, anywhere — so a trailing
+# "Authorization: Bearer …" comment excused a real value sitting on the left.
 # The planted-payload test caught that while this very gate was being written.
 allow_prose="${_key}"'[[:space:]]*:[[:space:]]*[A-Z][A-Za-z]*[[:space:]]+[A-Za-z0-9]'
 
-# --- ALLOW (4): `description` / `Authorization` as the line's OWN key. ---
+# --- ALLOW (3): `description` / `Authorization` as the line's OWN key. ---
 # ANCHORED to line start. These two were free-floating in both repos' gates, and
-# so were an escape hatch: `token = "abc123def456"  # Authorization: Bearer xyz`
-# passed clean. They are only ever allowed when they are what the line IS, not
-# something the line happens to mention.
+# so were an escape hatch — a real value on the left, a trailing "Authorization:
+# Bearer …" on the right, and the line passed clean. They are only ever allowed
+# when they are what the line IS, not something the line happens to mention.
 allow_keys='^[[:space:]]*[-{,]?[[:space:]]*["'"'"']?(description|Authorization)["'"'"']?[[:space:]]*[:=]'
 
-# --- ALLOW (5): `self.x = x` constructor plumbing. ANCHORED, and deliberately
+# --- ALLOW (4): `self.x = x` constructor plumbing. ANCHORED, and deliberately
 # narrow. The VALUE is a bare unquoted lowercase identifier, i.e. a variable
-# reference (`self.password = password`). Anchoring matters: a bare lowercase
-# literal is exactly the shape a real leaked credential takes in weewx.conf
-# (`api_key = mysecretkey123`), so this must NOT generalise beyond `self.` .
+# reference (`self.<field> = <field>`). Anchoring matters: a bare lowercase
+# literal is exactly the shape a real leaked credential takes in weewx.conf, so
+# this must NOT generalise beyond `self.` — and, since S40, it does not
+# generalise past a comment marker either: a commented-out constructor line is
+# scanned like any other. Delete the dead comment rather than re-widening this.
 allow_selfassign='^[[:space:]]*self\.[A-Za-z_0-9]+[[:space:]]*=[[:space:]]*[a-z_][a-z_0-9]*[[:space:]]*$'
 
-allow_re="${allow_comment}|${allow_value}|${allow_prose}|${allow_keys}|${allow_selfassign}"
+allow_re="${allow_value}|${allow_prose}|${allow_keys}|${allow_selfassign}"
 
 for f in "${files[@]}"; do
   [ -f "$f" ] || continue
