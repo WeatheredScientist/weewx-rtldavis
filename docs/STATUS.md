@@ -42,10 +42,14 @@ _Last updated: 2026-07-12 (S36)._
   **The Docker Hub push matters more than usual:** the published compose file was mounting the stock
   driver over the baked one (DEC-0031), so *every downstream user* has been running an unpatched driver.
   The fix is only real for them once the new image + compose are published.
-- **The CRC question — the true root cause, and the owner wants a community bug report.** How is
-  multi-bit corruption passing `_check_crc()` at all? Three rain phantoms are clean 2⁶/2⁷ flips and the
-  humidity glitches are clean 2⁷/2⁸ flips — all CRC-valid. SensorQC is a *symptom* filter; the decoder
-  accepting corrupt frames is the disease. This is the highest-value remaining thread.
+- **The CRC question is ANSWERED (DEC-0033) — what's left is a DECISION, not research.** The glitches
+  are CRC-valid multi-bit corruption, most likely spurious near-duplicate frames from the rtldavis Go
+  demodulator (one transmission decoded twice). Confirmed from raw packets in upstream issue
+  `lheijst/weewx-rtldavis#15`, open since Oct 2022 with three users reporting the same symptom class.
+  **An upstream comment is drafted but NOT posted and deliberately held out of git** (public repo):
+  `docs/upstream/rain-wraparound-bug.md`, gitignored. Owner is iffy on posting and wants (a) the prose
+  rewritten in his own voice — the draft reads as Claude, not as him — and (b) our own confirmation of
+  the duplicate-frame fingerprint first. **Do not post without an explicit go.**
 - **Cross-sensor consistency filter (S33 follow-up #2) — now has a concrete, validated discriminator.**
   From dash S69: *a humidity move >6 %/min with temperature essentially flat is physically impossible*
   (a real moist parcel is also a cooler one). It correctly spares the 2026-05-23 gust front, where temp
@@ -109,15 +113,31 @@ _Last updated: 2026-07-12 (S36)._
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S36 (2026-07-12):** v2.0.4 deployed + verified; DEC-0031 (driver is baked, never mounted);
-DEC-0032 (retrospective correction + in-band `rain_qc` flag); ERR-0002 logged and corrected; ERR-0001's
-InfluxDB correction finally applied; secret gate fixed; doc staleness swept. See CHANGELOG `[S36]`.
+**✅ Done in S36 (2026-07-12):** v2.0.4 deployed + verified (SensorQC live); DEC-0031 (driver is baked,
+never mounted — killed the compose clobber that had shipped the stock driver to every public user);
+DEC-0032 (retrospective correction + in-band `rain_qc` flag); DEC-0033 (the CRC question, answered, with
+a retraction recorded); ERR-0002 logged and corrected; ERR-0001's InfluxDB correction finally applied;
+secret gate fixed (it had never worked); doc staleness swept; cross-repo handoff written. See
+CHANGELOG `[S36]`.
 
-**▶ ON RETURN (S37):**
-1. **Check the rejection log first** — `grep -c "rejecting implausible" weewx.log`. This is the single
-   number that tells you whether v2.0.4 is doing its job. Nonzero and nocturnal = working as designed.
-2. **Promote v2.0.4** if it has ridden clean (see Active thread) — merge, tag, Docker Hub, release.
-3. Then pick up **the CRC bug report** (highest value) or the **temp/humidity coupling filter** (v2.0.5).
+**▶ ON RETURN (S37), in order:**
+1. **Check the two numbers that tell you whether v2.0.4 is working:**
+   `grep -c "rejecting implausible" weewx.log` (expect ~0.4+/day, nocturnal — **zero after a week is
+   suspicious, not good**), and the Lloyd test:
+   `python3 /volume1/docker/weewx-rtldavis/find_duplicate_frames.py /volume1/docker/weewx-rtldavis/logs/weewx.log`
+2. **Then REVERT the debug state** (see housekeeping — `debug_rtld` → 1, `user` logger → INFO, restart).
+   Don't leave prod logging raw frames indefinitely.
+3. **Promote v2.0.4** once it has ridden clean for a few days: merge `dev` → `main`, tag `v2.0.4` +
+   a new `prod-baseline`, **push the image to Docker Hub, cut the GitHub release.** The Docker Hub push
+   is the step that actually fixes downstream users — until it lands, everyone installing this extension
+   still gets the stock driver via the old compose file (DEC-0031).
+4. **Decide on the upstream post** (owner call — see the CRC thread above).
+5. Then: cold-load Fix B (`current.json`), the temp/humidity coupling filter, Reception Layer B (v2.0.5).
+
+**Cross-repo:** `docs/handoffs/S36-to-eaglehunt-dashboard.md` is written and answers all three of
+dashboard S69's open questions. **The dashboard should read the new `rain_qc` flag** (DEC-0032,
+INTERFACES.md) to render corrected-point markers. It also carries a reciprocal finding: the dashboard's
+own secret gate still has two live holes we closed here.
 
 **Live access:** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in gitignored
 `docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use `env -u GH_TOKEN` for
