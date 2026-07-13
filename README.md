@@ -13,11 +13,16 @@ An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](htt
 
 📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
 ```bash
-docker pull weatheredscientist/weewx-rtldavis:v2.0.4   # or :latest
+docker pull weatheredscientist/weewx-rtldavis:v2.0.5   # or :latest
 ```
-Pin a version tag (`:v2.0.4`) for reproducible deploys; `:latest` always tracks the newest release.
+Pin a version tag (`:v2.0.5`) for reproducible deploys; `:latest` always tracks the newest release.
 
-> **Current version:** v2.0.4 — adds a decode-layer sensor plausibility filter (SensorQC)  
+> **Current version:** v2.0.5 — **upgrade if you are on any earlier tag.** It carries two fixes that
+> only reach you through the image: the driver you actually run (earlier compose files mounted the
+> *stock* driver over the patched one, so SensorQC and the rain-glitch filter were silently inert),
+> and a container-freeze hazard (the console log handler now defaults to `WARNING`, not `INFO` — at
+> `INFO` a wedged Docker log consumer can block weewx forever, with no error and a container that
+> still reports `Up`). See the [CHANGELOG](CHANGELOG.md).  
 > **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3  
 > **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.4.0  
 > **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)
