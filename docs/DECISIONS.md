@@ -48,7 +48,11 @@ a later entry.
 | DEC-0030 | Docs diet: tiered session read, DEC index+full split, CHANGELOG roll, STATUS prune | Accepted | 2026-07-09 (S35) |
 | DEC-0031 | The driver is BAKED into the image, never bind-mounted (supersedes DEC-0004's driver half) | Accepted | 2026-07-12 (S36) |
 | DEC-0032 | Retrospective correction: correct to the KNOWN value, flag it in-band (`rain_qc`) | Accepted · **clarifies** DEC-0006 | 2026-07-12 (S36) |
-| DEC-0033 | Glitches are CRC-valid multi-bit corruption from spurious duplicate frames (upstream #15) | Accepted · **confirms** DEC-0029 | 2026-07-12 (S36) |
+| DEC-0033 | Glitches are CRC-valid multi-bit corruption from spurious duplicate frames (upstream #15) | Accepted · **confirms** DEC-0029 · **confirmed locally** by DEC-0035 | 2026-07-12 (S36) |
+| DEC-0034 | State the fork honestly: modification notices, `+ws` version, CHANGES-FROM-UPSTREAM | Accepted | 2026-07-12 (S37) |
+| DEC-0035 | Duplicate-frame mechanism CONFIRMED here (~722/day); the test that said otherwise was broken | Accepted · **confirms** DEC-0033 | 2026-07-12 (S37) |
+| DEC-0036 | The 7h18m freeze: trigger known (bare `docker logs` wedged the daemon), **mechanism OPEN**; mitigations banked | Accepted · **mechanism open** | 2026-07-13 (S37) |
+| DEC-0037 | A retrospective correction must propagate to every derived field | Accepted · **extends** DEC-0032 | 2026-07-13 (S37) |
 
 ## Open / deferred
 
