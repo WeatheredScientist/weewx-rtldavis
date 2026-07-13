@@ -42,6 +42,18 @@ _Last updated: 2026-07-12 (S36)._
   **The Docker Hub push matters more than usual:** the published compose file was mounting the stock
   driver over the baked one (DEC-0031), so *every downstream user* has been running an unpatched driver.
   The fix is only real for them once the new image + compose are published.
+- **⚠️ rainRate's 15-minute hold — OPEN, and the best lead we have (S37).** The phantom rain also
+  produced a phantom rain *RATE* (peaks 4.736 / 4.216 in/hr, `rain = 0.0` throughout). **The data is
+  corrected** in both stores (S36, 2nd pass — see DATA_ERRATA), but the *mechanism* is not explained: a
+  single corrupt packet gives ONE bad reading, yet we see ~16 min of a *stable* rate (raw tip-interval
+  drifting only ~7.6 s → 9.6 s), starting at the exact phantom timestamps, twice. That shape resembles
+  the **Davis rain-rate timeout** (ISS holds a rate ~15 min after tips), which would mean the ISS itself
+  held a non-zero rate state — which DEC-0033's spurious-frame model does **not** explain. `rain` (type
+  0xE counter) and `rainRate` (type 0x5 `time_between_tips`) are **separate messages**, so the two
+  corruptions co-occurring is a strong clue, not a coincidence. **Don't guess — the `debug_rtld = 2`
+  capture will record the raw type-0x5 frames if it recurs.** This also matters for what we propose
+  upstream: `rain_delta_tips` guards the counter and does **nothing** for the rate, whose failure mode
+  is a corrupted "no rain" sentinel (`time_between_tips_raw == 0x3FF`).
 - **The CRC question is ANSWERED (DEC-0033) — what's left is a DECISION, not research.** The glitches
   are CRC-valid multi-bit corruption, most likely spurious near-duplicate frames from the rtldavis Go
   demodulator (one transmission decoded twice). Confirmed from raw packets in upstream issue
