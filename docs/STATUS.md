@@ -93,7 +93,34 @@ _Last updated: 2026-07-12 (S36)._
 
 ## Needs a check / housekeeping
 
-- **⚠️ Our driver lies about its identity (owner question, S36).** `DRIVER_VERSION = '0.20'` — we log as
+- **⚠️ FORK-IDENTITY / PROVENANCE AUDIT — own S37 session, prompt below.** We are a **fork of a fork of a
+  fork** and we don't say so anywhere. The real chain, verified from the Dockerfile (we build from
+  **Vince Skahan's `src.tgz`**, not from Luc's repo directly):
+    - *Go decoder:* `bemasher/rtldavis` → `lheijst/rtldavis` → bundled in `weewx-contrib` src.tgz → us
+    - *Driver:* `matthewwall/weewx-sdr` + `weewx-meteostick` → merged by **lheijst** into weewx-rtldavis
+      v0.20 → repackaged by **Skahan** (`weewx-contrib/weewx-rtldavis`) → **patched by us**
+    - plus `steve-m/librtlsdr`, `jpoirier/gortlsdr`, **kobuki** (`calc_wind_speed_ec`), and
+      **`david-lutz/weewx-influx2`** — which we also **patched** (Py-3.14 `e.read().decode()`).
+  So there are **several modified upstream works** here, not just `rtldavis.py`. Scope:
+    1. **GPLv3 §5(a) gap (real, not a nit):** a modified work must "carry prominent notices stating that
+       you modified it, and giving a relevant date." `rtldavis.py` carries only *upstream's* header
+       (`Copyright 2019 Matthew Wall, Luc Heijst`) and says nothing about our 2026 changes. Same for the
+       other vendored/patched files. **Follow Luc's own example** — his header documents that his driver
+       is a merge of Matthew Wall's, with links. Inherit the pattern, add our line.
+    2. **`DRIVER_VERSION = '0.20'` misrepresents us** — we log as stock upstream while carrying
+       rain_delta_tips, SensorQC, H1/H2/M3, windDir, dewpoint honest-null. Use `'0.20+ws.1'` and log
+       "(fork of lheijst 0.20)". Same class of dishonesty as the compose clobber (DEC-0031): the
+       artifact asserts one thing and does another.
+    3. **`CHANGES-FROM-UPSTREAM.md`** — every divergence, with DEC links. Highest-value artifact: it is
+       both the "playing nice" document and the checklist for *shrinking* the fork.
+    4. **README opening rewrite** — line 3 currently reads as though we ship *Luc's* driver. We don't.
+       Say plainly: unofficial Docker distribution, patched driver, not affiliated, links upstream.
+    5. **Upstream-first posture:** to contribute, `gh repo fork lheijst/weewx-rtldavis` **separately** and
+       send ONE focused PR (the rain fix), not our whole divergence. Our repo correctly stays a normal
+       repo, not a GitHub fork — it is a *distribution*, not a fork of the driver.
+  **Keep the repo/image name** (published, GPLv3, attribution intact; renaming breaks every
+  `docker pull`). This is about honesty, not rebranding.
+- **(superseded detail) Our driver lies about its identity (owner question, S36).** `DRIVER_VERSION = '0.20'` — we log as
   **stock upstream v0.20** while carrying the rain-glitch filter (DEC-0021), SensorQC (DEC-0029), the
   H1/H2/M3 reception fixes, the windDir fix and dewpoint honest-null. **None of that exists upstream.**
   We are a fork that hasn't admitted it, and the log line misleads anyone debugging — including us, and
