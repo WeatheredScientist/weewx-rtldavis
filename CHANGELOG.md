@@ -6,6 +6,68 @@ under [Pre-S16].
 
 ---
 
+## [S41] — 2026-07-13 — v2.0.7 shipped, and the config fix that would have missed prod entirely
+
+> **v2.0.7 is on Docker Hub, prod runs it, and the raw-humidity capture is finally live.**
+>
+> The headline was meant to be routine: take S39's `[[root]]` logger fix (DEC-0043), which had been
+> sitting merged-but-unreleased on `dev`, and ship it. That happened — `:v2.0.7` + `:latest`
+> (digest `sha256:31cad4d2`), GitHub release, `main` == prod, `prod-baseline-20260713b` tagged.
+>
+> **The finding is what the deploy nearly missed.** The `[[root]]` fix lives in the image's *baked*
+> config, protected by a Dockerfile build-time assertion so an image cannot be built without it. But prod
+> bind-mounts `weewx-data/` over `/opt/weewx-data` — the mount covers the whole directory, so the live
+> `weewx.conf` **shadows the baked config completely**. Deploying `:v2.0.7` and stopping there would have
+> been, in prod, **a no-op with a green checkmark**: correct image, passing assertion, accurate release
+> notes, and a station still emitting syslog tracebacks and still silently dropping every startup
+> diagnostic. **DEC-0046.**
+
+### Shipped — v2.0.7
+
+- **Docker Hub:** `:v2.0.7` and `:latest`, both at digest `sha256:31cad4d2826b…`. Built on the NAS from
+  `git archive v2.0.7` — the image is built from *exactly* the tagged tree (DEC-0038).
+- **GitHub release** [v2.0.7](https://github.com/WeatheredScientist/weewx-rtldavis/releases/tag/v2.0.7);
+  `dev` → `main` (PR #38, after PR #37's version bump); `main` and `dev` are identical trees.
+- **Prod recreated on `:v2.0.7`** at 15:27 EDT. `docker kill`, never `stop` (DEC-0008); no `rtldavis.py`
+  mount (DEC-0031). Rollback available: `:v2.0.6` (`e23cabd53591`) is still on the NAS.
+- **`prod-baseline-20260713b`** tagged — the second baseline of the day (the first, `-20260713`, was
+  v2.0.6). Not force-moved; the old tag still means what it meant. DEC-0011's *`main` = production truth*
+  invariant holds.
+
+### Found — DEC-0046: the baked config never reaches prod
+
+- Caught by a **pre-flight `grep` of the live config**, which found **zero** `[[root]]` blocks while the
+  image's baked config carried it and asserted it.
+- **The exact mirror of DEC-0031.** There, the *driver* is baked and the bind-mount is the no-op, so an
+  `scp` is silently ignored. Here, the *config* is mounted and the image is the no-op, so a rebuild is
+  silently ignored. Inverses — which is precisely what makes the pair easy to get backwards. **Neither
+  errors. Both accept the instruction and discard it.**
+- Fixed in the same window: the live `weewx.conf` gained the `[[root]]` block (backed up first to
+  `weewx.conf.bak-pre-v2.0.7`). Prod's version routes to `handlers = rotate,` — **file only, no console**,
+  deliberately differing from the baked config, because prod declares no console handler and adding one
+  would re-arm the DEC-0036 freeze hazard that DEC-0041 disarmed. **The fix must match; the text need not.**
+- **The fifth member of the family**: an interface that accepts an instruction and silently discards it
+  (DEC-0031's bind-mount, DEC-0036's `max-size`, DEC-0040's prose, DEC-0045's test that certified the
+  hole). The build assertion was not wrong — **it was answering a question nobody was asking in prod.**
+
+### Verified in prod — behaviorally, not by inspecting the artifact
+
+- **`weewx.log` now contains `weewxd INFO Initializing weewxd version 5.4.0`**, plus the command line, the
+  Python version, the platform and `WEEWX_ROOT` — **lines that had never once appeared in that file.** This
+  is the S39 acceptance criterion, and it reads the running system. An image check would have said PASS.
+- **Zero `--- Logging error ---` blocks** on stdout (was ~15 tracebacks / ~515 lines per start).
+- `driver version is 0.20+ws.1 (patched by WeatheredScientist -- not stock upstream)`, `sensor_qc True`,
+  **`log_humidity_raw True`**, 0 tracebacks, `RestartCount: 0`, and Wunderground (rapidfire + PWS), Influx
+  and Windy all publishing.
+
+### Armed — the raw-humidity capture is now live (DEC-0044)
+
+`log_humidity_raw` had been sitting in the live config since S39 but weewx reads its config **only at
+startup**, so it took this restart to activate. It is now running. **The next midday humidity spike logs
+its raw `pkt[3]`/`pkt[4]`** and settles the nibble question deterministically — no averaging, no free
+parameter. Spikes run ~2–3/week, clustered 11:00–16:00. The inversion method is in DEC-0044; do not
+re-derive it.
+
 ## [S40] — 2026-07-13 — a comment is not an exemption: the gate's proof had certified the hole
 
 > **The secret gate let commented-out credentials into a PUBLIC repo — and its own test said that was
