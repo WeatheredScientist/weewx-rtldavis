@@ -31,6 +31,23 @@
             formatter = standard
             class = logging.StreamHandler
             stream = ext://sys.stdout
+    # Root must be overridden, not just the weewx/user loggers (DEC-0043).
+    # weewx's built-in defaults set the ROOT logger to `handlers = syslog,`
+    # with address /dev/log (weeutil/logger.py LOGGING_STR). There is no
+    # syslog daemon in a container, so every record reaching root raises
+    # inside SysLogHandler.emit() and Python's logging module prints the
+    # whole traceback to STDERR -- ~15 tracebacks (~500 lines) per start.
+    #
+    # The weewx and user loggers below never hit this: they have their own
+    # handlers and propagate = 0. But weewxd and weeutil.* are in NEITHER
+    # namespace, so they fall through to root -- which is why the startup
+    # banner, the config path and the group list have never appeared in
+    # weewx.log at all. They were only ever going to the syslog handler,
+    # and it was failing. Overriding root sends them to the file, where we
+    # can actually read them, and silences the stderr noise.
+    [[root]]
+        level = INFO
+        handlers = rotate, console,
     [[loggers]]
         [[[weewx]]]
             level = INFO
