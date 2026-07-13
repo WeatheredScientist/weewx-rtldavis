@@ -6,6 +6,64 @@ under [Pre-S16].
 
 ---
 
+## [S40] — 2026-07-13 — a comment is not an exemption: the gate's proof had certified the hole
+
+> **The secret gate let commented-out credentials into a PUBLIC repo — and its own test said that was
+> correct.**
+>
+> Carried over from the close of S39, where it was spotted and deliberately left as the owner's call.
+> `scripts/check_secrets.sh` had an `ALLOW (1)`: *if the whole line is a comment, allow it.* So
+> `# api_key = <a real credential>` shipped clean. `git push` does not strip comments, and neither does
+> anyone reading the file on GitHub.
+>
+> **The part that made this a DEC and not a bug fix:** the rule was not a blind spot the test missed —
+> **the test asserted it.** Two commented credentials sat in `test_check_secrets.sh` under *"must PASS"*,
+> and they were part of DEC-0039's celebrated *"28/28 planted payloads, proven"*. DEC-0039's thesis is
+> *"a green exit code is not evidence."* S40's correction: **a passing test is not evidence either, if
+> the assertion is wrong.** The proof had certified the hole.
+
+### Fixed — DEC-0045: comments are scanned exactly like code
+
+- **`ALLOW (1)` deleted.** No comment rule at all. A comment earns no exemption; only its **value** can.
+  `# api_key = YOUR_API_KEY_HERE`, `# token = "${INFLUX_TOKEN}"` and the `influx.py` docstring style still
+  pass — via the placeholder / interpolation / prose rules, which test the value. Commenting a line out no
+  longer changes the verdict **in either direction**.
+- **No new exemptions.** The gate's own header had illustrated three past bugs with six real-looking
+  credential literals, which the fix now flags. The tempting move — exempt `check_secrets.sh` by path, as
+  the test file already is — was **rejected**: that is a 130-line blind spot in the one file that most
+  needs scanning. The literals **moved into `test_check_secrets.sh`, where they execute as payloads**, and
+  the header now points at them. DEC-0040 applied to the gate itself: *prose does not execute.* The gate
+  scans 100 % of tracked files, including its own source.
+
+### Evidence — because a green run proves nothing on its own (DEC-0039)
+
+- **Blast radius measured before deciding:** deleting `ALLOW (1)` produced **6 hits across the entire
+  tracked tree, all of them inside the gate's own header comments.** Every legitimate comment elsewhere
+  (README's `YOUR_*` blocks, `influx.py`'s docstring, the handoff docs) already passed on its *value*. The
+  exemption was doing **no legitimate work in this repo** — it was close to pure hole.
+- **Planted-payload suite: 41 passed, 0 failed** (was 28). Seven new BAD payloads cover every comment
+  marker form (`#`, `//`, `/* */`, ` *`, indented, no-spaces) plus a commented constructor line; six new
+  GOOD payloads are the same placeholder/prose/empty values wearing a comment marker.
+- **Mutation test:** re-adding `ALLOW (1)` turns the suite **red — 7 LEAKED**. The fix is load-bearing and
+  the test can actually fail.
+- **Full-history scan: 0.** Every blob that ever existed in this repo (**333 unique, all refs**) was
+  scanned for a commented credential. None. **The hole was never exploited** — nothing needs revoking, and
+  no history rewrite is warranted. Positive-controlled: the same scan with the gate's own files re-included
+  finds the 11 known header examples, so the scanner demonstrably sees things. (The first version of that
+  scan reported a false "0" because `git` was silently not running inside the loop and `2>/dev/null` ate
+  the error — caught only *because* the positive control was run. Same lesson, third time in one session.)
+- **The gate blocked this session's own ADR** on first draft (4 hits — it quoted the payloads verbatim).
+  The literals were removed rather than exempted.
+
+### Also
+
+- **PR #34 merged** — S39's work (DEC-0043 root logger, DEC-0044 nibble theory) landed on `dev`. It had
+  been sitting open and green since S39; the session-start hook flagged it.
+- 72 pytest tests still green. **Prod untouched** — still `:v2.0.6`, `RestartCount: 0`. This session
+  changed no runtime code, only the commit-time gate and its docs.
+
+---
+
 ## [S39] — 2026-07-13 — the root logger nobody overrode, and a theory that did not survive its own test
 
 > **Two findings, one shipped fix, and one filter deliberately NOT built.**
