@@ -1127,10 +1127,41 @@ is the one still without a mechanical guard.
 3. **The NAS runtime contract is the one genuinely unowned thing** — and it is one page, not a repo.
    Verified this session: **all four** production containers run with `LogConfig.Config = map[]` — no
    `max-size`, no `max-file`, no caps of any kind — on Synology's **`db`** driver, which is the exact
-   component that wedged. (This also corrects the S37 handoff: its `--log-opt max-size` advice names
-   **`json-file`** options, and this daemon defaults to `db`. The daemon *records* `max-size` on `db`;
-   whether it *enforces* it is unproven, and "it was accepted" is exactly the class of evidence — a
-   green exit code — that this decision is about.)
+   component that wedged.
+
+   **And the `db` driver cannot be capped at all.** Tested: a container run with
+   `--log-opt max-size=1m` emitted 200,000 lines (~10 MB) and **all 200,000 remained retrievable**; a
+   cap would have left ~20,000. Confirmed against the literature — `db` is a **proprietary Synology
+   driver**, not a Docker one, with no published options: *"the `max-size` option is not supported by
+   this custom Synology db driver."* It is not undocumented, it is **unsupported**. This also corrects
+   the S37 handoff, whose `--log-opt max-size` advice names **`json-file`** options.
+
+   **Third instance in one session of the same meta-failure:** an interface that **accepts an
+   instruction and discards it** — after the secret gate's green exit code (DEC-0039) and the compose
+   file's silent driver clobber (DEC-0031). *"It was accepted"* is not evidence that it does anything.
+   That pattern, not any individual bug, is what this decision exists to make expensive.
+
+   **Bonus finding, which upgrades DEC-0036 from inference to demonstration:** retrieving that
+   200k-line log **hung for over three minutes** — and that was a `--tail`-bounded read. The `db`
+   driver's pathological slowness on a large `log.db` is real and reproducible. (Safely: throwaway
+   container, per-container `log.db`, prod healthy throughout and verified after.)
+
+   **Consequence:** the logging driver is a **per-container** choice. `json-file` + caps is the only
+   way to bound a log here, and it costs the DSM Container Manager log tab for that container
+   (confirmed, not speculative). So bound only the containers that actually generate volume — a fact
+   that needs `sudo du` on each `log.db` and is **not yet known**. weewx itself is no longer a
+   candidate: v2.0.5 put its console handler at `WARNING`, so it has almost nothing to write.
+
+4. **Branch protection is part of the enforcement layer, and it has two holes, not one.**
+   `enforce_admins: true` is now set on `main` and `dev` (required checks: `secret-scan`, `lint`,
+   `tests`), closing the S36 bypass — for everyone, including the owner. But that does **nothing** for
+   the way S37 was lost: an entire session's work sat in a **draft** PR, CI green, branch pushed, and
+   simply never merged; it was found a day later by accident. A draft PR is invisible to every check
+   that exists. The `SessionStart` hook (`~/.claude/hooks/eaglehunt-status.sh`) closes that one by
+   reporting drafts, stranded branches and uncommitted work **across all three repos** at every session
+   start. On its first run it immediately surfaced a live stranded draft in the *dashboard* (#22) that
+   nobody knew about — which is precisely the "one project unaware of another's actions" the owner
+   named as the real problem.
 
 **Alternatives rejected.**
 *(a) A shared `eaglehunt-ops` repo.* Its real benefit is discoverability for a **new** project, and

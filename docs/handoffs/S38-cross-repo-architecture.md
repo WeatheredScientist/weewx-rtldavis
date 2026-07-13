@@ -151,27 +151,60 @@ This is the only part of the problem that a shared home would really help, and i
 - **The component that wedged for seven hours is unbounded and identically unconfigured on every
   service we run, and no repo's documentation mentions it.**
 
-**A correction to the S37 handoff, which the S37 author could not have known.** That doc's advice #2
-was *"cap the Docker log driver — `--log-opt max-size=10m --log-opt max-file=3`."* Those are
-**`json-file` options**, and this daemon defaults to `db`. Tested today: the daemon *accepts and
-records* `max-size` on the `db` driver (`cfg=map[max-size:10m]`) — but **recorded is not enforced**,
-and I did not prove the `db` driver honors it. `json-file` with caps works and `docker logs` still
-functions normally against it.
+**A correction to the S37 handoff, and then a correction to my own first draft of this one.** The S37
+doc advised *"cap the Docker log driver — `--log-opt max-size=10m --log-opt max-file=3`."* Those are
+**`json-file` options**, and this daemon defaults to `db`. My first instinct was that the `db` driver
+*might* honor them, since the daemon accepts and records the option (`cfg=map[max-size:10m]`).
 
-So the actual choice, which is **yours and needs one decision**:
+**It does not. Tested, then confirmed against the literature.**
 
-- **`json-file` + caps** — known-good, standard, bounded. Cost: Synology's Container Manager UI reads
-  `log.db`, so the DSM log viewer likely stops showing those containers' logs. We read log *files*
-  anyway (`weewx_monitor.py` does, and it is what worked during the outage), so this may cost nothing
-  we use.
-- **Stay on `db`, add `max-size`** — keeps the DSM UI. **Requires proving the driver enforces it**
-  before anyone relies on it. Don't skip that proof; "it was accepted" is precisely the class of
-  evidence (a green exit code) that this whole document is about.
+Empirically: a throwaway container run with `--log-opt max-size=1m` was made to emit 200,000 lines
+(~10 MB). **All 200,000 were still retrievable afterwards.** Had the cap been enforced, roughly 20,000
+would have survived. The daemon records the option in `HostConfig` and the driver ignores it.
 
-Either way this is a three-line change to three compose files, in three repos, and **I have not made
-it** — per your instruction and per the DEC-0031 lesson: *infrastructure advice across a repo boundary
-must be verified in the target repo before it is given.* I verified the daemon; I did not verify what
-your services do with their stdout.
+This matches the documented reality: `db` is a **proprietary Synology driver, not a Docker one**, it
+has no published options, and the consensus is explicit — *"there is no way to control the max-size of
+logs when the driver is `db`"*; *"the `max-size` option is not supported by this custom Synology db
+driver."* So this is not undocumented. It is **unsupported**.
+
+> **This is the third time in one session** that "the configuration was accepted" turned out not to
+> mean "the configuration does anything" — after the secret gate's green exit code and the compose
+> file's silent driver clobber. It is becoming the signature failure of this whole system: **an
+> interface that accepts an instruction and discards it.** That is the thing to be suspicious of.
+
+**A second, unplanned finding.** Retrieving that 200k-line log **hung for over three minutes** — and
+that was a `--tail`-bounded read, not a bare one. So the pathological slowness of the `db` driver on a
+large `log.db` is real, and it is reproducible. That is the DEC-0036 mechanism, and it is now
+demonstrated rather than inferred. (Prod was never at risk: separate throwaway container, per-container
+`log.db`, daemon healthy throughout and verified after.)
+
+**So the choice is narrower and more honest than the S37 doc implied:**
+
+- **`json-file` + caps** — the only way to bound a log on this box. **It costs the DSM log viewer:**
+  Container Manager reads `log.db`, and switching a container to `json-file` empties its log tab in the
+  UI. That cost is real and confirmed, not speculative.
+- **Stay on `db`** — keep the UI, accept that the log store is **unbounded, permanently**, and rely on
+  the `docker logs` guard (Move 1) to remove the trigger instead.
+
+**These are not mutually exclusive, and that is the point.** The logging driver can be set
+**per container** in compose. So the sane answer is probably: switch *only* the containers that
+actually generate log volume, and leave the quiet ones on `db` with their UI intact.
+
+Which containers those are is **the one thing I could not check** — reading `log.db` sizes needs root.
+It is one command:
+
+```
+for c in $(docker ps -q); do printf '%s  ' "$(docker inspect -f '{{.Name}}' $c)"; sudo du -h "$(docker inspect -f '{{.LogPath}}' $c)"; done
+```
+
+Worth noting before anyone panics: **weewx's own stdout is now nearly silent** — v2.0.5 moved the
+console handler to `WARNING`, so it has almost nothing to write. The containers with unknown and
+unbounded log volume are **yours**: `hyperlocal-forecast-api`, `eh-proxy`, `influxdb`.
+
+**I have made no change to any compose file, in any repo** — per your instruction and per the DEC-0031
+lesson: *infrastructure advice across a repo boundary must be verified in the target repo before it is
+given.* I verified the daemon. I did not verify what your services do with their stdout. Please do,
+and note that a service which logs a line per request is the one this actually threatens.
 
 ## What I am recommending against, and why
 
@@ -197,12 +230,34 @@ mechanical drift check — at which point you have built Move 2, and the fragmen
 it is why you are reading this. It is the wrong mechanism for *rules*, because a rule delivered as
 prose is a rule enforced by memory, and memory is what failed at 23:53 on 2026-07-12.
 
-## The decision I need from you
+## Decisions — settled in S38 (owner, live)
 
-1. **Install the `docker logs` hook globally?** (yes / no — I will not touch `~/.claude/` without a go)
-2. **`json-file` + caps, or prove `db` enforces `max-size`?** — then the three compose changes follow.
-3. **Confirm: no `eaglehunt-ops` repo for now?** (my recommendation — say so and I will stop
-   re-raising it, and record it as a DEC so the next session does not re-litigate it)
+1. **No `eaglehunt-ops` repo.** Confirmed. Recorded as **DEC-0040** so it is not re-litigated. Revisit
+   on a trigger: a fourth NAS service, a second operator, a third shared *executable*, or the second
+   time the same fix is hand-pasted into three repos.
+2. **The guards are INSTALLED and PROVEN**, in `~/.claude/hooks/`, global across all three repos:
+   - `docker-guard.sh` — `PreToolUse(Bash)`. Blocks `docker logs` without `--tail` and blocks
+     `docker stop`. Ships with `test-docker-guard.sh`: **19 cases, 19 pass** — including a `docker
+     logs` hidden inside `ssh nas "..."`, which slipped past the first draft. Verified live: it
+     blocked a real bare `docker logs` the moment it went in.
+   - `eaglehunt-status.sh` — `SessionStart`. Reports, across **all three repos**, any open or **draft**
+     PR, any branch ahead of `dev`, and any uncommitted work. **On its first run it immediately found a
+     live draft PR in the dashboard (#22, S71 Beaufort) that nobody knew was stranded** — the same
+     failure that lost weewx S37 for a day, already recurring elsewhere.
+3. **Branch protection:** `enforce_admins: true` on `main` **and** `dev`, required checks now
+   `secret-scan` + `lint` + `tests`. The S36 bypass is now mechanically impossible — for everyone,
+   including the owner.
+
+## Still open — one decision, one command
+
+**The log driver.** `db` cannot be capped (proven above). The remaining choice is *per container*, and
+it depends on a fact nobody has: **which containers are actually filling a `log.db`.** Run the `sudo du`
+one-liner above. Then:
+
+- **Every `log.db` small** → keep `db` everywhere, keep your UI, change nothing. The trigger is already
+  gone (Move 1). This is the likely outcome now that weewx's console is at `WARNING`.
+- **One is fat** → that container is the live wedge candidate. Switch **just that one** to `json-file`
+  with caps in its own compose. You lose the DSM log tab for that container only.
 
 ---
 
