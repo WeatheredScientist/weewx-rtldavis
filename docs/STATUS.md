@@ -131,6 +131,15 @@ _Last updated: 2026-07-13 (S41)._
   to `json-file` is the only way to bound its log, and it costs that container's DSM log tab. **Revisit
   only if a container starts generating real stdout volume.**
 
+- **⚠️ WATCH: one `rtldavis process stalled` at the v2.0.7 startup (S41).** At 2026-07-13 15:30:35, three
+  minutes after the container was recreated, weewx logged `CRITICAL Caught WeeWxIOError: rtldavis process
+  stalled`, waited 60 s, and restarted the driver cleanly. It **self-recovered** and has not recurred;
+  reception went straight back to 100 % and archive records land every minute. It is the **only** stall in
+  the whole day's log — including across the `:v2.0.6` restart that morning — so it is new to this boot.
+  Most likely the USB dongle being re-acquired while the old container was still releasing it (`kill` →
+  `rm` → `run` in quick succession). **Not a blocker and nothing is owed** — but if a stall shows up on the
+  *next* restart too, it is a real startup race and needs a settle-delay between `rm` and `run`.
+
 - **Rotate the exposed WU API key** (NAS `wxcheck.sh`; scrubbed from repo S16, real key still live).
   Owner-acknowledged; **still owed** — and it remains the only known live exposure. **S40 confirmed nothing
   else joined it:** a scan of every blob that ever existed in this repo (333 unique, all refs) for a
