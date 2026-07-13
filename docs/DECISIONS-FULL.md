@@ -667,3 +667,63 @@ The archive and InfluxDB are explicitly the **corrected best-estimate** layer (D
 layers"), so putting our best estimate in them is their purpose, not a violation of it. What must never
 happen is a corrected value that is *indistinguishable* from a measured one — which is precisely what
 the errata entry plus the in-band `rain_qc` flag prevent.
+
+---
+
+## DEC-0033 — The glitches are CRC-valid multi-bit corruption from spurious duplicate frames
+
+**Date:** 2026-07-12 (S36) · **Status:** Accepted · **Confirms** DEC-0029's stated cause (which an
+earlier S36 draft wrongly "corrected" — see the retraction note below)
+
+**Context.** DEC-0029 attributed the sensor glitches to *"multi-bit corruption that passes CRC"* and
+treated it as a given. Investigating it for an upstream bug report (S36) first produced a **wrong**
+conclusion, then the right one. Both are recorded, because the wrong one is instructive.
+
+**The retracted claim (do not resurrect it).** We verified that CRC-16-CCITT (poly `0x1021`) cannot
+miss a **single-bit** error — 0 of 64 single-bit flips of a valid 8-byte message pass. From that we
+concluded the corruption *must* be transmitter-side (present before the ISS computes its checksum).
+**That inference was invalid.** "CRC catches all single-bit errors" does not imply "CRC catches all
+errors" — a **multi-bit** error pattern can be a multiple of the generator polynomial and is then
+completely undetectable. We had proved a narrow fact and over-generalized it.
+
+**The evidence that settled it** — raw packets posted by user *LloydR* in upstream issue
+[lheijst/weewx-rtldavis#15](https://github.com/lheijst/weewx-rtldavis/issues/15), verified against our
+own `weewx.crc16`:
+
+```
+03:57:08.612942  E003BE730300E26A   rain byte 0x73 (115)   crc16 = 0  PASSES
+03:57:08.613204  E0019E310300E26A   rain byte 0x31 ( 49)   crc16 = 0  PASSES   <- 262 us later
+```
+
+The two frames differ in **4 bits** (`0x02 0x20 0x42` across bytes 1–3) and **both pass CRC** — the
+error pattern is a valid codeword. They arrived **262 microseconds apart**, while a Davis ISS transmits
+every **~2.5 seconds**. So one transmission produced two decoded frames: the receiver, not the
+transmitter, made the second one.
+
+**Decision — the settled model:**
+1. **Root cause (upstream, unfixed):** the `rtldavis` Go demodulator sometimes emits a **spurious
+   near-duplicate frame** microseconds after a good one. Most such frames are garbage and **fail CRC,
+   so they are dropped silently and invisibly**; roughly **1 in 65,536** passes by chance and delivers
+   corrupt sensor values. This is consistent with the observed rarity (~1 event per 2–3 weeks) without
+   requiring any exotic mechanism. *(LloydR independently patched the Go program to reject packets
+   arriving <2 s apart and reports it fixed his station — supporting the model, though it was never
+   upstreamed; the Go repo has issues disabled.)*
+2. **The driver's dedup cannot catch it.** `if data != self._last_pkt` (~L1209) is **exact-equality**.
+   A *corrupted* near-duplicate differs from the previous packet, so by construction it is not a
+   duplicate and passes straight through. The guard only stops the harmless case.
+3. **CRC is therefore NOT a defense**, and a decode-layer plausibility filter is the only one available
+   to us. This is the standing justification for `rain_delta_tips` (DEC-0021) and `SensorQC`
+   (DEC-0029). Anyone proposing "just trust the CRC" should be pointed here.
+4. **Transmitter-side corruption is NOT ruled out** as an additional contributor — we simply have no
+   evidence for it, and the demodulator model explains everything we have seen. Do not assert it.
+5. **We have not confirmed the duplicate-frame fingerprint on OUR station**, because `DEBUG_RTLD = 0`
+   and `weewx.log` rotates daily, so the raw `data:` lines were never captured. **Open follow-up:** run
+   with `debug_rtld = 1` for a few days and look for sub-2-second packet pairs. Until then, the
+   mechanism is upstream-confirmed but locally unverified.
+
+*Rationale for recording the retraction:* the wrong version was confidently argued, internally
+consistent, and would have produced a publicly wrong bug report asserting the maintainer's CRC handling
+was fine and Davis was at fault. It survived until someone checked it against **another user's raw
+bytes**. The lesson is narrow and worth keeping: *a proof about single-bit errors says nothing about
+multi-bit errors* — and when a conclusion depends on an inference rather than a measurement, go find
+the measurement.
