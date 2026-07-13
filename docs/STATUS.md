@@ -28,27 +28,36 @@ _Last updated: 2026-07-13 (S38)._
 
 ## Active thread
 
-> **▶ Resume here (S38 → S39). Everything is clean. Exactly TWO things are open, and both are the
-> owner's.**
+> **▶ Resume here (S38 → S39). The session is CLOSED and everything is shipped.** Prod runs `:v2.0.6`,
+> `main` == prod (`prod-baseline-20260713`), the image is published, and **all three upstream
+> contributions are live**. Nothing is half-done, nothing is stranded, no PR is open.
 >
-> Prod runs **`:v2.0.6`**, `main` == prod (`prod-baseline-20260713`), the image is published, both
-> upstream PRs are **open**, and the guards are installed and tested. Nothing is half-done and nothing is
-> stranded.
+> **ONE thing is deliberately parked, and it is not ours to move:**
 >
-> **1. Cross-repo etiquette — the 4th-project question (owner, needs a decision).**
->    DEC-0040 settled the *enforcement* half: no master repo, guards in `~/.claude/hooks/`, share the
->    payload test not the regex. What it did **not** settle is **etiquette** — the human/agent protocol
->    *between* repos: who may touch whose prod, how a finding in repo A is handed to repo B, what an
->    agent may do unattended in a repo it is not "in". The owner wants short, concrete advice, and is
->    leaning toward a small coordinating 4th project. **See `docs/handoffs/S38-cross-repo-architecture.md`
->    §Etiquette.** This is a governance decision, not a code one.
+> **Cross-repo etiquette / the 4th-project question — PARKED FOR FABLE (owner's call, ~2026-07-14).**
+> Do **not** re-litigate or start building it. The advice is written up in
+> `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette: *a repo owns its own prod — nobody else
+> deploys into it, they file*; a coordinating repo earns its keep only if it holds the NAS runtime
+> contract, a shared **issue tracker**, and the shared executables, is read **on demand** (never at
+> session boot), and passes the litmus test *"does this belong to more than one repo?"*. DEC-0040 already
+> settled the **enforcement** half (no master repo; guards in `~/.claude/hooks/`) — this is only the
+> **etiquette** half. Fable reviews it, then the owner decides.
 >
-> **2. The issue-#15 thread response — drafted, awaiting the owner's review for tone/content.**
->    `docs/upstream/issue-15-response.md` (gitignored). The **PR is already open and needs nothing**
->    ([lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22)); this is the *thread* half —
->    explaining the mechanism to the three people who have lived with it since 2022. It credits LloydR's
->    packet dumps, tells gary-hammer his 64 mph gusts are the same bug in a different field, and is
->    honest that the rain-*rate* half is still unexplained. **Owner posts it, or says go.**
+> **S39 picks up the ordinary backlog** (below). Nothing blocks it.
+
+## Upstream — all three landed (S38)
+
+- **[lheijst/weewx-rtldavis#22](https://github.com/lheijst/weewx-rtldavis/pull/22)** — the rain-counter
+  wraparound fix. OPEN.
+- **[Issue #15 comment](https://github.com/lheijst/weewx-rtldavis/issues/15#issuecomment-4960224128)** —
+  **POSTED 2026-07-13** (owner-approved). The first comment on that thread since **2022-11-14**. Explains
+  the duplicate-frame mechanism, the wraparound bug, and — new at S38 — that the phantom **rainRate is
+  ISS-side, not a driver bug** (DEC-0042), which three people there had been hunting in software.
+- **[david-lutz/weewx-influx2#1](https://github.com/david-lutz/weewx-influx2/pull/1)** — TLS verification
+  on by default + four more. OPEN; that repo's first-ever PR, and it has been quiet since 2023, so it may
+  simply sit.
+
+**Watch for replies.** `lheijst` was active as recently as 2026-07-09.
 
 ## Shipped and closed in S38 — nothing to do here
 
@@ -142,32 +151,47 @@ _Last updated: 2026-07-13 (S38)._
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S38 (2026-07-13):** merged S37's stranded draft PR #23; **shipped `v2.0.5` then `v2.0.6`**
-to Docker Hub; **DEC-0038** (an image tag denotes exactly one tree), **DEC-0039** (the secret gate,
-hardened and *proven* — 28/28, in CI), **DEC-0040** (the cross-repo gap is an *enforcement* gap — no
-master repo; guards in `~/.claude/hooks/`), **DEC-0041** (**StdPrint removed** — the real stdout writer
-that v2.0.5 missed); prod deployed to `:v2.0.6` and `prod-baseline-20260713` tagged; `influx.py` drift
-closed; both upstream PRs opened; `enforce_admins: true`; CI now runs the 67 tests. See CHANGELOG `[S38]`.
+**✅ Done in S38 (2026-07-13).** A long one. Merged S37's stranded draft PR #23 (an entire session had
+never landed); shipped **v2.0.5 then v2.0.6** to Docker Hub and deployed prod to `:v2.0.6`; **posted the
+issue-#15 response** and opened both upstream PRs; answered the rainRate question. New decisions:
+**DEC-0038** (an image tag denotes exactly one tree), **DEC-0039** (the secret gate, hardened and
+*proven* — 28/28, in CI), **DEC-0040** (the cross-repo gap is an *enforcement* gap — no master repo;
+guards in `~/.claude/hooks/`), **DEC-0041** (**StdPrint removed** — the real stdout writer that v2.0.5
+missed), **DEC-0042** (**the phantom rainRate is ISS-side**, not RF and not the driver). Plus
+`enforce_admins: true`, CI now runs the 67 tests, and 47 MB reclaimed from a container dead since May.
+See CHANGELOG `[S38]`.
 
-**▶ ON RETURN (S39) — only two things are open, and both are the owner's:**
+**▶ ON RETURN (S39):**
 
-1. **Cross-repo ETIQUETTE — the 4th-project question.** DEC-0040 settled *enforcement*; it did not settle
-   the human/agent protocol *between* repos. Short concrete advice is in
-   `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette. Owner decision.
+**Do NOT touch the cross-repo / 4th-project question.** It is parked for Fable's review (~2026-07-14) and
+is the owner's call. Everything needed is in `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette.
 
-2. **Post the issue-#15 response** — `docs/upstream/issue-15-response.md` (gitignored), pending the
-   owner's review for tone/content. **The PR is already open and needs nothing**
-   ([lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22)).
+**Pick up the ordinary backlog — nothing blocks any of it:**
 
-**Then, at leisure (nothing is blocked):** cold-load Fix B (`current.json`); the temp/humidity coupling
-filter; Reception Layer B (DEC-0024); the always-on duplicate-frame counter (DEC-0035); and the rainRate
-15-minute hold, which remains the most interesting unexplained thing in the data.
+1. **Cold-load Fix B (`current.json`)** — `loop_json_writer.py` also writes an atomic `current.json` the
+   dashboard fetches first at boot, so a first-time visitor doesn't see em-dashes. Richer than originally
+   scoped: the loop packet now carries `barometer`/`dewpoint`/`heatindex`.
+2. **The temp/humidity coupling filter** (v2.0.7) — a humidity move >6 %/min with temperature essentially
+   flat is physically impossible. From dash S69: 3-for-3 on the bad events, 0 false positives, and it
+   correctly spares the 2026-05-23 gust front.
+3. **Reception Layer B (DEC-0024)** — driver stops publishing dataless freqError packets + persists raw
+   `count`/`missed`. Needs design + approval (No-Rewrite).
+4. **The always-on duplicate-frame counter (DEC-0035)** — one INFO line per archive period, replacing any
+   future open-ended `debug_rtld = 2` expedition.
 
-**Watch for:** replies on the two upstream PRs. `lheijst` was active as recently as 2026-07-09;
-`david-lutz` has been quiet since 2023, so that one may simply sit.
+**Physical, not software (DEC-0042):** inspect the tipping bucket, the reed switch and its wiring. The
+phantom rainRate is an ISS sensor artifact — condensation trips the rate timer without tipping the
+bucket. **A third event is predictable on the next calm, saturated, cooling night**, which is a free test.
+
+**Watch:** replies on [lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22),
+[issue #15](https://github.com/lheijst/weewx-rtldavis/issues/15) and
+[david-lutz#1](https://github.com/david-lutz/weewx-influx2/pull/1).
+
+**Also owed:** rotate the exposed WU API key (NAS `wxcheck.sh`) — the only known live exposure. The
+dashboard has a stranded draft PR (#22) that our session-start hook found; flag it when next in that repo.
 
 **Live access:** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in gitignored
 `docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use `env -u GH_TOKEN` for any
 `git push`. **The driver is BAKED — never `scp` it (DEC-0031); `influx.py` IS mounted, so scp IS correct
-for that one.** **Never run `docker logs` without `--tail N`** — now blocked by a hook in both the agent
-and the shell, not merely written down (DEC-0040).
+for that one.** **`docker logs` without `--tail` is now blocked by a hook** in both the agent and the
+shell — it is no longer merely a written rule (DEC-0040).
