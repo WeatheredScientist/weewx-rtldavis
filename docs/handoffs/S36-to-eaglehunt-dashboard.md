@@ -105,7 +105,10 @@ unquoted secret — **the gate was green because it caught nothing**).
 
 **While porting it, we found two more holes that are still live in YOUR copy:**
 
-1. **`# ` matches a comment anywhere on the line**, so `api_key = REALSECRET  # note` **passes clean**.
+1. **`# ` matches a comment anywhere on the line**, so `api_key = REAL  # note` **passes clean**.
+   (The example value is shortened here on purpose: with a realistic 8+ char value this very line
+   trips the hardened gate — which is the system working. The payloads live in
+   `scripts/test_check_secrets.sh`, the one file the gate exempts.)
    Anchor it to comment-only lines (`^[0-9]+:[[:space:]]*#`, since the allow-list runs against `grep -n`
    output).
 2. **The docstring-param rule passes a capitalized single token** — a bare `api_key:` followed by one

@@ -975,3 +975,176 @@ derived from it has been recomputed over every affected window.
 **Credit where due:** the dashboard found this and, per their DEC-0096, deliberately did **not** patch our
 store — they display corrections, they never author them. That boundary is right, and it is why the bug
 came back to us as a report instead of a silent divergence between two stores.
+
+---
+
+## DEC-0038 — An image tag denotes exactly one tree: publish v2.0.5, do not rebuild "v2.0.4"
+
+**Date:** 2026-07-13 (S38) · **Status:** Accepted
+**Extends:** DEC-0031 (the driver is baked), DEC-0034 (state the fork honestly).
+
+**Context.** S37's handoff said: promote **v2.0.4** to `main` and push it to Docker Hub, because the
+published image still ships the **stock driver** to every downstream user (DEC-0031) and the
+**console-handler freeze hazard** (DEC-0036).
+
+Both true. But the `weatheredscientist/weewx-rtldavis:v2.0.4` image sitting on the NAS — the one prod
+has been running since 2026-07-12 15:49 — was **built at 15:44 that afternoon**, roughly eight hours
+*before* the freeze began at 23:53 and long before DEC-0036 existed. It therefore does **not** contain
+the `logging.additions` console-handler fix, and it does not contain DEC-0034's identity strings
+either. **Publishing that image as-is would have shipped an artifact that fails the very acceptance
+criterion the release was cut for.** A rebuild was mandatory in any case.
+
+Given a rebuild is mandatory, the only real question is what to *call* it.
+
+**Decision.** Publish the rebuilt image as **`v2.0.5`**, not as a second, different `v2.0.4`.
+
+**A version tag must denote exactly one tree.** Had we rebuilt and republished `v2.0.4`, the string
+"v2.0.4" would have named two different images: the one prod runs (`dff97719b629`) and the one on
+Docker Hub (`939e949cbb28`). That is not a naming nit — **it is the same failure mode as DEC-0031 and
+DEC-0034**, which this release exists to fix: *an artifact that asserts one thing and is another.* We
+would have been fixing "the image lies about its driver" by shipping "the tag lies about its image."
+
+`v2.0.4` was never published to Docker Hub (Hub went `v2.0.3` → `latest`, both 2026-07-08), so nothing
+public breaks and no downstream `docker pull` is invalidated. The cost is internal bookkeeping only.
+
+**Consequences — and one deliberate, documented drift.**
+
+- Docker Hub now carries **`v2.0.5` + `latest`** (pushed 2026-07-13 12:55). Every new install gets the
+  patched driver **and** the freeze fix. This is the item that had an ongoing external cost, and it is
+  now closed.
+- **Prod still runs `:v2.0.4`, and `prod-baseline` has NOT been moved.** This breaks DEC-0011's
+  *`main` = production truth* invariant, knowingly and temporarily, and the alternative was worse:
+  redeploying prod unattended, in a background session, hours after a seven-hour outage, to fix
+  something that **does not affect prod**. The delta is behaviorally nil here — v2.0.5 = v2.0.4 + the
+  console-handler default + identity strings, and prod's bind-mounted `weewx.conf` has **no console
+  handler at all**, which is the config drift that spared us in the first place. The freeze fix
+  protects *downstream users*, who have no such drift.
+- **A catch-up deploy of `:v2.0.5` to prod is owed**, in an attended window, with `:v2.0.4` as the
+  rollback. `prod-baseline` moves then, not before. Recorded in STATUS.
+- Do not let this become a habit. "Published is ahead of prod" is acceptable for exactly as long as it
+  takes to schedule one deploy.
+
+---
+
+## DEC-0039 — Every allow term is anchored or positioned; a gate ships with its planted-payload test
+
+**Date:** 2026-07-13 (S38) · **Status:** Accepted
+**Extends:** DEC-0012 (never commit secrets). **Adopts + strengthens:** dashboard DEC-0063, DEC-0100.
+
+**Context.** `scripts/check_secrets.sh` guarded this **public** repo for nine sessions while catching
+essentially nothing. S36 found the cause (`grep -viE` — a case-insensitive allow-list whose `[A-Z]`
+terms matched lowercase code, so the ALL_CAPS rule swallowed nearly every unquoted secret) and fixed
+it. The dashboard found the identical bug independently (their DEC-0063), then found five more holes
+in the same class (DEC-0100), then we found more here. **Four separate discoveries of one bug class,
+each re-derived from scratch.**
+
+**The bug class, stated once:**
+
+> **An allow term that can match ANYWHERE on the line is not an allow-list, it is an escape hatch —
+> the secret sits on the left and the excuse on the right.**
+
+```
+token = REAL   # falls back to os.environ      <-- old gate: PASSED, exit 0
+```
+
+*(The value is stubbed to four characters on purpose. With a realistic 8+ character value, this very
+line trips the hardened gate — as it did while this entry was being written. The realistic payloads
+live in `scripts/test_check_secrets.sh`, the one file the gate exempts, by exact path.)*
+
+**Decision.**
+
+1. **Every allow term must be ANCHORED** (`^[[:space:]]*#`, `^[[:space:]]*//` — the line *is* a
+   comment) **or POSITIONED** (it must appear as the value of, or in key position to, *the key the
+   detector actually matched*). There are now **no free-floating terms**. A new term that can match
+   mid-line re-opens the hole; that is the first thing to check when adding one.
+2. **The `grep -n` prefix bug is fixed at the root, not compensated for.** The old gate piped `grep -n`
+   output into its allow-list, so every line arrived prefixed `N:` — and a rule keyed on a colon
+   matched *that* prefix instead of the code. The anchors had to compensate (`^[0-9]+:`), which is
+   fragile and is exactly why the dashboard warns against porting our anchors verbatim. The line number
+   is now stripped with **bash parameter expansion**, and the allow-list runs on the **raw line**.
+3. **A gate ships with its planted-payload test.** `scripts/test_check_secrets.sh` plants 13 known-bad
+   payloads (each MUST be caught), 14 known-good lines (each MUST pass), and re-runs the real gate over
+   the whole tracked tree (MUST be clean). **It runs in CI, before the scan itself.**
+4. **A green exit code is not evidence.** Two repos believed it for months. Evidence is a payload the
+   gate catches and a tree it does not flag.
+5. **Port the test, never the regex.** The dashboard's gate runs on raw lines; ours used to run on
+   `grep -n` output; theirs needs JS comment forms, ours needs weewx config plumbing. The gates are
+   legitimately different. **The test is the contract; the gate is the implementation** — which is
+   PRINCIPLES §1 (*the contract is the data, not the consumer*) pointed at tooling.
+
+**Evidence it works.** The harness caught a hole **in the S38 fix itself, while it was being written**:
+the first cut of the prose rule began `[A-Za-z]:` — any letter, any colon, anywhere — so a secret with
+a trailing `# Authorization: Bearer …` comment still passed, the excuse on the right rescuing the
+secret on the left. That is the whole argument for rule 3 in one line. Final state: **28 passed,
+0 failed**; 72 tracked files, zero false positives.
+
+It then caught **this very ADR**, which originally quoted its payloads at full length. Docs describe
+the *shape*; only `scripts/test_check_secrets.sh` carries realistic payloads, and it is exempt by
+exact path. That is the system working, and it is why the exemption is a path and never a pattern.
+
+**Reciprocal finding, sent back to the dashboard.** Applying their own DEC-0100 rule strictly, *their*
+hardened gate still has free-floating escape hatches (`YOUR_`, `process.env`, `os.environ`, `getenv`,
+`config_dict`, `.get(`, `argv`), so a real credential with a trailing `# falls back to process.env`
+comment still leaks past it with exit 0 — payloads 8–12 of our harness. Handed over in
+`docs/handoffs/S38-cross-repo-architecture.md`, with the same warning they gave us: **do not port our
+regex verbatim.**
+
+---
+
+## DEC-0040 — The cross-repo gap is an ENFORCEMENT gap, not a documentation gap: no master repo (yet)
+
+**Date:** 2026-07-13 (S38) · **Status:** Accepted (recommendation; owner to confirm moves 1 and 3)
+**Answers:** the open architectural question recorded in `S37-to-all-projects-stdout-freeze.md`.
+
+**Context.** Three shared assets have each now caused a cross-repo incident: the NAS Docker daemon
+(DEC-0036, a 7h18m outage), the driver-vs-image mismatch (DEC-0031), and the secret gate (green-but-
+blind in *both* repos, independently). None belongs to any one repo, and no repo's session-start read
+covers the gap between them. The options tabled were: a shared `ops/` repo, a vendored CONVENTIONS
+fragment, or status quo plus handoff docs.
+
+**The reframe.** All three options are strategies for **distributing documentation**, and all three
+would have failed to prevent all three incidents — because in the worst of them, *the rule was already
+written down*. "`docker logs` always with `--tail N`" was in `CLAUDE.md` **and** `CONVENTIONS.md`
+before the freeze. It was followed for thirty-odd sessions and broken once, and that once cost seven
+hours.
+
+> **Prose does not execute.** A rule in a document is enforced by whoever happened to read it and
+> happened to remember it at the moment they typed the command. That is not a control; it is a hope.
+
+What actually resolved the other two was, in both cases, **someone writing an executable check**: the
+duplicate-frame question stood open four sessions and fell in an afternoon to
+`ops/find_duplicate_frames.py` (DEC-0035); the secret gate was trusted for nine sessions and its holes
+fell in twenty minutes to a planted-payload test (DEC-0039). The one incident still **mechanism-open**
+is the one still without a mechanical guard.
+
+**Decision. No master coordination repo. Build a shared enforcement layer instead.**
+
+1. **Mechanical guards belong in `~/.claude/` (global, cross-project, zero session-boot cost).** It has
+   no hooks today. A `PreToolUse` hook blocking bare `docker logs` (DEC-0036) and `docker stop`
+   (DEC-0008) is the *only* candidate mechanism that would have prevented the freeze. Plus a `.zshrc`
+   guard, because a Claude hook only guards the agent and we never established who ran the command.
+2. **Share the test, not the regex** (see DEC-0039 §5).
+3. **The NAS runtime contract is the one genuinely unowned thing** — and it is one page, not a repo.
+   Verified this session: **all four** production containers run with `LogConfig.Config = map[]` — no
+   `max-size`, no `max-file`, no caps of any kind — on Synology's **`db`** driver, which is the exact
+   component that wedged. (This also corrects the S37 handoff: its `--log-opt max-size` advice names
+   **`json-file`** options, and this daemon defaults to `db`. The daemon *records* `max-size` on `db`;
+   whether it *enforces* it is unproven, and "it was accepted" is exactly the class of evidence — a
+   green exit code — that this decision is about.)
+
+**Alternatives rejected.**
+*(a) A shared `eaglehunt-ops` repo.* Its real benefit is discoverability for a **new** project, and
+that benefit accrues only when there is someone to discover it, while the costs — a fourth
+session-start read, a two-PR dance for any cross-cutting change — are paid every session, in three
+repos that just spent three sessions deliberately **cutting** boot cost (DEC-0030 / dash DEC-0081 /
+HLF DEC-0095). Two shared artifacts do not justify it for a solo operator. **Build it on a trigger:** a
+fourth NAS service, a second operator, a third shared *executable*, or the second time the same fix is
+hand-pasted into three repos.
+*(b) A vendored CONVENTIONS fragment.* **Drift is the bug** — DEC-0031 is drift (compose vs.
+Dockerfile), the secret gate is drift (two copies, one bug, four discoveries). An unchecked vendored
+copy is the same failure with extra steps. Acceptable only with a mechanical drift check — at which
+point you have built the enforcement layer and the fragment is redundant.
+*(c) Status quo + handoffs.* **Kept, but only for lessons** — narrative, causal, one-directional —
+where it demonstrably works (the S37 handoff did its job; it is why this decision exists). It is the
+wrong mechanism for **rules**, because a rule delivered as prose is a rule enforced by memory, and
+memory is what failed at 23:53 on 2026-07-12.

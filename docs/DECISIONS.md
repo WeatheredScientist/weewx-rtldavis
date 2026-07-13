@@ -53,6 +53,9 @@ a later entry.
 | DEC-0035 | Duplicate-frame mechanism CONFIRMED here (~722/day); the test that said otherwise was broken | Accepted · **confirms** DEC-0033 | 2026-07-12 (S37) |
 | DEC-0036 | The 7h18m freeze: trigger known (bare `docker logs` wedged the daemon), **mechanism OPEN**; mitigations banked | Accepted · **mechanism open** | 2026-07-13 (S37) |
 | DEC-0037 | A retrospective correction must propagate to every derived field | Accepted · **extends** DEC-0032 | 2026-07-13 (S37) |
+| DEC-0038 | An image tag denotes exactly one tree: publish **v2.0.5**, don't rebuild "v2.0.4" | Accepted · **extends** DEC-0031/0034 · *prod deliberately one patch behind* | 2026-07-13 (S38) |
+| DEC-0039 | Secret gate: every allow term **anchored or positioned**; a gate ships with its planted-payload test | Accepted · **extends** DEC-0012 · adopts dash DEC-0063/0100 | 2026-07-13 (S38) |
+| DEC-0040 | The cross-repo gap is an **enforcement** gap, not a documentation gap — **no master repo** (yet) | Accepted · *owner to confirm moves 1 + 3* | 2026-07-13 (S38) |
 
 ## Open / deferred
 
