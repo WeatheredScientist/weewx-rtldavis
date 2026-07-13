@@ -77,6 +77,21 @@ _Last updated: 2026-07-12 (S36)._
 
 ## Needs a check / housekeeping
 
+- **⚠️ PROD IS IN A DEBUG STATE — revert when the Lloyd test is done (S36).** To capture raw frames we
+  set, in the live `weewx.conf`: `[Rtldavis] debug_rtld = 2` and `[Logging][[loggers]][[[user]]]
+  level = DEBUG`. This adds log volume (raw `data:` line per packet, ~21/min). **Revert both to
+  `1` / `INFO` and restart** (`docker kill` + `docker start`) once the test concludes. Backup:
+  `weewx-data/weewx.conf.bak-S36-debugrtld-*`.
+- **The Lloyd test (DEC-0033) is RUNNING.** `ops/find_duplicate_frames.py` looks for two frames from the
+  same transmitter <2 s apart — impossible for a real ISS (it transmits every ~2.5 s) and the fingerprint
+  LloydR posted upstream (262 µs apart, 4 bits different, both CRC-valid). The driver logs the raw
+  `data:` line *before* the CRC check, so spurious frames are visible **even when they fail CRC** — so
+  this should answer in hours, not weeks. Run it against the accumulating log:
+  `python3 /volume1/docker/weewx-rtldavis/find_duplicate_frames.py /volume1/docker/weewx-rtldavis/logs/weewx.log`
+  First pass (5 min, 34 frames): **0 suspicious pairs** — far too little data to mean anything yet.
+  If pairs appear, we can confirm the mechanism on our own hardware and post to upstream issue #15.
+
+
 - **Rotate the exposed WU API key** (NAS `wxcheck.sh`; scrubbed from repo S16, real key still live).
   Owner-acknowledged; **still owed** — and now the only known live exposure.
 - **Unported from the dashboard:** its `.claude/agents/` routing definitions (its DEC-0093). The
