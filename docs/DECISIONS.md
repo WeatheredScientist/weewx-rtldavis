@@ -62,6 +62,7 @@ a later entry.
 | DEC-0044 | The **nibble theory is not supported** by the archive, and the archive can never settle it — **instrument, don't filter** | Accepted · **bounds** DEC-0029 · **parks** the coupling filter | 2026-07-13 (S39) |
 | DEC-0045 | **A comment is not an exemption** — the secret gate scans comments like code. A commented-out credential in a public repo is still leaked, and the gate's *own test* had asserted it was fine | Accepted · **amends** DEC-0039 · **extends** DEC-0012 | 2026-07-13 (S40) |
 | DEC-0046 | **The baked config is shadowed by the prod bind-mount** — an image-only config fix reaches downstream users and *never* reaches prod. The exact mirror of DEC-0031 (where the *image* wins and the mount is the no-op) | Accepted · **mirrors** DEC-0031 · completes the delivery half of DEC-0043 | 2026-07-13 (S41) |
+| DEC-0047 | **The secret gate guards commits, not reads — the transcript is an egress path.** A `sed -n '…,+44p'` overran its section and dumped credentials into the transcript; no control existed because nobody had modeled reading as a path. Guard + redacting reader + transcript scanner, all in `~/.claude/`. *(Rotation specifics: gitignored local-infra doc.)* | Accepted · **extends** DEC-0012 · completes DEC-0039/0045 (write path only) · applies DEC-0040 | 2026-07-13 (S41) |
 
 ## Open / deferred
 
