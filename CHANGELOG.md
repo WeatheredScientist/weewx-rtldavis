@@ -79,16 +79,27 @@ not mean "the configuration does anything" (cf. the green secret gate, the silen
 Also demonstrated, rather than inferred, the DEC-0036 mechanism: retrieving that log **hung for over
 three minutes**, and that was a `--tail`-bounded read. Prod was never at risk.
 
-**Provenance, outward half — prepared, NOT sent.** Both upstreams forked separately, both fixes
-committed and pushed to our forks, both verified. **No PR opened, nothing posted.**
-- `lheijst/weewx-rtldavis` → the rain-counter wraparound. Proven against LloydR's own numbers from
-  issue #15: `115 → 49 → 115` now yields missing/missing instead of a phantom 1.28″, while genuine
-  wraparounds still work (`127 → 0` = 1 tip).
-- `david-lutz/weewx-influx2` → five fixes, led by a **silent TLS-verification bypass**
-  (`ssl._create_unverified_context()` applied unconditionally to every https endpoint, so every user
-  posting to InfluxDB Cloud has certificate verification off and their token on an unauthenticated
-  connection).
-- Drafts in the owner's voice: `docs/upstream/` (gitignored). **Awaiting an explicit go.**
+**Provenance, outward half — SENT.** After three sessions of "the fork hasn't given anything back," it
+has. Both upstreams forked separately (our distribution repo correctly stays a normal repo, not a GitHub
+fork), both PRs **open**:
+- **[lheijst/weewx-rtldavis#22](https://github.com/lheijst/weewx-rtldavis/pull/22)** — the rain-counter
+  wraparound. Proven against LloydR's own numbers from issue #15: `115 → 49 → 115` now yields
+  missing/missing instead of a phantom 1.28″, while genuine wraparounds still work (`127 → 0` = 1 tip).
+- **[david-lutz/weewx-influx2#1](https://github.com/david-lutz/weewx-influx2/pull/1)** — five fixes, led
+  by a **silent TLS-verification bypass** (`ssl._create_unverified_context()` applied unconditionally to
+  every https endpoint, so every user posting to InfluxDB Cloud has certificate verification off and
+  their token on an unauthenticated connection). That repo's first-ever PR.
+- **The issue-#15 thread response is drafted and NOT posted** — `docs/upstream/issue-15-response.md`,
+  awaiting the owner's review for tone. The PR needs nothing; this is the half that explains the
+  mechanism to the three people who have been living with it since 2022.
+
+**Prod finished the session on `:v2.0.6`, and `main` == prod again.** Recreated 11:09 EDT; verified
+`driver version is 0.20+ws.1 (fork of lheijst 0.20)`, `sensor_qc True`, `influx service version 0.20+ws.1`,
+stdout **silent**, every uploader publishing, `RestartCount: 0`. `prod-baseline-20260713` tagged, which
+restores DEC-0011's *`main` = production truth* invariant that S38 deliberately broke for a few hours.
+Prod's bind-mounted `influx.py` also caught up with the repo (it had drifted — DEC-0031's class again:
+the running copy still had `VERSION = "0.20"`, the unconditional `_create_unverified_context()`, and
+per-record `loginf` spam; not a live exposure, since the endpoint is plain http).
 
 ## [S37] — 2026-07-12→13 — A 7-hour prod freeze, the CRC question answered, and the fork finally admits it is one
 
