@@ -15,38 +15,45 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S37** (2026-07-12 → 07-13) — **a 7-hour prod outage, and the CRC question answered.**
-> weewx froze solid for 7h18m (DEC-0036, ERR-0003 — recovered, gap backfilled). The fork-identity /
-> provenance audit landed (DEC-0034). The duplicate-frame mechanism is **confirmed on our hardware**
-> (DEC-0035) — and the test that first said otherwise was broken. Full story: CHANGELOG `[S37]`.
+> **Current session: S38** (2026-07-13) — **v2.0.5 IS ON DOCKER HUB.** The downstream harm is over:
+> every `docker pull` now gets the patched driver (DEC-0031) *and* the console-handler freeze fix
+> (DEC-0036). Published as `v2.0.5`, not `v2.0.4`, deliberately (DEC-0038). The secret gate is now
+> **proven** rather than merely green (DEC-0039), and the cross-repo question is answered: the gap is an
+> **enforcement** gap, not a documentation gap — no master repo (DEC-0040). Full story: CHANGELOG `[S38]`.
 
-_Last updated: 2026-07-13 (S37)._
+_Last updated: 2026-07-13 (S38)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S37 → S38). Prod is healthy** — recovered 07:12 EDT 2026-07-13, `RestartCount: 0`,
-> `sensor_qc True`, debug state reverted (`debug_rtld = 1`, `user` logger `INFO`).
+> **▶ Resume here (S38 → S39). Prod is healthy and prod was not touched this session.**
 >
-> **Two things are NOT done and are the top of the list:**
+> **One thing is owed, and one thing is waiting on the owner:**
 >
-> 1. **Promote v2.0.4** — `dev` → `main`, tag + `prod-baseline`, **Docker Hub push**, GitHub release.
->    Still the highest-value outstanding item: until the image ships, every downstream user is running
->    the **stock driver** (DEC-0031). Now doubly so — the published image also carries the
->    console-handler hazard that DEC-0036 fixes in `logging.additions`.
-> 2. **The upstream post is NOT sent, by owner instruction.** The owner wants the problem fully worked
->    out, then the prose tuned to strike a balance between technical content and human warmth — the
->    draft still reads as Claude, not as him. **DEC-0035 removes the last technical blocker** (he wanted
->    our own confirmation of the duplicate-frame fingerprint before posting; we now have it). Do not post
->    without an explicit go.
+> 1. **A catch-up deploy of `:v2.0.5` to prod** — attended window, `:v2.0.4` is the rollback. Prod is
+>    deliberately one patch behind (DEC-0038) and the behavior delta is **nil** (prod's `weewx.conf` has
+>    no console handler at all). **`prod-baseline` has NOT been moved** and must not be until this
+>    happens. This is the only thing keeping `main` ahead of the station.
+> 2. **The upstream contributions are PREPARED but NOT SENT.** Both upstreams forked, both fixes
+>    committed, pushed and verified; **no PR opened, nothing posted.** Drafts in the owner's voice at
+>    `docs/upstream/` (gitignored). One command each opens them — see that folder. **Explicit go still
+>    required.**
 
 ## Open threads (not yet shipped)
 
-- **Promote v2.0.4** — `dev` → `main`, tag + `prod-baseline-2026MMDD`, Docker Hub push, GitHub release.
-  **The Docker Hub push matters more than usual:** the published compose file was mounting the stock
-  driver over the baked one (DEC-0031), so *every downstream user* has been running an unpatched driver.
-  The fix is only real for them once the new image + compose are published.
+- **⚠️ Prod is one patch behind `main` (DEC-0038, deliberate).** Published `:v2.0.5` ≠ running `:v2.0.4`.
+  Behaviorally identical *here*; the difference protects downstream users. Catch-up deploy owed; do not
+  move `prod-baseline` until it lands.
+- **The log-driver decision — needs ONE command from the owner.** Synology's `db` driver **cannot be
+  capped** (proven: `max-size=1m`, 200k lines emitted, 200k retained; it is a proprietary driver and the
+  option is *unsupported*, not just undocumented). `json-file` + caps is the only way to bound a log
+  here, and it **costs the DSM Container Manager log tab** for that container. The driver is a
+  **per-container** choice, so bound only the noisy ones — but nobody knows which those are. Needs root:
+  `for c in $(docker ps -q); do printf '%s  ' "$(docker inspect -f '{{.Name}}' $c)"; sudo du -h "$(docker inspect -f '{{.LogPath}}' $c)"; done`
+  weewx is no longer a candidate (console now `WARNING`). The unknowns are `hyperlocal-forecast-api`,
+  `eh-proxy`, `influxdb`. **The freeze *trigger* is already gone** — the `docker logs` hook blocks it —
+  so this is defense in depth, not urgent.
 - **⚠️ rainRate's 15-minute hold — OPEN, and the best lead we have (S37).** The phantom rain also
   produced a phantom rain *RATE* (peaks 4.736 / 4.216 in/hr, `rain = 0.0` throughout). **The data is
   corrected** in both stores (S36, 2nd pass — see DATA_ERRATA), but the *mechanism* is not explained: a
@@ -95,15 +102,22 @@ _Last updated: 2026-07-13 (S37)._
 
 ## Needs a check / housekeeping
 
-- **✅ CLOSED IN S37:** the debug state is reverted (`debug_rtld = 1`, `user` logger `INFO`); the Lloyd
-  test is **answered** (DEC-0035); the fork-identity audit is **done** (DEC-0034); `qc-capture` on the NAS
-  is **gone** (it did not survive the restart — nothing to harvest, nothing to kill).
+- **✅ CLOSED IN S38:** v2.0.5 published to Docker Hub (`v2.0.5` + `latest`, 12:55) — **the downstream
+  hazard from DEC-0031 *and* DEC-0036 is fixed for every new install**; S37's stranded draft PR #23
+  merged; the secret gate hardened **and proven** (DEC-0039); the cross-repo architecture decided
+  (DEC-0040); `enforce_admins: true` on `main` + `dev`; CI now runs the 67 tests; both upstream forks
+  prepared.
 
-- **⚠️ NEW — the published image carries a hazard our prod does not (DEC-0036).** `logging.additions`
-  (baked into the image) defines a console handler at **INFO**; the live bind-mounted `weewx.conf` has
-  **no console handler at all**. The repo and the running station have **drifted**. Every downstream user
-  is logging INFO to stdout, which is the DEC-0036 freeze hazard. Fixed in `logging.additions` (→
-  `WARNING`) but **it only reaches users when v2.0.4 is pushed to Docker Hub.** Same shape as DEC-0031.
+- **✅ CLOSED IN S37:** debug state reverted; the Lloyd test **answered** (DEC-0035); the fork-identity
+  audit **done** (DEC-0034); `qc-capture` gone.
+
+- **The guards live in `~/.claude/hooks/` — global, all three repos, zero session-boot cost (DEC-0040).**
+  `docker-guard.sh` (`PreToolUse`) blocks bare `docker logs` + `docker stop`; `eaglehunt-status.sh`
+  (`SessionStart`) surfaces draft PRs / stranded branches / uncommitted work across all three repos.
+  **Both ship with tests. If you change one, run its test** — that is the whole point (DEC-0039 §3).
+
+- **A `.zshrc` guard for the human is still owed.** The Claude hook only guards the agent, and we never
+  established who ran the bare `docker logs` that froze prod — it may have been the owner at a terminal.
 
 - **⚠️ The freeze mechanism is OPEN (DEC-0036).** Trigger identified (a bare `docker logs`, no `--tail`,
   wedged the Synology daemon's log path for that container). The exact blocked write is **not** known and
@@ -123,50 +137,46 @@ _Last updated: 2026-07-13 (S37)._
 - **Snow / freezing / no heating tape** (parked, owner's future thread) — cold-weather failure modes we
   haven't designed for. 2026 = learning year.
 
-## Next session actions (S37 done → S38)
+## Next session actions (S38 done → S39)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S37 (2026-07-12 → 07-13):** health check + debug revert; **DEC-0034** fork-identity /
-provenance audit (modification notices on all four patched upstream files, `0.20+ws.1`,
-`CHANGES-FROM-UPSTREAM.md`, README rewrite); **DEC-0035** the duplicate-frame mechanism CONFIRMED here
-(~722/day) *and* the broken test that first denied it, fixed; **DEC-0036** the 7h18m freeze (recovered,
-mitigations banked, mechanism open); **DEC-0037** corrections must propagate to derived fields;
-**ERR-0003** the gap, backfilled; **ERR-0001 amendment** — `dayRain_in`/`rain24_in`/`hourRain_in` still
-carried the phantom, now recomputed. See CHANGELOG `[S37]`.
+**✅ Done in S38 (2026-07-13):** merged S37's **stranded draft PR #23** (it had never landed on `dev`);
+**shipped `v2.0.5` + `latest` to Docker Hub** — the downstream stock-driver (DEC-0031) and
+console-handler-freeze (DEC-0036) hazards are fixed for every new install; **DEC-0038** an image tag
+denotes exactly one tree (why v2.0.5, not a second v2.0.4); **DEC-0039** the secret gate hardened and
+**proven** with a planted-payload harness (28/28), now in CI, plus the 67 unit tests CI never ran;
+**DEC-0040** the cross-repo gap is an **enforcement** gap — no master repo; global hooks in
+`~/.claude/hooks/` (docker guard 19/19, cross-repo session-start check); `enforce_admins: true` on
+`main` + `dev`; both upstream forks prepared and verified. See CHANGELOG `[S38]`.
 
-**▶ ON RETURN (S38), in order:**
+**▶ ON RETURN (S39), in order:**
 
-1. **CROSS-REPO ARCHITECTURE — owner decision, do this FIRST.** It gates the other two repos.
-   `docs/handoffs/S37-to-all-projects-stdout-freeze.md` frames it: **three shared assets have each now
-   caused a cross-repo incident** — the NAS Docker daemon (DEC-0036), the driver-vs-image mismatch
-   (DEC-0031), and the secret gate (green-but-blind in *both* repos, independently). **None belongs to
-   any one repo, and no repo's session-start read covers the gap between them.** Options on the table:
-   a shared `ops/`-`infra/` repo owning NAS-level truth; a vendored CONVENTIONS fragment (cheap, drifts —
-   and drift *is* DEC-0031 and DEC-0036); or status quo + handoffs (reactive: every lesson costs one
-   outage in one repo before the others hear). **Decide the model, then propagate.**
+1. **Catch-up deploy `:v2.0.5` to prod** (attended; `:v2.0.4` = rollback). Then **move
+   `prod-baseline`** — it was deliberately NOT moved (DEC-0038), so `main` is currently ahead of the
+   station. Behavior delta is nil; this is bookkeeping, but it is the last open thread from the release.
 
-2. **Promote v2.0.4** — `dev` → `main`, tag + `prod-baseline`, **Docker Hub push**, GitHub release.
-   Carries **two** downstream fixes now: the **stock driver** still shipping to every user (DEC-0031)
-   *and* the **console-handler freeze hazard** (DEC-0036) that our own prod escaped only through config
-   drift. Neither is fixed for anyone until the image lands.
+2. **The upstream contributions — owner's call, one command each.** Everything is staged and verified;
+   **nothing has been posted.** Read `docs/upstream/rain-wraparound-bug.md` and
+   `docs/upstream/influx2-fixes.md` (gitignored), both written in the owner's voice. The rain fix is
+   proven against LloydR's own counter values from issue #15. The influx2 set is led by a **silent TLS
+   verification bypass** affecting every user of that uploader on https. **Explicit go required.**
 
-3. **Upstream contribution (provenance follow-through).** DEC-0034 made us honest *internally*; the
-   outward half is unfinished. Fork `lheijst/weewx-rtldavis` **separately** and send **one focused PR**
-   (the rain-counter wraparound), not our whole divergence. The research is done (DEC-0035); what remains
-   is **prose in the owner's voice** — technical substance balanced with human warmth. Draft is gitignored
-   at `docs/upstream/rain-wraparound-bug.md`. **Do not post without an explicit go.**
-   Same for `david-lutz/weewx-influx2` (four real bugs, incl. a TLS-verification fix).
+3. **The log-driver decision** — one `sudo du` command (see Open threads). Not urgent: the freeze
+   *trigger* is now blocked by the hook. This is defense in depth.
 
-4. **The five secret-gate holes** the dashboard found (their S70 §3). Our repo is **public**, so these
-   matter more here. Steal their `test_check_secrets.sh` harness (plant payloads that MUST be caught).
-   **Do not port their anchor verbatim** — theirs runs on raw lines, ours on `grep -n` output; a verbatim
-   port silently re-opens the hole it closes.
+4. **A `.zshrc` guard** so the human is covered too, not just the agent.
 
-5. Then: cold-load Fix B (`current.json`), temp/humidity coupling filter, Reception Layer B, and the
-   always-on duplicate-frame counter (DEC-0035, replaces ever running prod at `debug_rtld = 2` again).
+5. Then: cold-load Fix B (`current.json`), the temp/humidity coupling filter, Reception Layer B, and the
+   always-on duplicate-frame counter (DEC-0035).
+
+**Cross-repo:** `docs/handoffs/S38-cross-repo-architecture.md` carries the DEC-0040 recommendation and
+two things the other repos need to act on: (a) the **dashboard's own hardened gate still has
+free-floating escape hatches** — steal payloads 8–12 from our `scripts/test_check_secrets.sh`, and do
+**not** port our regex verbatim; (b) **hyperlocal-forecast has no secret gate at all**, and both repos
+run uncapped containers on the same `db` log driver that wedged.
 
 **Live access:** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in gitignored
 `docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use `env -u GH_TOKEN` for any
 `git push`. **The driver is BAKED — never `scp` it (DEC-0031).** **Never run `docker logs` without
-`--tail N`** — a bare one wedged the daemon and froze prod for 7 hours (DEC-0036).
+`--tail N`** — now enforced by a hook, not just a rule (DEC-0040).
