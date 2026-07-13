@@ -1,5 +1,5 @@
 #--------------------------------------------
-# weewx-rtldavis v2.0.5
+# weewx-rtldavis v2.0.6
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
@@ -80,6 +80,27 @@ RUN python3 -m venv --copies /opt/weewx-venv && \
 COPY logging.additions /tmp/logging.additions
 RUN cat /tmp/logging.additions >> /opt/weewx-data/weewx.conf && \
     rm /tmp/logging.additions
+
+#--------------------------------------------
+# Remove StdPrint from the baked default config (DEC-0041)
+#--------------------------------------------
+# weewx ships with StdPrint enabled by default. It print()s every LOOP packet
+# straight to stdout, BYPASSING the logging handlers -- so the console handler
+# level (set to WARNING in logging.additions) does NOT quiet it. That was the
+# hole left open by v2.0.5.
+#
+# In a container, stdout is a pipe drained by the Docker daemon. On Synology the
+# store behind it is a SQLite log.db that CANNOT be size-capped (the `db` driver
+# accepts --log-opt max-size and silently ignores it -- measured). If that
+# consumer stalls, the 64 KB pipe fills and weewx blocks FOREVER on its next
+# print: no crash, no traceback, container still "Up". That is DEC-0036, a
+# 7h18m outage. StdPrint was writing ~25 MB/day into that pipe.
+#
+# It buys nothing in a container: nothing reads stdout, and the full log already
+# goes to the rotating FILE that we and weewx_monitor.py actually read.
+RUN sed -i 's|^\([[:space:]]*\)report_services = weewx.engine.StdPrint, weewx.engine.StdReport|\1report_services = weewx.engine.StdReport|' /opt/weewx-data/weewx.conf && \
+    grep -q '^[[:space:]]*report_services = weewx.engine.StdReport$' /opt/weewx-data/weewx.conf || \
+    (echo "FATAL: StdPrint removal did not apply — the baked config would ship the freeze hazard" && exit 1)
 
 #--------------------------------------------
 # Copy custom service files
