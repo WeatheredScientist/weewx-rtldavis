@@ -104,6 +104,36 @@ re-derive it.
   either.* **S41: a scan that finds nothing is not evidence unless you have proved the scanner can see.**
 - **A full scan of all refs confirms no real credential has ever been committed to any of the three repos.**
 
+### Housekeeping — the cleanup that found its own backlog item was stale
+
+- **DEC-0049 — the ISS hardware is new and inspected, so the phantom rainRate is not a broken part.**
+  DEC-0042 closed with *"next step is physical: inspect the bucket, the reed switch and its wiring."*
+  **That action is now closed and it came back clean.** The owner reports the ISS hardware is **new**, was
+  **recently inspected**, and has **no faults** — the one component that did fail, the **anemometer**, was
+  **replaced ~16–17 June 2026**. A clean inspection does not falsify DEC-0042, it **sharpens** it: the two
+  readings were always *defective part* or *working part reacting to the environment*, and **the first is
+  now excluded.** Condensation bridging a **healthy** reed switch produces exactly the measured signature
+  (94 % RH, 1.7 °F dewpoint spread, 0 mph wind, tip counter never advancing). **There is nothing to swap and
+  no part to order** — anyone reading DEC-0042's "next step is physical" without DEC-0049 would order one
+  for no reason. The anemometer date is also a **dating anchor**: wind data either side of mid-June comes
+  from different physical hardware.
+
+- **DEC-0048 — reception testing is a designed experiment, not a pile of image tags.** `rw250-test` is
+  retired. It was a **misnomer within a day of being built** (`receiveWindow` ships at the upstream
+  default), and it was **never published to Docker Hub** — verified against the live tag list, so the
+  confusion was only ever ours. The deeper point: that sweep was never a controlled experiment, which is
+  also **why DEC-0017 has sat open since S16** — gain is held at 372 pending an "averaged re-test" that
+  never happened because no method was ever agreed. A proper RX test is **deferred, not abandoned**: when it
+  runs it gets a hypothesis, a control arm, an averaged window, and a pre-registered metric — and it settles
+  **gain 372-vs-207 and `receiveWindow` in the same run**, since they share the same apparatus and the same
+  confound. Until then **neither parameter gets tuned by feel.**
+
+- **Branch cleanup — and the backlog item was stale.** STATUS had been asking us to delete
+  `feature/rain-spike-filter` and `s32-reconcile-main`; **neither still existed.** What *did* exist was **8
+  merged `worktree-*` branches**, each verified at **0 unmerged commits** before deletion. The remote is now
+  exactly **`dev` and `main`**. All three Eagle Hunt repos have **zero** open PRs, and the dashboard's
+  long-flagged stranded draft PR is gone too.
+
 ## [S40] — 2026-07-13 — a comment is not an exemption: the gate's proof had certified the hole
 
 > **The secret gate let commented-out credentials into a PUBLIC repo — and its own test said that was
