@@ -1,14 +1,28 @@
 # weewx-rtldavis
 
-A Docker image for running [weewx](https://weewx.com/) with the [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver, enabling a Davis Vantage weather station to upload data to multiple online weather services using an RTL-SDR USB dongle — no proprietary Davis hardware required.
+An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](https://weewx.com/) plus a **patched** version of Luc Heijst's [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver. It intercepts a Davis Vantage station off the air with an RTL-SDR USB dongle and uploads to multiple weather services — no proprietary Davis hardware required.
+
+> **This is not stock upstream.** The driver shipped here is a fork of rtldavis v0.20 and reports
+> itself as `0.20+ws.1`. It carries a rain-counter glitch filter, a decode-layer sensor plausibility
+> filter, and five bug fixes that do not exist upstream — see
+> **[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)** for every divergence, why it is there, and
+> whether it is headed upstream.
+>
+> This project is **not affiliated with or endorsed by** Luc Heijst, Vince Skahan, or the weewx
+> project. It is built on their work (see [Credits](#credits)); its bugs are its own. GPLv3.
 
 📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
 ```bash
-docker pull weatheredscientist/weewx-rtldavis:v2.0.3   # or :latest
+docker pull weatheredscientist/weewx-rtldavis:v2.0.5   # or :latest
 ```
-Pin a version tag (`:v2.0.3`) for reproducible deploys; `:latest` always tracks the newest release.
+Pin a version tag (`:v2.0.5`) for reproducible deploys; `:latest` always tracks the newest release.
 
-> **Current version:** v2.0.3  
+> **Current version:** v2.0.5 — **upgrade if you are on any earlier tag.** It carries two fixes that
+> only reach you through the image: the driver you actually run (earlier compose files mounted the
+> *stock* driver over the patched one, so SensorQC and the rain-glitch filter were silently inert),
+> and a container-freeze hazard (the console log handler now defaults to `WARNING`, not `INFO` — at
+> `INFO` a wedged Docker log consumer can block weewx forever, with no error and a container that
+> still reports `Up`). See the [CHANGELOG](CHANGELOG.md).  
 > **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3  
 > **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.4.0  
 > **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)

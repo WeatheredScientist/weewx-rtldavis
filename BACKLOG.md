@@ -5,6 +5,14 @@ in-flight work in docs/STATUS.md. Carried forward from the pre-governance NAS `B
 open items from the retired root `cleanup_backlog.md` were folded in here (S27, S23 tail).
 
 ## Open ideas
+- **Tuning infrastructure (owner idea, S34) — control panel and/or designed sweep plan.** Two
+  complementary routes to better RF tuning, framing to be discussed in a future session:
+  (a) a **front-end control panel** (in this repo or standalone) for live-changing select runtime
+  variables — gain first, potentially receiveWindow etc. — without container rebuilds/restarts;
+  (b) a **proper sweep plan** with a sufficient number of acquisitions per setting for statistical
+  confidence (the 2026-06-01 sweeps and the pending DEC-0017 gain-372-vs-207 question suffered from
+  short, unaveraged samples) — possibly better than (a), possibly both. Ties into DEC-0017 and the
+  "Reception improvement beyond ~70%" idea below.
 - Reception improvement beyond ~70% (noise-floor limited at ~150 ft through walls).
 - Windows/macOS FHSS investigation (Docker Desktop USB passthrough findings for the README).
 - ESP32 secondary sensor node — lightning (AS3935), pressure (BMP390), air quality (SEN55);
@@ -56,24 +64,10 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
 ## Data integrity
 - May monthly rain totals were noted as compromised by dev restarts; reconcile against the Davis
   WeatherLink Live gold standard once the rain-spike fix lands — don't compound the error.
-- **[PRIORITIZED — owner, S30] Bad-packet root cause for temp/humidity/radiation/UV spikes.** Recent
-  temperature spikes were patched with *filtering bandaids* (coarse `[StdQC]` MinMax bounds, e.g.
-  `outTemp = -40, 120 degF`, which pass any in-range spike + the DewpointCacher carry-forward that
-  masks — not detects — bad reads). The likely **root cause is bad RF packets**, the same failure class
-  as the rain 64/128 decode glitch — but rain got a proper packet-level plausibility filter
-  (`rtldavis.py:211`, null-on-rejection per DEC-0006) while temp/humidity/radiation/UV never did. The
-  real fix is a **decode-layer plausibility/delta filter** for those sensors (reject implausible
-  per-packet jumps → honest null, don't clamp/substitute), which also unblocks converting them from
-  carry-forward to honest-null (ties into **DEC-0022** sensor-QC hardening). **Make this a dedicated
-  future session** and **pick a model suited to deep RF-decode root-causing** (Opus, high reasoning) —
-  it's investigation-heavy (capture raw packets around a spike, characterize the corruption), not a
-  quick patch. Do after v2.0.3 ships.
-  - **Observed instance (2026-07-05, S30):** a **201 mph** wind spike flashed on the live dashboard
-    gauge (owner screenshot). Confirmed **not persisted** — archive DB + InfluxDB stayed clean; only the
-    real-time loop-JSON feed showed it. Two concrete findings for this session: (1) **the live gauge
-    bypasses the wind filter** — `LoopJsonWriter` is a `data_service` and runs *before* `DewpointCacher`
-    (a `process_service`), so `loop-data.txt` gets the raw packet; the fix belongs at the **driver/decode
-    layer** (a wind plausibility clamp like the rain filter) so *all* consumers are covered. (2) **possible
-    unit mismatch:** `MAX_WIND_DELTA = 75.0` is commented as mph but the packet `windSpeed` is likely m/s
-    (driver stores `wind_speed_ec * MPH_TO_MPS`), which would make the delta filter far too lenient
-    (only rejecting jumps > 75 m/s ≈ 168 mph). Verify + fix the units.
+- ~~[PRIORITIZED — owner, S30] Bad-packet root cause for temp/humidity/radiation/UV spikes~~ —
+  **DONE (S33, DEC-0029):** root cause confirmed from the archive (bit-flip corruption passing CRC,
+  same class as rain; 18 humidity spikes + impossible UV 16.29; loop-JSON path unfiltered) and fixed
+  with the decode-layer `SensorQC` filter + the DewpointCacher timeout-null (closes DEC-0022).
+  The S30 `MAX_WIND_DELTA` unit-mismatch lead was disproven (post-StdConvert = mph). Ships with the
+  v2.0.4 rebuild. Follow-ups live in DEC-0029/STATUS: cross-sensor consistency checks (UV↔radiation),
+  monitor alert on the new rejection signature.
