@@ -35,6 +35,43 @@
 #   see https://groups.google.com/g/weewx-user/c/-KOh89ur7Y8/m/qbIFacJeCQAJ for details
 #
 #-------
+# 2026 patched by WeatheredScientist
+#   github.com/WeatheredScientist/weewx-rtldavis
+#
+#   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
+#   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.1'
+#   so the difference is visible in the logs. Bugs here are ours, not upstream's.
+#
+#   Changes, with the date each was recorded in git. Entries dated 2026-07-04
+#   include work done earlier (May-June 2026) and first committed on that date.
+#
+#   2026-07-04  windDir fix: upstream assigns wind_speed/wind_dir only inside one
+#               branch of the direction decode; the other branch leaves them unset.
+#   2026-07-04  calm-air gate: raw wind speed <= 2 with direction 0 is the 6410
+#               hall-sensor floor. Record 0 speed and a NULL direction rather than
+#               a false 2 mph out of due north.
+#   2026-07-04  freqError values are stored for the US and NZ bands too, not EU only.
+#   2026-07-04  rain_delta_tips(): reject implausible rain-counter deltas. Upstream
+#               treats ANY negative delta as a 127->0 wraparound and adds 128, which
+#               turns a single RF decode glitch into phantom rain. (DEC-0021)
+#   2026-07-05  unknown-channel handler logged an undefined name `raw` (NameError).
+#   2026-07-05  pct_good_all was gated on a field that _init_stats/_reset_stats set
+#               back to None every archive period, so the guard could never pass and
+#               the driver's own rxCheckPercent was never populated. pct_good (a
+#               list) was also compared against None rather than pct_good[i].
+#   2026-07-05  per-packet RAW/Hop logging moved behind debug_rtld levels; it was
+#               flooding weewx.log at INFO.
+#   2026-07-08  lint: dropped unused imports and the dead _fmt()/parse_readings().
+#   2026-07-08  SensorQC: decode-layer plausibility filter for temperature, humidity,
+#               wind, UV and radiation -- sensor-spec bounds plus a per-reading delta
+#               check. Rejected values become NULL, never a substituted reading.
+#               (DEC-0029)
+#
+#   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
+#   These fixes are offered upstream; this fork exists to ship them in the meantime.
+#
+#-------
 
 """
 Collect data from rtldavis  
@@ -117,7 +154,12 @@ def logerr(msg):
     log.error(msg)
 
 DRIVER_NAME = 'Rtldavis'
-DRIVER_VERSION = '0.20'
+# Fork of Luc Heijst's rtldavis v0.20. The '+ws.N' suffix is a PEP 440 local
+# version identifier: upstream base 0.20, WeatheredScientist revision 1. Never
+# report a bare '0.20' from this file -- it is not stock upstream and must not
+# claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
+DRIVER_VERSION = '0.20+ws.1'
+DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
 weewx.units.USUnits['group_frequency'] = 'hertz'
@@ -167,11 +209,24 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
 
     WHY THIS FILTER EXISTS (the false-rain bug it fixes):
     ------------------------------------------------------
-    This RTL-SDR link runs near the RF noise floor (~150 ft through walls,
-    ~67-70% reception). CRC is enforced, so simple single-bit errors are
-    dropped -- but a multi-bit corruption or a mis-decoded packet can still
-    pass CRC and deliver a wrong rain-counter byte, characteristically with a
-    high bit (64 or 128) wrong. The ORIGINAL driver treated *any* negative
+    Corrupt rain-counter readings DO arrive with a valid CRC. CRC-16 cannot miss
+    a SINGLE-bit error (verified: 0 of 64 single-bit flips of a valid 8-byte
+    message pass) -- but a MULTI-bit error pattern can be a valid codeword and
+    slip through, and upstream issue #15 has the receipts: two frames 262 us
+    apart (the ISS transmits every ~2.5 s), differing in 4 bits, BOTH passing
+    CRC. The mechanism is CONFIRMED on this station (DEC-0035): the rtldavis Go
+    demodulator sometimes decodes one RF burst TWICE, emitting a second frame a
+    few ms later. Census: 61 frames arriving 1.4-10 ms (median 2.0 ms) after a
+    byte-identical frame, in 2 hours -- ~722/day. The ISS transmits every ~2.8 s
+    and cannot transmit twice 2 ms apart, so the receiver made the second copy.
+    Most such copies pick up bit errors, fail CRC and are dropped silently inside
+    the Go binary (protocol.go ~L218), but ~1 in 65536 passes by chance and
+    delivers garbage. Neither dedup catches a CORRUPTED near-duplicate: Go's
+    (`seen == lastRecMsg`, main.go ~L394) and the driver's own
+    (`data != self._last_pkt`, ~L1209) are both EXACT-equality, so a corrupted
+    copy is not a duplicate and sails past both.
+    So CRC is not a defense here, and a decode-layer plausibility check is the
+    only one available at this layer. The ORIGINAL driver treated *any* negative
     counter delta as a 127->0 wraparound and unconditionally added 128 to
     recover the true count. That is correct for a genuine wraparound, but a
     corrupted reading can produce a SMALL negative delta (e.g. -64) -- and
@@ -208,6 +263,100 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     if delta < 0 or delta > max_tips:       # small-negative glitch, or implausible spike
         return None
     return delta
+
+
+# --- Sensor plausibility filter (S33 bad-packet fix, DEC-0029) ---
+# The same failure class as the rain glitch -- multi-bit corruption that passes
+# CRC (see rain_delta_tips above and DEC-0033: upstream issue #15 shows two
+# frames 262 us apart differing in 4 bits, both CRC-valid; CRC-16 catches every
+# single-bit error but a multi-bit pattern can be a valid codeword). It hits the
+# other sensor bit-fields too, with characteristic
+# high-bit-flip magnitudes: humidity is raw %x10, so bit-7/bit-8 flips inject
+# +/-12.8 / +/-25.6 %RH per reading (18 one-minute archive spikes confirmed
+# 2026-05-19..07-08, deviations clustering at 25.6/3 and 12.8/2 as predicted
+# by 2-3 readings/min averaging); plus a physically impossible UV 16.29 under
+# overcast (2026-05-30) and a 201 mph loop-only wind spike (2026-07-05).
+# Rain got a decode-layer filter in S18 (rain_delta_tips above); this extends
+# the same idea to temperature/humidity/wind/UV/radiation at the same choke
+# point (_data_to_packet), so ALL consumers are covered -- every sink reads a
+# packet the driver has already vetted, whatever the service order happens to be.
+#
+# History (do not re-derive): when DEC-0029 was written the loop-JSON feed ran
+# in data_services, i.e. BEFORE StdQC/StdConvert/DewpointCacher, and was
+# reaching the live dashboard unfiltered -- that was this filter's original
+# motivation. Since 2026-07-12 LoopJsonWriter runs at the END of
+# process_services, so it now sees StdQC and the derived fields too. The two
+# guards are complementary, not redundant: this filter catches decode errors at
+# the source for every consumer; the service order is what gives the loop feed
+# its derived fields (barometer/dewpoint/heatindex), which this filter cannot.
+#
+# Two layers (full rationale: docs/DECISIONS.md DEC-0029):
+#   1. Davis sensor-spec bounds: a value the sensor cannot physically report
+#      is by definition a decode error (site-agnostic, safe for any station).
+#   2. Per-reading delta vs the last accepted value (temperature/humidity/
+#      wind/UV only): glitch magnitudes sit far above any real change between
+#      consecutive readings (~2.5-60 s apart). NO delta for radiation --
+#      genuine cloud edges produce +/-900 W/m2 swings within a minute.
+# Delta rejections RESYNC the baseline to the rejected value (the rain
+# filter's trick): an isolated glitch costs 1-2 nulled readings, a genuine
+# step is accepted on the very next reading, and the filter can never
+# deadlock on a stale baseline. Bounds rejections do NOT move the baseline
+# (an impossible value carries no information). After QC_RESEED_SECONDS
+# without a check the baseline expires and the next in-bounds value reseeds
+# it (cold start behaves the same way).
+# Rejected values become None (honest null, DEC-0006) and log a
+# "rejecting implausible" line, the same signature family as the rain filter,
+# so rejections stay visible in weewx.log for alerting and forensics.
+#
+# Units are the driver-internal data-dict units (deg C, %, m/s, UV index,
+# W/m2). Deltas are overridable via [Rtldavis] qc_<field>_max_delta; the
+# whole filter via sensor_qc = false.
+
+QC_RESEED_SECONDS = 300
+
+# data-dict key: (min, max, max_delta or None), driver-internal units
+SENSOR_QC_DEFAULTS = {
+    'temperature':     (-40.0, 65.0, 4.0),    # spec -40..65 C; real <=~1 C/min, glitch >=7.1 C
+    'humidity':        (0.0, 100.0, 10.0),    # glitch >=12.8 %RH/reading, real <=~5 %
+    'wind_speed':      (0.0, 89.4, 20.0),     # 6410 spec 0..200 mph (89.4 m/s)
+    'uv':              (0.0, 16.0, 8.0),      # spec 0..16; real cloud flicker <=~5.5 observed
+    'solar_radiation': (0.0, 1800.0, None),   # spec 0..1800; no delta (cloud edges genuine)
+}
+
+
+class SensorQC(object):
+    """Plausibility-filter state machine. Pure logic, no I/O -- unit-tested in
+    tests/test_sensor_qc.py; the driver owns one instance and logs rejections."""
+
+    def __init__(self, limits=None, reseed_seconds=QC_RESEED_SECONDS):
+        self.limits = dict(SENSOR_QC_DEFAULTS)
+        if limits:
+            self.limits.update(limits)
+        self.reseed_seconds = reseed_seconds
+        self._baseline = {}  # key -> (value, time of last accepted or resynced)
+
+    def check(self, key, value, now):
+        """Return (value_or_None, reject_reason_or_None)."""
+        if value is None or key not in self.limits:
+            return value, None
+        lo, hi, max_delta = self.limits[key]
+        if value < lo or value > hi:
+            # impossible per sensor spec: reject, keep the old baseline
+            return None, "out of sensor range %g..%g" % (lo, hi)
+        if max_delta is not None:
+            last = self._baseline.get(key)
+            if last is not None and (now - last[1]) <= self.reseed_seconds:
+                delta = value - last[0]
+                # always resync, even on reject: a genuine step is accepted
+                # on the next reading (no stale-baseline deadlock)
+                self._baseline[key] = (value, now)
+                if abs(delta) > max_delta:
+                    return None, "delta %+g from %g exceeds %g" % (
+                        delta, last[0], max_delta)
+                return value, None
+        self._baseline[key] = (value, now)
+        return value, None
+
 
 def loader(config_dict, engine):
     return RtldavisDriver(engine, config_dict)
@@ -807,7 +956,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
 
 
     def __init__(self, engine, config_dict):
-        loginf('driver version is %s' % DRIVER_VERSION)
+        loginf('driver version is %s (fork of %s, patched by WeatheredScientist '
+               '-- not stock upstream)' % (DRIVER_VERSION, DRIVER_UPSTREAM))
         self.setup_units_rtld_schema()
 
         if engine:
@@ -837,6 +987,15 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         loginf('sensor map is: %s' % self.sensor_map)
         self._init_stats()
         self.last_rain_count = None
+        # sensor plausibility filter (DEC-0029); deltas overridable per field
+        self._sensor_qc_enabled = tobool(stn_dict.get('sensor_qc', True))
+        qc_limits = {}
+        for qc_key, qc_default in SENSOR_QC_DEFAULTS.items():
+            opt = stn_dict.get('qc_%s_max_delta' % qc_key)
+            if opt is not None:
+                qc_limits[qc_key] = (qc_default[0], qc_default[1], float(opt))
+        self._sensor_qc = SensorQC(qc_limits)
+        loginf('sensor_qc %s' % self._sensor_qc_enabled)
         self._log_humidity_raw = tobool(stn_dict.get('log_humidity_raw', False))
         self._save_pct_good_per_transmitter = tobool(stn_dict.get('save_pct_good_per_transmitter', False))
         self._sensor_map = stn_dict.get('sensor_map', {})
@@ -872,7 +1031,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             channels['temp_hum_1'], channels['temp_hum_2'])
         loginf('using transmitters %d' % self.transmitters)
         loginf('log_humidity_raw %s' % self._log_humidity_raw)
-        loginf('RTLDAVIS_DRIVER_MARKER patched active file running')
+        # (The old RTLDAVIS_DRIVER_MARKER canary lived here. It proved which
+        # rtldavis.py was actually imported during the DEC-0031 hunt. The version
+        # line in __init__ now does that job honestly: stock upstream logs
+        # 'driver version is 0.20', this fork cannot.)
 
         self.cmd = self.cmd + " -tf " + str(self.frequency) + " -tr " + str(self.transmitters)
 
@@ -914,6 +1076,24 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         return transmitters, trIdCount
 
     def _data_to_packet(self, data):
+        # decode-layer plausibility filter (DEC-0029): reject RF-glitch values
+        # at the source so every consumer (including the pre-QC loop-JSON
+        # feed) sees an honest null instead of a corrupt reading
+        if self._sensor_qc_enabled:
+            qc_now = time.time()
+            for qc_key in self._sensor_qc.limits:
+                if data.get(qc_key) is None:
+                    continue
+                qc_value, qc_reason = self._sensor_qc.check(
+                    qc_key, data[qc_key], qc_now)
+                if qc_reason is not None:
+                    logerr("%s: rejecting implausible value %s (%s -- "
+                           "RF glitch, not weather; DEC-0029)" %
+                           (qc_key, data[qc_key], qc_reason))
+                    data[qc_key] = None            # null-on-rejection, DEC-0006
+                    if qc_key == 'wind_speed':
+                        # the same-packet direction byte is equally suspect
+                        data['wind_dir'] = None
         packet = dict()
         # map sensor observations to database field names
         for k in self.sensor_map:
