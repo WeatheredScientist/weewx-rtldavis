@@ -1506,3 +1506,70 @@ should happen; writing one does not make the claim true. When a test asserts tha
 fine, it converts a bug into a **certified** bug — and the green checkmark then actively defends it. So
 when you add a case to a security test, the question is not "does it pass?" but **"which array does it
 belong in, and why?"** That judgement *is* the gate. The code is just how it is enforced.
+
+---
+
+## DEC-0046 — The baked config is shadowed by the prod bind-mount: an image-only config fix never reaches prod (S41)
+
+**Status:** Accepted · **mirrors** DEC-0031 · **completes the delivery half of** DEC-0043 · 2026-07-13 (S41)
+
+**Context.** DEC-0043 fixed the root-logger defect by adding a `[[root]]` override to the two configs the
+repo ships: `logging.additions` (concatenated into the image's baked `/opt/weewx-data/weewx.conf`) and
+`weewx.conf.example`. A build-time assertion in the `Dockerfile` guarantees the baked config carries it,
+so an image *cannot* be built without the fix. S41 released that image as `:v2.0.7`.
+
+**Prod does not read the baked config.** The production container bind-mounts
+
+    /volume1/docker/weewx-rtldavis/weewx-data  ->  /opt/weewx-data
+
+The mount covers the *entire directory*, so the live `weewx.conf` **shadows the baked one completely**.
+The baked config — assertion and all — is inert in prod. It exists on disk under the mount and is never
+read.
+
+**What this would have cost.** Deploying `:v2.0.7` and stopping there would have produced a release that
+was, in prod, a **no-op with a green checkmark**: the image genuinely contains the fix, the build
+assertion genuinely passed, the release notes genuinely describe the fix — and the station would have gone
+on emitting syslog tracebacks and silently dropping every `weewxd`/`weeutil` startup line, exactly as
+before. Nothing anywhere would have said "no". It was caught by a pre-flight `grep` of the live config,
+which found **zero** `[[root]]` blocks.
+
+**Decision.** A config-layer change has **two independent delivery paths**, and shipping one does not ship
+the other:
+
+1. **The baked config** (`logging.additions` → image). Reaches **downstream users** on `docker pull`.
+   Delivered by an image rebuild. Cannot reach prod.
+2. **The live bind-mounted `weewx.conf`** on the NAS. Reaches **prod** — and *only* prod. Delivered by
+   editing that file on the NAS. Cannot reach downstream users, and is never committed (it holds live
+   credentials; DEC-0012).
+
+**Any release that changes shipped config MUST patch the live config in the same window, and verify the
+behavior in prod** — not merely confirm the image contains the fix. S41 did both: the live conf gained the
+`[[root]]` block (backed up first to `weewx.conf.bak-pre-v2.0.7`), and prod was verified behaviorally.
+
+**Prod's `[[root]]` is not identical to the baked one, deliberately.** The baked config uses
+`handlers = rotate, console,`; prod's uses `handlers = rotate,` — file only. Prod declares no console
+handler at all, and adding one would pipe root records to stdout and re-arm the DEC-0036 freeze hazard
+that DEC-0041 disarmed. **The two configs are allowed to differ; what must match is the *fix*, not the
+text.**
+
+**This is the exact mirror of DEC-0031, and that is the point.**
+
+| | Wins in prod | The no-op trap |
+|---|---|---|
+| **The driver** (DEC-0031) | the **baked** venv copy | `scp`ing `rtldavis.py` to the NAS is silently ignored |
+| **The config** (DEC-0046) | the **mounted** `weewx.conf` | rebuilding the image is silently ignored |
+
+They are inverses, which is what makes the pair so easy to get backwards. Neither one errors. Both accept
+the instruction and discard it. **For every file we ship, the question is not "did I change it?" but
+"which layer actually wins in prod?"**
+
+**The family this belongs to.** It is the fifth member of the pattern this repo keeps meeting: *an
+interface that accepts an instruction and silently discards it.* DEC-0031's bind-mount over the driver,
+DEC-0036's `max-size` on Synology's `db` log driver, DEC-0040's prose that does not execute, DEC-0045's
+test that certified the hole — and now a bind-mount that shadows a config whose own build assertion had
+just passed. **The assertion was not wrong. It was answering a question nobody was asking in prod.**
+
+**Consequence for how we verify.** The verification criterion S39 wrote down — *`weewx.log` must now
+contain `weewxd INFO Starting up weewx version 5.4.0`* — is behavioral, reads prod, and would have caught
+this even if the pre-flight grep had not. **Post-deploy checks must observe the running system, never the
+artifact.** An image check would have said PASS.

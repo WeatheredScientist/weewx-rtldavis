@@ -15,38 +15,44 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S40** (2026-07-13) — **a comment is not an exemption.** The secret gate let a
-> commented-out credential into a **public** repo — and its own planted-payload test **asserted that was
-> correct**, as part of DEC-0039's "28/28, proven". The proof had certified the hole. `ALLOW (1)` is
-> deleted, comments are now scanned exactly like code, **no exemption was added**, and a **full-history
-> scan of all 333 blobs found the hole was never exploited** (DEC-0045). S39's PR #34 also merged to
-> `dev`. Full story: CHANGELOG `[S40]`.
+> **Current session: S41** (2026-07-13) — **v2.0.7 IS SHIPPED AND PROD RUNS IT.** Docker Hub `:v2.0.7` +
+> `:latest`, GitHub release, `main` == prod (`prod-baseline-20260713b`). The S39 logger fix (DEC-0043) is
+> finally out. **The finding: the image fix would never have reached prod** — prod bind-mounts
+> `weewx-data/` over `/opt/weewx-data`, so the live `weewx.conf` **shadows the baked config completely**,
+> build assertion and all. A no-op with a green checkmark, caught by a pre-flight grep. The exact mirror
+> of DEC-0031 (**DEC-0046**). Live conf patched in the same window; verified behaviorally in prod.
+> **`log_humidity_raw` is now ACTIVE** — the next midday spike settles the nibble question.
+> Full story: CHANGELOG `[S41]`.
 
-_Last updated: 2026-07-13 (S40)._
+_Last updated: 2026-07-13 (S41)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S40 → S41).**
+> **▶ Resume here (S41 → S42). The release is DONE. Nothing is half-shipped and no PR is open.**
 >
-> **1. v2.0.7 is built but NOT released — this is the biggest open item.** The `[[root]]` logging fix
-> (DEC-0043) is **merged to `dev`** (PR #34, S39) but not shipped. It needs: `dev` → `main`, tag, **Docker
-> Hub push**, GitHub release. Until it ships, every downstream user still sees 15 tracebacks on
-> `docker run` and loses their startup diagnostics. Prod is **not** affected by the noise (bounded burst,
-> steady state silent), so there is no urgency to restart the station for it — fold the prod deploy into
-> the release in **one attended window**, which also activates the raw-humidity capture below.
+> **1. The raw-humidity capture is now LIVE — the next midday spike is the deliverable.** It went active
+> with the v2.0.7 restart (`log_humidity_raw True`, confirmed in the log). The **next humidity spike** logs
+> `rtldavis-luc: humidity_raw= XXXX` — the full `pkt[4]`/`pkt[3]`, with **no averaging and no free
+> parameter**. That settles the nibble question **deterministically**: invert the bytes, re-decode under
+> `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits
+> away), and compare with the concurrent archived sensor. **The method and the arithmetic are in DEC-0044
+> — do not re-derive them.** Spikes run ~2–3/week, clustered **11:00–16:00**. Check the log for the
+> pattern; there may already be one.
 >
-> **2. The raw-humidity capture is ARMED but NOT ACTIVE.** `log_humidity_raw = true` is in the live
-> `weewx.conf` and parses, but **weewx reads its config only at startup — it takes effect on the next
-> container restart.** The v2.0.7 deploy is the natural moment. Once running, the **next midday humidity
-> spike** logs its raw `pkt[3]`/`pkt[4]` and settles the nibble question deterministically (DEC-0044).
-> Spikes run ~2–3/week, clustered 11:00–16:00.
+> **2. Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. **The
+> mechanism is the open question, not the threshold.**
 >
 > **3. Cross-repo etiquette / the 4th-project question — STILL PARKED FOR FABLE** (owner's call). Do
 > **not** re-litigate or start building it. Everything is in
 > `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette. DEC-0040 settled the *enforcement* half
 > (no master repo; guards in `~/.claude/hooks/`); this is only the *etiquette* half.
+>
+> **New rule to carry (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
+> **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
+> (DEC-0046). They are inverses. A release that changes shipped config **must patch the live
+> `weewx.conf` on the NAS in the same window** — and verify in the running system, never in the artifact.
 
 ## Upstream — all three landed (S38)
 
@@ -67,8 +73,13 @@ _Last updated: 2026-07-13 (S40)._
 - **S38** (v2.0.5 → **v2.0.6** on Docker Hub; prod recreated + verified; `prod-baseline-20260713` tagged;
   `influx.py` drift closed; the `~/.claude/hooks/` enforcement layer live and tested; 47 MB reclaimed):
   see CHANGELOG `[S38]` and DEC-0038/0039/0040/0041/0042.
-- **S39** (root-logger fix DEC-0043; nibble theory falsified DEC-0044): CHANGELOG `[S39]`. **On `dev`,
-  not released** — see "Active thread" item 1.
+- **S39** (root-logger fix DEC-0043; nibble theory falsified DEC-0044): CHANGELOG `[S39]`. **Released in
+  S41 as v2.0.7.**
+- **S41** (**v2.0.7 shipped** — Docker Hub `:v2.0.7` + `:latest` at digest `sha256:31cad4d2`, GitHub
+  release, `main` == prod, `prod-baseline-20260713b`; prod recreated and verified; **DEC-0046** — the baked
+  config is shadowed by the prod bind-mount; `log_humidity_raw` now active): CHANGELOG `[S41]`.
+  **Rollback:** `:v2.0.6` (`e23cabd53591`) is still on the NAS; the pre-deploy config is at
+  `weewx-data/weewx.conf.bak-pre-v2.0.7`.
 - **S40** (the secret gate scans comments like code — DEC-0045; suite 28 → 41; a full-history scan of all
   333 blobs proved the hole was never exploited): CHANGELOG `[S40]`. **DEC-0039's "28/28 proven" is
   superseded** — two of those 28 asserted a *commented-out* credential must PASS.
@@ -136,39 +147,40 @@ _Last updated: 2026-07-13 (S40)._
   misnomer `rw250-test` image tag.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S40 done → S41)
+## Next session actions (S41 done → S42)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S40 (2026-07-13).** **DEC-0045 — a comment is not an exemption.** The secret gate's `ALLOW (1)`
-waved through *any* full-line comment, so a commented-out credential shipped clean into a **public** repo.
-The rule was not a blind spot the test missed: **the test asserted it** — two commented credentials sat
-under *"must PASS"* and were part of DEC-0039's "28/28, proven". The proof had certified the hole.
-`ALLOW (1)` is deleted, comments are scanned like code, **no exemption was added** (the gate's own
-illustrative literals moved into the test, where they execute — DEC-0040 applied to the gate itself), and a
-**full-history scan of all 333 blobs confirmed the hole was never exploited.** Suite 28 → **41/41**; a
-mutation test proves the fix is load-bearing. Also **merged S39's PR #34** to `dev`. See CHANGELOG `[S40]`.
+**✅ Done in S41 (2026-07-13).** **v2.0.7 is released and prod runs it.** S39's `[[root]]` logger fix
+(DEC-0043) had been merged-but-unshipped since S39; it is now on Docker Hub (`:v2.0.7` + `:latest`, digest
+`sha256:31cad4d2`), released on GitHub, and `main` == prod (`prod-baseline-20260713b`). **The finding:
+the image fix alone would never have reached prod.** Prod bind-mounts `weewx-data/` over `/opt/weewx-data`,
+so the live `weewx.conf` **shadows the baked config completely** — build assertion and all. Deploying and
+stopping there would have been **a no-op with a green checkmark**. Caught by a pre-flight grep; the live
+conf was patched in the same window and prod verified **behaviorally** (`weewxd` lines now reach
+`weewx.log` for the first time ever; zero logging-error tracebacks). **DEC-0046** — the exact mirror of
+DEC-0031. See CHANGELOG `[S41]`.
 
-**▶ ON RETURN (S41), in order:**
+**▶ ON RETURN (S42), in order:**
 
-1. **Release v2.0.7 and deploy prod — one attended window, two jobs at once.** The S39 fix is already on
-   `dev` (PR #34 merged in S40). Remaining: `dev` → `main`, tag, **push to Docker Hub**, GitHub release.
-   Then recreate prod on `:v2.0.7`. That restart is also what **activates `log_humidity_raw`** (weewx reads
-   its config only at startup), so the release and the instrument arm together. Verify after:
-   `docker logs --tail 40` shows **no** `--- Logging error ---`, and `weewx.log` now contains
-   `weewxd INFO Starting up weewx version 5.4.0` — a line that has never appeared there before.
+1. **Check the log for a humidity spike — the capture is LIVE.** `log_humidity_raw True` went active with
+   the v2.0.7 restart at 2026-07-13 15:27 EDT. Grep `weewx.log` for `humidity_raw=`. Spikes run ~2–3/week
+   clustered **11:00–16:00**, so one may already have landed. It logs the full `pkt[4]`/`pkt[3]` — **no
+   averaging, no free parameter** — which settles the nibble question **deterministically**: invert the
+   bytes, re-decode under `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV,
+   which are 2 and 3 bits away), compare with the concurrent archived sensor. **The method and the
+   arithmetic are in DEC-0044; do not re-derive them.**
 
-2. **Then watch for the next humidity spike.** ~2–3/week, clustered **11:00–16:00**. With the capture
-   running it logs `rtldavis-luc: humidity_raw= XXXX` — the full `pkt[4]`/`pkt[3]`. That settles the
-   nibble question **deterministically**: invert the bytes, re-decode under `0x2`/`0x8`/`0xE` (humidity's
-   real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits away), and compare with the
-   concurrent archived sensor. The method and the arithmetic are in DEC-0044; **do not re-derive them.**
-
-3. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
+2. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
 
-4. Then the ordinary backlog: **cold-load Fix B (`current.json`)**, **Reception Layer B (DEC-0024)**, and
+3. Then the ordinary backlog: **cold-load Fix B (`current.json`)**, **Reception Layer B (DEC-0024)**, and
    the **always-on duplicate-frame counter (DEC-0035)**.
+
+**Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
+**config** is mounted and the image is inert (DEC-0046). Inverses. A release that changes shipped config
+**must patch the live `weewx.conf` on the NAS in the same window**, and must verify in the **running
+system**, never in the artifact — an image check would have said PASS.
 
 **Still parked for Fable, not ours to move:** the cross-repo / 4th-project etiquette question
 (`docs/handoffs/S38-cross-repo-architecture.md` §Etiquette).
