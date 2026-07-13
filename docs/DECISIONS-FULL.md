@@ -1245,3 +1245,64 @@ was not the biggest one.
   and the per-record `loginf` calls. **Not a live exposure** — the endpoint is
   `http://influxdb:8086`, so the TLS branch is never taken — but it is the DEC-0031 class again, and
   `influx.py` *is* bind-mounted, so an `scp` is the correct deploy for it. **Owner decision pending.**
+
+---
+
+## DEC-0042 — The phantom rainRate is an ISS-side sensor artifact, not an RF or driver bug
+
+**Date:** 2026-07-13 (S38) · **Status:** Accepted — *ISS-side is established; the condensation mechanism
+is the best explanation and is testable*
+**Closes:** the rainRate thread open since S36. **Bounds:** DEC-0033/DEC-0035 (which explain the rain
+*counter*, and do **not** explain the rate).
+
+**Context.** Two phantom rain events (ERR-0001, ERR-0002) each produced a phantom rain *rate* — peaks
+4.736 / 4.216 in/hr — with `rain = 0.0` throughout. The counter glitch was explained (CRC-valid corrupted
+duplicate frames, DEC-0033/0035). The rate was not: a single corrupt packet gives ONE bad reading, yet we
+saw ~16 minutes of a *stable* rate. STATUS carried it as "the best lead we have."
+
+**What settled it.** The archive was corrected in S36, so the originals were gone from the live DB — but
+a **2026-05-29 backup predates the correction** and covers ERR-0002. Reconstructing the raw
+`time_between_tips` from the stored `rainRate` (`t = 36 / rate_in_hr`):
+
+| fact | value |
+|---|---|
+| real rain that entire UTC day | **none** — the whole 1.280″ day total *is* the phantom |
+| rate window | 03:22 → 03:37 UTC, **sharp on, sharp off** — the ISS's ~15-min rain-rate timeout, exactly |
+| implied tip interval across the window | tight band, **8.5 – 10.0 s** — physically coherent, not garbage |
+| **tip counter during those 16 min** | **never advanced** — `rain = 0.0000` in *all sixteen* records |
+| conditions | **94 % RH, 1.7 °F dewpoint spread, 0.0 mph wind**, slowly cooling. Both events overnight. |
+
+**The decisive argument.** The "no rain" sentinel is `0x3FF`
+(`time_between_tips_raw = ((pkt[4] & 0x30) << 4) + pkt[3]`). The observed raw values are ~136–160.
+Getting from one to the other requires **~6 bit-flips — in every packet, for sixteen consecutive
+minutes.** RF corruption cannot do that: a corrupted duplicate frame yields *one* bad packet, not a
+coherent 16-minute stream. **The ISS genuinely transmitted those values.** The decode is stateless
+(`data['rain_rate']` is computed fresh per packet, no caching), so it is not our driver either.
+
+**Decision.** The phantom rainRate is an **ISS-side sensor artifact**. It is not in the RF path, not in
+the demodulator, and not in the driver. **No decode-layer filter will fix it**, and we should stop
+looking for one — `rain_delta_tips` guards the counter and does nothing here, by design.
+
+**Mechanism (best explanation, testable).** The rate register and the tip counter are driven by the same
+reed switch. Something fired the rate path without completing a counted tip. Given the conditions —
+saturated, dead calm, radiating heat away — **condensation trips the reed switch often enough to start
+the rate timer, but never enough water accumulates to actually tip the bucket.** Rate set, counter
+untouched, which is precisely what the data shows. Dead-calm wind also rules out vibration.
+
+**Consequences.**
+1. **A third event is predictable:** expect it on a calm, saturated, cooling night. That is a falsifiable
+   claim, and the cheapest possible test.
+2. **The next step is physical, not software** — inspect the tipping bucket, the reed switch and its
+   wiring (debris, webs, corrosion, a bucket that rocks without completing a tip).
+3. **The confirming capture is now safe to run.** Logging raw type-5 bytes + the raw counter whenever the
+   rate is non-sentinel was previously refused because leaving prod at DEBUG fed the stdout pipe. **That
+   trap is gone** (DEC-0041 removed StdPrint; the console handler is at `WARNING`; debug goes to the
+   rotating *file*). ~1 hour to build, negligible log volume, can run indefinitely.
+4. **Told upstream.** The issue-#15 draft now says the rate is ISS-side — useful to that thread, where
+   three people have been hunting it in software.
+
+**Method note, worth keeping.** This was answered in half an hour from **data we already had**, because
+a backup happened to predate our own correction. DEC-0025 (*preserve and flag, never delete*) is why the
+evidence existed at all — but the live rows had been overwritten in place (DEC-0032), and only luck
+supplied a pre-correction copy. **Snapshot the affected rows before a retrospective correction, not
+after.**
