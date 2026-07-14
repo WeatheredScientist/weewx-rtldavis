@@ -6,6 +6,56 @@ under [Pre-S16].
 
 ---
 
+## [S42] — 2026-07-14 — the cross-repo round: DEC-0040's triggers fired, the identifiers were live on public dev, and pre-commit had never run (DEC-0050)
+
+> **This was the scheduled `[Fable]` cross-repo coordination round** (dash S74 = this repo's S42),
+> and this repo's share of it landed in one PR.
+>
+> **The identifier scrub was not hypothetical.** `ops/soak_check.sh` carried the real NAS
+> user/IP/port as tracked shell defaults — **on `dev`, on a PUBLIC repo**, since S41. Our own
+> `test_check_secrets.sh` tree check flags it (40/41 → the "1 FAILED" was this), but that check
+> runs only where the gitignored `.identifiers` file exists — **CI is structurally identifier-blind
+> by design**, so the only enforcement point was local pre-commit. And the hole under the hole:
+> **pre-commit was configured but never installed** — `.git/hooks/pre-commit` did not exist, here
+> or in either sibling repo. The load-bearing local gate for a public repo had never once executed.
+> A configured control that nothing runs is prose (DEC-0040, one level down). Fixed: defaults are
+> now placeholders that fail fast; real facts live in `~/.claude/nas.env` (also honored by the new
+> eaglehunt-ops checks) / gitignored `docs/LOCAL_INFRA.md`; suite 41/41 with a clean tree; soak
+> re-proven green end-to-end via `nas.env` and red on the placeholder path; pre-commit actually
+> installed (owner-run). Per DEC-0028's precedent (identifiers, not credentials; LAN IP): fix
+> forward, **no history rewrite**.
+>
+> **DEC-0050 — the station gets a master for its IDENTITY (and only that).** DEC-0040's own revisit
+> triggers fired (five shared `~/.claude/` executables versioned nowhere; the same gate fix
+> re-derived four times; the dashboard's DEC-0106 as the predicted casualty — 6.7 km of coordinate
+> drift, a week of forecasts for the wrong town). The private **`eaglehunt-ops`** repo now holds:
+> canonical `station-identity.env`, the drift check (**first run: 8/9 representations within 19 m —
+> and the 9th finding was real**, see below), the NAS runtime contract, and the `~/.claude/` guards
+> under version control with their tests (live copies = deployments via owner-run `install.sh`).
+> Scope fenced by the S38 §Etiquette litmus test; deletion clause attached.
+>
+> **The identity check's first run caught a live outage in a sibling:** HLF's
+> `/api/v1/forecast` hangs indefinitely for **every** coordinate pair (health/current fine,
+> container "Up 8 hours" — *"Up" is not health*, our own DEC-0036 lesson, now on an API surface).
+> Per §Etiquette: **filed in HLF's tracker with the evidence, not fixed from here.**
+>
+> **Also filed here (cross-repo asks from the dashboard's S73):** the loop writer emitting
+> `cloudbase` (+`windchill`) — folds into the existing Cold-load Fix B thread; and a provenance
+> audit (does the artifact a consumer READS carry the assumptions it was captured under — their
+> DEC-0104/0106 twins of our DEC-0040/0045/0047 family). The dashboard's stale claim that our
+> secret gate was "neutered" was **re-measured and retired** — 40/41 planted payloads pass; the
+> one failure was the tree check doing its job on the identifiers above.
+>
+> **Read-guard field data (their `~/.claude/` DEC-0047 guard, now versioned in eaglehunt-ops):**
+> S73/S74 logged five false positives — all token×verb string matches with no data flow (a commit
+> MESSAGE containing "proxy.env" + the word "more"; the sanctioned `readconf` invoked by full path;
+> a `.env` name inside an `echo` literal). Two mechanical fixes ride the eaglehunt-ops migration
+> (readconf at a path boundary; a lone `git commit` exempted after heredoc-body stripping — chains
+> and substitutions still block), proven 46/46 both directions. The wider class is documented as
+> accepted: a false block costs a retype; a false allow costs a rotation.
+
+---
+
 ## [S41] — 2026-07-13 — v2.0.7 shipped, and the config fix that would have missed prod entirely
 
 > **v2.0.7 is on Docker Hub, prod runs it, and the raw-humidity capture is finally live.**

@@ -15,16 +15,19 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S41** (2026-07-13) — **v2.0.7 IS SHIPPED AND PROD RUNS IT.** Docker Hub `:v2.0.7` +
-> `:latest`, GitHub release, `main` == prod (`prod-baseline-20260713b`). The S39 logger fix (DEC-0043) is
-> finally out. **The finding: the image fix would never have reached prod** — prod bind-mounts
-> `weewx-data/` over `/opt/weewx-data`, so the live `weewx.conf` **shadows the baked config completely**,
-> build assertion and all. A no-op with a green checkmark, caught by a pre-flight grep. The exact mirror
-> of DEC-0031 (**DEC-0046**). Live conf patched in the same window; verified behaviorally in prod.
-> **`log_humidity_raw` is now ACTIVE** — the next midday spike settles the nibble question.
-> Full story: CHANGELOG `[S41]`.
+> **Current session: S42** (2026-07-14) — **the cross-repo coordination round** (dash S74 = our S42).
+> **DEC-0050:** DEC-0040's revisit triggers fired — the private **`eaglehunt-ops`** repo now holds the
+> canonical `station-identity.env` + drift check (first run: 8/9 representations within 19 m; the 9th
+> caught **HLF's `/api/v1/forecast` hanging in prod** — filed in their tracker, not fixed from here),
+> the NAS runtime contract, and the `~/.claude/` guards under version control with tests. **Scrubbed:**
+> `ops/soak_check.sh` had the real NAS user/IP/port as tracked defaults on public `dev` — now fail-fast
+> placeholders, facts in `~/.claude/nas.env`; suite 41/41, tree clean, no history rewrite (DEC-0028).
+> **The hole under the hole: pre-commit was configured but NEVER INSTALLED, in all three repos** — now
+> installed. Full story: CHANGELOG `[S42]`.
+> v2.0.7 remains in prod (`prod-baseline-20260713b`); `log_humidity_raw` still ACTIVE — the next midday
+> spike settles the nibble question (see [S41]).
 
-_Last updated: 2026-07-13 (S41)._
+_Last updated: 2026-07-14 (S42)._
 
 ---
 
@@ -72,10 +75,10 @@ and no stalls beyond the single known startup one.
 > **2. Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. **The
 > mechanism is the open question, not the threshold.**
 >
-> **3. Cross-repo etiquette / the 4th-project question — STILL PARKED FOR FABLE** (owner's call). Do
-> **not** re-litigate or start building it. Everything is in
-> `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette. DEC-0040 settled the *enforcement* half
-> (no master repo; guards in `~/.claude/hooks/`); this is only the *etiquette* half.
+> **3. ✅ Cross-repo etiquette / the 4th-project question — SETTLED at the round (DEC-0050, S42).**
+> `eaglehunt-ops` (private) exists, scoped to the §Etiquette litmus test; the agent protocol is standing
+> doctrine (its README). Cross-repo findings now get **filed as issues** there or in the owning repo's
+> tracker — not carried in STATUS blocks. Do not re-litigate; supersede DEC-0050 if it needs changing.
 >
 > **New rule to carry (DEC-0047):** **the transcript is an egress path.** The secret gate guards *commits*;
 > it has nothing to say about *reads*. Anything a tool prints lands in `~/.claude/projects/*.jsonl` in
@@ -210,21 +213,18 @@ and no stalls beyond the single known startup one.
   misnomer was only ever ours. `rw350-test` / `rw400-test` are the same class and should follow.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S41 done → S42)
+## Next session actions (S42 done → S43)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S41 (2026-07-13).** **v2.0.7 is released and prod runs it.** S39's `[[root]]` logger fix
-(DEC-0043) had been merged-but-unshipped since S39; it is now on Docker Hub (`:v2.0.7` + `:latest`, digest
-`sha256:31cad4d2`), released on GitHub, and `main` == prod (`prod-baseline-20260713b`). **The finding:
-the image fix alone would never have reached prod.** Prod bind-mounts `weewx-data/` over `/opt/weewx-data`,
-so the live `weewx.conf` **shadows the baked config completely** — build assertion and all. Deploying and
-stopping there would have been **a no-op with a green checkmark**. Caught by a pre-flight grep; the live
-conf was patched in the same window and prod verified **behaviorally** (`weewxd` lines now reach
-`weewx.log` for the first time ever; zero logging-error tracebacks). **DEC-0046** — the exact mirror of
-DEC-0031. See CHANGELOG `[S41]`.
+**✅ Done in S42 (2026-07-14) — the cross-repo round's share for this repo** (one PR): the
+`soak_check.sh` identifier scrub (fail-fast placeholders; facts in `~/.claude/nas.env`; 41/41 clean
+tree), **DEC-0050** (`eaglehunt-ops` born — canonical station identity + drift check + versioned
+`~/.claude/` guards; NOT a master repo), pre-commit **actually installed** (it had never been, in any
+of the three clones), and two issues filed here (loop-writer `cloudbase`+`windchill`; provenance
+audit). See CHANGELOG `[S42]`.
 
-**▶ ON RETURN (S42), in order:**
+**▶ ON RETURN (S43), in order:**
 
 1. **Check the log for a humidity spike — the capture is LIVE.** `log_humidity_raw True` went active with
    the v2.0.7 restart at 2026-07-13 15:27 EDT. Grep `weewx.log` for `humidity_raw=`. Spikes run ~2–3/week
@@ -245,8 +245,8 @@ DEC-0031. See CHANGELOG `[S41]`.
 **must patch the live `weewx.conf` on the NAS in the same window**, and must verify in the **running
 system**, never in the artifact — an image check would have said PASS.
 
-**Still parked for Fable, not ours to move:** the cross-repo / 4th-project etiquette question
-(`docs/handoffs/S38-cross-repo-architecture.md` §Etiquette).
+**✅ The Fable cross-repo round HAPPENED (S42, DEC-0050)** — the etiquette question is settled;
+`eaglehunt-ops` is live. New cross-repo findings go to its issue tracker, not into this file.
 
 **Physical, not software (DEC-0042):** inspect the tipping bucket, the reed switch and its wiring. The
 phantom rainRate is an ISS sensor artifact — condensation trips the rate timer without tipping the
@@ -256,8 +256,9 @@ bucket. **A third event is predictable on the next calm, saturated, cooling nigh
 [issue #15](https://github.com/lheijst/weewx-rtldavis/issues/15) and
 [david-lutz#1](https://github.com/david-lutz/weewx-influx2/pull/1).
 
-**Also owed:** the security follow-ups tracked in the gitignored local-infra doc — not listed here, because this repo is public. The
-dashboard has a stranded draft PR (#22) that our session-start hook found; flag it when next in that repo.
+**Also owed:** the security follow-ups tracked in the gitignored local-infra doc — not listed here,
+because this repo is public. _(The dashboard's stranded draft PR #22 was resolved back in their S71;
+that note was stale — a doc's claims decay, dash DEC-0104.)_
 
 **Live access:** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in gitignored
 `docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use `env -u GH_TOKEN` for any
