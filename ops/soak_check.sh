@@ -20,8 +20,16 @@
 # Exit 0 = all green. Exit 1 = something needs a human.
 set -uo pipefail
 
-NAS_PORT="${NAS_PORT:-3753}"; NAS_USER="${NAS_USER:-patarroyo}"; NAS_HOST="${NAS_HOST:-192.168.127.4}"
+# Connection facts live OUTSIDE this PUBLIC repo (DEC-0012 posture): export
+# NAS_PORT/NAS_USER/NAS_HOST, or put them in ~/.claude/nas.env (sourced below).
+# The tracked defaults are placeholders and fail fast — real values are in the
+# gitignored docs/LOCAL_INFRA.md.
+NAS_PORT="${NAS_PORT:-<SSH_PORT>}"; NAS_USER="${NAS_USER:-<NAS_USER>}"; NAS_HOST="${NAS_HOST:-<NAS_IP>}"
 [ -f "$HOME/.claude/nas.env" ] && . "$HOME/.claude/nas.env"
+case "${NAS_PORT}${NAS_USER}${NAS_HOST}" in (*'<'*)
+  echo "SOAK: NAS_PORT/NAS_USER/NAS_HOST unset — export them or create ~/.claude/nas.env (see gitignored docs/LOCAL_INFRA.md)." >&2
+  exit 1 ;;
+esac
 WINDOW="${1:-0}"          # seconds; 0 = since container start
 CONTAINER=weewx-rtldavis-v2
 EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.7}"

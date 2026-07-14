@@ -865,7 +865,7 @@ The full glitch chain:
    exotic or marginal — it is running constantly, and only CRC and an exact-match dedup stand between it
    and the database. Both are known to be insufficient. This strengthens the case for the decode-layer
    filters, and it is the number to lead with upstream.
-4. **Instrumentation, not debug mode.** The `duplicate packet:` line is logged via `dbg_rtld(1)` → 
+4. **Instrumentation, not debug mode.** The `duplicate packet:` line is logged via `dbg_rtld(1)` →
    `log.debug`, so surfacing it requires the `user` logger at DEBUG — too noisy to leave on. Prod is back
    at `debug_rtld = 1` / INFO. The right fix is a **permanent, cheap counter** in the driver: tally
    duplicate-packet lines off the Go stderr stream and log one summary line per archive period at INFO.
@@ -1739,3 +1739,49 @@ you can replace was never going to fix it.**
 **The anemometer replacement (16–17 June 2026) is also a dating anchor** — wind data before and after that
 window comes from **different physical hardware**. Worth remembering before attributing any wind-series
 step change to software.
+
+## DEC-0050 — The station gets a master for its IDENTITY (and only that): eaglehunt-ops, executing DEC-0040's revisit clause (S42)
+
+**What this settles.** DEC-0040 said *no master coordination repo — yet*, and listed the triggers that
+would flip the answer: a third shared **executable** asset, or the second time the same fix is hand-pasted
+into three repos. **Both fired.** By S41, `~/.claude/` held five shared executables — `docker-guard.sh`,
+`eaglehunt-status.sh`, `secret-read-guard.sh`, `readconf`, `scan-transcripts` — global in blast radius and
+version-controlled nowhere; and the secret-gate bug class had been re-derived four separate times (S36 here,
+dash DEC-0063, dash S70, S38 here). And the failure DEC-0040 predicted arrived: the dashboard's **DEC-0106**
+— the live `proxy.env` carried coordinates 6.67 km from the station (a different NWS grid cell) for a week,
+poisoning every captured forecast, because the same physical fact was written six ways across three repos
+and **nothing validated any of them**.
+
+**The decision (owner-approved, cross-repo round 2026-07-14 = dash S74 / this repo's S42):**
+
+1. **A small PRIVATE coordination repo, `eaglehunt-ops`**, scoped exactly to the S38 §Etiquette litmus
+   test (*does this belong to more than one repo?*): the canonical `station-identity.env`; the drift check
+   `checks/station-identity-check.sh`; the one-page NAS runtime contract; the `~/.claude/` guards **under
+   version control with their tests** (the live copies become deployments, installed by an owner-run
+   `hooks/install.sh`); and an issue tracker as the cross-repo inbox. It is **NOT a master repo**: no DECs
+   for the three project repos, not a session-start read, and it carries a deletion clause (unused in three
+   months → delete).
+2. **The station identity has ONE canonical representation** — `eaglehunt-ops/station-identity.env`.
+   This repo's `weewx.conf [Station]`, the gitignored `docs/LOCAL_INFRA.md`, and everything the dashboard
+   and HLF hold are **copies, validated against it** by the identity check (equality predicate: same NWS
+   grid cell / 250 m — HLF DEC-0078, dash DEC-0108). First run of the check: **8/9 representations agreed
+   within 19 m** — and the ninth finding was real (HLF's forecast endpoint was hanging; filed in their
+   tracker, not fixed from here).
+3. **This repo's identifier hygiene now has a place to point:** `ops/soak_check.sh` no longer carries NAS
+   connection facts as tracked defaults (they were live on public `dev` — caught by our own
+   `test_check_secrets.sh` tree check, which CI structurally cannot run because `.identifiers` is
+   gitignored). Facts live in `~/.claude/nas.env` / `docs/LOCAL_INFRA.md`; the tracked defaults are
+   placeholders that **fail fast**. The enforcement hole underneath: **pre-commit was configured but never
+   installed in any of the three clones** — the load-bearing local gate had never once run. Closed by
+   actually installing it (owner-run), and the lesson is DEC-0040's own, one level down: *a configured
+   control that nothing executes is prose.*
+
+**Why not "no repo, just a file on the NAS":** an unversioned canonical file is the same failure shape as
+the unversioned `proxy.env` that started this — no history, no diff, no owner. The identity file must live
+where change is visible and attributable.
+
+**Boundary rules ratified at the same round** (recorded in the owning repos): HLF's `/api/v1/` surface is
+the only sanctioned cross-repo read path into HLF (their DEC-0104); the dashboard owns `proxy.env` even
+though it lives under this repo's directory on the NAS (their DEC-0109); the S38 §Etiquette agent protocol
+(read-only across boundaries; file, don't fix; one owner per prod; state your confidence) is now standing
+doctrine, printed in eaglehunt-ops' README.
