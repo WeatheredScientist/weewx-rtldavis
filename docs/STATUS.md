@@ -15,84 +15,43 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S43** (2026-07-15). **Soak + humidity-spike check (clean):** v2.0.7 soak is
-> green (11/15 pass, 4 expected startup-only warnings, 0 failures; 45,190 records published, 100 %
-> reception, 0 phantom-rain rows). Pulled and decoded the full `humidity_raw=` series since capture
-> went live (2,056 samples across ~50 h, incl. the rotated `weewx.log.2026-07-13`/`.2026-07-14`) —
-> **no qualifying spike yet** (largest jump 7.5 %RH/min, well under the 16-37 % DEC-0044 signature).
-> Capture is working correctly; still watching.
-> **Three backlog items shipped in code this session** (worktree `worktree-s43-three-backlog-items`,
-> not yet merged/deployed): **Cold-load Fix B** (`current.json` + `windchill`, closes issue #44,
-> DEC-0051) — mounted file, hot-swap deploy, no rebuild; **Reception Layer B** (DEC-0024, now fully
-> resolved) and the **duplicate-frame counter** (DEC-0035) — both in the baked driver, need an image
-> rebuild. Suite 85/85 (+13 new tests). See CHANGELOG `[S43]`.
-> v2.0.7 remains in prod (`prod-baseline-20260713b`); `log_humidity_raw` still ACTIVE — the next midday
-> spike settles the nibble question (see [S41]).
+> **Current session: S43** (2026-07-15). **v2.0.8 shipped, deployed and verified.** Soak +
+> humidity-spike check started the session clean (v2.0.7: 11/15 pass, 0 failures; humidity capture
+> confirmed working, no qualifying spike yet — largest jump 7.5 %RH/min, still watching, see below).
+> Then all three backlog items shipped: **Cold-load Fix B** (`current.json` + `windchill`, closes
+> issue #44, DEC-0051), **Reception Layer B** (DEC-0024, now fully resolved), the
+> **duplicate-frame counter** (DEC-0035). Suite 85/85 (+13 tests). Built, pushed to Docker Hub
+> (`v2.0.8` + `latest`), deployed to prod (`docker kill`→`rm`→`run`, DEC-0008) and **live-verified**:
+> driver banner `0.20+ws.1`, `current.json` writing real data incl. `windchill_F`, WU-published count
+> now matches unique record epochs **exactly** (53/53 over a 3-min window — the ~1.6x overcount is
+> gone), `duplicate frames this period: N` logging every archive period, `soak_check.sh` 14/15 pass
+> (1 warning: 71% reception, normal RF variance). **`main` promoted to `dev`'s tip; tagged
+> `prod-baseline-20260715` + `v2.0.8`; GitHub Release published.** Also fixed mid-session: local
+> pre-commit's `ruff-format` hook had silently contradicted DEC-0027 since S31 — removed. Full story:
+> CHANGELOG `[S43]`.
+> `log_humidity_raw` still ACTIVE — the next midday spike settles the nibble question (see [S41]).
 
 _Last updated: 2026-07-15 (S43)._
 
 ---
 
-## 🔬 SOAK IN PROGRESS — v2.0.7, started 2026-07-13 15:27 EDT
-
-**Run `ops/soak_check.sh` to get a verdict.** It *is* the acceptance criteria, not a vibe: 15 checks,
-**exit 0 = green, exit 1 = needs a human**, so a cron or a future session can trust it. It re-asserts every
-claim the v2.0.7 deploy made — and it can actually fail (proven with a positive control: told to expect a
-tag prod is not running, it goes red).
-
-**It catches the two things that have lied to us before.**
-
-- **Archive continuity** catches **DEC-0036** — weewx froze for 7h18m mid-log-write while the container
-  still reported `Up`. No crash, no traceback. **Data arriving is health; "Up" is not.**
-- **Driver identity** catches **DEC-0031** — the image ran the *stock* driver for weeks with a correct
-  version tag and perfectly normal logs. The filters were simply inert.
-
-**A 24 h window is the right length because it covers both open experiments for free:**
-
-1. **The midday humidity spike** (11:00–16:00, ~2–3/week). The `log_humidity_raw` capture is live and
-   accumulating. A spike settles the nibble question **deterministically** (DEC-0044). The soak reports the
-   running sample count, but **you still have to spot the spike and do the inversion** — that part is not
-   automated.
-2. **The overnight calm/saturated window.** A third phantom-`rainRate` event is predicted. **The soak
-   auto-detects it** — it queries the archive DB for `rainRate > 0` while `rain = 0`, which is exactly the
-   DEC-0042 signature. If it fires: **snapshot the raw rows BEFORE any correction** (the S38 lesson), then
-   confirm the tip counter did **not** advance, as DEC-0049 requires.
-
-**Baseline at T+2 h: 15/15 pass, 0 warnings.** Stdout silent (6 lines), reception 100 %, archive current,
-and no stalls beyond the single known startup one.
-
 ## Active thread
 
-> **▶ Resume here (S41 → S42). The release is DONE. Nothing is half-shipped and no PR is open.**
+> **▶ Resume here (S43 → S44). The release is DONE and verified. Nothing is half-shipped and no PR is
+> open.** The one still-open thread is the humidity-spike watch (see banner above and "Next session
+> actions" — `log_humidity_raw` capture is live, no qualifying spike yet).
 >
-> **1. The raw-humidity capture is now LIVE — the next midday spike is the deliverable.** It went active
-> with the v2.0.7 restart (`log_humidity_raw True`, confirmed in the log). The **next humidity spike** logs
-> `rtldavis-luc: humidity_raw= XXXX` — the full `pkt[4]`/`pkt[3]`, with **no averaging and no free
-> parameter**. That settles the nibble question **deterministically**: invert the bytes, re-decode under
-> `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits
-> away), and compare with the concurrent archived sensor. **The method and the arithmetic are in DEC-0044
-> — do not re-derive them.** Spikes run ~2–3/week, clustered **11:00–16:00**. Check the log for the
-> pattern; there may already be one.
->
-> **2. Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. **The
-> mechanism is the open question, not the threshold.**
->
-> **3. ✅ Cross-repo etiquette / the 4th-project question — SETTLED at the round (DEC-0050, S42).**
-> `eaglehunt-ops` (private) exists, scoped to the §Etiquette litmus test; the agent protocol is standing
-> doctrine (its README). Cross-repo findings now get **filed as issues** there or in the owning repo's
-> tracker — not carried in STATUS blocks. Do not re-litigate; supersede DEC-0050 if it needs changing.
->
-> **New rule to carry (DEC-0047):** **the transcript is an egress path.** The secret gate guards *commits*;
-> it has nothing to say about *reads*. Anything a tool prints lands in `~/.claude/projects/*.jsonl` in
-> plaintext and goes to the model provider. A `PreToolUse` hook now blocks dumping any secret-bearing file
-> (`~/.claude/hooks/secret-read-guard.sh`); use **`readconf`** to read a config — section-scoped, values
-> fingerprinted — and **`scan-transcripts`** to audit. **Never use a line-count window (`+44p`, `head -n`)
-> on a sectioned config — sections move, the window does not.** Editing is deliberately not blocked.
->
-> **New rule to carry (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
+> **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
 > (DEC-0046). They are inverses. A release that changes shipped config **must patch the live
 > `weewx.conf` on the NAS in the same window** — and verify in the running system, never in the artifact.
+>
+> **Standing rule (DEC-0047):** the transcript is an egress path. Use **`readconf`** to read a config
+> (section-scoped, fingerprinted) and **`scan-transcripts`** to audit; never a line-count window on a
+> sectioned config.
+>
+> Run `ops/soak_check.sh` any time for a fresh acceptance-criteria verdict (its `EXPECT_IMAGE` default
+> now tracks `:v2.0.8` — bump it in the same PR next time the deployed tag moves).
 
 ## Upstream — all three landed (S38)
 
@@ -110,6 +69,15 @@ and no stalls beyond the single known startup one.
 
 ## Shipped — nothing to do here
 
+- **S43** (**v2.0.8 shipped** — Docker Hub `:v2.0.8` + `:latest` at digest `sha256:2c05493a`, GitHub
+  release, `main` == prod, `prod-baseline-20260715`; prod recreated and verified): Reception Layer B
+  (DEC-0024, fully resolved — WU-published count now matches unique record epochs exactly, confirmed
+  53/53 over a 3-min window post-deploy), the duplicate-frame counter (DEC-0035 — `duplicate frames
+  this period: N` logging live), Cold-load Fix B + windchill (DEC-0051, closes issue #44 —
+  `current.json` confirmed writing real data incl. `windchill_F`). Local pre-commit's `ruff-format`
+  hook (silently contradicting DEC-0027 since S31) removed. See CHANGELOG `[S43]`.
+  **Rollback:** `:v2.0.7` (`e22fea3c744c`) is still on the NAS; the pre-deploy `loop_json_writer.py`
+  is at `loop_json_writer.py.bak-pre-v2.0.8`.
 - **S38** (v2.0.5 → **v2.0.6** on Docker Hub; prod recreated + verified; `prod-baseline-20260713` tagged;
   `influx.py` drift closed; the `~/.claude/hooks/` enforcement layer live and tested; 47 MB reclaimed):
   see CHANGELOG `[S38]` and DEC-0038/0039/0040/0041/0042.
@@ -214,31 +182,15 @@ and no stalls beyond the single known startup one.
 **This section is the repo-visible handoff.** Read it first when resuming.
 
 **✅ Done in S43 (2026-07-15):** soak + humidity-spike check (both clean, see banner above); **three
-backlog items shipped in code** on `worktree-s43-three-backlog-items` (PR pending review — not yet
-merged or deployed):
-1. **Cold-load Fix B + windchill (DEC-0051, closes issue #44)** — `loop_json_writer.py` now also
-   writes `current.json` (identical content, second path) and emits `windchill_F`.
-   `docs/INTERFACES.md` updated. **Deploy: mounted file, hot-swap (scp + clear-pyc + restart) — no
-   image rebuild.**
-2. **Reception Layer B (DEC-0024, now fully resolved)** — `rtldavis.py` caches a channel-hop packet's
-   `freqError{n}` fields and merges them onto the *next* real DATA packet instead of yielding the
-   channel-hop packet as its own dataless loop packet. Fixes the ~1.6x WU overcount AND, as a side
-   effect, `ops/reception_service.py`'s own reception-window overcount (it only ever sees real DATA
-   packets now).
-3. **Duplicate-frame counter (DEC-0035)** — `rtldavis.py` tallies Go's `"duplicate packet:"` dedup
-   line unconditionally and logs one INFO summary per archive period (incl. `N=0`), reset each period.
-
-Items 2+3 are both in the baked driver (same file) — bundle into **one image rebuild**, not two
-(DEC-0031). Suite 85/85 (+13 tests: `test_loop_json_writer.py`, `test_reception_layer_b.py`,
-`test_duplicate_frame_counter.py`).
+backlog items shipped, deployed and verified** — DEC-0051 (Cold-load Fix B + windchill, closes issue
+#44), DEC-0024 (Reception Layer B, now fully resolved), DEC-0035 (duplicate-frame counter). PRs #49/50
+merged to `dev`, #51 promoted `dev` → `main`; `v2.0.8` built, pushed to Docker Hub, deployed to prod,
+GitHub Release published; `prod-baseline-20260715` tagged. Suite 85/85 (+13 tests). Local pre-commit's
+`ruff-format` hook (silently contradicting DEC-0027 since S31) removed. See CHANGELOG `[S43]`.
 
 **▶ ON RETURN (S44), in order:**
 
-1. **Merge the S43 PR, then deploy.** Two separate deploy actions: (a) hot-swap `loop_json_writer.py`
-   on the NAS (no rebuild); (b) rebuild the image for the driver changes, bump to the next version tag,
-   redeploy, verify in the running system per DEC-0046 discipline (never trust an image-only check).
-
-2. **Check the log for a humidity spike — the capture is LIVE.** `log_humidity_raw True` went active with
+1. **Check the log for a humidity spike — the capture is LIVE.** `log_humidity_raw True` went active with
    the v2.0.7 restart at 2026-07-13 15:27 EDT. Grep `weewx.log` for `humidity_raw=`. Spikes run ~2–3/week
    clustered **11:00–16:00** — S43 checked 2,056 samples across ~50 h, no qualifying spike yet (largest
    7.5 %RH/min, need the 16-37 % DEC-0044 signature). It logs the full `pkt[4]`/`pkt[3]` — **no
@@ -247,7 +199,7 @@ Items 2+3 are both in the baked driver (same file) — bundle into **one image r
    which are 2 and 3 bits away), compare with the concurrent archived sensor. **The method and the
    arithmetic are in DEC-0044; do not re-derive them.**
 
-3. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
+2. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
 
 **Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
