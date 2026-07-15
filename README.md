@@ -13,17 +13,16 @@ An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](htt
 
 📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
 ```bash
-docker pull weatheredscientist/weewx-rtldavis:v2.0.7   # or :latest
+docker pull weatheredscientist/weewx-rtldavis:v2.0.8   # or :latest
 ```
-Pin a version tag (`:v2.0.7`) for reproducible deploys; `:latest` always tracks the newest release.
+Pin a version tag (`:v2.0.8`) for reproducible deploys; `:latest` always tracks the newest release.
 
-> **Current version:** v2.0.7 — **upgrade if you are on any earlier tag.**
-> **New in v2.0.7: the root logger is overridden** (DEC-0043). weewx's own defaults point the *root*
-> logger at a syslog handler on `/dev/log` — a socket that does not exist in a container. Earlier images
-> overrode only the `weewx` and `user` loggers, but `weewxd` and `weeutil.*` are in neither namespace, so
-> they fell through to root and raised there: ~15 logging-error tracebacks to stderr on every start, and —
-> the half that actually matters — **every startup diagnostic silently lost.** The version banner, the
-> config path and the group list had never once reached `weewx.log`. They do now.
+> **Current version:** v2.0.8 — **upgrade if you are on any earlier tag.**
+> **New in v2.0.8:** the driver no longer publishes frequency-hop telemetry as its own dataless LOOP
+> packet — it now rides in on the next real sensor reading instead, which removes a ~1.6x overcount in
+> published/reception metrics for every uploader (Wunderground RapidFire etc.). Also adds a permanent
+> duplicate-frame counter (one INFO log line per archive period) so how often the SDR demodulator
+> double-decodes a burst is a standing measurement, not a one-off debug session.
 >
 > Still carried from v2.0.6, and still the reason to upgrade from anything older: (1) **the driver you
 > actually run** — earlier compose files bind-mounted the *stock* driver over the patched one, so the
@@ -31,9 +30,9 @@ Pin a version tag (`:v2.0.7`) for reproducible deploys; `:latest` always tracks 
 > every LOOP packet to stdout, and (3) **the console log handler defaults to `WARNING`**. Both of those fed
 > a container-freeze hazard: stdout is a pipe, and if the Docker log consumer stalls, the next write
 > **blocks forever** — no crash, no traceback, and a container that still reports `Up`. That cost us a
-> 7-hour outage. See the [CHANGELOG](CHANGELOG.md).  
-> **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3  
-> **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.4.0  
+> 7-hour outage. See the [CHANGELOG](CHANGELOG.md).
+> **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3
+> **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.4.0
 > **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)
 
 ---
