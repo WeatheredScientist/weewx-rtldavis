@@ -15,38 +15,84 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S40** (2026-07-13) — **a comment is not an exemption.** The secret gate let a
-> commented-out credential into a **public** repo — and its own planted-payload test **asserted that was
-> correct**, as part of DEC-0039's "28/28, proven". The proof had certified the hole. `ALLOW (1)` is
-> deleted, comments are now scanned exactly like code, **no exemption was added**, and a **full-history
-> scan of all 333 blobs found the hole was never exploited** (DEC-0045). S39's PR #34 also merged to
-> `dev`. Full story: CHANGELOG `[S40]`.
+> **Current session: S43** (2026-07-15). **Soak + humidity-spike check (clean):** v2.0.7 soak is
+> green (11/15 pass, 4 expected startup-only warnings, 0 failures; 45,190 records published, 100 %
+> reception, 0 phantom-rain rows). Pulled and decoded the full `humidity_raw=` series since capture
+> went live (2,056 samples across ~50 h, incl. the rotated `weewx.log.2026-07-13`/`.2026-07-14`) —
+> **no qualifying spike yet** (largest jump 7.5 %RH/min, well under the 16-37 % DEC-0044 signature).
+> Capture is working correctly; still watching.
+> **Three backlog items shipped in code this session** (worktree `worktree-s43-three-backlog-items`,
+> not yet merged/deployed): **Cold-load Fix B** (`current.json` + `windchill`, closes issue #44,
+> DEC-0051) — mounted file, hot-swap deploy, no rebuild; **Reception Layer B** (DEC-0024, now fully
+> resolved) and the **duplicate-frame counter** (DEC-0035) — both in the baked driver, need an image
+> rebuild. Suite 85/85 (+13 new tests). See CHANGELOG `[S43]`.
+> v2.0.7 remains in prod (`prod-baseline-20260713b`); `log_humidity_raw` still ACTIVE — the next midday
+> spike settles the nibble question (see [S41]).
 
-_Last updated: 2026-07-13 (S40)._
+_Last updated: 2026-07-15 (S43)._
 
 ---
 
+## 🔬 SOAK IN PROGRESS — v2.0.7, started 2026-07-13 15:27 EDT
+
+**Run `ops/soak_check.sh` to get a verdict.** It *is* the acceptance criteria, not a vibe: 15 checks,
+**exit 0 = green, exit 1 = needs a human**, so a cron or a future session can trust it. It re-asserts every
+claim the v2.0.7 deploy made — and it can actually fail (proven with a positive control: told to expect a
+tag prod is not running, it goes red).
+
+**It catches the two things that have lied to us before.**
+
+- **Archive continuity** catches **DEC-0036** — weewx froze for 7h18m mid-log-write while the container
+  still reported `Up`. No crash, no traceback. **Data arriving is health; "Up" is not.**
+- **Driver identity** catches **DEC-0031** — the image ran the *stock* driver for weeks with a correct
+  version tag and perfectly normal logs. The filters were simply inert.
+
+**A 24 h window is the right length because it covers both open experiments for free:**
+
+1. **The midday humidity spike** (11:00–16:00, ~2–3/week). The `log_humidity_raw` capture is live and
+   accumulating. A spike settles the nibble question **deterministically** (DEC-0044). The soak reports the
+   running sample count, but **you still have to spot the spike and do the inversion** — that part is not
+   automated.
+2. **The overnight calm/saturated window.** A third phantom-`rainRate` event is predicted. **The soak
+   auto-detects it** — it queries the archive DB for `rainRate > 0` while `rain = 0`, which is exactly the
+   DEC-0042 signature. If it fires: **snapshot the raw rows BEFORE any correction** (the S38 lesson), then
+   confirm the tip counter did **not** advance, as DEC-0049 requires.
+
+**Baseline at T+2 h: 15/15 pass, 0 warnings.** Stdout silent (6 lines), reception 100 %, archive current,
+and no stalls beyond the single known startup one.
+
 ## Active thread
 
-> **▶ Resume here (S40 → S41).**
+> **▶ Resume here (S41 → S42). The release is DONE. Nothing is half-shipped and no PR is open.**
 >
-> **1. v2.0.7 is built but NOT released — this is the biggest open item.** The `[[root]]` logging fix
-> (DEC-0043) is **merged to `dev`** (PR #34, S39) but not shipped. It needs: `dev` → `main`, tag, **Docker
-> Hub push**, GitHub release. Until it ships, every downstream user still sees 15 tracebacks on
-> `docker run` and loses their startup diagnostics. Prod is **not** affected by the noise (bounded burst,
-> steady state silent), so there is no urgency to restart the station for it — fold the prod deploy into
-> the release in **one attended window**, which also activates the raw-humidity capture below.
+> **1. The raw-humidity capture is now LIVE — the next midday spike is the deliverable.** It went active
+> with the v2.0.7 restart (`log_humidity_raw True`, confirmed in the log). The **next humidity spike** logs
+> `rtldavis-luc: humidity_raw= XXXX` — the full `pkt[4]`/`pkt[3]`, with **no averaging and no free
+> parameter**. That settles the nibble question **deterministically**: invert the bytes, re-decode under
+> `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits
+> away), and compare with the concurrent archived sensor. **The method and the arithmetic are in DEC-0044
+> — do not re-derive them.** Spikes run ~2–3/week, clustered **11:00–16:00**. Check the log for the
+> pattern; there may already be one.
 >
-> **2. The raw-humidity capture is ARMED but NOT ACTIVE.** `log_humidity_raw = true` is in the live
-> `weewx.conf` and parses, but **weewx reads its config only at startup — it takes effect on the next
-> container restart.** The v2.0.7 deploy is the natural moment. Once running, the **next midday humidity
-> spike** logs its raw `pkt[3]`/`pkt[4]` and settles the nibble question deterministically (DEC-0044).
-> Spikes run ~2–3/week, clustered 11:00–16:00.
+> **2. Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. **The
+> mechanism is the open question, not the threshold.**
 >
-> **3. Cross-repo etiquette / the 4th-project question — STILL PARKED FOR FABLE** (owner's call). Do
-> **not** re-litigate or start building it. Everything is in
-> `docs/handoffs/S38-cross-repo-architecture.md` §Etiquette. DEC-0040 settled the *enforcement* half
-> (no master repo; guards in `~/.claude/hooks/`); this is only the *etiquette* half.
+> **3. ✅ Cross-repo etiquette / the 4th-project question — SETTLED at the round (DEC-0050, S42).**
+> `eaglehunt-ops` (private) exists, scoped to the §Etiquette litmus test; the agent protocol is standing
+> doctrine (its README). Cross-repo findings now get **filed as issues** there or in the owning repo's
+> tracker — not carried in STATUS blocks. Do not re-litigate; supersede DEC-0050 if it needs changing.
+>
+> **New rule to carry (DEC-0047):** **the transcript is an egress path.** The secret gate guards *commits*;
+> it has nothing to say about *reads*. Anything a tool prints lands in `~/.claude/projects/*.jsonl` in
+> plaintext and goes to the model provider. A `PreToolUse` hook now blocks dumping any secret-bearing file
+> (`~/.claude/hooks/secret-read-guard.sh`); use **`readconf`** to read a config — section-scoped, values
+> fingerprinted — and **`scan-transcripts`** to audit. **Never use a line-count window (`+44p`, `head -n`)
+> on a sectioned config — sections move, the window does not.** Editing is deliberately not blocked.
+>
+> **New rule to carry (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
+> **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
+> (DEC-0046). They are inverses. A release that changes shipped config **must patch the live
+> `weewx.conf` on the NAS in the same window** — and verify in the running system, never in the artifact.
 
 ## Upstream — all three landed (S38)
 
@@ -67,36 +113,46 @@ _Last updated: 2026-07-13 (S40)._
 - **S38** (v2.0.5 → **v2.0.6** on Docker Hub; prod recreated + verified; `prod-baseline-20260713` tagged;
   `influx.py` drift closed; the `~/.claude/hooks/` enforcement layer live and tested; 47 MB reclaimed):
   see CHANGELOG `[S38]` and DEC-0038/0039/0040/0041/0042.
-- **S39** (root-logger fix DEC-0043; nibble theory falsified DEC-0044): CHANGELOG `[S39]`. **On `dev`,
-  not released** — see "Active thread" item 1.
+- **S39** (root-logger fix DEC-0043; nibble theory falsified DEC-0044): CHANGELOG `[S39]`. **Released in
+  S41 as v2.0.7.**
+- **S41** (**v2.0.7 shipped** — Docker Hub `:v2.0.7` + `:latest` at digest `sha256:31cad4d2`, GitHub
+  release, `main` == prod, `prod-baseline-20260713b`; prod recreated and verified; **DEC-0046** — the baked
+  config is shadowed by the prod bind-mount; `log_humidity_raw` now active): CHANGELOG `[S41]`.
+  **Rollback:** `:v2.0.6` (`e23cabd53591`) is still on the NAS; the pre-deploy config is at
+  `weewx-data/weewx.conf.bak-pre-v2.0.7`.
+- **S41 (security)** — **DEC-0047**: the secret gate guards commits, not reads. A `sed -n '…,+44p'` on the
+  live `weewx.conf` overran its section and leaked live credentials into the transcript. Now guarded
+  mechanically: `~/.claude/hooks/secret-read-guard.sh` (38/38 both directions; mutation test → 18 red),
+  `~/.claude/bin/readconf` (section-scoped, fingerprinted), `~/.claude/bin/scan-transcripts` (self-tests
+  before every run). **Rotation still owed — see the section below.**
 - **S40** (the secret gate scans comments like code — DEC-0045; suite 28 → 41; a full-history scan of all
   333 blobs proved the hole was never exploited): CHANGELOG `[S40]`. **DEC-0039's "28/28 proven" is
   superseded** — two of those 28 asserted a *commented-out* credential must PASS.
 
 ## Open threads (backlog — none of these block anything)
 
-- **✅ rainRate — ANSWERED (DEC-0042).** ISS-side sensor artifact, not RF and not the driver: condensation
-  trips the reed switch enough to start the rate timer, never enough to tip the bucket. **Next step is
-  physical (inspect the bucket + reed switch), not software** — a third event is predictable on the next
-  calm, saturated, cooling night. Full evidence in DEC-0042; **do not re-derive it.**
+- **✅ rainRate — ANSWERED (DEC-0042) and the hardware action is now CLOSED (DEC-0049).** ISS-side sensor
+  artifact, not RF and not the driver. **The owner inspected the hardware: it is new, and there are no
+  faults** — the one failure, the anemometer, was replaced ~16–17 Jun 2026. That **excludes a defective
+  part** and sharpens DEC-0042: it is *working* hardware reacting to condensation, so **there is nothing
+  to swap and no part to order.** Nothing is being built — the event is rare, benign, corrected in-band
+  (`rain_qc`, DEC-0032) and understood. A third event on the next calm, saturated, cooling night remains a
+  free test, with a sharper prediction: **the tip counter still will not advance.** Do not re-derive
+  DEC-0042.
 - **✅ Cross-sensor coupling filter — PARKED, DELIBERATELY NOT BUILT (DEC-0044).** Do **not** pick this up
   as specced; its premise failed on our own data. **The mechanism is the open question, not the
   threshold** — the raw-byte capture in "Active thread" is what settles it. Full reasoning in DEC-0044.
 - **Monitor alert on the new rejection signature (S33 follow-up #1)** — extend `weewx_monitor.py`'s
   rain-glitch email to SensorQC rejections; needs its own pattern + a rate cap so a flapping sensor
   can't spam. Only worth doing once we see the real rejection rate.
-- **Reception Layer B (DEC-0024)** — driver stops publishing dataless freqError packets + persists raw
-  `count`/`missed`. Deferred to **v2.0.5** (S34) so v2.0.4 stayed single-purpose. Needs design + approval
-  (No-Rewrite).
-- **Cold-load Fix B (`current.json`)** — `loop_json_writer.py` also writes an atomic `current.json` the
-  dashboard fetches first at boot, so a *first-time* visitor doesn't see em-dashes. Richer than
-  originally scoped now: the loop packet gained `barometer`/`dewpoint`/`heatindex`.
 - **`DewpointCacher` × `SensorQC` interaction (S36, undecided).** The cacher carries `outTemp`/
   `outHumidity`/`radiation`/`UV` forward for up to 300 s, so a value SensorQC *rejects* gets refilled
   with the last good reading (~40 s old) rather than left null. The bad value never propagates either
   way — so this did **not** block v2.0.4 — but a rejected reading is currently indistinguishable from an
   absent one in the data (the rejection is still logged loudly). Decide whether that's right.
-- **Gain 372, interim** (DEC-0017) — awaiting a 24 h averaged no-preamp sweep to settle vs 207.
+- **Gain 372, interim** (DEC-0017) — the sweep is now **part of DEC-0048's designed RX experiment**, not a
+  standalone errand. Gain stays at 372 and `receiveWindow` stays at the upstream default until that runs.
+  **Do not tune either by feel.**
 - **Vestigial `loopdata.py`** — mounted + `[LoopData]` present but in no active service list; safe to
   remove, not urgent.
 - **Errata → dashboard contract (cross-repo, dash S69 Q3).** The owner wants corrected points visibly
@@ -120,58 +176,87 @@ _Last updated: 2026-07-13 (S40)._
   to `json-file` is the only way to bound its log, and it costs that container's DSM log tab. **Revisit
   only if a container starts generating real stdout volume.**
 
-- **Rotate the exposed WU API key** (NAS `wxcheck.sh`; scrubbed from repo S16, real key still live).
-  Owner-acknowledged; **still owed** — and it remains the only known live exposure. **S40 confirmed nothing
-  else joined it:** a scan of every blob that ever existed in this repo (333 unique, all refs) for a
-  *commented-out* credential — the class DEC-0045 just closed — found **zero**. The gate's hole was real
-  but never exploited, so no revocation and no history rewrite is warranted.
+- **⚠️ WATCH: one `rtldavis process stalled` at the v2.0.7 startup (S41).** At 2026-07-13 15:30:35, three
+  minutes after the container was recreated, weewx logged `CRITICAL Caught WeeWxIOError: rtldavis process
+  stalled`, waited 60 s, and restarted the driver cleanly. It **self-recovered** and has not recurred;
+  reception went straight back to 100 % and archive records land every minute. It is the **only** stall in
+  the whole day's log — including across the `:v2.0.6` restart that morning — so it is new to this boot.
+  Most likely the USB dongle being re-acquired while the old container was still releasing it (`kill` →
+  `rm` → `run` in quick succession). **Not a blocker and nothing is owed** — but if a stall shows up on the
+  *next* restart too, it is a real startup race and needs a settle-delay between `rm` and `run`.
+
+- **Security follow-ups are tracked in the gitignored local-infra doc, not here.** This repo is public;
+  operational security state does not belong in it. Read that file when picking up security work.
+
+- **✅ No real credential has ever been committed to any of the three repos.** S40 scanned all 333 blobs for
+  commented credentials (zero). S41 scanned every live config value against the full history of all refs in
+  all three repos (zero). One scare — a password apparently sitting in `weewx.conf.example` on `main` since
+  S16 — was the example's own placeholder string. False positive, caught by re-checking evidence that looked
+  internally weird (DEC-0047).
+
 - **Unported from the dashboard:** its `.claude/agents/` routing definitions (its DEC-0093).
-- **The dashboard has a stranded draft PR (#22, S71 Beaufort)** — found by the new session-start hook on
-  its first run. Not ours to merge; flag it when next in that repo.
+- **✅ The dashboard's stranded draft PR is GONE** (checked S41: all three repos have **zero** open PRs, and
+  the dashboard's `promote-main` is no longer ahead of `dev`). Both sibling repos just have one uncommitted
+  file each in their working copies.
 - **NAS boot task fragility (S32):** after the next DSM update/reboot, verify the `weewx_monitor`
   scheduler task still runs as root (symptom: `sudo: a terminal is required` spam, no pidfile).
 - **Docker Hub README auto-sync:** add repo secrets `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` to activate
   `.github/workflows/dockerhub-description.yml` (green no-op until then). Owner action.
-- **Branch/tag cleanup:** delete merged `feature/rain-spike-filter` + `s32-reconcile-main`; retire the
-  misnomer `rw250-test` image tag.
+- **✅ Branch/tag cleanup DONE (S41).** The two branches this item named (`feature/rain-spike-filter`,
+  `s32-reconcile-main`) **no longer existed** — the item was stale. What *did* exist was 8 merged
+  `worktree-*` branches, all deleted (0 unmerged commits each; verified before deleting). The repo now has
+  exactly **`dev` and `main`**. `rw250-test` is retired (DEC-0048); it was **never on Docker Hub**, so the
+  misnomer was only ever ours. `rw350-test` / `rw400-test` are the same class and should follow.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S40 done → S41)
+## Next session actions (S43 done → S44)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S40 (2026-07-13).** **DEC-0045 — a comment is not an exemption.** The secret gate's `ALLOW (1)`
-waved through *any* full-line comment, so a commented-out credential shipped clean into a **public** repo.
-The rule was not a blind spot the test missed: **the test asserted it** — two commented credentials sat
-under *"must PASS"* and were part of DEC-0039's "28/28, proven". The proof had certified the hole.
-`ALLOW (1)` is deleted, comments are scanned like code, **no exemption was added** (the gate's own
-illustrative literals moved into the test, where they execute — DEC-0040 applied to the gate itself), and a
-**full-history scan of all 333 blobs confirmed the hole was never exploited.** Suite 28 → **41/41**; a
-mutation test proves the fix is load-bearing. Also **merged S39's PR #34** to `dev`. See CHANGELOG `[S40]`.
+**✅ Done in S43 (2026-07-15):** soak + humidity-spike check (both clean, see banner above); **three
+backlog items shipped in code** on `worktree-s43-three-backlog-items` (PR pending review — not yet
+merged or deployed):
+1. **Cold-load Fix B + windchill (DEC-0051, closes issue #44)** — `loop_json_writer.py` now also
+   writes `current.json` (identical content, second path) and emits `windchill_F`.
+   `docs/INTERFACES.md` updated. **Deploy: mounted file, hot-swap (scp + clear-pyc + restart) — no
+   image rebuild.**
+2. **Reception Layer B (DEC-0024, now fully resolved)** — `rtldavis.py` caches a channel-hop packet's
+   `freqError{n}` fields and merges them onto the *next* real DATA packet instead of yielding the
+   channel-hop packet as its own dataless loop packet. Fixes the ~1.6x WU overcount AND, as a side
+   effect, `ops/reception_service.py`'s own reception-window overcount (it only ever sees real DATA
+   packets now).
+3. **Duplicate-frame counter (DEC-0035)** — `rtldavis.py` tallies Go's `"duplicate packet:"` dedup
+   line unconditionally and logs one INFO summary per archive period (incl. `N=0`), reset each period.
 
-**▶ ON RETURN (S41), in order:**
+Items 2+3 are both in the baked driver (same file) — bundle into **one image rebuild**, not two
+(DEC-0031). Suite 85/85 (+13 tests: `test_loop_json_writer.py`, `test_reception_layer_b.py`,
+`test_duplicate_frame_counter.py`).
 
-1. **Release v2.0.7 and deploy prod — one attended window, two jobs at once.** The S39 fix is already on
-   `dev` (PR #34 merged in S40). Remaining: `dev` → `main`, tag, **push to Docker Hub**, GitHub release.
-   Then recreate prod on `:v2.0.7`. That restart is also what **activates `log_humidity_raw`** (weewx reads
-   its config only at startup), so the release and the instrument arm together. Verify after:
-   `docker logs --tail 40` shows **no** `--- Logging error ---`, and `weewx.log` now contains
-   `weewxd INFO Starting up weewx version 5.4.0` — a line that has never appeared there before.
+**▶ ON RETURN (S44), in order:**
 
-2. **Then watch for the next humidity spike.** ~2–3/week, clustered **11:00–16:00**. With the capture
-   running it logs `rtldavis-luc: humidity_raw= XXXX` — the full `pkt[4]`/`pkt[3]`. That settles the
-   nibble question **deterministically**: invert the bytes, re-decode under `0x2`/`0x8`/`0xE` (humidity's
-   real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits away), and compare with the
-   concurrent archived sensor. The method and the arithmetic are in DEC-0044; **do not re-derive them.**
+1. **Merge the S43 PR, then deploy.** Two separate deploy actions: (a) hot-swap `loop_json_writer.py`
+   on the NAS (no rebuild); (b) rebuild the image for the driver changes, bump to the next version tag,
+   redeploy, verify in the running system per DEC-0046 discipline (never trust an image-only check).
+
+2. **Check the log for a humidity spike — the capture is LIVE.** `log_humidity_raw True` went active with
+   the v2.0.7 restart at 2026-07-13 15:27 EDT. Grep `weewx.log` for `humidity_raw=`. Spikes run ~2–3/week
+   clustered **11:00–16:00** — S43 checked 2,056 samples across ~50 h, no qualifying spike yet (largest
+   7.5 %RH/min, need the 16-37 % DEC-0044 signature). It logs the full `pkt[4]`/`pkt[3]` — **no
+   averaging, no free parameter** — which settles the nibble question **deterministically**: invert the
+   bytes, re-decode under `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV,
+   which are 2 and 3 bits away), compare with the concurrent archived sensor. **The method and the
+   arithmetic are in DEC-0044; do not re-derive them.**
 
 3. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
 
-4. Then the ordinary backlog: **cold-load Fix B (`current.json`)**, **Reception Layer B (DEC-0024)**, and
-   the **always-on duplicate-frame counter (DEC-0035)**.
+**Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
+**config** is mounted and the image is inert (DEC-0046). Inverses. A release that changes shipped config
+**must patch the live `weewx.conf` on the NAS in the same window**, and must verify in the **running
+system**, never in the artifact — an image check would have said PASS.
 
-**Still parked for Fable, not ours to move:** the cross-repo / 4th-project etiquette question
-(`docs/handoffs/S38-cross-repo-architecture.md` §Etiquette).
+**✅ The Fable cross-repo round HAPPENED (S42, DEC-0050)** — the etiquette question is settled;
+`eaglehunt-ops` is live. New cross-repo findings go to its issue tracker, not into this file.
 
 **Physical, not software (DEC-0042):** inspect the tipping bucket, the reed switch and its wiring. The
 phantom rainRate is an ISS sensor artifact — condensation trips the rate timer without tipping the
@@ -181,8 +266,9 @@ bucket. **A third event is predictable on the next calm, saturated, cooling nigh
 [issue #15](https://github.com/lheijst/weewx-rtldavis/issues/15) and
 [david-lutz#1](https://github.com/david-lutz/weewx-influx2/pull/1).
 
-**Also owed:** rotate the exposed WU API key (NAS `wxcheck.sh`) — the only known live exposure. The
-dashboard has a stranded draft PR (#22) that our session-start hook found; flag it when next in that repo.
+**Also owed:** the security follow-ups tracked in the gitignored local-infra doc — not listed here,
+because this repo is public. _(The dashboard's stranded draft PR #22 was resolved back in their S71;
+that note was stale — a doc's claims decay, dash DEC-0104.)_
 
 **Live access:** `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` (real values in gitignored
 `docs/LOCAL_INFRA.md`); logs at `.../logs/{weewx.log,weewx_monitor.log}`. Use `env -u GH_TOKEN` for any

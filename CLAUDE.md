@@ -89,7 +89,9 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
 
 - **Start:** read the Tier 1 set (STATUS.md first, **from `dev`'s tip if the checkout lags**);
   `git fetch && git status`; read STATUS.md "Active thread" + "Next session actions". A clean-pickup
-  check: `git status` clean and `pytest` green before new work.
+  check: `git status` clean and `pytest` green before new work. Then pick up cross-repo assignments
+  (ops-DEC-0005; Claude sessions only — one command, the rest of eaglehunt-ops stays
+  not-a-session-start-read): `gh issue list -R WeatheredScientist/eaglehunt-ops --label repo:weewx --state open`
 - **End:** update STATUS.md (session #, active thread, next actions — it's the source of truth),
   append to CHANGELOG.md, `git status` should show *up to date*. Don't strand the next session's
   handoff in private memory — it lives in STATUS.md so it's visible on GitHub.

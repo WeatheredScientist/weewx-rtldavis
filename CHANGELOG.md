@@ -6,6 +6,233 @@ under [Pre-S16].
 
 ---
 
+## [S43] — 2026-07-15 — soak + humidity-spike check clean; three backlog items shipped (Cold-load Fix B/DEC-0051, Reception Layer B/DEC-0024, duplicate-frame counter/DEC-0035)
+
+> **Soak check (v2.0.7, up 49h): green.** 11/15 pass, 4 expected startup-only warnings, 0 failures —
+> archive current, stdout quiet, no tracebacks, no stalls, 100% reception, 45,190 records published, 0
+> phantom-rain rows in 2,987 archive rows. **Humidity-spike check: no qualifying spike yet.** Decoded
+> the full `humidity_raw=` series since the capture went live (2,056 samples, ~50h, including the
+> rotated `weewx.log.2026-07-13`/`.2026-07-14` the live log had already rolled past) per the driver's
+> real decode formula. Largest jump: 7.5 %RH/min, clustered in the predicted 11:00–16:00 window but
+> well under the 16-37% DEC-0044 signature. Capture instrument confirmed working correctly.
+>
+> **Three backlog items shipped in code, on a worktree branch (PR pending — not yet merged/deployed):**
+>
+> 1. **Cold-load Fix B + windchill (DEC-0051, closes issue #44).** `loop_json_writer.py` now writes an
+>    identical snapshot to a second path (`current.json`, default `/opt/weewx-data/current.json`) on
+>    every LOOP packet, atomic tmp+rename same as `loop-data.txt`; `windchill` added to `_FIELDS`
+>    (`windchill_F`). `docs/INTERFACES.md` updated. **Deploy: mounted file — hot-swap (scp + clear-pyc
+>    + restart), no image rebuild** (verified against `docs/ARCHITECTURE.md`'s mount table).
+> 2. **Reception Layer B (DEC-0024 — now fully resolved).** The driver published channel-hop
+>    (`freqError{n}`) packets as their own dataless loop packets, which every uploader (WU RapidFire
+>    etc.) then published as if they were full weather updates — the ~1.6x overcount measured at S21.
+>    Considered and rejected: dropping the packet outright (freqError is repurposed onto real archive
+>    schema columns — `consBatteryVoltage`/`hail`/`hailRate`/`heatingTemp`/`heatingVoltage` — and
+>    `ops/reception_service.py` logs non-zero freqErrors, so silently breaks both); tagging it dataless
+>    and filtering in every consumer (broader blast radius for no benefit). **Chosen:** cache the
+>    channel-hop packet's freqError fields and merge them onto the *next* real DATA packet instead of
+>    ever yielding a standalone one (`_cache_pending_freq_fields` / `_merge_pending_freq_fields`, each
+>    cached value rides exactly once). Side effect: also fixes `ops/reception_service.py`'s own
+>    60s-rolling reception window, which had the identical blind spot (counted channel-hop packets as
+>    real readings) and was never separately flagged until this session.
+> 3. **Duplicate-frame counter (DEC-0035's own proposed instrument).** `genLoopPackets`'s stderr scan
+>    now counts Go's `"duplicate packet:"` dedup line unconditionally (no `debug_rtld` gate) into
+>    `self.stats['dup_count']`; `_update_summaries()` logs one INFO line per archive period (including
+>    `N=0`, so a quiet period is distinguishable from the instrument not running); `_reset_stats()`
+>    zeroes it for the next period — the same pattern already used for `pct_good_all`.
+>
+> Items 2+3 both touch the baked driver (`rtldavis.py`) — bundled for **one** image rebuild rather than
+> two. +13 offline tests (`test_loop_json_writer.py`, `test_reception_layer_b.py`,
+> `test_duplicate_frame_counter.py`); suite 72 → 85. **DEC-0051 added; DEC-0024 and DEC-0035 updated**
+> with S43 sub-sections in `DECISIONS-FULL.md`.
+>
+> **Caught mid-commit: local pre-commit's `ruff-format` hook had silently contradicted DEC-0027 since
+> S31.** CI dropped `ruff format` deliberately (it flattens `rtldavis.py`'s column alignment and
+> reformats the baked driver — No-Rewrite); local `.pre-commit-config.yaml` still carried it. Never
+> fired because pre-commit itself was never installed until S42 (DEC-0050) — its first real run
+> attempted to mass-reformat `rtldavis.py` (3,213-line diff) on this session's commit. Caught (a second
+> hook also blocked the same commit), reverted, `ruff-format` removed from the config. Checked both
+> siblings for the same pattern: the dashboard already avoids it deliberately; `hyperlocal-forecast`
+> carries it too but with no equivalent DEC and no known baked file, so no finding filed there.
+
+## [S42] — 2026-07-14 — the cross-repo round: DEC-0040's triggers fired, the identifiers were live on public dev, and pre-commit had never run (DEC-0050)
+
+> **This was the scheduled `[Fable]` cross-repo coordination round** (dash S74 = this repo's S42),
+> and this repo's share of it landed in one PR.
+>
+> **The identifier scrub was not hypothetical.** `ops/soak_check.sh` carried the real NAS
+> user/IP/port as tracked shell defaults — **on `dev`, on a PUBLIC repo**, since S41. Our own
+> `test_check_secrets.sh` tree check flags it (40/41 → the "1 FAILED" was this), but that check
+> runs only where the gitignored `.identifiers` file exists — **CI is structurally identifier-blind
+> by design**, so the only enforcement point was local pre-commit. And the hole under the hole:
+> **pre-commit was configured but never installed** — `.git/hooks/pre-commit` did not exist, here
+> or in either sibling repo. The load-bearing local gate for a public repo had never once executed.
+> A configured control that nothing runs is prose (DEC-0040, one level down). Fixed: defaults are
+> now placeholders that fail fast; real facts live in `~/.claude/nas.env` (also honored by the new
+> eaglehunt-ops checks) / gitignored `docs/LOCAL_INFRA.md`; suite 41/41 with a clean tree; soak
+> re-proven green end-to-end via `nas.env` and red on the placeholder path; pre-commit actually
+> installed (owner-run). Per DEC-0028's precedent (identifiers, not credentials; LAN IP): fix
+> forward, **no history rewrite**.
+>
+> **DEC-0050 — the station gets a master for its IDENTITY (and only that).** DEC-0040's own revisit
+> triggers fired (five shared `~/.claude/` executables versioned nowhere; the same gate fix
+> re-derived four times; the dashboard's DEC-0106 as the predicted casualty — 6.7 km of coordinate
+> drift, a week of forecasts for the wrong town). The private **`eaglehunt-ops`** repo now holds:
+> canonical `station-identity.env`, the drift check (**first run: 8/9 representations within 19 m —
+> and the 9th finding was real**, see below), the NAS runtime contract, and the `~/.claude/` guards
+> under version control with their tests (live copies = deployments via owner-run `install.sh`).
+> Scope fenced by the S38 §Etiquette litmus test; deletion clause attached.
+>
+> **The identity check's first run caught a live outage in a sibling:** HLF's
+> `/api/v1/forecast` hangs indefinitely for **every** coordinate pair (health/current fine,
+> container "Up 8 hours" — *"Up" is not health*, our own DEC-0036 lesson, now on an API surface).
+> Per §Etiquette: **filed in HLF's tracker with the evidence, not fixed from here.**
+>
+> **Also filed here (cross-repo asks from the dashboard's S73):** the loop writer emitting
+> `cloudbase` (+`windchill`) — folds into the existing Cold-load Fix B thread; and a provenance
+> audit (does the artifact a consumer READS carry the assumptions it was captured under — their
+> DEC-0104/0106 twins of our DEC-0040/0045/0047 family). The dashboard's stale claim that our
+> secret gate was "neutered" was **re-measured and retired** — 40/41 planted payloads pass; the
+> one failure was the tree check doing its job on the identifiers above.
+>
+> **Read-guard field data (their `~/.claude/` DEC-0047 guard, now versioned in eaglehunt-ops):**
+> S73/S74 logged five false positives — all token×verb string matches with no data flow (a commit
+> MESSAGE containing "proxy.env" + the word "more"; the sanctioned `readconf` invoked by full path;
+> a `.env` name inside an `echo` literal). Two mechanical fixes ride the eaglehunt-ops migration
+> (readconf at a path boundary; a lone `git commit` exempted after heredoc-body stripping — chains
+> and substitutions still block), proven 46/46 both directions. The wider class is documented as
+> accepted: a false block costs a retype; a false allow costs a rotation.
+
+---
+
+## [S41] — 2026-07-13 — v2.0.7 shipped, and the config fix that would have missed prod entirely
+
+> **v2.0.7 is on Docker Hub, prod runs it, and the raw-humidity capture is finally live.**
+>
+> The headline was meant to be routine: take S39's `[[root]]` logger fix (DEC-0043), which had been
+> sitting merged-but-unreleased on `dev`, and ship it. That happened — `:v2.0.7` + `:latest`
+> (digest `sha256:31cad4d2`), GitHub release, `main` == prod, `prod-baseline-20260713b` tagged.
+>
+> **The finding is what the deploy nearly missed.** The `[[root]]` fix lives in the image's *baked*
+> config, protected by a Dockerfile build-time assertion so an image cannot be built without it. But prod
+> bind-mounts `weewx-data/` over `/opt/weewx-data` — the mount covers the whole directory, so the live
+> `weewx.conf` **shadows the baked config completely**. Deploying `:v2.0.7` and stopping there would have
+> been, in prod, **a no-op with a green checkmark**: correct image, passing assertion, accurate release
+> notes, and a station still emitting syslog tracebacks and still silently dropping every startup
+> diagnostic. **DEC-0046.**
+
+### Shipped — v2.0.7
+
+- **Docker Hub:** `:v2.0.7` and `:latest`, both at digest `sha256:31cad4d2826b…`. Built on the NAS from
+  `git archive v2.0.7` — the image is built from *exactly* the tagged tree (DEC-0038).
+- **GitHub release** [v2.0.7](https://github.com/WeatheredScientist/weewx-rtldavis/releases/tag/v2.0.7);
+  `dev` → `main` (PR #38, after PR #37's version bump); `main` and `dev` are identical trees.
+- **Prod recreated on `:v2.0.7`** at 15:27 EDT. `docker kill`, never `stop` (DEC-0008); no `rtldavis.py`
+  mount (DEC-0031). Rollback available: `:v2.0.6` (`e23cabd53591`) is still on the NAS.
+- **`prod-baseline-20260713b`** tagged — the second baseline of the day (the first, `-20260713`, was
+  v2.0.6). Not force-moved; the old tag still means what it meant. DEC-0011's *`main` = production truth*
+  invariant holds.
+
+### Found — DEC-0046: the baked config never reaches prod
+
+- Caught by a **pre-flight `grep` of the live config**, which found **zero** `[[root]]` blocks while the
+  image's baked config carried it and asserted it.
+- **The exact mirror of DEC-0031.** There, the *driver* is baked and the bind-mount is the no-op, so an
+  `scp` is silently ignored. Here, the *config* is mounted and the image is the no-op, so a rebuild is
+  silently ignored. Inverses — which is precisely what makes the pair easy to get backwards. **Neither
+  errors. Both accept the instruction and discard it.**
+- Fixed in the same window: the live `weewx.conf` gained the `[[root]]` block (backed up first to
+  `weewx.conf.bak-pre-v2.0.7`). Prod's version routes to `handlers = rotate,` — **file only, no console**,
+  deliberately differing from the baked config, because prod declares no console handler and adding one
+  would re-arm the DEC-0036 freeze hazard that DEC-0041 disarmed. **The fix must match; the text need not.**
+- **The fifth member of the family**: an interface that accepts an instruction and silently discards it
+  (DEC-0031's bind-mount, DEC-0036's `max-size`, DEC-0040's prose, DEC-0045's test that certified the
+  hole). The build assertion was not wrong — **it was answering a question nobody was asking in prod.**
+
+### Verified in prod — behaviorally, not by inspecting the artifact
+
+- **`weewx.log` now contains `weewxd INFO Initializing weewxd version 5.4.0`**, plus the command line, the
+  Python version, the platform and `WEEWX_ROOT` — **lines that had never once appeared in that file.** This
+  is the S39 acceptance criterion, and it reads the running system. An image check would have said PASS.
+- **Zero `--- Logging error ---` blocks** on stdout (was ~15 tracebacks / ~515 lines per start).
+- `driver version is 0.20+ws.1 (patched by WeatheredScientist -- not stock upstream)`, `sensor_qc True`,
+  **`log_humidity_raw True`**, 0 tracebacks, `RestartCount: 0`, and Wunderground (rapidfire + PWS), Influx
+  and Windy all publishing.
+
+### Armed — the raw-humidity capture is now live (DEC-0044)
+
+`log_humidity_raw` had been sitting in the live config since S39 but weewx reads its config **only at
+startup**, so it took this restart to activate. It is now running. **The next midday humidity spike logs
+its raw `pkt[3]`/`pkt[4]`** and settles the nibble question deterministically — no averaging, no free
+parameter. Spikes run ~2–3/week, clustered 11:00–16:00. The inversion method is in DEC-0044; do not
+re-derive it.
+
+### Security — DEC-0047: the secret gate guards commits, not reads
+
+> **The transcript is an egress path, and nobody had modeled it as one.**
+
+- **The gap.** Every secret control in this repo is a **commit-time** control — DEC-0012,
+  `check_secrets.sh`, the CI secret-scan, the 41-payload proof suite. Four hardenings across S26 → S40, all
+  of them guarding the **write** path to GitHub. **None says anything about reading.** Whatever a tool
+  prints lands in `~/.claude/projects/*.jsonl` in plaintext and is transmitted to the model provider. The
+  `.gitignore` entry feeds the blind spot: the live config is *deliberately* excluded from the repo, which
+  makes it feel handled. **"Not in the repo" is not "not in the transcript."** DEC-0040 said *prose does not
+  execute*; this is worse — **there was no prose.** No rule was broken because no rule existed.
+- **What surfaced it:** a `sed -n "/^[Logging]/,+44p"` on the live config during this deploy. A fixed
+  **line-count** window on a sectioned file: `[Logging]` is ~22 lines, so it ran off the end and printed the
+  following sections into the transcript. **A line-count window on a sectioned config is a loaded gun —
+  sections move, the window does not.**
+- **Three mechanical controls, in `~/.claude/`** (global — DEC-0040's "no master repo"):
+  `hooks/secret-read-guard.sh` (PreToolUse on Bash/Read/Grep; blocks *secret path* × *emitting verb*, sees
+  through `ssh "…"`, **leaves editing alone** so the DEC-0046 release workflow still works — a guard that
+  blocks the work gets switched off; matches **per-token**, so `cat weewx.conf.example && cat weewx.conf`
+  cannot launder the live config through the `.example` carve-out);
+  `bin/readconf` (**section-scoped — it structurally cannot take a line window**; values become stable
+  `sha256` fingerprints while `handlers = rotate,` and `level = INFO` stay readable, because a DEC-0046
+  deploy has to verify exactly those); and `bin/scan-transcripts` (the detection half).
+- **Proven, not merely green.** The guard's suite asserts **both directions** (38/38 — the leaking command
+  blocks; `cat weewx.conf.example`, `sed -i`, `cp`, `readconf` all still pass), and a **mutation test**
+  turns it **red — 18 failures.** The scanner **self-tests before every run** and refuses to report "0" if
+  the harvest returned nothing. **Verified live:** re-running the original command is now blocked by the
+  hook.
+- **A scanner that cries wolf is its own failure mode.** The first pass reported a real password sitting in
+  `weewx.conf.example` on public `main` since S16 — which would have been a live exposure and a fifth gate
+  hole. It was the example's own placeholder string. The evidence looked internally weird (the same
+  "password" appeared as three different keys), and re-checking it is the only reason a five-alarm claim was
+  not filed. DEC-0039: *a green exit code is not evidence.* DEC-0045: *a passing test is not evidence
+  either.* **S41: a scan that finds nothing is not evidence unless you have proved the scanner can see.**
+- **A full scan of all refs confirms no real credential has ever been committed to any of the three repos.**
+
+### Housekeeping — the cleanup that found its own backlog item was stale
+
+- **DEC-0049 — the ISS hardware is new and inspected, so the phantom rainRate is not a broken part.**
+  DEC-0042 closed with *"next step is physical: inspect the bucket, the reed switch and its wiring."*
+  **That action is now closed and it came back clean.** The owner reports the ISS hardware is **new**, was
+  **recently inspected**, and has **no faults** — the one component that did fail, the **anemometer**, was
+  **replaced ~16–17 June 2026**. A clean inspection does not falsify DEC-0042, it **sharpens** it: the two
+  readings were always *defective part* or *working part reacting to the environment*, and **the first is
+  now excluded.** Condensation bridging a **healthy** reed switch produces exactly the measured signature
+  (94 % RH, 1.7 °F dewpoint spread, 0 mph wind, tip counter never advancing). **There is nothing to swap and
+  no part to order** — anyone reading DEC-0042's "next step is physical" without DEC-0049 would order one
+  for no reason. The anemometer date is also a **dating anchor**: wind data either side of mid-June comes
+  from different physical hardware.
+
+- **DEC-0048 — reception testing is a designed experiment, not a pile of image tags.** `rw250-test` is
+  retired. It was a **misnomer within a day of being built** (`receiveWindow` ships at the upstream
+  default), and it was **never published to Docker Hub** — verified against the live tag list, so the
+  confusion was only ever ours. The deeper point: that sweep was never a controlled experiment, which is
+  also **why DEC-0017 has sat open since S16** — gain is held at 372 pending an "averaged re-test" that
+  never happened because no method was ever agreed. A proper RX test is **deferred, not abandoned**: when it
+  runs it gets a hypothesis, a control arm, an averaged window, and a pre-registered metric — and it settles
+  **gain 372-vs-207 and `receiveWindow` in the same run**, since they share the same apparatus and the same
+  confound. Until then **neither parameter gets tuned by feel.**
+
+- **Branch cleanup — and the backlog item was stale.** STATUS had been asking us to delete
+  `feature/rain-spike-filter` and `s32-reconcile-main`; **neither still existed.** What *did* exist was **8
+  merged `worktree-*` branches**, each verified at **0 unmerged commits** before deletion. The remote is now
+  exactly **`dev` and `main`**. All three Eagle Hunt repos have **zero** open PRs, and the dashboard's
+  long-flagged stranded draft PR is gone too.
+
 ## [S40] — 2026-07-13 — a comment is not an exemption: the gate's proof had certified the hole
 
 > **The secret gate let commented-out credentials into a PUBLIC repo — and its own test said that was

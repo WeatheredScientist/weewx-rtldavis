@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed *)",
+      "Bash(awk *)",
+      "Bash(python3 -c *)",
+      "Bash(python3 -)",
+      "Bash(md5 *)",
+      "Bash(python3 -m pytest*)",
+      "Bash(python -m pytest*)",
+      "Bash(python3 -m ruff*)",
+      "Bash(python3 -m mypy*)",
+      "Bash(python3 -m pip list*)",
+      "Bash(bash scripts/check_secrets.sh*)",
+      "Bash(git add *)",
+      "Bash(git checkout *)",
+      "Bash(git branch *)",
+      "Bash(git worktree *)",
+      "Bash(git pull *)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push)",
+      "Bash(git push *)",
+      "Bash(env -u GH_TOKEN git push)",
+      "Bash(env -u GH_TOKEN git push *)",
+      "Bash(git merge * main)",
+      "Bash(git merge * dev)",
+      "Bash(docker push *)"
+    ]
+  }
+}

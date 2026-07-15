@@ -106,7 +106,7 @@ is STATUS's active thread.
 # LONG TERM (P4 + horizon) — housekeeping, community, direction
 
 ## P4 — Housekeeping / community
-- [ ] Rotate the exposed WU API key; move it to `monitor.env` env-var (DEC-0012, BACKLOG).
+- [ ] Credential hygiene follow-ups — tracked in the gitignored local-infra doc, not here (public repo). Move any inline secret to a `monitor.env` env-var (DEC-0012, DEC-0047).
 - [ ] README refresh for public users: Docker Desktop USB findings, current install flow, and a
       shortest-painless-path "run your own" onboarding section (mirrors the dashboard's public-release
       readiness workstream — this repo is already public, so this is polish, not a gate).
