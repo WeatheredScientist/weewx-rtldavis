@@ -11,7 +11,14 @@ repos:
     hooks:
       - id: ruff
         args: ["--fix", "--exit-non-zero-on-fix"]
-      - id: ruff-format
+      # No ruff-format (DEC-0027): the codebase uses deliberate column
+      # alignment for readability, and rtldavis.py is baked into the shipped
+      # image (ARCHITECTURE §3) -- auto-reformatting a prod-sacred file is
+      # exactly the churn No-Rewrite (DEC-0014) guards against. This hook was
+      # present but never actually fired until pre-commit was first installed
+      # (S42, DEC-0050); its first real run mass-reformatted rtldavis.py
+      # (S43) before the mismatch with CI's already-documented decision was
+      # caught.
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.11.1
