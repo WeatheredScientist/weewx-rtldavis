@@ -17,9 +17,13 @@ eventually CumulusMX can satisfy them (PRINCIPLES §1, DEC-0010).
 ## 1. Loop-JSON — real-time surface
 
 Written by `loop_json_writer.py` (a WeeWX `data_service`, DEC-0005) to
-`/opt/weewx-data/loop-data.txt` on **every LOOP packet (~2.5 s** for the VP2+), via atomic
-tmp-write + `os.replace`. Served to the dashboard at `/loopdata` by the eh-proxy (which lives in the
-dashboard's deployment, not this repo).
+`/opt/weewx-data/loop-data.txt` **and** `/opt/weewx-data/current.json` on **every LOOP packet
+(~2.5 s** for the VP2+), via atomic tmp-write + `os.replace`. Both files carry identical content —
+only the path differs. `loop-data.txt` is served to the dashboard's ongoing polling at `/loopdata`
+by the eh-proxy (which lives in the dashboard's deployment, not this repo); `current.json` is what
+the dashboard fetches **first at boot**, so a first-time visitor doesn't see em-dashes before the
+polling loop's first response lands (Cold-load Fix B). Serving `current.json` with the right cache
+headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's.
 
 **Contract:**
 - **Units are US/imperial**, encoded in the key names. The packet is `to_US()`-normalized before
@@ -41,6 +45,7 @@ dashboard's deployment, not this repo).
 | `dewpoint_F` | dewpoint | °F |
 | `outHumidity` | outHumidity | % |
 | `heatindex_F` | heatindex | °F |
+| `windchill_F` | windchill | °F |
 | `barometer_inHg` | barometer | inHg |
 | `rainRate_inch_per_hour` | rainRate | in/hr |
 | `radiation_Wpm2` | radiation | W/m² |
