@@ -26,7 +26,7 @@
 #
 # 27-04-2020 release note:
 # This version of rtldavis.py works best with version 0.13 of main.go or higher.
-# For EU frequencies the freqError values are stored in the database in 
+# For EU frequencies the freqError values are stored in the database in
 # time slots of two days per transmitter (when activated).
 #
 #-------
@@ -74,7 +74,7 @@
 #-------
 
 """
-Collect data from rtldavis  
+Collect data from rtldavis
 see: https://github.com/bemasher/rtldavis
 
 Run rtld on a thread and push the output onto a queue.
@@ -83,12 +83,12 @@ Run rtld on a thread and push the output onto a queue.
 
 [Rtldavis]
     # This section is for the rtldavis sdr-rtl USB receiver.
-    cmd = /home/pi/work/bin/rtldavis 
+    cmd = /home/pi/work/bin/rtldavis
 
     # Radio frequency to use between USB transceiver and console: US, NZ or EU
     # US uses 915 MHz, NZ uses 921 MHz and EU uses 868.3 MHz.  Default is EU.
     transceiver_frequency = EU
-    
+
     # Used channels: 0=not present, 1-8)
     # The channel of the Vantage Vue ISS or Vantage Pro or Pro2 ISS
     iss_channel = 1
@@ -99,7 +99,7 @@ Run rtld on a thread and push the output onto a queue.
     temp_hum_2_channel = 0
     # rain bucket type (0: 0.01 inch, 1: 0.2 mm)
     rain_bucket_type = 1
-    
+
     # Print debug messages
     # 0=no logging; 1=minimum logging; 2=normal logging; 3=detailed logging
     debug_parse = 0
@@ -174,16 +174,16 @@ if weewx.__version__ < "3":
 
 # Rtldavis Usage
 #
-# For 868MHz the usually supplied 10cm DVB-T antenna stick is well suited. Make 
-# sure that it is placed on a small metallic ground plane. Avoid near WLAN, DECT 
+# For 868MHz the usually supplied 10cm DVB-T antenna stick is well suited. Make
+# sure that it is placed on a small metallic ground plane. Avoid near WLAN, DECT
 # or other RF stuff that may disturb the SDR stick.
-# 
-# To reduce other disturbances, place a sensor in about 2m distance for the first 
-# test.
-# 
-# Call with:  /home/pi/work/bin/rtldavis -tf [transceiver-frequency: US, NZ or EU] -tr [transmitters]} 
 #
-DEFAULT_CMD = '/home/pi/work/bin/rtldavis -tf EU' 
+# To reduce other disturbances, place a sensor in about 2m distance for the first
+# test.
+#
+# Call with:  /home/pi/work/bin/rtldavis -tf [transceiver-frequency: US, NZ or EU] -tr [transmitters]}
+#
+DEFAULT_CMD = '/home/pi/work/bin/rtldavis -tf EU'
 DEBUG_RAIN = 0
 DEBUG_PARSE = 0
 DEBUG_RTLD = 0
@@ -693,16 +693,16 @@ class ProcManager():
         return lines
 
     def get_stderr(self):
-        lines = [] 
+        lines = []
         # When a lot rtldavis packets are read, a hangup
         # will occur regularly, sometimes of more than a minute.
-        # Therefor a maximum run-time of get_stderr of 10 seconds 
-        # is invoked to let genLoopPackets process the yielded lines. 
+        # Therefor a maximum run-time of get_stderr of 10 seconds
+        # is invoked to let genLoopPackets process the yielded lines.
         start_time = int(time.time())
         while self.running() and int(time.time()) - start_time < 10:
-            try:             
+            try:
                 line = self.stderr_queue.get(True, 10).decode('utf-8')
-                lines.append(line) 
+                lines.append(line)
                 yield lines
                 lines = []
             except queue.Empty:
@@ -867,13 +867,13 @@ class RtldavisConfigurationEditor(weewx.drivers.AbstractConfEditor):
     #
     # The options below will autoamically be set
     # -tf = transmitter frequencies, US, NZ or EU
-    # -tr = transmitters: tr1=1,  tr2=2,  tr3=4,  tr4=8, 
+    # -tr = transmitters: tr1=1,  tr2=2,  tr3=4,  tr4=8,
     #                     tr5=16, tr6=32, tr7=64, tr8=128
 
     # Radio frequency to use between USB transceiver and console: US, NZ or EU
     # US uses 915 MHz, NZ uses 921 MHz and EU uses 868.3 MHz.  Default is EU.
     transceiver_frequency = EU
-    
+
     # Used channels: 0=not present, 1-8)
     # The channel of the Vantage Vue ISS or Vantage Pro or Pro2 ISS
     iss_channel = 1
@@ -884,7 +884,7 @@ class RtldavisConfigurationEditor(weewx.drivers.AbstractConfEditor):
     temp_hum_2_channel = 0
     # rain bucket type (0: 0.01 inch, 1: 0.2 mm)
     rain_bucket_type = 1
-    
+
     # Print debug messages
     # 0=no logging; 1=minimum logging; 2=normal logging; 3=detailed logging
     debug_parse = 0
@@ -936,7 +936,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         'soilMoist4': 'soil_moisture_4',
         'leafWet1': 'leaf_wetness_1',
         'leafWet2': 'leaf_wetness_2',
-        'rxCheckPercent': 'pct_good_all', # updated in 
+        'rxCheckPercent': 'pct_good_all', # updated in
         'txBatteryStatus': 'bat_iss',
         'supplyVoltage': 'supercap_volt',
         'referenceVoltage': 'solar_power',
@@ -1026,7 +1026,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         loginf('using temp_hum_1_channel %s' % channels['temp_hum_1'])
         loginf('using temp_hum_2_channel %s' % channels['temp_hum_2'])
 
-        self.transmitters, self.tr_count = RtldavisDriver.ch_to_xmit(self, 
+        self.transmitters, self.tr_count = RtldavisDriver.ch_to_xmit(self,
             channels['iss'], channels['anemometer'], channels['leaf_soil'],
             channels['temp_hum_1'], channels['temp_hum_2'])
         loginf('using transmitters %d' % self.transmitters)
@@ -1040,6 +1040,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
 
         self._last_pkt = None # avoid duplicate sequential packets
         self._stderr_sample_count = 0  # bounded startup RAW sample (S24 L6)
+        # DEC-0024 Layer B (S43): freqError fields from the last channel-hop
+        # packet, held here until the next real DATA packet rides them in --
+        # never published as their own dataless loop packet.
+        self._pending_freq_fields = {}
         self._mgr = ProcManager()
         self._mgr.startup(self.cmd, self.path, self.ld_library_path)
 
@@ -1118,21 +1122,39 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         packet['usUnits'] = weewx.METRICWX
         return packet
 
+    def _cache_pending_freq_fields(self, data):
+        """DEC-0024 Layer B (S43): stash a channel-hop packet's freqError{n}
+        fields (if any -- the hop may not match the transmitter being
+        tracked) so the next real DATA packet can carry them, instead of
+        this dataless packet ever being yielded as a loop packet."""
+        freq_fields = {k: v for k, v in data.items() if k.startswith('freqError')}
+        if freq_fields:
+            self._pending_freq_fields.update(freq_fields)
+
+    def _merge_pending_freq_fields(self, data):
+        """DEC-0024 Layer B (S43): ride any freqError fields cached from the
+        last channel-hop packet in on this real DATA packet, then clear the
+        cache -- each cached value rides exactly once."""
+        if self._pending_freq_fields:
+            data.update(self._pending_freq_fields)
+            self._pending_freq_fields = {}
+
     def _init_stats(self):
         self.stats = {
             # theoretical loop times for 8 transmitter channels (plus 100.0 as dummy)
             'loop_times': [2.5625, 2.625, 2.6875, 2.75, 2.8125, 2.875, 2.9375, 3, 100.0],
             'activeTrIds': [9] * 8,    # 9 means: sensor not active
             'activeTrIdPtrs': [0] * 8, # pointer to active transmitter
-            'curr_ts': 0,              # time stamp of current archive  
+            'curr_ts': 0,              # time stamp of current archive
             'last_ts': 0,              # time stamp of previous archive
             'curr_cnt': [0] * 4,       # received messages since startup at current archive
             'last_cnt': [0] * 4,       # received messages since startup at previous archive
             'max_count': [0] * 4,      # max to receive messages per transmitter current archive period
-            'count': [0] * 4,          # received messages per transmitter current archive period 
+            'count': [0] * 4,          # received messages per transmitter current archive period
             'missed': [0] * 4,         # missed messages per transmitter current archive period
             'pct_good': [None] * 4,    # percentage of good messages per transmitter
-            'pct_good_all': None}      # percentage of good messages for all transmitters
+            'pct_good_all': None,      # percentage of good messages for all transmitters
+            'dup_count': 0}            # DEC-0035 (S43): Go demodulator double-decodes this period
 
     def _reset_stats(self):
         self.stats['last_ts'] = self.stats['curr_ts']
@@ -1140,6 +1162,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             self.stats['last_cnt'][i] = self.stats['curr_cnt'][i]
             self.stats['pct_good'][i] = None
         self.stats['pct_good_all'] = None
+        self.stats['dup_count'] = 0
 
     def _update_stats(self, curr_cnt0, curr_cnt1, curr_cnt2, curr_cnt3):
         # update the statistics
@@ -1153,6 +1176,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self.stats['curr_ts'] = int(time.time())
         logdbg("ARCHIVE_STATS: last time: last_cnt[0-3]: %12d %8d %8d %8d %8d" % (self.stats['last_ts'], self.stats['last_cnt'][0], self.stats['last_cnt'][1], self.stats['last_cnt'][2], self.stats['last_cnt'][3]))
         logdbg("ARCHIVE_STATS: curr time: curr_cnt[0-3]: %12d %8d %8d %8d %8d" % (self.stats['curr_ts'], self.stats['curr_cnt'][0], self.stats['curr_cnt'][1], self.stats['curr_cnt'][2], self.stats['curr_cnt'][3]))
+        # DEC-0035 (S43): a permanent, cheap counter, logged once per archive
+        # period at INFO -- no debug mode required. Turns the S37 two-hour
+        # debug expedition into a standing measurement of how often the Go
+        # demodulator double-decodes a single RF burst.
+        loginf("duplicate frames this period: %d" % self.stats['dup_count'])
         # if not the first time since startup
         if self.stats['last_ts'] > 0:
             total_count = 0
@@ -1187,13 +1215,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # already means real messages were received this period.
             if total_max_count > 0:
                 self.stats['pct_good_all'] = 100.0 * total_count / total_max_count
-                logdbg("ARCHIVE_STATS: total_max_count=%d total_count=%d total_missed=%d  pctGood=%6.2f" % 
+                logdbg("ARCHIVE_STATS: total_max_count=%d total_count=%d total_missed=%d  pctGood=%6.2f" %
                     (total_max_count, total_count, total_missed, self.stats['pct_good_all']))
             # log the stats for each active transmitter and no-init-counters
             for i in range(0, 4):
                 if self.stats['curr_cnt'][i] > 0 and self.stats['count'][i] > 0 and self.stats['pct_good'][i] is not None:
                     x = self.stats['activeTrIds'][i]
-                    logdbg("ARCHIVE_STATS: station %d: max_count= %4d count=%4d missed=%4d pct_good=%6.2f" % 
+                    logdbg("ARCHIVE_STATS: station %d: max_count= %4d count=%4d missed=%4d pct_good=%6.2f" %
                         (i+1, self.stats['max_count'][i], self.stats['count'][i], self.stats['missed'][i], self.stats['pct_good'][i]))
 
     def new_archive_record(self, event):
@@ -1231,13 +1259,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
     def genLoopPackets(self):
         packet = dict()
         time_last_received = int(time.time())
-        # change the presentation of the FrequencyErrors of the transmitters 
+        # change the presentation of the FrequencyErrors of the transmitters
         #  each period
         periodShowOneTransm = 2*24*3600  # 2 days
         rel_transm_to_store = int(((time_last_received-(3*3600)) % (periodShowOneTransm * self.tr_count)) / periodShowOneTransm)
         self.transm_to_store = self.stats['activeTrIds'][rel_transm_to_store]
         dbg_parse(1, "Number of transmitters: %s, store freqError data for transmitter with ID=%s" % (self.tr_count, self.transm_to_store))
-        
+
         while self._mgr.running():
             # the stalled timeout must be greater than the init period
             # init period is EU: 16 s, US, AU and NZ: 133 s
@@ -1254,11 +1282,28 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # per-hop line -- gated at debug_rtld=3 so it no longer
                         # floods weewx.log at INFO on every freq-hop (S24 M3).
                         dbg_rtld(3, "RAW_RTL_HOP: %s" % _line.strip())
+                    if "duplicate packet:" in _line:
+                        # DEC-0035 (S43): Go's own dedup log -- the demodulator
+                        # double-decoded one RF burst. Counted unconditionally
+                        # (no debug gate); summarized once per archive period
+                        # by _update_summaries().
+                        self.stats['dup_count'] += 1
                 for data in PacketFactory.create(self, lines):
                     if data:
                         time_last_received = int(time.time())
                         if 'curr_cnt0' in data:
                             self._update_stats(data['curr_cnt0'], data['curr_cnt1'], data['curr_cnt2'], data['curr_cnt3'])
+                            self._merge_pending_freq_fields(data)
+                        else:
+                            # DEC-0024 Layer B (S43): a channel-hop packet --
+                            # dateTime + usUnits, and freqError{n} when this
+                            # hop matches the transmitter being tracked.
+                            # Publishing this as its own loop packet is what
+                            # inflated reception/publish counts ~1.6x
+                            # (measured S21). Cache it for the next real DATA
+                            # packet instead of yielding a standalone one.
+                            self._cache_pending_freq_fields(data)
+                            continue
                         if data != self._last_pkt:
                             self._last_pkt = data
                             packet = self._data_to_packet(data)
@@ -1624,7 +1669,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         obs_group_dict['heatingVoltage']    = 'group_frequency'
 
 
-############################## Conf Editor ############################## 
+############################## Conf Editor ##############################
 
 if __name__ == '__main__':
     import optparse
@@ -1637,7 +1682,7 @@ if __name__ == '__main__':
     weeutil.logger.setup('rtldavis', {})
 
     usage = """%prog [--debug] [--help] [--version]
-        [--action=(show-packets] [--cmd=RTL_CMD] 
+        [--action=(show-packets] [--cmd=RTL_CMD]
         [--path=PATH] [--ld_library_path=LD_LIBRARY_PATH]
 
 Actions:

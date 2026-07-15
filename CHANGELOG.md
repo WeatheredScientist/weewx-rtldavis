@@ -6,6 +6,55 @@ under [Pre-S16].
 
 ---
 
+## [S43] — 2026-07-15 — soak + humidity-spike check clean; three backlog items shipped (Cold-load Fix B/DEC-0051, Reception Layer B/DEC-0024, duplicate-frame counter/DEC-0035)
+
+> **Soak check (v2.0.7, up 49h): green.** 11/15 pass, 4 expected startup-only warnings, 0 failures —
+> archive current, stdout quiet, no tracebacks, no stalls, 100% reception, 45,190 records published, 0
+> phantom-rain rows in 2,987 archive rows. **Humidity-spike check: no qualifying spike yet.** Decoded
+> the full `humidity_raw=` series since the capture went live (2,056 samples, ~50h, including the
+> rotated `weewx.log.2026-07-13`/`.2026-07-14` the live log had already rolled past) per the driver's
+> real decode formula. Largest jump: 7.5 %RH/min, clustered in the predicted 11:00–16:00 window but
+> well under the 16-37% DEC-0044 signature. Capture instrument confirmed working correctly.
+>
+> **Three backlog items shipped in code, on a worktree branch (PR pending — not yet merged/deployed):**
+>
+> 1. **Cold-load Fix B + windchill (DEC-0051, closes issue #44).** `loop_json_writer.py` now writes an
+>    identical snapshot to a second path (`current.json`, default `/opt/weewx-data/current.json`) on
+>    every LOOP packet, atomic tmp+rename same as `loop-data.txt`; `windchill` added to `_FIELDS`
+>    (`windchill_F`). `docs/INTERFACES.md` updated. **Deploy: mounted file — hot-swap (scp + clear-pyc
+>    + restart), no image rebuild** (verified against `docs/ARCHITECTURE.md`'s mount table).
+> 2. **Reception Layer B (DEC-0024 — now fully resolved).** The driver published channel-hop
+>    (`freqError{n}`) packets as their own dataless loop packets, which every uploader (WU RapidFire
+>    etc.) then published as if they were full weather updates — the ~1.6x overcount measured at S21.
+>    Considered and rejected: dropping the packet outright (freqError is repurposed onto real archive
+>    schema columns — `consBatteryVoltage`/`hail`/`hailRate`/`heatingTemp`/`heatingVoltage` — and
+>    `ops/reception_service.py` logs non-zero freqErrors, so silently breaks both); tagging it dataless
+>    and filtering in every consumer (broader blast radius for no benefit). **Chosen:** cache the
+>    channel-hop packet's freqError fields and merge them onto the *next* real DATA packet instead of
+>    ever yielding a standalone one (`_cache_pending_freq_fields` / `_merge_pending_freq_fields`, each
+>    cached value rides exactly once). Side effect: also fixes `ops/reception_service.py`'s own
+>    60s-rolling reception window, which had the identical blind spot (counted channel-hop packets as
+>    real readings) and was never separately flagged until this session.
+> 3. **Duplicate-frame counter (DEC-0035's own proposed instrument).** `genLoopPackets`'s stderr scan
+>    now counts Go's `"duplicate packet:"` dedup line unconditionally (no `debug_rtld` gate) into
+>    `self.stats['dup_count']`; `_update_summaries()` logs one INFO line per archive period (including
+>    `N=0`, so a quiet period is distinguishable from the instrument not running); `_reset_stats()`
+>    zeroes it for the next period — the same pattern already used for `pct_good_all`.
+>
+> Items 2+3 both touch the baked driver (`rtldavis.py`) — bundled for **one** image rebuild rather than
+> two. +13 offline tests (`test_loop_json_writer.py`, `test_reception_layer_b.py`,
+> `test_duplicate_frame_counter.py`); suite 72 → 85. **DEC-0051 added; DEC-0024 and DEC-0035 updated**
+> with S43 sub-sections in `DECISIONS-FULL.md`.
+>
+> **Caught mid-commit: local pre-commit's `ruff-format` hook had silently contradicted DEC-0027 since
+> S31.** CI dropped `ruff format` deliberately (it flattens `rtldavis.py`'s column alignment and
+> reformats the baked driver — No-Rewrite); local `.pre-commit-config.yaml` still carried it. Never
+> fired because pre-commit itself was never installed until S42 (DEC-0050) — its first real run
+> attempted to mass-reformat `rtldavis.py` (3,213-line diff) on this session's commit. Caught (a second
+> hook also blocked the same commit), reverted, `ruff-format` removed from the config. Checked both
+> siblings for the same pattern: the dashboard already avoids it deliberately; `hyperlocal-forecast`
+> carries it too but with no equivalent DEC and no known baked file, so no finding filed there.
+
 ## [S42] — 2026-07-14 — the cross-repo round: DEC-0040's triggers fired, the identifiers were live on public dev, and pre-commit had never run (DEC-0050)
 
 > **This was the scheduled `[Fable]` cross-repo coordination round** (dash S74 = this repo's S42),

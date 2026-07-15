@@ -15,19 +15,21 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S42** (2026-07-14) — **the cross-repo coordination round** (dash S74 = our S42).
-> **DEC-0050:** DEC-0040's revisit triggers fired — the private **`eaglehunt-ops`** repo now holds the
-> canonical `station-identity.env` + drift check (first run: 8/9 representations within 19 m; the 9th
-> caught **HLF's `/api/v1/forecast` hanging in prod** — filed in their tracker, not fixed from here),
-> the NAS runtime contract, and the `~/.claude/` guards under version control with tests. **Scrubbed:**
-> `ops/soak_check.sh` had the real NAS user/IP/port as tracked defaults on public `dev` — now fail-fast
-> placeholders, facts in `~/.claude/nas.env`; suite 41/41, tree clean, no history rewrite (DEC-0028).
-> **The hole under the hole: pre-commit was configured but NEVER INSTALLED, in all three repos** — now
-> installed. Full story: CHANGELOG `[S42]`.
+> **Current session: S43** (2026-07-15). **Soak + humidity-spike check (clean):** v2.0.7 soak is
+> green (11/15 pass, 4 expected startup-only warnings, 0 failures; 45,190 records published, 100 %
+> reception, 0 phantom-rain rows). Pulled and decoded the full `humidity_raw=` series since capture
+> went live (2,056 samples across ~50 h, incl. the rotated `weewx.log.2026-07-13`/`.2026-07-14`) —
+> **no qualifying spike yet** (largest jump 7.5 %RH/min, well under the 16-37 % DEC-0044 signature).
+> Capture is working correctly; still watching.
+> **Three backlog items shipped in code this session** (worktree `worktree-s43-three-backlog-items`,
+> not yet merged/deployed): **Cold-load Fix B** (`current.json` + `windchill`, closes issue #44,
+> DEC-0051) — mounted file, hot-swap deploy, no rebuild; **Reception Layer B** (DEC-0024, now fully
+> resolved) and the **duplicate-frame counter** (DEC-0035) — both in the baked driver, need an image
+> rebuild. Suite 85/85 (+13 new tests). See CHANGELOG `[S43]`.
 > v2.0.7 remains in prod (`prod-baseline-20260713b`); `log_humidity_raw` still ACTIVE — the next midday
 > spike settles the nibble question (see [S41]).
 
-_Last updated: 2026-07-14 (S42)._
+_Last updated: 2026-07-15 (S43)._
 
 ---
 
@@ -143,12 +145,6 @@ and no stalls beyond the single known startup one.
 - **Monitor alert on the new rejection signature (S33 follow-up #1)** — extend `weewx_monitor.py`'s
   rain-glitch email to SensorQC rejections; needs its own pattern + a rate cap so a flapping sensor
   can't spam. Only worth doing once we see the real rejection rate.
-- **Reception Layer B (DEC-0024)** — driver stops publishing dataless freqError packets + persists raw
-  `count`/`missed`. Deferred to **v2.0.5** (S34) so v2.0.4 stayed single-purpose. Needs design + approval
-  (No-Rewrite).
-- **Cold-load Fix B (`current.json`)** — `loop_json_writer.py` also writes an atomic `current.json` the
-  dashboard fetches first at boot, so a *first-time* visitor doesn't see em-dashes. Richer than
-  originally scoped now: the loop packet gained `barometer`/`dewpoint`/`heatindex`.
 - **`DewpointCacher` × `SensorQC` interaction (S36, undecided).** The cacher carries `outTemp`/
   `outHumidity`/`radiation`/`UV` forward for up to 300 s, so a value SensorQC *rejects* gets refilled
   with the last good reading (~40 s old) rather than left null. The bad value never propagates either
@@ -213,32 +209,46 @@ and no stalls beyond the single known startup one.
   misnomer was only ever ours. `rw350-test` / `rw400-test` are the same class and should follow.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S42 done → S43)
+## Next session actions (S43 done → S44)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S42 (2026-07-14) — the cross-repo round's share for this repo** (one PR): the
-`soak_check.sh` identifier scrub (fail-fast placeholders; facts in `~/.claude/nas.env`; 41/41 clean
-tree), **DEC-0050** (`eaglehunt-ops` born — canonical station identity + drift check + versioned
-`~/.claude/` guards; NOT a master repo), pre-commit **actually installed** (it had never been, in any
-of the three clones), and two issues filed here (loop-writer `cloudbase`+`windchill`; provenance
-audit). See CHANGELOG `[S42]`.
+**✅ Done in S43 (2026-07-15):** soak + humidity-spike check (both clean, see banner above); **three
+backlog items shipped in code** on `worktree-s43-three-backlog-items` (PR pending review — not yet
+merged or deployed):
+1. **Cold-load Fix B + windchill (DEC-0051, closes issue #44)** — `loop_json_writer.py` now also
+   writes `current.json` (identical content, second path) and emits `windchill_F`.
+   `docs/INTERFACES.md` updated. **Deploy: mounted file, hot-swap (scp + clear-pyc + restart) — no
+   image rebuild.**
+2. **Reception Layer B (DEC-0024, now fully resolved)** — `rtldavis.py` caches a channel-hop packet's
+   `freqError{n}` fields and merges them onto the *next* real DATA packet instead of yielding the
+   channel-hop packet as its own dataless loop packet. Fixes the ~1.6x WU overcount AND, as a side
+   effect, `ops/reception_service.py`'s own reception-window overcount (it only ever sees real DATA
+   packets now).
+3. **Duplicate-frame counter (DEC-0035)** — `rtldavis.py` tallies Go's `"duplicate packet:"` dedup
+   line unconditionally and logs one INFO summary per archive period (incl. `N=0`), reset each period.
 
-**▶ ON RETURN (S43), in order:**
+Items 2+3 are both in the baked driver (same file) — bundle into **one image rebuild**, not two
+(DEC-0031). Suite 85/85 (+13 tests: `test_loop_json_writer.py`, `test_reception_layer_b.py`,
+`test_duplicate_frame_counter.py`).
 
-1. **Check the log for a humidity spike — the capture is LIVE.** `log_humidity_raw True` went active with
+**▶ ON RETURN (S44), in order:**
+
+1. **Merge the S43 PR, then deploy.** Two separate deploy actions: (a) hot-swap `loop_json_writer.py`
+   on the NAS (no rebuild); (b) rebuild the image for the driver changes, bump to the next version tag,
+   redeploy, verify in the running system per DEC-0046 discipline (never trust an image-only check).
+
+2. **Check the log for a humidity spike — the capture is LIVE.** `log_humidity_raw True` went active with
    the v2.0.7 restart at 2026-07-13 15:27 EDT. Grep `weewx.log` for `humidity_raw=`. Spikes run ~2–3/week
-   clustered **11:00–16:00**, so one may already have landed. It logs the full `pkt[4]`/`pkt[3]` — **no
+   clustered **11:00–16:00** — S43 checked 2,056 samples across ~50 h, no qualifying spike yet (largest
+   7.5 %RH/min, need the 16-37 % DEC-0044 signature). It logs the full `pkt[4]`/`pkt[3]` — **no
    averaging, no free parameter** — which settles the nibble question **deterministically**: invert the
    bytes, re-decode under `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV,
    which are 2 and 3 bits away), compare with the concurrent archived sensor. **The method and the
    arithmetic are in DEC-0044; do not re-derive them.**
 
-2. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
+3. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
-
-3. Then the ordinary backlog: **cold-load Fix B (`current.json`)**, **Reception Layer B (DEC-0024)**, and
-   the **always-on duplicate-frame counter (DEC-0035)**.
 
 **Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
 **config** is mounted and the image is inert (DEC-0046). Inverses. A release that changes shipped config

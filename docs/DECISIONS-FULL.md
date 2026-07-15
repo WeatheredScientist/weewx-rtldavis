@@ -378,6 +378,23 @@ fallback to the legacy summary; real-time `WINDOW` logging + outage alerting unt
 counts / enable `ARCHIVE_STATS` logging + stop the dataless freqError publishes), still deferred under
 No-Rewrite.
 
+**Update (S43, 2026-07-15) — Layer B shipped.** Three options were weighed: (A) drop the channel-hop
+packet outright — rejected, because `freqError0-4` are repurposed onto real archive schema columns
+(`consBatteryVoltage`/`hail`/`hailRate`/`heatingTemp`/`heatingVoltage`, `rtldavis.py:951-955`) and
+`ops/reception_service.py` logs non-zero freqErrors, so dropping it silently breaks both; (C) tag the
+packet dataless and filter in every consumer — rejected as unnecessarily broad (touches multiple
+files for no benefit over B). **(B), chosen:** cache a channel-hop packet's `freqError{n}` fields
+(`_cache_pending_freq_fields`) and merge them onto the *next* real DATA packet
+(`_merge_pending_freq_fields`) instead of ever yielding the channel-hop packet as its own loop packet.
+Each cached value rides exactly once (cleared on merge). Confined to `genLoopPackets`'s packet-yield
+loop plus two small extracted helpers (~25 lines total) — no consumer files touched, no schema
+change, no config change. `ops/reception_service.py`'s own 60s-rolling reception window (bound to
+`NEW_LOOP_PACKET`, previously counting channel-hop packets as if they were real readings — a second,
+previously undocumented consumer with the same blind spot as the WU overcount) is fixed **as a side
+effect**: it now only ever sees real DATA packets. 5 offline unit tests
+(`tests/test_reception_layer_b.py`), suite 85/85. Driver is baked (DEC-0031) — ships in the next
+image rebuild. **DEC-0024 is now fully resolved; both layers shipped.**
+
 ## DEC-0025 — Known-bad data: preserve-and-flag, never delete
 
 **Status:** Accepted · **Date:** S29 (2026-07-05)
@@ -452,6 +469,18 @@ codebase's formatting are untouched. *Alternatives rejected:* full `ruff format`
 reformats the baked driver — No-Rewrite) and relaxing lint to non-blocking (defeats the point — we want
 real green, and `ruff check` catches genuine issues). If a formatter is ever wanted, adopt it deliberately
 per-file with the alignment trade-off understood, not as a blanket gate.
+
+**Update (S43, 2026-07-15) — the decision was dropped from CI but never from local pre-commit.**
+`.pre-commit-config.yaml` had carried a `ruff-format` hook the whole time, silently contradicting this
+DEC. It never fired because **pre-commit itself was never installed** until S42 (DEC-0050) — so this
+was a second, independent instance of "a configured control that nothing executes is prose," this time
+inverted: once actually installed, its first real run **did** execute, and it mass-reformatted
+`rtldavis.py` (a 3,213-line diff) attempting the S43 commit, exactly the outcome this DEC rejected.
+Caught before it landed (a second hook's file modifications also blocked the same commit). Fixed:
+`ruff-format` removed from `.pre-commit-config.yaml`, local config now matches this DEC and CI. Checked
+both sibling repos for the same pattern: the dashboard already avoids it deliberately (no `ruff-format`,
+noted in its own config header); `hyperlocal-forecast` does carry `ruff-format`, but with no equivalent
+DEC and no known baked/aligned file, there is no evidence it's wrong there — not filed as a finding.
 
 ## DEC-0028 — Leaked credential in pushed public history: rotate immediately, don't rewrite (S32)
 
@@ -875,6 +904,15 @@ The full glitch chain:
 *Lesson, stated plainly because it has now cost two sessions:* a null result from an instrument whose
 sensitivity you have not verified is not evidence of absence. Before trusting a "zero", prove the tool
 can see a "one".
+
+**Update (S43, 2026-07-15) — the permanent counter shipped, exactly as proposed.** `genLoopPackets`'s
+existing stderr-scan loop (already special-cased `"Hop:"`/`"ChannelIdx:"`) now also counts
+`"duplicate packet:"` lines into `self.stats['dup_count']`, unconditionally — no `debug_rtld` gate.
+`_update_summaries()` logs one INFO line every archive period (`"duplicate frames this period: N"`),
+including `N=0` so a quiet period is distinguishable from the instrument not running; `_reset_stats()`
+zeroes it for the next period, following the exact pattern already used for `pct_good_all`. 5 offline
+unit tests (`tests/test_duplicate_frame_counter.py`), suite 85/85. Driver is baked (DEC-0031) — ships
+in the next image rebuild, bundled with DEC-0024's Layer B (same file, same rebuild).
 
 ---
 
@@ -1785,3 +1823,30 @@ the only sanctioned cross-repo read path into HLF (their DEC-0104); the dashboar
 though it lives under this repo's directory on the NAS (their DEC-0109); the S38 §Etiquette agent protocol
 (read-only across boundaries; file, don't fix; one owner per prod; state your confidence) is now standing
 doctrine, printed in eaglehunt-ops' README.
+
+---
+
+## DEC-0051 — Cold-load Fix B ships (`current.json`); `windchill` closes issue #44
+
+**Status:** Accepted · **Date:** 2026-07-15 (S43)
+
+The dashboard's S69 handoff and issue #44 (filed at the S42 cross-repo round, dash S74) asked for two
+things sharing "the same file, same contract surface": a `current.json` snapshot the dashboard fetches
+**first at boot** (Fix A, the dashboard's own localStorage replay via its DEC-0094, only helps *repeat*
+visitors — a public link lands on a first-timer with nothing to show, hence the em-dashes), and
+`windchill` as the last field the dashboard still round-trips to InfluxDB for on every 30 s tick
+(`cloudbase` was already emitted).
+
+**Shipped, both in `loop_json_writer.py`:**
+1. `new_loop()` now writes the identical cached-forward dict to a second path
+   (`current_path`, default `/opt/weewx-data/current.json`) on every packet, same atomic
+   tmp-write + `os.replace` pattern as the existing `loop-data.txt` write. Both paths are
+   independently configurable via `[LoopJsonWriter]`.
+2. `windchill` added to `_FIELDS` (`windchill` → `windchill_F`), identical treatment to `heatindex`.
+
+`docs/INTERFACES.md` §1 updated: `current.json` documented alongside `loop-data.txt` as the same
+contract surface, and `windchill_F` added to the fields table. Serving `current.json` with the right
+cache headers (`no-store`) is the dashboard/eh-proxy's responsibility (DEC-0010) — this repo's scope
+ends at producing the file. 3 offline unit tests (`tests/test_loop_json_writer.py`), suite 85/85. No
+driver involved — `loop_json_writer.py` is a `data_service` (DEC-0005), not the baked driver, so this
+ships on the next ordinary config/service deploy, independent of any image rebuild.
