@@ -158,7 +158,7 @@ Real credentials live only in gitignored files (`weewx.conf`, `monitor.env`); co
 
 *Rationale:* the repo is public, indexed, and permanent — a pushed secret is exposed even if later
 deleted. S16 caught and scrubbed three real leaks (WU API key + PWS id in `wxcheck.sh`, a place-name
-chart title, the InfluxDB org name). *Follow-up:* rotate the exposed WU key (BACKLOG).
+chart title, the InfluxDB org name). *Follow-up:* credential hygiene, tracked in the gitignored local-infra doc (DEC-0047).
 
 ## DEC-0013 — Session numbering continues the shared lineage at S16
 
@@ -378,6 +378,23 @@ fallback to the legacy summary; real-time `WINDOW` logging + outage alerting unt
 counts / enable `ARCHIVE_STATS` logging + stop the dataless freqError publishes), still deferred under
 No-Rewrite.
 
+**Update (S43, 2026-07-15) — Layer B shipped.** Three options were weighed: (A) drop the channel-hop
+packet outright — rejected, because `freqError0-4` are repurposed onto real archive schema columns
+(`consBatteryVoltage`/`hail`/`hailRate`/`heatingTemp`/`heatingVoltage`, `rtldavis.py:951-955`) and
+`ops/reception_service.py` logs non-zero freqErrors, so dropping it silently breaks both; (C) tag the
+packet dataless and filter in every consumer — rejected as unnecessarily broad (touches multiple
+files for no benefit over B). **(B), chosen:** cache a channel-hop packet's `freqError{n}` fields
+(`_cache_pending_freq_fields`) and merge them onto the *next* real DATA packet
+(`_merge_pending_freq_fields`) instead of ever yielding the channel-hop packet as its own loop packet.
+Each cached value rides exactly once (cleared on merge). Confined to `genLoopPackets`'s packet-yield
+loop plus two small extracted helpers (~25 lines total) — no consumer files touched, no schema
+change, no config change. `ops/reception_service.py`'s own 60s-rolling reception window (bound to
+`NEW_LOOP_PACKET`, previously counting channel-hop packets as if they were real readings — a second,
+previously undocumented consumer with the same blind spot as the WU overcount) is fixed **as a side
+effect**: it now only ever sees real DATA packets. 5 offline unit tests
+(`tests/test_reception_layer_b.py`), suite 85/85. Driver is baked (DEC-0031) — ships in the next
+image rebuild. **DEC-0024 is now fully resolved; both layers shipped.**
+
 ## DEC-0025 — Known-bad data: preserve-and-flag, never delete
 
 **Status:** Accepted · **Date:** S29 (2026-07-05)
@@ -452,6 +469,18 @@ codebase's formatting are untouched. *Alternatives rejected:* full `ruff format`
 reformats the baked driver — No-Rewrite) and relaxing lint to non-blocking (defeats the point — we want
 real green, and `ruff check` catches genuine issues). If a formatter is ever wanted, adopt it deliberately
 per-file with the alignment trade-off understood, not as a blanket gate.
+
+**Update (S43, 2026-07-15) — the decision was dropped from CI but never from local pre-commit.**
+`.pre-commit-config.yaml` had carried a `ruff-format` hook the whole time, silently contradicting this
+DEC. It never fired because **pre-commit itself was never installed** until S42 (DEC-0050) — so this
+was a second, independent instance of "a configured control that nothing executes is prose," this time
+inverted: once actually installed, its first real run **did** execute, and it mass-reformatted
+`rtldavis.py` (a 3,213-line diff) attempting the S43 commit, exactly the outcome this DEC rejected.
+Caught before it landed (a second hook's file modifications also blocked the same commit). Fixed:
+`ruff-format` removed from `.pre-commit-config.yaml`, local config now matches this DEC and CI. Checked
+both sibling repos for the same pattern: the dashboard already avoids it deliberately (no `ruff-format`,
+noted in its own config header); `hyperlocal-forecast` does carry `ruff-format`, but with no equivalent
+DEC and no known baked/aligned file, there is no evidence it's wrong there — not filed as a finding.
 
 ## DEC-0028 — Leaked credential in pushed public history: rotate immediately, don't rewrite (S32)
 
@@ -865,7 +894,7 @@ The full glitch chain:
    exotic or marginal — it is running constantly, and only CRC and an exact-match dedup stand between it
    and the database. Both are known to be insufficient. This strengthens the case for the decode-layer
    filters, and it is the number to lead with upstream.
-4. **Instrumentation, not debug mode.** The `duplicate packet:` line is logged via `dbg_rtld(1)` → 
+4. **Instrumentation, not debug mode.** The `duplicate packet:` line is logged via `dbg_rtld(1)` →
    `log.debug`, so surfacing it requires the `user` logger at DEBUG — too noisy to leave on. Prod is back
    at `debug_rtld = 1` / INFO. The right fix is a **permanent, cheap counter** in the driver: tally
    duplicate-packet lines off the Go stderr stream and log one summary line per archive period at INFO.
@@ -875,6 +904,15 @@ The full glitch chain:
 *Lesson, stated plainly because it has now cost two sessions:* a null result from an instrument whose
 sensitivity you have not verified is not evidence of absence. Before trusting a "zero", prove the tool
 can see a "one".
+
+**Update (S43, 2026-07-15) — the permanent counter shipped, exactly as proposed.** `genLoopPackets`'s
+existing stderr-scan loop (already special-cased `"Hop:"`/`"ChannelIdx:"`) now also counts
+`"duplicate packet:"` lines into `self.stats['dup_count']`, unconditionally — no `debug_rtld` gate.
+`_update_summaries()` logs one INFO line every archive period (`"duplicate frames this period: N"`),
+including `N=0` so a quiet period is distinguishable from the instrument not running; `_reset_stats()`
+zeroes it for the next period, following the exact pattern already used for `pct_good_all`. 5 offline
+unit tests (`tests/test_duplicate_frame_counter.py`), suite 85/85. Driver is baked (DEC-0031) — ships
+in the next image rebuild, bundled with DEC-0024's Layer B (same file, same rebuild).
 
 ---
 
@@ -1506,3 +1544,309 @@ should happen; writing one does not make the claim true. When a test asserts tha
 fine, it converts a bug into a **certified** bug — and the green checkmark then actively defends it. So
 when you add a case to a security test, the question is not "does it pass?" but **"which array does it
 belong in, and why?"** That judgement *is* the gate. The code is just how it is enforced.
+
+---
+
+## DEC-0046 — The baked config is shadowed by the prod bind-mount: an image-only config fix never reaches prod (S41)
+
+**Status:** Accepted · **mirrors** DEC-0031 · **completes the delivery half of** DEC-0043 · 2026-07-13 (S41)
+
+**Context.** DEC-0043 fixed the root-logger defect by adding a `[[root]]` override to the two configs the
+repo ships: `logging.additions` (concatenated into the image's baked `/opt/weewx-data/weewx.conf`) and
+`weewx.conf.example`. A build-time assertion in the `Dockerfile` guarantees the baked config carries it,
+so an image *cannot* be built without the fix. S41 released that image as `:v2.0.7`.
+
+**Prod does not read the baked config.** The production container bind-mounts
+
+    /volume1/docker/weewx-rtldavis/weewx-data  ->  /opt/weewx-data
+
+The mount covers the *entire directory*, so the live `weewx.conf` **shadows the baked one completely**.
+The baked config — assertion and all — is inert in prod. It exists on disk under the mount and is never
+read.
+
+**What this would have cost.** Deploying `:v2.0.7` and stopping there would have produced a release that
+was, in prod, a **no-op with a green checkmark**: the image genuinely contains the fix, the build
+assertion genuinely passed, the release notes genuinely describe the fix — and the station would have gone
+on emitting syslog tracebacks and silently dropping every `weewxd`/`weeutil` startup line, exactly as
+before. Nothing anywhere would have said "no". It was caught by a pre-flight `grep` of the live config,
+which found **zero** `[[root]]` blocks.
+
+**Decision.** A config-layer change has **two independent delivery paths**, and shipping one does not ship
+the other:
+
+1. **The baked config** (`logging.additions` → image). Reaches **downstream users** on `docker pull`.
+   Delivered by an image rebuild. Cannot reach prod.
+2. **The live bind-mounted `weewx.conf`** on the NAS. Reaches **prod** — and *only* prod. Delivered by
+   editing that file on the NAS. Cannot reach downstream users, and is never committed (it holds live
+   credentials; DEC-0012).
+
+**Any release that changes shipped config MUST patch the live config in the same window, and verify the
+behavior in prod** — not merely confirm the image contains the fix. S41 did both: the live conf gained the
+`[[root]]` block (backed up first to `weewx.conf.bak-pre-v2.0.7`), and prod was verified behaviorally.
+
+**Prod's `[[root]]` is not identical to the baked one, deliberately.** The baked config uses
+`handlers = rotate, console,`; prod's uses `handlers = rotate,` — file only. Prod declares no console
+handler at all, and adding one would pipe root records to stdout and re-arm the DEC-0036 freeze hazard
+that DEC-0041 disarmed. **The two configs are allowed to differ; what must match is the *fix*, not the
+text.**
+
+**This is the exact mirror of DEC-0031, and that is the point.**
+
+| | Wins in prod | The no-op trap |
+|---|---|---|
+| **The driver** (DEC-0031) | the **baked** venv copy | `scp`ing `rtldavis.py` to the NAS is silently ignored |
+| **The config** (DEC-0046) | the **mounted** `weewx.conf` | rebuilding the image is silently ignored |
+
+They are inverses, which is what makes the pair so easy to get backwards. Neither one errors. Both accept
+the instruction and discard it. **For every file we ship, the question is not "did I change it?" but
+"which layer actually wins in prod?"**
+
+**The family this belongs to.** It is the fifth member of the pattern this repo keeps meeting: *an
+interface that accepts an instruction and silently discards it.* DEC-0031's bind-mount over the driver,
+DEC-0036's `max-size` on Synology's `db` log driver, DEC-0040's prose that does not execute, DEC-0045's
+test that certified the hole — and now a bind-mount that shadows a config whose own build assertion had
+just passed. **The assertion was not wrong. It was answering a question nobody was asking in prod.**
+
+**Consequence for how we verify.** The verification criterion S39 wrote down — *`weewx.log` must now
+contain `weewxd INFO Starting up weewx version 5.4.0`* — is behavioral, reads prod, and would have caught
+this even if the pre-flight grep had not. **Post-deploy checks must observe the running system, never the
+artifact.** An image check would have said PASS.
+
+---
+
+## DEC-0047 — The secret gate guards commits, not reads: the transcript is an egress path (S41)
+
+**Status:** Accepted · **extends** DEC-0012 · **completes** DEC-0039/0045 (which hardened only the write
+path) · **applies** DEC-0040 (prose does not execute) · 2026-07-13 (S41)
+
+**The gap.** Every secret control in this repo is a **commit-time** control. DEC-0012: *the live
+`weewx.conf` must never enter a commit.* `scripts/check_secrets.sh`: scans staged and tracked files. The
+CI `secret-scan` job. The 41-payload proof suite (DEC-0039, DEC-0045). Four hardenings across S26 → S40.
+
+**All of them guard the write path to GitHub. None of them has anything to say about reading.** Whatever a
+tool prints is written to `~/.claude/projects/*.jsonl` in **plaintext on local disk** and **transmitted to
+the model provider**. That is an egress path, and it had never been modeled as one.
+
+The `.gitignore` entry actively feeds the blind spot: the live config is *deliberately* excluded from the
+repo, which makes it feel handled. **"Not in the repo" is not "not in the transcript."**
+
+DEC-0040 said *prose does not execute*. This is a level worse: **there was no prose.** No rule was broken,
+because no rule existed.
+
+**What surfaced it (S41).** Inspecting the live config during the v2.0.7 deploy:
+
+    sed -n "/^\[Logging\]/,+44p" .../weewx-data/weewx.conf
+
+A fixed **line-count window** on a file that holds credentials. `[Logging]` is ~22 lines long, so the
+window ran off the end of its section and printed the *following* sections into the transcript. The
+section-scoped form was tried first (`awk '/^\[Logging\]/,/^\[[A-Z]/'`), returned only the header because
+the range pattern matched its own start, and `+44` was reached for as a quick fix. Nobody asked what lived
+at line 45.
+
+**A line-count window on a sectioned config is a loaded gun.** Sections move; the window does not.
+
+**Decision — three mechanical controls, in `~/.claude/`** (global, per DEC-0040's *no master repo; guards
+live in hooks*).
+
+1. **`hooks/secret-read-guard.sh`** — a `PreToolUse` hook on `Bash`, `Read` and `Grep`. Blocks
+   *(secret-bearing path)* × *(content-emitting verb)*: `cat`, `head`, `tail`, `sed` (without `-i`), `awk`,
+   `grep`, `cut`, `less`, `xxd`, `diff`, `scp`, … It sees through `ssh "…"` wrapping. **Editing is
+   deliberately untouched** — `cp`, `chmod`, `sed -i` and python heredocs all pass, because patching the
+   live `weewx.conf` is the DEC-0046 release workflow, and **a guard that blocks the work gets switched
+   off and protects nothing.** Path matching is **per-token, not per-string**: a string-level allowlist is
+   a hole, since `cat weewx.conf.example && cat weewx.conf` would see `.example`, conclude "sanitized",
+   and wave the live config through. `weewx.conf.bak-*` is treated as sensitive as the original, because
+   it is a verbatim copy of it.
+
+2. **`bin/readconf`** — the escape hatch that makes the guard livable. **Section-scoped: it structurally
+   cannot take a line window**, so it cannot repeat the failure above. Credential values are replaced by a
+   stable `<REDACTED:sha256-xxxxxxxx>` fingerprint, which still answers the two questions we actually ask
+   of a config — *does prod match the repo?* and *did this drift?* — with nothing disclosed. Redaction
+   keys off credential-shaped **key names** or high-entropy **values**, so `handlers = rotate,` and
+   `level = INFO` stay readable: those are precisely the lines a DEC-0046 deploy must verify.
+
+3. **`bin/scan-transcripts`** — the detection half, because prevention fails eventually. Correlates config
+   values against every transcript on the machine and the full git history of all three repos. Never
+   prints a value.
+
+**Both new tools ship with a positive control, and it is not decoration.**
+
+The guard's test asserts in **both directions** — 38 cases. The leaking command must block; and
+`cat weewx.conf.example`, `sed -i`, `cp`, `readconf` must all still pass, because the MUST-ALLOW half is
+what keeps the guard from being disabled. A **mutation test** (neuter the path check) turns it red — 18
+failures — proving it is load-bearing. The scanner **self-tests before every run**: it plants a canary,
+asserts it finds it, and asserts a placeholder is *not* reported. It refuses to report "0" if the harvest
+returned nothing, because that zero would be a lie.
+
+This is DEC-0039 and DEC-0045 compounding. *A green exit code is not evidence* (0039). *A passing test is
+not evidence either, if the assertion is wrong* (0045). **And a scan that finds nothing is not evidence
+unless you have proved the scanner can see.**
+
+**A scanner that cries wolf is its own failure mode.** The first pass of this analysis reported a real
+password sitting in `weewx.conf.example` in the current tree of the **public** repo — which would have
+been a live exposure and a fifth gate hole. It was the example's own placeholder string. The evidence was
+internally weird (the same "password" appeared as three different keys), and re-checking it is the only
+reason a five-alarm claim was not filed. `is_placeholder()` is now a first-class part of both tools.
+**A full scan of all refs confirms no real credential has ever been committed to any of the three repos.**
+
+**Operational note.** Anything printed into a transcript cannot be recalled by deleting the `.jsonl` — it
+has already been transmitted. That asymmetry is exactly why the *read* path deserves a guard as strong as
+the write path. Credential hygiene follow-ups are tracked in the **gitignored** local-infra doc, never in
+this public repo.
+
+
+---
+
+## DEC-0048 — Reception testing is a designed experiment, not a pile of image tags (S41)
+
+**Status:** Accepted · **supersedes** the ad-hoc `rw*-test` images · **absorbs** DEC-0017's pending sweep ·
+2026-07-13 (S41)
+
+**Context.** Three images sat on the NAS for six weeks — `rw250-test`, `rw350-test`, `rw400-test` — built
+during an ad-hoc `receiveWindow` sweep. They were **misnomers by the time they were a day old**:
+`receiveWindow` ships at the upstream default, so the tag names described a configuration nothing was
+actually running. They were never published to Docker Hub (verified: the public tag list is `latest` +
+`v1.0-ubuntu22`, `v2-ubuntu26`, `v2.0.1/.3/.5/.6/.7`), so the confusion was ours alone — but a tag that
+lies about what is inside it is exactly the failure DEC-0038 exists to prevent (*an image tag denotes
+exactly one tree*).
+
+**The deeper problem is that the sweep was never a controlled experiment.** It varied one parameter,
+eyeballed the result over an uncontrolled window, and left artifacts behind. **DEC-0017 has been open since
+S16 for the same reason** — gain is held at 372 "pending an averaged re-test" that never happened, because
+there was no agreed method for running one.
+
+**Decision.**
+
+1. **Retire the ad-hoc tags.** `rw250-test` is deleted. (`rw350-test` and `rw400-test` are the same class
+   and should follow.)
+2. **A proper RX test is deferred, deliberately — it is not abandoned.** When we do it, it is a *designed*
+   experiment, not a tag: a stated hypothesis, a fixed observation window long enough to average out
+   propagation and weather, a control arm, and a pre-registered success metric. It settles **DEC-0017**
+   (gain 372 vs 207, averaged, no preamp) and any `receiveWindow` question **in the same run**, because
+   they share the same apparatus and the same confound.
+3. **Until then, gain stays at 372 and `receiveWindow` stays at the upstream default.** Reception is
+   noise-floor limited at ~67–70 %, which is a *known* baseline, not a mystery. **Do not tune either
+   parameter by feel.**
+
+**Why this is a DEC and not a chore.** The temptation with radio work is to twiddle a parameter, glance at
+a number, and keep the tag "just in case". That produces artifacts that outlive their meaning and a
+baseline nobody trusts. **An experiment we cannot describe before running it is not an experiment.** The
+cleanup is trivial; the commitment is the point.
+
+
+---
+
+## DEC-0049 — The ISS hardware is new and has been inspected: the rainRate artifact is not a broken part (S41)
+
+**Status:** Accepted · **bounds** DEC-0042 · closes DEC-0042's "next step is physical" action ·
+2026-07-13 (S41)
+
+**Owner-supplied hardware facts (2026-07-13):**
+
+- The **ISS hardware is new**.
+- It was **recently inspected**, and **no hardware problems were found** — including the tipping bucket and
+  the reed switch, which DEC-0042 named as the things to look at.
+- The **one** component that did fail has already been **replaced: the anemometer, circa 16–17 June 2026**.
+
+**What this settles.** DEC-0042 concluded that the phantom `rainRate` is **ISS-side, not RF and not the
+driver** — condensation trips the reed switch enough to start the rate timer but never enough to tip the
+bucket — and its closing action was *"next step is physical: inspect the bucket, the reed switch and its
+wiring."* **That action is now closed, and it came back clean.**
+
+**A clean inspection does not falsify DEC-0042 — it sharpens it.** The two readings were always:
+
+1. a **defective** bucket or reed switch (a sticky, mis-seated or corroded part), or
+2. a **functioning** switch responding to an environmental condition it cannot distinguish from a tip.
+
+**Reading 1 is now excluded.** The hardware is new and sound, so the artifact is an **interaction between
+working hardware and the environment**, not a fault. That is consistent with everything DEC-0042 measured:
+both events were overnight, at 94 % RH, with a 1.7 °F dewpoint spread and 0 mph wind, and the tip counter
+**never advanced**. Condensation bridging a healthy reed switch produces exactly this signature. **A part
+you can replace was never going to fix it.**
+
+**Consequences.**
+
+- **Do not "fix" the rainRate by swapping hardware.** There is nothing to swap. Anyone who reads DEC-0042's
+  "next step is physical" without this entry will order a part for no reason.
+- **The remaining levers are environmental or software-side** (a shield/drip path, or a rate-plausibility
+  guard that requires the tip counter to advance) — but **nothing is being built yet**: the event is rare,
+  benign, already corrected in the data (DEC-0032 `rain_qc`), and understood.
+- **A third event remains a free test.** It is predictable on the next calm, saturated, cooling night, and
+  now has a sharper prediction attached: the counter still will not advance.
+
+**The anemometer replacement (16–17 June 2026) is also a dating anchor** — wind data before and after that
+window comes from **different physical hardware**. Worth remembering before attributing any wind-series
+step change to software.
+
+## DEC-0050 — The station gets a master for its IDENTITY (and only that): eaglehunt-ops, executing DEC-0040's revisit clause (S42)
+
+**What this settles.** DEC-0040 said *no master coordination repo — yet*, and listed the triggers that
+would flip the answer: a third shared **executable** asset, or the second time the same fix is hand-pasted
+into three repos. **Both fired.** By S41, `~/.claude/` held five shared executables — `docker-guard.sh`,
+`eaglehunt-status.sh`, `secret-read-guard.sh`, `readconf`, `scan-transcripts` — global in blast radius and
+version-controlled nowhere; and the secret-gate bug class had been re-derived four separate times (S36 here,
+dash DEC-0063, dash S70, S38 here). And the failure DEC-0040 predicted arrived: the dashboard's **DEC-0106**
+— the live `proxy.env` carried coordinates 6.67 km from the station (a different NWS grid cell) for a week,
+poisoning every captured forecast, because the same physical fact was written six ways across three repos
+and **nothing validated any of them**.
+
+**The decision (owner-approved, cross-repo round 2026-07-14 = dash S74 / this repo's S42):**
+
+1. **A small PRIVATE coordination repo, `eaglehunt-ops`**, scoped exactly to the S38 §Etiquette litmus
+   test (*does this belong to more than one repo?*): the canonical `station-identity.env`; the drift check
+   `checks/station-identity-check.sh`; the one-page NAS runtime contract; the `~/.claude/` guards **under
+   version control with their tests** (the live copies become deployments, installed by an owner-run
+   `hooks/install.sh`); and an issue tracker as the cross-repo inbox. It is **NOT a master repo**: no DECs
+   for the three project repos, not a session-start read, and it carries a deletion clause (unused in three
+   months → delete).
+2. **The station identity has ONE canonical representation** — `eaglehunt-ops/station-identity.env`.
+   This repo's `weewx.conf [Station]`, the gitignored `docs/LOCAL_INFRA.md`, and everything the dashboard
+   and HLF hold are **copies, validated against it** by the identity check (equality predicate: same NWS
+   grid cell / 250 m — HLF DEC-0078, dash DEC-0108). First run of the check: **8/9 representations agreed
+   within 19 m** — and the ninth finding was real (HLF's forecast endpoint was hanging; filed in their
+   tracker, not fixed from here).
+3. **This repo's identifier hygiene now has a place to point:** `ops/soak_check.sh` no longer carries NAS
+   connection facts as tracked defaults (they were live on public `dev` — caught by our own
+   `test_check_secrets.sh` tree check, which CI structurally cannot run because `.identifiers` is
+   gitignored). Facts live in `~/.claude/nas.env` / `docs/LOCAL_INFRA.md`; the tracked defaults are
+   placeholders that **fail fast**. The enforcement hole underneath: **pre-commit was configured but never
+   installed in any of the three clones** — the load-bearing local gate had never once run. Closed by
+   actually installing it (owner-run), and the lesson is DEC-0040's own, one level down: *a configured
+   control that nothing executes is prose.*
+
+**Why not "no repo, just a file on the NAS":** an unversioned canonical file is the same failure shape as
+the unversioned `proxy.env` that started this — no history, no diff, no owner. The identity file must live
+where change is visible and attributable.
+
+**Boundary rules ratified at the same round** (recorded in the owning repos): HLF's `/api/v1/` surface is
+the only sanctioned cross-repo read path into HLF (their DEC-0104); the dashboard owns `proxy.env` even
+though it lives under this repo's directory on the NAS (their DEC-0109); the S38 §Etiquette agent protocol
+(read-only across boundaries; file, don't fix; one owner per prod; state your confidence) is now standing
+doctrine, printed in eaglehunt-ops' README.
+
+---
+
+## DEC-0051 — Cold-load Fix B ships (`current.json`); `windchill` closes issue #44
+
+**Status:** Accepted · **Date:** 2026-07-15 (S43)
+
+The dashboard's S69 handoff and issue #44 (filed at the S42 cross-repo round, dash S74) asked for two
+things sharing "the same file, same contract surface": a `current.json` snapshot the dashboard fetches
+**first at boot** (Fix A, the dashboard's own localStorage replay via its DEC-0094, only helps *repeat*
+visitors — a public link lands on a first-timer with nothing to show, hence the em-dashes), and
+`windchill` as the last field the dashboard still round-trips to InfluxDB for on every 30 s tick
+(`cloudbase` was already emitted).
+
+**Shipped, both in `loop_json_writer.py`:**
+1. `new_loop()` now writes the identical cached-forward dict to a second path
+   (`current_path`, default `/opt/weewx-data/current.json`) on every packet, same atomic
+   tmp-write + `os.replace` pattern as the existing `loop-data.txt` write. Both paths are
+   independently configurable via `[LoopJsonWriter]`.
+2. `windchill` added to `_FIELDS` (`windchill` → `windchill_F`), identical treatment to `heatindex`.
+
+`docs/INTERFACES.md` §1 updated: `current.json` documented alongside `loop-data.txt` as the same
+contract surface, and `windchill_F` added to the fields table. Serving `current.json` with the right
+cache headers (`no-store`) is the dashboard/eh-proxy's responsibility (DEC-0010) — this repo's scope
+ends at producing the file. 3 offline unit tests (`tests/test_loop_json_writer.py`), suite 85/85. No
+driver involved — `loop_json_writer.py` is a `data_service` (DEC-0005), not the baked driver, so this
+ships on the next ordinary config/service deploy, independent of any image rebuild.
