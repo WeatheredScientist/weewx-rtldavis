@@ -3,11 +3,14 @@
 loop_json_writer.py
 Eagle Hunt PWS — expanded LOOP packet JSON writer.
 Writes all real-time fields to /opt/weewx-data/loop-data.txt on every
-LOOP packet (~2.5s for Davis VP2+). Atomic write via tmp+rename.
+LOOP packet (~2.5s for Davis VP2+), and atomically to a second path
+(current.json) that the dashboard fetches first at boot so a first-time
+visitor doesn't see em-dashes (Cold-load Fix B). Both writes carry identical
+content; only the destination path differs. Atomic write via tmp+rename.
 
 Fields written (None → omitted, last known value used for sparse fields):
   windSpeed_mph, windGust_mph, windDir
-  outTemp_F, dewpoint_F, outHumidity, heatindex_F
+  outTemp_F, dewpoint_F, outHumidity, heatindex_F, windchill_F
   barometer_inHg, rainRate_inch_per_hour
   radiation_Wpm2, UV, cloudbase_foot
   dateTime
@@ -36,6 +39,7 @@ _FIELDS = [
     ('dewpoint',             'dewpoint_F'),
     ('outHumidity',          'outHumidity'),
     ('heatindex',            'heatindex_F'),
+    ('windchill',            'windchill_F'),
     ('barometer',            'barometer_inHg'),
     ('rainRate',             'rainRate_inch_per_hour'),
     ('radiation',            'radiation_Wpm2'),
@@ -49,12 +53,13 @@ class LoopJsonWriter(StdService):
         super().__init__(engine, config_dict)
         cfg = config_dict.get('LoopJsonWriter', {})
         self.path = cfg.get('path', '/opt/weewx-data/loop-data.txt')
+        self.current_path = cfg.get('current_path', '/opt/weewx-data/current.json')
         # Cache of last known good values — VP2+ rotates fields across packets
         # so not every field appears in every packet. We keep the most recent
         # non-None value for each field and include it in every write.
         self._cache = {}
         self.bind(weewx.NEW_LOOP_PACKET, self.new_loop)
-        log.info('LoopJsonWriter: writing to %s' % self.path)
+        log.info('LoopJsonWriter: writing to %s and %s' % (self.path, self.current_path))
 
     def new_loop(self, event):
         pkt = event.packet
@@ -76,10 +81,11 @@ class LoopJsonWriter(StdService):
         data = dict(self._cache)
         data['dateTime'] = pkt.get('dateTime')
 
-        tmp = self.path + '.tmp'
-        try:
-            with open(tmp, 'w') as f:
-                json.dump(data, f)
-            os.replace(tmp, self.path)
-        except Exception as e:
-            log.error('LoopJsonWriter: failed to write %s: %s' % (self.path, e))
+        for path in (self.path, self.current_path):
+            tmp = path + '.tmp'
+            try:
+                with open(tmp, 'w') as f:
+                    json.dump(data, f)
+                os.replace(tmp, path)
+            except Exception as e:
+                log.error('LoopJsonWriter: failed to write %s: %s' % (path, e))
