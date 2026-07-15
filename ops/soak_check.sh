@@ -32,7 +32,7 @@ case "${NAS_PORT}${NAS_USER}${NAS_HOST}" in (*'<'*)
 esac
 WINDOW="${1:-0}"          # seconds; 0 = since container start
 CONTAINER=weewx-rtldavis-v2
-EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.7}"
+EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.8}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }

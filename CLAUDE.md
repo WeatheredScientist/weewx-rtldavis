@@ -70,12 +70,8 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
   `scp -P <SSH_PORT> -O` · no `bc`/`tmux`/`screen` (use bash integer arithmetic + `nohup`).
   Real values in gitignored `docs/LOCAL_INFRA.md`.
 - Docker: `/usr/local/bin/docker` (no sudo); container `weewx-rtldavis-v2`
-- **Published `:v2.0.5` (+ `:latest`) ≠ what prod runs (`:v2.0.4`).** Deliberate, and the delta is
-  behaviorally nil for us — v2.0.5 = v2.0.4 + the DEC-0036 console-handler default + the DEC-0034
-  identity strings. Prod's bind-mounted `weewx.conf` has no console handler at all, so the freeze
-  fix changes nothing here; it is what protects *downstream* users. **A catch-up deploy of `:v2.0.5`
-  to prod is owed** (attended window; `:v2.0.4` is the rollback). Until it happens, `main` is one
-  patch ahead of the station and `prod-baseline` has deliberately NOT been moved (DEC-0038).
+- **Published `:v2.0.8` (+ `:latest`) == what prod runs.** `main` == `prod-baseline-20260715`, no
+  drift (S43). Rollback: `:v2.0.7` is still on the NAS.
 - **The driver is BAKED, never mounted** (DEC-0031) — `weewx-data/bin/user/rtldavis.py` is NOT what
   runs. A driver fix needs an image rebuild; an `scp`/hot-swap there is a silent no-op.
 - Project root on NAS: `/volume1/docker/weewx-rtldavis/` · live config:
