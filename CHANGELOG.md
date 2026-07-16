@@ -6,7 +6,7 @@ under [Pre-S16].
 
 ---
 
-## [S43] — 2026-07-15 — soak + humidity-spike check clean; three backlog items shipped (Cold-load Fix B/DEC-0051, Reception Layer B/DEC-0024, duplicate-frame counter/DEC-0035)
+## [S43] — 2026-07-15 — v2.0.8 shipped, deployed and verified: Cold-load Fix B/DEC-0051, Reception Layer B/DEC-0024, duplicate-frame counter/DEC-0035
 
 > **Soak check (v2.0.7, up 49h): green.** 11/15 pass, 4 expected startup-only warnings, 0 failures —
 > archive current, stdout quiet, no tracebacks, no stalls, 100% reception, 45,190 records published, 0
@@ -16,7 +16,7 @@ under [Pre-S16].
 > real decode formula. Largest jump: 7.5 %RH/min, clustered in the predicted 11:00–16:00 window but
 > well under the 16-37% DEC-0044 signature. Capture instrument confirmed working correctly.
 >
-> **Three backlog items shipped in code, on a worktree branch (PR pending — not yet merged/deployed):**
+> **Three backlog items shipped in code:**
 >
 > 1. **Cold-load Fix B + windchill (DEC-0051, closes issue #44).** `loop_json_writer.py` now writes an
 >    identical snapshot to a second path (`current.json`, default `/opt/weewx-data/current.json`) on
@@ -32,9 +32,10 @@ under [Pre-S16].
 >    and filtering in every consumer (broader blast radius for no benefit). **Chosen:** cache the
 >    channel-hop packet's freqError fields and merge them onto the *next* real DATA packet instead of
 >    ever yielding a standalone one (`_cache_pending_freq_fields` / `_merge_pending_freq_fields`, each
->    cached value rides exactly once). Side effect: also fixes `ops/reception_service.py`'s own
->    60s-rolling reception window, which had the identical blind spot (counted channel-hop packets as
->    real readings) and was never separately flagged until this session.
+>    cached value rides exactly once). Side effect: also fixes `weewx_monitor.py`'s live `WINDOW:`
+>    reception metric, which counted channel-hop packets as real readings via its epoch-dedup (S22)
+>    never fully catching them (S31 confirmed it still pinned near 100%) — verified live post-deploy,
+>    see below.
 > 3. **Duplicate-frame counter (DEC-0035's own proposed instrument).** `genLoopPackets`'s stderr scan
 >    now counts Go's `"duplicate packet:"` dedup line unconditionally (no `debug_rtld` gate) into
 >    `self.stats['dup_count']`; `_update_summaries()` logs one INFO line per archive period (including
@@ -54,6 +55,30 @@ under [Pre-S16].
 > hook also blocked the same commit), reverted, `ruff-format` removed from the config. Checked both
 > siblings for the same pattern: the dashboard already avoids it deliberately; `hyperlocal-forecast`
 > carries it too but with no equivalent DEC and no known baked file, so no finding filed there.
+>
+> **Deployed and verified, same session.** PR #49 (the three items) and PR #50 (the `v2.0.8` version
+> bump — Dockerfile header + README) merged to `dev`. Image built on the NAS in a fresh `build-v2.0.8/`
+> checkout (`docker build`, zero errors in the build log), pushed to Docker Hub as `:v2.0.8` + `:latest`
+> (digest `sha256:2c05493a...`). `loop_json_writer.py` hot-swapped into place (old copy preserved as
+> `.bak-pre-v2.0.8`); production container recreated (`docker kill` → `rm` → `run`, DEC-0008 — replicated
+> the *actual running container's* `docker inspect` config, not the NAS's own stale `docker-compose.yml`,
+> which still said `:v2.0.4`). **Live-verified, not image-checked (DEC-0046 discipline):** driver banner
+> `0.20+ws.1`; `current.json` writing real data including `windchill_F`; `duplicate frames this period: N`
+> logging every archive period; **Wunderground-RF published-record count now matches unique record
+> epochs exactly (53/53 over a 3-min window)** — the ~1.6x overcount DEC-0024 documented is gone;
+> `soak_check.sh` 14/15 pass, 0 failures (1 warning: 71% reception, ordinary RF variance, not a
+> regression). **`weewx_monitor.py`'s live `WINDOW:` metric confirmed fixed too:** post-deploy it reads
+> `WINDOW: 14-17/21 (67-81%)`, `RECEPTION: 73-77% avg` — matching the driver's own trusted
+> `rxCheckPercent` range (59-95%, median 75%, S31) for the first time, instead of the pre-fix pinned-
+> near-100% pattern S31 documented. (Correction: `ops/reception_service.py` — a *different*,
+> WeeWX-internal `ReceptionMonitor` service — turned out not to be wired into this station's
+> `weewx.conf` at all, and per `git log` has sat untouched since S16; likely vestigial, like
+> `loopdata.py`. It is not what generates the reception emails; `weewx_monitor.py` is.)
+>
+> **PR #51 promoted `dev` → `main`** (CI green on both source commits); tagged `prod-baseline-20260715`
+> + `v2.0.8`; GitHub Release published. `docs/CONVENTIONS.md` and `CLAUDE.md` had stale `:v2.0.4`/`:v2.0.5`
+> drift notes left over from S38 that were never corrected when S41 actually caught prod up — fixed now
+> alongside this release. `ops/soak_check.sh`'s own `EXPECT_IMAGE` default bumped to `:v2.0.8`.
 
 ## [S42] — 2026-07-14 — the cross-repo round: DEC-0040's triggers fired, the identifiers were live on public dev, and pre-commit had never run (DEC-0050)
 
