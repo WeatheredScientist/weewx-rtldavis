@@ -388,10 +388,22 @@ files for no benefit over B). **(B), chosen:** cache a channel-hop packet's `fre
 (`_merge_pending_freq_fields`) instead of ever yielding the channel-hop packet as its own loop packet.
 Each cached value rides exactly once (cleared on merge). Confined to `genLoopPackets`'s packet-yield
 loop plus two small extracted helpers (~25 lines total) — no consumer files touched, no schema
-change, no config change. `ops/reception_service.py`'s own 60s-rolling reception window (bound to
-`NEW_LOOP_PACKET`, previously counting channel-hop packets as if they were real readings — a second,
-previously undocumented consumer with the same blind spot as the WU overcount) is fixed **as a side
-effect**: it now only ever sees real DATA packets. 5 offline unit tests
+change, no config change.
+
+**`weewx_monitor.py`'s live `WINDOW:` metric is fixed as a side effect, verified live post-deploy.**
+This is a *different* file from `ops/reception_service.py` (a WeeWX-internal `ReceptionMonitor`
+service that turned out to be unwired from `weewx.conf`'s `[Engine][Services]` entirely, and — per
+`git log --follow` — has sat untouched since S16; almost certainly vestigial, like the already-known
+`loopdata.py`). `weewx_monitor.py` is the actual NAS-side script behind the reception emails: its
+5-minute `WINDOW:` log counts unique record epochs from `Wunderground-RF ... Published` lines
+(`wu_record_key`, the Layer A dedup from S22). Channel-hop packets stamp a *fresh* `dateTime` at parse
+time (not tied to any real reading), so Layer A's epoch-dedup never fully caught them — S31 confirmed
+this metric still ran inflated, pinned near 100% almost always. Post-Layer-B-deploy,
+`weewx_monitor.log` reads **`WINDOW: 14-17/21 (67-81%)`, `RECEPTION: 73-77% avg`** — matching the
+driver's own trusted `rxCheckPercent` range (`59-95%, median 75%`, S31) for the first time, instead of
+pinning near 100%. The daily *email* summary itself was never affected either way — S31 already moved
+it to reading `rxCheckPercent` straight from the archive DB, bypassing publish-line counting entirely.
+5 offline unit tests
 (`tests/test_reception_layer_b.py`), suite 85/85. Driver is baked (DEC-0031) — ships in the next
 image rebuild. **DEC-0024 is now fully resolved; both layers shipped.**
 

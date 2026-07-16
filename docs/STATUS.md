@@ -72,10 +72,12 @@ _Last updated: 2026-07-15 (S43)._
 - **S43** (**v2.0.8 shipped** — Docker Hub `:v2.0.8` + `:latest` at digest `sha256:2c05493a`, GitHub
   release, `main` == prod, `prod-baseline-20260715`; prod recreated and verified): Reception Layer B
   (DEC-0024, fully resolved — WU-published count now matches unique record epochs exactly, confirmed
-  53/53 over a 3-min window post-deploy), the duplicate-frame counter (DEC-0035 — `duplicate frames
-  this period: N` logging live), Cold-load Fix B + windchill (DEC-0051, closes issue #44 —
-  `current.json` confirmed writing real data incl. `windchill_F`). Local pre-commit's `ruff-format`
-  hook (silently contradicting DEC-0027 since S31) removed. See CHANGELOG `[S43]`.
+  53/53 over a 3-min window post-deploy; `weewx_monitor.py`'s live `WINDOW:` metric confirmed fixed
+  too, now reading 67-81% matching the driver's trusted `rxCheckPercent` range instead of pinning near
+  100%), the duplicate-frame counter (DEC-0035 — `duplicate frames this period: N` logging live),
+  Cold-load Fix B + windchill (DEC-0051, closes issue #44 — `current.json` confirmed writing real data
+  incl. `windchill_F`). Local pre-commit's `ruff-format` hook (silently contradicting DEC-0027 since
+  S31) removed. See CHANGELOG `[S43]`.
   **Rollback:** `:v2.0.7` (`e22fea3c744c`) is still on the NAS; the pre-deploy `loop_json_writer.py`
   is at `loop_json_writer.py.bak-pre-v2.0.8`.
 - **S38** (v2.0.5 → **v2.0.6** on Docker Hub; prod recreated + verified; `prod-baseline-20260713` tagged;
@@ -123,6 +125,10 @@ _Last updated: 2026-07-15 (S43)._
   **Do not tune either by feel.**
 - **Vestigial `loopdata.py`** — mounted + `[LoopData]` present but in no active service list; safe to
   remove, not urgent.
+- **Likely-vestigial `ops/reception_service.py` (found S43).** Its `ReceptionMonitor` WeeWX service
+  isn't in `weewx.conf`'s `[Engine][Services]` at all, and per `git log --follow` has sat untouched
+  since S16 — never wired in. It is not what generates the reception emails (`weewx_monitor.py` is,
+  and is active). Same class as `loopdata.py`; confirm and remove, not urgent.
 - **Errata → dashboard contract (cross-repo, dash S69 Q3).** The owner wants corrected points visibly
   asterisked on the water-balance chart. **Half-solved:** InfluxDB corrected points now carry a sparse
   `rain_qc = 1` flag (DEC-0032, documented in INTERFACES.md), so the dashboard can render the marker
