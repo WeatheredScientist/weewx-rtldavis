@@ -32,9 +32,10 @@ under [Pre-S16].
 >    and filtering in every consumer (broader blast radius for no benefit). **Chosen:** cache the
 >    channel-hop packet's freqError fields and merge them onto the *next* real DATA packet instead of
 >    ever yielding a standalone one (`_cache_pending_freq_fields` / `_merge_pending_freq_fields`, each
->    cached value rides exactly once). Side effect: also fixes `ops/reception_service.py`'s own
->    60s-rolling reception window, which had the identical blind spot (counted channel-hop packets as
->    real readings) and was never separately flagged until this session.
+>    cached value rides exactly once). Side effect: also fixes `weewx_monitor.py`'s live `WINDOW:`
+>    reception metric, which counted channel-hop packets as real readings via its epoch-dedup (S22)
+>    never fully catching them (S31 confirmed it still pinned near 100%) — verified live post-deploy,
+>    see below.
 > 3. **Duplicate-frame counter (DEC-0035's own proposed instrument).** `genLoopPackets`'s stderr scan
 >    now counts Go's `"duplicate packet:"` dedup line unconditionally (no `debug_rtld` gate) into
 >    `self.stats['dup_count']`; `_update_summaries()` logs one INFO line per archive period (including
@@ -66,9 +67,13 @@ under [Pre-S16].
 > logging every archive period; **Wunderground-RF published-record count now matches unique record
 > epochs exactly (53/53 over a 3-min window)** — the ~1.6x overcount DEC-0024 documented is gone;
 > `soak_check.sh` 14/15 pass, 0 failures (1 warning: 71% reception, ordinary RF variance, not a
-> regression). `ops/reception_service.py`'s own reception-window fix could not be live-verified — that
-> service turned out not to be wired into this station's live `weewx.conf` `[Engine][Services]` at all,
-> so the fix is real in the code but currently unexercised here.
+> regression). **`weewx_monitor.py`'s live `WINDOW:` metric confirmed fixed too:** post-deploy it reads
+> `WINDOW: 14-17/21 (67-81%)`, `RECEPTION: 73-77% avg` — matching the driver's own trusted
+> `rxCheckPercent` range (59-95%, median 75%, S31) for the first time, instead of the pre-fix pinned-
+> near-100% pattern S31 documented. (Correction: `ops/reception_service.py` — a *different*,
+> WeeWX-internal `ReceptionMonitor` service — turned out not to be wired into this station's
+> `weewx.conf` at all, and per `git log` has sat untouched since S16; likely vestigial, like
+> `loopdata.py`. It is not what generates the reception emails; `weewx_monitor.py` is.)
 >
 > **PR #51 promoted `dev` → `main`** (CI green on both source commits); tagged `prod-baseline-20260715`
 > + `v2.0.8`; GitHub Release published. `docs/CONVENTIONS.md` and `CLAUDE.md` had stale `:v2.0.4`/`:v2.0.5`
