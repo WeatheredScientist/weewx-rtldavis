@@ -26,6 +26,8 @@
       "Bash(env -u GH_TOKEN git push *)",
       "Bash(git merge * main)",
       "Bash(git merge * dev)",
+      "Bash(env * git merge * main)",
+      "Bash(env * git merge * dev)",
       "Bash(docker push *)"
     ]
   }
