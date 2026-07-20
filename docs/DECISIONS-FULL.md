@@ -1862,3 +1862,40 @@ cache headers (`no-store`) is the dashboard/eh-proxy's responsibility (DEC-0010)
 ends at producing the file. 3 offline unit tests (`tests/test_loop_json_writer.py`), suite 85/85. No
 driver involved — `loop_json_writer.py` is a `data_service` (DEC-0005), not the baked driver, so this
 ships on the next ordinary config/service deploy, independent of any image rebuild.
+
+---
+
+## DEC-0052 — Adopt the shared closeout skeleton (adapted), from eaglehunt-ops OPS-DEC-0016
+
+**Status:** Accepted · **Date:** 2026-07-19 (S44)
+
+ops#22 found all three trio repos (+ coffeeradar) had independently invented their own closeout
+ritual despite common tiered-read/DECISIONS-index/STATUS.md-as-source-of-truth ancestry. This repo's
+was the loosest of the four: split across two separate CLAUDE.md paragraphs ("Session ritual — End"
+and a separate "Docs-diet ritual at close"), no numbered list. eaglehunt-ops published a generic
+6-step closeout skeleton (OPS-DEC-0016, locked OPS-DEC-0019 once three of four repos had adopted)
+and filed an adoption ask in each repo's own tracker (this repo's: weewx-rtldavis#56) — adopt, adapt,
+or decline is each repo's own call, per OPS-DEC-0001's charter that ops is not a master repo.
+
+**Call: adopt, adapted — not verbatim.** Four of the template's five mechanical steps (green gate,
+STATUS pointer, CHANGELOG entry, decision-log row) already matched this repo's practice; the fifth,
+commit+push, already has a stricter local rule (pause for approval before every commit and every
+push — Non-negotiable rules) that the template doesn't override. This repo's own docs-diet ritual
+(DEC-0030) is richer than the template's step 3 for a *public* repo — CHANGELOG archival to
+`CHANGELOG-ARCHIVE.md`, and `scripts/check_secrets.sh` run over anything a doc move rehomes — so it
+is kept as-is and layered after step 3, per the template's own "repo-specific addenda, not replaced"
+pattern.
+
+**The one genuinely new step: step 5, the model-tier restore check.** Nothing in this repo's docs
+previously prompted a check, at session close, of whether a bare `/model` switch (which persists as
+the new session default — user's global CLAUDE.md, OPS-DEC-0010) needs restoring to the Sonnet
+floor. Two other adopters (hyperlocal-forecast DEC-0126, coffeeradar DEC-0054) independently reported
+step 5 as the only genuinely new content in the template; this repo's adoption reaches the same
+conclusion a third time, from its own review rather than by import.
+
+**What changed:** CLAUDE.md's "Session ritual" now carries one 6-step numbered "End" list in place
+of the old two-paragraph split, with the docs-diet ritual folded in as step 3's addendum. No change
+to session numbering, to the pause-before-commit/push rule, or to any prior DEC — step 6 points at
+the existing rule instead of restating it.
+
+Outcome reported to eaglehunt-ops#22 (cross-repo roll-up); closes weewx-rtldavis#56.

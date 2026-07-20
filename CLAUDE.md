@@ -88,14 +88,25 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
   check: `git status` clean and `pytest` green before new work. Then pick up cross-repo assignments
   (ops-DEC-0005; Claude sessions only — one command, the rest of eaglehunt-ops stays
   not-a-session-start-read): `gh issue list -R WeatheredScientist/eaglehunt-ops --label repo:weewx --state open`
-- **End:** update STATUS.md (session #, active thread, next actions — it's the source of truth),
-  append to CHANGELOG.md, `git status` should show *up to date*. Don't strand the next session's
-  handoff in private memory — it lives in STATUS.md so it's visible on GitHub.
-- **Docs-diet ritual at close (DEC-0030):** prune STATUS to bench state (shipped → CHANGELOG
-  pointer, settled → DEC pointer, superseded → delete); roll CHANGELOG entries beyond ~3 sessions
-  to `CHANGELOG-ARCHIVE.md` verbatim; new DECs = full body in `DECISIONS-FULL.md` + index row in
-  `DECISIONS.md`. **Move text, never delete or rewrite history** — and because this repo is public,
-  run `scripts/check_secrets.sh` over anything a doc move rehomes.
+- **End (closeout skeleton — DEC-0052, adapted from eaglehunt-ops OPS-DEC-0016):**
+  1. **Green gate** — `python -m pytest` (+ `python -m mypy` as applicable — CONVENTIONS); if
+     skipped, state why.
+  2. **STATUS.md resume pointer** — update the `▶ Resume here` line (session #, active thread,
+     next actions — it's the source of truth). Don't strand the handoff in private memory; it
+     lives in STATUS.md so it's visible on GitHub.
+  3. **CHANGELOG.md entry** — one line for what landed.
+     **Docs-diet ritual (DEC-0030), layered here:** prune STATUS to bench state (shipped →
+     CHANGELOG pointer, settled → DEC pointer, superseded → delete); roll CHANGELOG entries beyond
+     ~3 sessions to `CHANGELOG-ARCHIVE.md` verbatim. **Move text, never delete or rewrite
+     history** — and because this repo is public, run `scripts/check_secrets.sh` over anything a
+     doc move rehomes.
+  4. **Decision-log row** — if a design call was made this session, full body in
+     `DECISIONS-FULL.md` + index row in `DECISIONS.md`, same session, not deferred.
+  5. **Model-tier restore check** *(new)* — if a bare `/model` switch happened this session,
+     confirm the Sonnet floor is restored before ending, or confirm a session-only switch was
+     used and there is nothing to restore.
+  6. **Commit + push**, per the branch model — subject to the pause-for-approval rule above
+     (Non-negotiable rules).
 - Sessions use **this repo's own independent counter** — a session number means something only within
   this repo (cross-repo refs are prefixed, e.g. `weewx S23` vs `dash S40`). **`docs/STATUS.md` is the
   single source of truth for the current session number** — take it from there (+1 for a new session),
