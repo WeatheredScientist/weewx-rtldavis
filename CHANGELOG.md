@@ -6,6 +6,33 @@ under [Pre-S16].
 
 ---
 
+## [S44] — 2026-07-19 — Soak-check phantom-rain false positive fixed; shared closeout skeleton adopted (DEC-0052)
+
+`ops/soak_check.sh` on the still-running v2.0.8 (up 98h) flagged 49 archive rows as a possible
+DEC-0049-predicted phantom-rainRate event. Cross-checked against the full 2026-07-18 archive: it
+wasn't one — 3 real bucket tips that day, a falling barometer (29.93→29.78 in) and rising gusts (to
+8 mph) confirm a real storm, and every flagged row is the ISS's own rain-rate message decaying after
+a real tip (one decay tail ran 38 minutes, past the light-rain formula's nominal ~1022s ceiling).
+**Fixed:** the detector now excludes any row with a real tip in the preceding hour. Re-verified
+live: 49 → 0 false positives, all other soak checks unchanged. The DEC-0049 prediction itself (a real
+condensation event, tip counter not advancing) remains unfired.
+
+**DEC-0052:** adopted eaglehunt-ops' locked closeout skeleton (OPS-DEC-0016), adapted. `CLAUDE.md`'s
+closeout ritual — previously split across two paragraphs ("Session ritual — End" and a separate
+"Docs-diet ritual at close") — is now one 6-step numbered list; the docs-diet ritual and this repo's
+stricter local commit/push rule are kept as addenda, per the template's own pattern. The only
+genuinely new content is step 5, a model-tier restore check — the third repo (after
+hyperlocal-forecast, coffeeradar) to independently land on that same assessment. Closes
+weewx-rtldavis#56; outcome reported to eaglehunt-ops#22.
+
+Both changes landed via PR #57 (`s44-ops-closeout-and-rain-fix` → `dev`), checks green
+(lint/secret-scan/tests).
+
+Humidity-spike watch: still negative, 894 samples this container lifetime, largest jump ~7.5 %RH/min
+— same magnitude as S43, no qualifying spike.
+
+---
+
 ## [S43] — 2026-07-15 — v2.0.8 shipped, deployed and verified: Cold-load Fix B/DEC-0051, Reception Layer B/DEC-0024, duplicate-frame counter/DEC-0035
 
 > **Soak check (v2.0.7, up 49h): green.** 11/15 pass, 4 expected startup-only warnings, 0 failures —

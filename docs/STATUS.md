@@ -15,31 +15,34 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S43** (2026-07-15). **v2.0.8 shipped, deployed and verified.** Soak +
-> humidity-spike check started the session clean (v2.0.7: 11/15 pass, 0 failures; humidity capture
-> confirmed working, no qualifying spike yet — largest jump 7.5 %RH/min, still watching, see below).
-> Then all three backlog items shipped: **Cold-load Fix B** (`current.json` + `windchill`, closes
-> issue #44, DEC-0051), **Reception Layer B** (DEC-0024, now fully resolved), the
-> **duplicate-frame counter** (DEC-0035). Suite 85/85 (+13 tests). Built, pushed to Docker Hub
-> (`v2.0.8` + `latest`), deployed to prod (`docker kill`→`rm`→`run`, DEC-0008) and **live-verified**:
-> driver banner `0.20+ws.1`, `current.json` writing real data incl. `windchill_F`, WU-published count
-> now matches unique record epochs **exactly** (53/53 over a 3-min window — the ~1.6x overcount is
-> gone), `duplicate frames this period: N` logging every archive period, `soak_check.sh` 14/15 pass
-> (1 warning: 71% reception, normal RF variance). **`main` promoted to `dev`'s tip; tagged
-> `prod-baseline-20260715` + `v2.0.8`; GitHub Release published.** Also fixed mid-session: local
-> pre-commit's `ruff-format` hook had silently contradicted DEC-0027 since S31 — removed. Full story:
-> CHANGELOG `[S43]`.
+> **Current session: S44** (2026-07-19). **No release — a soak check + two closeout items.**
+> `soak_check.sh` on the still-running v2.0.8 (up 98h) surfaced a false **PHANTOM RAIN EVENT**: 49
+> archive rows with `rainRate>0`/`rain=0` on 2026-07-18, which looked like the DEC-0049-predicted
+> third condensation event. Cross-checked against the full day's archive: it wasn't — 3 **real**
+> bucket tips that day, a falling barometer (29.93→29.78 in) and rising gusts (to 8 mph) confirm an
+> actual storm, and every flagged row is just the ISS's own rain-rate message decaying after a real
+> tip (one decay tail ran 38 min). **Fixed:** `ops/soak_check.sh`'s phantom-rain detector now
+> excludes rows with a real tip in the preceding hour — re-verified live, 49 → 0 false positives, all
+> other checks unchanged. The DEC-0049 prediction (a real condensation event, tip counter never
+> advancing) is still unfired. Humidity-spike watch: still negative, largest jump ~7.5 %RH/min (894
+> samples this container lifetime), same magnitude as S43's reading, well under the 16–37% DEC-0044
+> signature. **DEC-0052:** adopted eaglehunt-ops' locked closeout skeleton (OPS-DEC-0016), adapted —
+> `CLAUDE.md`'s old two-paragraph closeout split is now one 6-step list, docs-diet ritual and the
+> stricter local commit/push rule kept as addenda; closes weewx-rtldavis#56, reported to
+> eaglehunt-ops#22. Both landed via PR #57 (dev). Full story: CHANGELOG `[S44]`.
 > `log_humidity_raw` still ACTIVE — the next midday spike settles the nibble question (see [S41]).
 
-_Last updated: 2026-07-15 (S43)._
+_Last updated: 2026-07-19 (S44)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S43 → S44). The release is DONE and verified. Nothing is half-shipped and no PR is
-> open.** The one still-open thread is the humidity-spike watch (see banner above and "Next session
-> actions" — `log_humidity_raw` capture is live, no qualifying spike yet).
+> **▶ Resume here (S44 → S45). Nothing is half-shipped and no PR is open.** The one still-open thread
+> is the humidity-spike watch (see banner above and "Next session actions" — `log_humidity_raw`
+> capture is live, no qualifying spike yet). The DEC-0049 phantom-rainRate prediction (a real
+> condensation event with the tip counter not advancing) also remains unfired — S44's event turned
+> out to be real rain, not that.
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -69,6 +72,11 @@ _Last updated: 2026-07-15 (S43)._
 
 ## Shipped — nothing to do here
 
+- **S44** (soak-check false positive fixed; closeout skeleton adopted): `ops/soak_check.sh`'s
+  phantom-rain detector was flagging normal post-tip rain-rate decay as the DEC-0042 signature —
+  fixed to require no real tip in the preceding hour, verified live (49 → 0 false positives) against
+  a real 2026-07-18 storm. **DEC-0052**: adopted eaglehunt-ops' locked closeout skeleton (adapted),
+  closes weewx-rtldavis#56, reported to eaglehunt-ops#22. Both via PR #57. See CHANGELOG `[S44]`.
 - **S43** (**v2.0.8 shipped** — Docker Hub `:v2.0.8` + `:latest` at digest `sha256:2c05493a`, GitHub
   release, `main` == prod, `prod-baseline-20260715`; prod recreated and verified): Reception Layer B
   (DEC-0024, fully resolved — WU-published count now matches unique record epochs exactly, confirmed
@@ -183,22 +191,24 @@ _Last updated: 2026-07-15 (S43)._
   misnomer was only ever ours. `rw350-test` / `rw400-test` are the same class and should follow.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S43 done → S44)
+## Next session actions (S44 done → S45)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S43 (2026-07-15):** soak + humidity-spike check (both clean, see banner above); **three
-backlog items shipped, deployed and verified** — DEC-0051 (Cold-load Fix B + windchill, closes issue
-#44), DEC-0024 (Reception Layer B, now fully resolved), DEC-0035 (duplicate-frame counter). PRs #49/50
-merged to `dev`, #51 promoted `dev` → `main`; `v2.0.8` built, pushed to Docker Hub, deployed to prod,
-GitHub Release published; `prod-baseline-20260715` tagged. Suite 85/85 (+13 tests). Local pre-commit's
-`ruff-format` hook (silently contradicting DEC-0027 since S31) removed. See CHANGELOG `[S43]`.
+**✅ Done in S44 (2026-07-19):** soak check on v2.0.8 (still up, 98h+) surfaced a false phantom-rain
+positive (49 rows) — cross-checked against the archive and confirmed it was real rain (a storm on
+2026-07-18: 3 real tips, falling barometer, rising gusts), not the DEC-0042 signature. Fixed
+`ops/soak_check.sh`'s detector to require no real tip in the preceding hour; re-verified live, 0 false
+positives. Humidity-spike check: still negative (894 samples, largest jump ~7.5 %RH/min). **DEC-0052**
+adopted eaglehunt-ops' closeout skeleton (adapted); `CLAUDE.md`'s closeout ritual is now one 6-step
+list. Both landed via PR #57. `weewx-rtldavis#56` closed, outcome reported to `eaglehunt-ops#22`. See
+CHANGELOG `[S44]`.
 
-**▶ ON RETURN (S44), in order:**
+**▶ ON RETURN (S45), in order:**
 
 1. **Check the log for a humidity spike — the capture is LIVE.** `log_humidity_raw True` went active with
    the v2.0.7 restart at 2026-07-13 15:27 EDT. Grep `weewx.log` for `humidity_raw=`. Spikes run ~2–3/week
-   clustered **11:00–16:00** — S43 checked 2,056 samples across ~50 h, no qualifying spike yet (largest
+   clustered **11:00–16:00** — S43/S44 checked ~2,950 samples combined, no qualifying spike yet (largest
    7.5 %RH/min, need the 16-37 % DEC-0044 signature). It logs the full `pkt[4]`/`pkt[3]` — **no
    averaging, no free parameter** — which settles the nibble question **deterministically**: invert the
    bytes, re-decode under `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV,
@@ -207,6 +217,11 @@ GitHub Release published; `prod-baseline-20260715` tagged. Suite 85/85 (+13 test
 
 2. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
+
+3. **`ops/soak_check.sh`'s phantom-rain detector is now hardened (S44) — don't re-flag ordinary rain.**
+   If it reports a nonzero count, that already excludes the normal post-tip decay window (1 hour); a
+   real hit is worth taking seriously as the DEC-0049-predicted event, not re-litigating as a false
+   positive first.
 
 **Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
 **config** is mounted and the image is inert (DEC-0046). Inverses. A release that changes shipped config
