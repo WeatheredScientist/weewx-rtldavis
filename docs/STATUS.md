@@ -15,27 +15,31 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S45** (2026-07-20). **No release — one PR merged, closeout only.** PR #59
-> (OPS-DEC-0019 env-twin permission rules — `.claude/settings.json` gained the env-wrapped twins for
-> the two protected-branch `git merge` ask-rules, cross-repo rollout via `eaglehunt-ops#37`) had
-> already been committed and opened as a draft before this session started; flipped to ready and
-> merged to `dev`. Mechanical, no code touched, CI green. Full story: CHANGELOG `[S45]`.
+> **Current session: S46** (2026-07-24). **No release, no code changed — verification + ops closeout
+> only.** Ran the DEC-0044 humidity-spike check directly instead of deferring it: decoded all 8,852
+> `log_humidity_raw` packets captured since the capture went live (2026-07-13 through now) — still
+> **no qualifying spike** (largest -9.86 %RH/min, ordinary midday movement, well under the 16-37%
+> signature). Closed `eaglehunt-ops#37` (OPS-DEC-0019 rollout) — all three Eagle Hunt repos confirmed
+> merged. Pulled `dev` forward 2 commits (PR #61) and cleaned up the resulting stale worktree/branch.
+> Full story: CHANGELOG `[S46]`.
 >
+> **S45 recap** (PR #59 merged — OPS-DEC-0019 env-twin permission rules): see CHANGELOG `[S45]`.
 > **S44 recap** (soak-check false-positive fix + closeout-skeleton adoption, DEC-0052): see
-> CHANGELOG `[S44]`. Humidity-spike watch and the DEC-0049 rainRate prediction both carry over
-> unfired — see "Active thread" below.
+> CHANGELOG `[S44]`. The DEC-0049 rainRate prediction carries over unfired — see "Active thread"
+> below.
 
-_Last updated: 2026-07-20 (S45)._
+_Last updated: 2026-07-24 (S46)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S45 → S46). Nothing is half-shipped and no PR is open.** The one still-open thread
+> **▶ Resume here (S46 → S47). Nothing is half-shipped and no PR is open.** The one still-open thread
 > is the humidity-spike watch (see banner above and "Next session actions" — `log_humidity_raw`
-> capture is live, no qualifying spike yet). The DEC-0049 phantom-rainRate prediction (a real
-> condensation event with the tip counter not advancing) also remains unfired — S44's event turned
-> out to be real rain, not that.
+> capture is live, checked directly at S46 across the full 8,852-sample window since capture start,
+> still no qualifying spike). The DEC-0049 phantom-rainRate prediction (a real condensation event
+> with the tip counter not advancing) also remains unfired — S44's event turned out to be real rain,
+> not that.
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -65,6 +69,9 @@ _Last updated: 2026-07-20 (S45)._
 
 ## Shipped — nothing to do here
 
+- **S46** (humidity-spike watch checked directly, still unfired; `eaglehunt-ops#37` closed — all
+  three Eagle Hunt repos confirmed on OPS-DEC-0019; routine `dev` housekeeping). No code changed, no
+  release. See CHANGELOG `[S46]`.
 - **S45** (PR #59 merged — OPS-DEC-0019 env-twin permission rules): `.claude/settings.json` gained
   the env-wrapped ask-rule twins for the two protected-branch `git merge` rules (matches the
   cross-repo pattern already used for `git push`), part of the OPS-DEC-0019 rollout
@@ -188,30 +195,36 @@ _Last updated: 2026-07-20 (S45)._
   misnomer was only ever ours. `rw350-test` / `rw400-test` are the same class and should follow.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S45 done → S46)
+## Next session actions (S46 done → S47)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S45 (2026-07-20):** merged PR #59 — OPS-DEC-0019 env-twin permission rules
-(`.claude/settings.json` gained the env-wrapped ask-rule twins for the two protected-branch
-`git merge` rules, cross-repo rollout via `eaglehunt-ops#37`). Branch and commit were already staged
-before the session started; this session flipped the draft to ready and merged to `dev`. Mechanical,
-no code touched, CI green. See CHANGELOG `[S45]`.
+**✅ Done in S46 (2026-07-24):** ran the humidity-spike check directly rather than deferring it —
+decoded all 8,852 `log_humidity_raw` packets captured since the capture went live (2026-07-13 15:27
+through the current log), searched for the DEC-0044 16-37 %RH single-step signature, **zero matches**
+(largest -9.86 %RH/min, ordinary midday movement). Closed `eaglehunt-ops#37` (OPS-DEC-0019 rollout) —
+confirmed all three Eagle Hunt repos had merged their portion. Pulled `dev` forward 2 commits (PR #61)
+and removed the resulting stale worktree/branch. No code changed, no release. See CHANGELOG `[S46]`.
+
+**S45 recap (2026-07-20):** PR #59 merged — OPS-DEC-0019 env-twin permission rules. See CHANGELOG
+`[S45]`.
 
 **S44 recap (2026-07-19):** soak-check phantom-rain false positive fixed (DEC-0052 closeout-skeleton
 adoption too) — see CHANGELOG `[S44]` for the full story; nothing carries forward from it except the
 still-open watches below.
 
-**▶ ON RETURN (S46), in order:**
+**▶ ON RETURN (S47), in order:**
 
-1. **Check the log for a humidity spike — the capture is LIVE.** `log_humidity_raw True` went active with
-   the v2.0.7 restart at 2026-07-13 15:27 EDT. Grep `weewx.log` for `humidity_raw=`. Spikes run ~2–3/week
-   clustered **11:00–16:00** — S43/S44 checked ~2,950 samples combined, no qualifying spike yet (largest
-   7.5 %RH/min, need the 16-37 % DEC-0044 signature). It logs the full `pkt[4]`/`pkt[3]` — **no
-   averaging, no free parameter** — which settles the nibble question **deterministically**: invert the
-   bytes, re-decode under `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV,
-   which are 2 and 3 bits away), compare with the concurrent archived sensor. **The method and the
-   arithmetic are in DEC-0044; do not re-derive them.**
+1. **Keep watching the humidity-spike log — still nothing qualifying through S46.** `log_humidity_raw
+   True` has been active since the v2.0.7 restart at 2026-07-13 15:27 EDT; S46 checked the full
+   8,852-sample window and found nothing. Grep for `humidity_raw=` in the current + rotated
+   `weewx.log*` files for anything logged since. Spikes run ~2–3/week clustered **11:00–16:00** — need
+   the 16-37 % DEC-0044 signature (a single-step raw jump), not just an ordinary 5-10 %/min swing.
+   It logs the full `pkt[4]`/`pkt[3]` — **no averaging, no free parameter** — which settles the
+   nibble question **deterministically**: invert the bytes, re-decode under `0x2`/`0x8`/`0xE`
+   (humidity's real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits away), compare
+   with the concurrent archived sensor. **The method and the arithmetic are in DEC-0044; do not
+   re-derive them.**
 
 2. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
