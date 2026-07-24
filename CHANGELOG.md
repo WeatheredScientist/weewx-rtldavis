@@ -26,7 +26,13 @@ Housekeeping: local `dev` was 2 commits behind `origin/dev` (PR #61, `ops-53-set
 (`.claude/worktrees/ops-53-settings-consolidation`) and its local branch. Checked eaglehunt-ops' open
 issues and both sibling repos for anything owed here: nothing tagged `repo:weewx`, nothing outstanding.
 
-No code changed, no release, no PR from this repo.
+Opening this closeout as PR #62 surfaced a real CI break: the lint job's unpinned `pip install ruff`
+had drifted to 0.16.0, whose new default rules flagged 295 pre-existing hits (139 in `rtldavis.py`,
+the driver protected from reformatting churn by DEC-0014/DEC-0027) — `lint` is a required check on
+`dev`, so this was silently blocking every PR. Fixed via PR #63 (pinned `ruff==0.5.7`, matching the
+`.pre-commit-config.yaml` pin DEC-0027 already settled on; no source files touched). Merge order:
+#63 merged first, then #62's branch was updated onto it so its own lint check went green. Both
+merged 2026-07-24. The CI workflow file changed; no source/driver code did.
 
 ---
 
