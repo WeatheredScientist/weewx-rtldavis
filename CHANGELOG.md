@@ -6,6 +6,30 @@ under [Pre-S16].
 
 ---
 
+## [S46] — 2026-07-24 — Humidity-spike watch checked directly (still unfired); OPS-DEC-0019 rollout closed cross-repo; dev housekeeping
+
+Ran the DEC-0044 humidity-spike check directly against the live NAS logs rather than deferring it:
+fetched every `log_humidity_raw` packet captured since the capture went live (2026-07-13 15:27, S41)
+through the current log — 11 days, 8,852 raw packets, ~3x the largest prior sample (S43's 2,056).
+Decoded per the driver's own formula (`rtldavis.py:1543-1550`) and searched for a single-step raw jump
+of 16-37 %RH (the DEC-0044 signature). **Zero matches.** Largest swing: -9.86 %/min (2026-07-17
+13:16→13:17, 60.5%→51.3%) — larger than S43/S44's reported 7.5 %/min purely from sample size, still
+ordinary midday humidity movement, clustered in the predicted 11:00-16:00 window. Watch remains open,
+unfired.
+
+Closed [eaglehunt-ops#37](https://github.com/WeatheredScientist/eaglehunt-ops/issues/37) (OPS-DEC-0019
+env-twin rollout): confirmed all three Eagle Hunt repos had merged their portion (weewx-rtldavis#59 in
+S45, hyperlocal-forecast#135, eaglehunt-weather-dashboard#102+#112) — commented and closed.
+
+Housekeeping: local `dev` was 2 commits behind `origin/dev` (PR #61, `ops-53-settings-consolidation`)
+— pulled forward; removed the resulting stale merged worktree
+(`.claude/worktrees/ops-53-settings-consolidation`) and its local branch. Checked eaglehunt-ops' open
+issues and both sibling repos for anything owed here: nothing tagged `repo:weewx`, nothing outstanding.
+
+No code changed, no release, no PR from this repo.
+
+---
+
 ## [S45] — 2026-07-20 — PR #59 merged: OPS-DEC-0019 env-twin permission rules (cross-repo)
 
 `.claude/settings.json` gained two ask-rule entries: `Bash(env * git merge * main)` and
@@ -46,79 +70,3 @@ Both changes landed via PR #57 (`s44-ops-closeout-and-rain-fix` → `dev`), chec
 
 Humidity-spike watch: still negative, 894 samples this container lifetime, largest jump ~7.5 %RH/min
 — same magnitude as S43, no qualifying spike.
-
----
-
-## [S43] — 2026-07-15 — v2.0.8 shipped, deployed and verified: Cold-load Fix B/DEC-0051, Reception Layer B/DEC-0024, duplicate-frame counter/DEC-0035
-
-> **Soak check (v2.0.7, up 49h): green.** 11/15 pass, 4 expected startup-only warnings, 0 failures —
-> archive current, stdout quiet, no tracebacks, no stalls, 100% reception, 45,190 records published, 0
-> phantom-rain rows in 2,987 archive rows. **Humidity-spike check: no qualifying spike yet.** Decoded
-> the full `humidity_raw=` series since the capture went live (2,056 samples, ~50h, including the
-> rotated `weewx.log.2026-07-13`/`.2026-07-14` the live log had already rolled past) per the driver's
-> real decode formula. Largest jump: 7.5 %RH/min, clustered in the predicted 11:00–16:00 window but
-> well under the 16-37% DEC-0044 signature. Capture instrument confirmed working correctly.
->
-> **Three backlog items shipped in code:**
->
-> 1. **Cold-load Fix B + windchill (DEC-0051, closes issue #44).** `loop_json_writer.py` now writes an
->    identical snapshot to a second path (`current.json`, default `/opt/weewx-data/current.json`) on
->    every LOOP packet, atomic tmp+rename same as `loop-data.txt`; `windchill` added to `_FIELDS`
->    (`windchill_F`). `docs/INTERFACES.md` updated. **Deploy: mounted file — hot-swap (scp + clear-pyc
->    + restart), no image rebuild** (verified against `docs/ARCHITECTURE.md`'s mount table).
-> 2. **Reception Layer B (DEC-0024 — now fully resolved).** The driver published channel-hop
->    (`freqError{n}`) packets as their own dataless loop packets, which every uploader (WU RapidFire
->    etc.) then published as if they were full weather updates — the ~1.6x overcount measured at S21.
->    Considered and rejected: dropping the packet outright (freqError is repurposed onto real archive
->    schema columns — `consBatteryVoltage`/`hail`/`hailRate`/`heatingTemp`/`heatingVoltage` — and
->    `ops/reception_service.py` logs non-zero freqErrors, so silently breaks both); tagging it dataless
->    and filtering in every consumer (broader blast radius for no benefit). **Chosen:** cache the
->    channel-hop packet's freqError fields and merge them onto the *next* real DATA packet instead of
->    ever yielding a standalone one (`_cache_pending_freq_fields` / `_merge_pending_freq_fields`, each
->    cached value rides exactly once). Side effect: also fixes `weewx_monitor.py`'s live `WINDOW:`
->    reception metric, which counted channel-hop packets as real readings via its epoch-dedup (S22)
->    never fully catching them (S31 confirmed it still pinned near 100%) — verified live post-deploy,
->    see below.
-> 3. **Duplicate-frame counter (DEC-0035's own proposed instrument).** `genLoopPackets`'s stderr scan
->    now counts Go's `"duplicate packet:"` dedup line unconditionally (no `debug_rtld` gate) into
->    `self.stats['dup_count']`; `_update_summaries()` logs one INFO line per archive period (including
->    `N=0`, so a quiet period is distinguishable from the instrument not running); `_reset_stats()`
->    zeroes it for the next period — the same pattern already used for `pct_good_all`.
->
-> Items 2+3 both touch the baked driver (`rtldavis.py`) — bundled for **one** image rebuild rather than
-> two. +13 offline tests (`test_loop_json_writer.py`, `test_reception_layer_b.py`,
-> `test_duplicate_frame_counter.py`); suite 72 → 85. **DEC-0051 added; DEC-0024 and DEC-0035 updated**
-> with S43 sub-sections in `DECISIONS-FULL.md`.
->
-> **Caught mid-commit: local pre-commit's `ruff-format` hook had silently contradicted DEC-0027 since
-> S31.** CI dropped `ruff format` deliberately (it flattens `rtldavis.py`'s column alignment and
-> reformats the baked driver — No-Rewrite); local `.pre-commit-config.yaml` still carried it. Never
-> fired because pre-commit itself was never installed until S42 (DEC-0050) — its first real run
-> attempted to mass-reformat `rtldavis.py` (3,213-line diff) on this session's commit. Caught (a second
-> hook also blocked the same commit), reverted, `ruff-format` removed from the config. Checked both
-> siblings for the same pattern: the dashboard already avoids it deliberately; `hyperlocal-forecast`
-> carries it too but with no equivalent DEC and no known baked file, so no finding filed there.
->
-> **Deployed and verified, same session.** PR #49 (the three items) and PR #50 (the `v2.0.8` version
-> bump — Dockerfile header + README) merged to `dev`. Image built on the NAS in a fresh `build-v2.0.8/`
-> checkout (`docker build`, zero errors in the build log), pushed to Docker Hub as `:v2.0.8` + `:latest`
-> (digest `sha256:2c05493a...`). `loop_json_writer.py` hot-swapped into place (old copy preserved as
-> `.bak-pre-v2.0.8`); production container recreated (`docker kill` → `rm` → `run`, DEC-0008 — replicated
-> the *actual running container's* `docker inspect` config, not the NAS's own stale `docker-compose.yml`,
-> which still said `:v2.0.4`). **Live-verified, not image-checked (DEC-0046 discipline):** driver banner
-> `0.20+ws.1`; `current.json` writing real data including `windchill_F`; `duplicate frames this period: N`
-> logging every archive period; **Wunderground-RF published-record count now matches unique record
-> epochs exactly (53/53 over a 3-min window)** — the ~1.6x overcount DEC-0024 documented is gone;
-> `soak_check.sh` 14/15 pass, 0 failures (1 warning: 71% reception, ordinary RF variance, not a
-> regression). **`weewx_monitor.py`'s live `WINDOW:` metric confirmed fixed too:** post-deploy it reads
-> `WINDOW: 14-17/21 (67-81%)`, `RECEPTION: 73-77% avg` — matching the driver's own trusted
-> `rxCheckPercent` range (59-95%, median 75%, S31) for the first time, instead of the pre-fix pinned-
-> near-100% pattern S31 documented. (Correction: `ops/reception_service.py` — a *different*,
-> WeeWX-internal `ReceptionMonitor` service — turned out not to be wired into this station's
-> `weewx.conf` at all, and per `git log` has sat untouched since S16; likely vestigial, like
-> `loopdata.py`. It is not what generates the reception emails; `weewx_monitor.py` is.)
->
-> **PR #51 promoted `dev` → `main`** (CI green on both source commits); tagged `prod-baseline-20260715`
-> + `v2.0.8`; GitHub Release published. `docs/CONVENTIONS.md` and `CLAUDE.md` had stale `:v2.0.4`/`:v2.0.5`
-> drift notes left over from S38 that were never corrected when S41 actually caught prod up — fixed now
-> alongside this release. `ops/soak_check.sh`'s own `EXPECT_IMAGE` default bumped to `:v2.0.8`.
