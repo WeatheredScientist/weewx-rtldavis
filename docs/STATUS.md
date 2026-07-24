@@ -70,8 +70,11 @@ _Last updated: 2026-07-24 (S46)._
 ## Shipped — nothing to do here
 
 - **S46** (humidity-spike watch checked directly, still unfired; `eaglehunt-ops#37` closed — all
-  three Eagle Hunt repos confirmed on OPS-DEC-0019; routine `dev` housekeeping). No code changed, no
-  release. See CHANGELOG `[S46]`.
+  three Eagle Hunt repos confirmed on OPS-DEC-0019; routine `dev` housekeeping; **PR #63** fixed a
+  CI break the closeout PR surfaced — unpinned `ruff` had drifted to 0.16.0 and was silently
+  blocking the required `lint` check on `dev`, pinned to `0.5.7` matching DEC-0027; both #63 and
+  the closeout PR #62 merged). No source/driver code changed; the CI workflow did. No release. See
+  CHANGELOG `[S46]`.
 - **S45** (PR #59 merged — OPS-DEC-0019 env-twin permission rules): `.claude/settings.json` gained
   the env-wrapped ask-rule twins for the two protected-branch `git merge` rules (matches the
   cross-repo pattern already used for `git push`), part of the OPS-DEC-0019 rollout
