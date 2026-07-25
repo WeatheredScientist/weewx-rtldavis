@@ -76,7 +76,10 @@ extension.
 exactly the loop-JSON contract the dashboard expects (PRINCIPLES §6, INTERFACES). *Known state
 (S16):* a `loopdata.py` copy is still volume-mounted and a stale `[LoopData]` config section remains,
 but `user.loopdata.LoopData` is in **no** active service list — vestigial; cleanup backlogged
-(BACKLOG, ROADMAP).
+(BACKLOG, ROADMAP). **Cleanup done (S47):** live `weewx.conf`'s `[LoopData]` section removed, the
+`loopdata.py` mount dropped from the recreated `weewx-rtldavis-v2` container (verified: 6 mounts,
+clean restart, records publishing), and the file renamed aside on the NAS
+(`loopdata.py.removed-S47`) rather than deleted outright.
 
 ## DEC-0006 — Null-on-rejection filter philosophy
 

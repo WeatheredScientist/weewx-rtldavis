@@ -6,6 +6,39 @@ under [Pre-S16].
 
 ---
 
+## [S47] — 2026-07-25 — Backlog + branch cleanup: loopdata.py / reception_service.py removed, rw350/400-test images deleted, stale worktree removed
+
+Cleared four long-parked, "not urgent" backlog items in one session.
+
+**`loopdata.py` (DEC-0005, open since S16).** `user.loopdata.LoopData` was confirmed still absent
+from every active `[Engine][Services]` list. Removed the `[LoopData]` config section from the live
+`weewx.conf` (backed up first as `weewx.conf.bak-pre-loopdata-cleanup-S47`; a small Python script
+found the section by its top-level header and asserted on expected content before writing, rather
+than a line-count sed). Recreated `weewx-rtldavis-v2` (`kill` → `rm` → 3 s settle → `run`,
+reconstructed from `docker inspect`) without the `loopdata.py` bind mount. Verified live: container
+`running`, 6 mounts (down from 7), `weewx.log` publishing archive records and RESTful uploads within
+seconds, no `CRITICAL`/stall. `loopdata.py` renamed aside on the NAS to `loopdata.py.removed-S47`
+rather than deleted, for rollback.
+
+**`ops/reception_service.py` (found S43).** Confirmed unimported anywhere in the test suite (one
+stale comment reference in `tests/test_reception_layer_b.py`, fixed), never `COPY`'d into the
+Dockerfile, and its `ReceptionMonitor` service never listed in `weewx.conf`. Deleted from the repo;
+the NAS copy renamed aside to `reception_service.py.removed-S47`.
+
+**`rw350-test` / `rw400-test` Docker images (DEC-0048's last piece).** `rw250-test` was retired at
+DEC-0048 (S41); the other two ad-hoc `receiveWindow`-sweep tags were left. Confirmed neither backs
+any running container (`docker ps -a` showed only `weewx-rtldavis-v2` on `:v2.0.8`) and deleted both
+from the NAS. DEC-0048 is now fully closed.
+
+**Stale worktree.** `.claude/worktrees/s46-closeout-amendment` (branch
+`worktree-s46-closeout-amendment`, merged via PR #64) removed — same pattern as the 8 worktrees
+cleaned up at S41.
+
+No driver/source code changed, no image rebuild, `:v2.0.8` unchanged. Docs updated: BACKLOG.md,
+ROADMAP.md, docs/ARCHITECTURE.md, docs/DECISIONS-FULL.md (DEC-0005), docs/STATUS.md.
+
+---
+
 ## [S46] — 2026-07-24 — Humidity-spike watch checked directly (still unfired); OPS-DEC-0019 rollout closed cross-repo; dev housekeeping
 
 Ran the DEC-0044 humidity-spike check directly against the live NAS logs rather than deferring it:
