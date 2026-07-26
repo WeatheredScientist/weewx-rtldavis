@@ -185,19 +185,13 @@ _Last updated: 2026-07-25 (S48)._
 
 ## Needs a check / housekeeping
 
-- **⚠️ Tracked in [issue #67](https://github.com/WeatheredScientist/weewx-rtldavis/issues/67) (S48): mypy has never actually been a gate.** CI's mypy step is
-  `python -m mypy ... . || true` (`.github/workflows/ci.yml:81`) — it always exits 0, so a mypy
-  failure has never once blocked a PR; it's pure noise-suppression, not enforcement. Pre-commit's
-  mypy hook only checks each commit's own diff, so a file nobody has touched recently never gets
-  re-checked either. A full `--all-files` run (S48, while adding the pytest hook) surfaced **19
-  pre-existing errors in 4 files**: `influx.py` (12 — mostly `queue`/`urllib` py2/py3-compat
-  redefinition patterns plus a `Queue[Never]` assignment at line 638), `wcloud.py` (4, same
-  redefinition class), `pressure_service.py` (1, missing `types-requests` stub), and
-  `ops/recover_sweep_results.py` (2, a tuple-shape mismatch and a `str`/`datetime` assignment).
-  Not diagnosed or fixed — flagging only. Decide whether these are real bugs (the
-  `ops/recover_sweep_results.py` pair looks the most suspicious) or intentional py2/py3-compat
-  noise mypy can't see through, and whether CI's `|| true` should come off once the backlog is
-  clean.
+- **✅ Issue #67 closed (S49): mypy is now a real gate.** The 19 pre-existing errors flagged at S48
+  are fixed — two genuine bugs in `ops/recover_sweep_results.py` (a mismatched tuple shape in the
+  `results` list, and two loop variables silently shadowing earlier module-level names of different
+  types), one missing `types-requests` stub for `pressure_service.py`, and 10 py2/py3-compat
+  `try/except ImportError` false positives in `influx.py`/`wcloud.py` suppressed with per-line
+  `# type: ignore[...]`. CI's `.github/workflows/ci.yml:81` no longer has `|| true`. See CHANGELOG
+  `[S49]`.
 
 - **⚠️ The freeze MECHANISM is still open (DEC-0036) — but the trigger and the fuel are both gone.**
   We never proved exactly which write blocked, and the evidence is gone. Do **not** invent one. What we
