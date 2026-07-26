@@ -18,6 +18,15 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
 - ESP32 secondary sensor node — lightning (AS3935), pressure (BMP390), air quality (SEN55);
   solar-powered (parts shopping list done).
 - Blitzortung lightning integration (System Blue — the detection-network route; longer term).
+- **InfluxDB points carry no station identity (DEC-0053 Finding 2) — do NOT "just add the tag."**
+  `influx.py` supports `tags = station=...`; the live config sets none, so every point in an
+  infinite-retention bucket is anonymous. Adding a tag **forks the series key** (INTERFACES §2), which
+  splits historical continuity and needs dashboard coordination. Harmless with one producer; revisit as
+  a coordinated interface change if a second producer ever satisfies the contract (PRINCIPLES §1).
+- **SQLite archive carries no correction flag (DEC-0053 Finding 3).** InfluxDB corrected points carry
+  `rain_qc`/`rainRate_qc`/`backfill`; the archive carries nothing, so a corrected row is
+  indistinguishable from a never-corrected one — the derived store is better provenanced than the
+  system of record. Only `DATA_ERRATA.md` records it. Not urgent; a schema change isn't justified yet.
 - Credential hygiene follow-ups — tracked in the gitignored local-infra doc, not here (this repo is public). Secrets belong in `monitor.env` as env vars, never inline (DEC-0012, DEC-0047).
 - Set `STATION_NAME` in the NAS `monitor.env` — the monitor's alert/summary emails currently fall back
   to the default "My PWS" (env var unset), so they're unbranded. Cosmetic, one-line fix (observed S27).

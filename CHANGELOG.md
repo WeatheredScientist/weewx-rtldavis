@@ -6,6 +6,43 @@ under [Pre-S16].
 
 ---
 
+## [S48b] — 2026-07-25 — Provenance audit (DEC-0053): loop-JSON cache bounded; #48 and #45 closed
+
+**Issue #48 — closed, DEC-0042 upheld.** A dashboard-side reconciliation found WeatherLink's
+install-to-date total only balances if the console *excludes* the 2.56″ of phantom rain we corrected,
+and asked whether that undercuts DEC-0042's ISS-side mechanism. It does not — the premise conflates
+two classes this repo's data model already separates into independent flags: the 2.56″ is `rain_qc`
+(3 points, the **counter**, owned by DEC-0021/0033/0035), while DEC-0042 governs `rainRate_qc`
+(33 points, `rain = 0.0` in every one, contributing 0″ to any total). Both classes independently
+*require* the console's absence — ERR-0001 was our own wraparound handler adding 128 to a logged
+`rain_count=-64` and ERR-0002 a bit-7 flip passing CRC (both downstream of the shared broadcast), and
+DEC-0042's mechanism predicts no tip at all. Per INTERFACES §4 the console is our ground truth for
+"did the bucket actually tip," and it says no — confirmatory, not contradictory. The reconciliation is
+real value as **independent validation that the correction was right** (residual 0.01″), now recorded
+in `DATA_ERRATA.md`. DEC-0042 gained a "Challenged and upheld" note so it isn't re-derived.
+
+**Issue #45 — closed as DEC-0053.** Audited every artifact a consumer reads for whether the
+assumptions it was produced under travel with it. One real bug, two documented gaps:
+
+- **Fixed:** `loop_json_writer.py`'s cache was **unbounded** — it updated only on non-None values,
+  never expired them, and stamped every write with the *current* packet's `dateTime`. A dead or
+  SensorQC-rejected sensor emitted its last value forever, indistinguishable from a live reading, on
+  the surface the dashboard reads. Same failure `dewpoint_service.py` fixed for the archive path at
+  S33/DEC-0022 — learned in one artifact, never propagated to its sibling. Now bounded per-field:
+  300 s default (matching DewpointCacher), **2 × `[DavisPressure] fetch_interval`** for
+  `barometer_inHg`, since a flat 300 s would have blanked the hourly-fetched barometer for 55 min of
+  every hour and regressed Cold-load Fix B. Expired fields are omitted, not frozen, and logged at
+  WARNING. 6 new tests + a mutation check confirming they go red against the old cache (91 total).
+- **Documented, not fixed:** InfluxDB carries no station identity — and the "one-line" `tags =` fix is
+  a trap, since it forks the series key (interface break, needs dashboard coordination). The SQLite
+  archive carries no correction flag, so the system of record is less provenanced than the derived
+  store. Both in BACKLOG with the reasoning.
+
+`INTERFACES.md` §1 updated — the staleness bound is part of the contract, and a missing field now
+explicitly means "no current value," never "value unchanged."
+
+---
+
 ## [S48] — 2026-07-25 — pytest hard-gated at commit time; closes issue #55
 
 Investigated [#55](https://github.com/WeatheredScientist/weewx-rtldavis/issues/55) ("closeout
