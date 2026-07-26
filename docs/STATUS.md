@@ -15,31 +15,32 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S46** (2026-07-24). **No release, no code changed — verification + ops closeout
-> only.** Ran the DEC-0044 humidity-spike check directly instead of deferring it: decoded all 8,852
-> `log_humidity_raw` packets captured since the capture went live (2026-07-13 through now) — still
-> **no qualifying spike** (largest -9.86 %RH/min, ordinary midday movement, well under the 16-37%
-> signature). Closed `eaglehunt-ops#37` (OPS-DEC-0019 rollout) — all three Eagle Hunt repos confirmed
-> merged. Pulled `dev` forward 2 commits (PR #61) and cleaned up the resulting stale worktree/branch.
-> Full story: CHANGELOG `[S46]`.
+> **Current session: S47** (2026-07-25). **Cleanup only — backlog + branches, no release.** Closed out
+> the last two long-parked vestigial-file items: removed the `[LoopData]` config section from the live
+> `weewx.conf` and recreated `weewx-rtldavis-v2` without the `loopdata.py` mount (verified live — clean
+> restart, 6 mounts, records publishing normally); deleted `ops/reception_service.py` from the repo
+> (confirmed unwired, unimported, not baked into the Dockerfile). Both source files renamed aside on
+> the NAS (`*.removed-S47`) rather than deleted, for rollback. Deleted the `rw350-test`/`rw400-test`
+> Docker images from the NAS (confirmed unused by any running container), fully closing DEC-0048.
+> Removed the merged `worktree-s46-closeout-amendment` worktree + branch (PR #64 landed on `dev`).
+> No release, no image rebuild — `:v2.0.8` is unchanged. Full story: CHANGELOG `[S47]`.
 >
-> **S45 recap** (PR #59 merged — OPS-DEC-0019 env-twin permission rules): see CHANGELOG `[S45]`.
-> **S44 recap** (soak-check false-positive fix + closeout-skeleton adoption, DEC-0052): see
-> CHANGELOG `[S44]`. The DEC-0049 rainRate prediction carries over unfired — see "Active thread"
-> below.
+> **S46 recap** (DEC-0044 humidity-spike check run directly, still unfired; `eaglehunt-ops#37` closed):
+> see CHANGELOG `[S46]`. **S45 recap** (PR #59 merged — OPS-DEC-0019 env-twin permission rules): see
+> CHANGELOG `[S45]`. The DEC-0049 rainRate prediction carries over unfired — see "Active thread" below.
 
-_Last updated: 2026-07-24 (S46)._
+_Last updated: 2026-07-25 (S47)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S46 → S47). Nothing is half-shipped and no PR is open.** The one still-open thread
-> is the humidity-spike watch (see banner above and "Next session actions" — `log_humidity_raw`
-> capture is live, checked directly at S46 across the full 8,852-sample window since capture start,
-> still no qualifying spike). The DEC-0049 phantom-rainRate prediction (a real condensation event
-> with the tip counter not advancing) also remains unfired — S44's event turned out to be real rain,
-> not that.
+> **▶ Resume here (S47 → S48). Nothing is half-shipped and no PR is open.** The one still-open thread
+> is the humidity-spike watch (see "Next session actions" — `log_humidity_raw` capture is live, checked
+> directly at S46 across the full 8,852-sample window since capture start, still no qualifying spike;
+> not re-checked at S47, which was cleanup-only). The DEC-0049 phantom-rainRate prediction (a real
+> condensation event with the tip counter not advancing) also remains unfired — S44's event turned out
+> to be real rain, not that.
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -69,6 +70,12 @@ _Last updated: 2026-07-24 (S46)._
 
 ## Shipped — nothing to do here
 
+- **S47** (backlog + branch cleanup — no release): `loopdata.py` mount + `[LoopData]` config section
+  removed (DEC-0005, closed — live `weewx.conf` edited, `weewx-rtldavis-v2` recreated without the
+  mount, verified clean restart); `ops/reception_service.py` deleted from the repo (confirmed vestigial);
+  `rw350-test`/`rw400-test` Docker images deleted from the NAS (DEC-0048 fully closed); merged
+  `worktree-s46-closeout-amendment` worktree + branch removed. No code/driver change, no image rebuild.
+  See CHANGELOG `[S47]`.
 - **S46** (humidity-spike watch checked directly, still unfired; `eaglehunt-ops#37` closed — all
   three Eagle Hunt repos confirmed on OPS-DEC-0019; routine `dev` housekeeping; **PR #63** fixed a
   CI break the closeout PR surfaced — unpinned `ruff` had drifted to 0.16.0 and was silently
@@ -138,12 +145,12 @@ _Last updated: 2026-07-24 (S46)._
 - **Gain 372, interim** (DEC-0017) — the sweep is now **part of DEC-0048's designed RX experiment**, not a
   standalone errand. Gain stays at 372 and `receiveWindow` stays at the upstream default until that runs.
   **Do not tune either by feel.**
-- **Vestigial `loopdata.py`** — mounted + `[LoopData]` present but in no active service list; safe to
-  remove, not urgent.
-- **Likely-vestigial `ops/reception_service.py` (found S43).** Its `ReceptionMonitor` WeeWX service
-  isn't in `weewx.conf`'s `[Engine][Services]` at all, and per `git log --follow` has sat untouched
-  since S16 — never wired in. It is not what generates the reception emails (`weewx_monitor.py` is,
-  and is active). Same class as `loopdata.py`; confirm and remove, not urgent.
+- **✅ `loopdata.py` + `ops/reception_service.py` removed (S47).** Both confirmed vestigial (neither
+  wired into `weewx.conf`'s `[Engine][Services]`) and cleaned up: `[LoopData]` section removed from
+  the live `weewx.conf`, `weewx-rtldavis-v2` recreated without the `loopdata.py` mount (verified —
+  clean restart, 6 mounts, records publishing), both files renamed aside on the NAS
+  (`*.removed-S47`, not deleted, in case of rollback); `ops/reception_service.py` deleted from the
+  repo (unimported, not baked into the Dockerfile). See DEC-0005, CHANGELOG `[S47]`.
 - **Errata → dashboard contract (cross-repo, dash S69 Q3).** The owner wants corrected points visibly
   asterisked on the water-balance chart. **Half-solved:** InfluxDB corrected points now carry a sparse
   `rain_qc = 1` flag (DEC-0032, documented in INTERFACES.md), so the dashboard can render the marker
@@ -165,14 +172,14 @@ _Last updated: 2026-07-24 (S46)._
   to `json-file` is the only way to bound its log, and it costs that container's DSM log tab. **Revisit
   only if a container starts generating real stdout volume.**
 
-- **⚠️ WATCH: one `rtldavis process stalled` at the v2.0.7 startup (S41).** At 2026-07-13 15:30:35, three
-  minutes after the container was recreated, weewx logged `CRITICAL Caught WeeWxIOError: rtldavis process
-  stalled`, waited 60 s, and restarted the driver cleanly. It **self-recovered** and has not recurred;
-  reception went straight back to 100 % and archive records land every minute. It is the **only** stall in
-  the whole day's log — including across the `:v2.0.6` restart that morning — so it is new to this boot.
-  Most likely the USB dongle being re-acquired while the old container was still releasing it (`kill` →
-  `rm` → `run` in quick succession). **Not a blocker and nothing is owed** — but if a stall shows up on the
-  *next* restart too, it is a real startup race and needs a settle-delay between `rm` and `run`.
+- **One `rtldavis process stalled` at the v2.0.7 startup (S41) — has not recurred across 2 further
+  recreates (S43 v2.0.8 deploy, S47 loopdata-mount removal).** At 2026-07-13 15:30:35, three minutes
+  after the container was recreated, weewx logged `CRITICAL Caught WeeWxIOError: rtldavis process
+  stalled`, waited 60 s, and restarted the driver cleanly. Most likely the USB dongle being re-acquired
+  while the old container was still releasing it (`kill` → `rm` → `run` in quick succession). S47 added
+  a 3 s `sleep` between `rm` and `run` as a precaution and came back clean (records publishing within
+  seconds, no stall logged). **Not a blocker; downgraded from an open watch** — treat a future stall as
+  a one-off unless it shows up on consecutive restarts.
 
 - **Security follow-ups are tracked in the gitignored local-infra doc, not here.** This repo is public;
   operational security state does not belong in it. Read that file when picking up security work.
@@ -191,43 +198,50 @@ _Last updated: 2026-07-24 (S46)._
   scheduler task still runs as root (symptom: `sudo: a terminal is required` spam, no pidfile).
 - **Docker Hub README auto-sync:** add repo secrets `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` to activate
   `.github/workflows/dockerhub-description.yml` (green no-op until then). Owner action.
-- **✅ Branch/tag cleanup DONE (S41).** The two branches this item named (`feature/rain-spike-filter`,
+- **✅ Branch/tag cleanup DONE (S41, S47).** The two branches this item named (`feature/rain-spike-filter`,
   `s32-reconcile-main`) **no longer existed** — the item was stale. What *did* exist was 8 merged
-  `worktree-*` branches, all deleted (0 unmerged commits each; verified before deleting). The repo now has
-  exactly **`dev` and `main`**. `rw250-test` is retired (DEC-0048); it was **never on Docker Hub**, so the
-  misnomer was only ever ours. `rw350-test` / `rw400-test` are the same class and should follow.
+  `worktree-*` branches, all deleted (0 unmerged commits each; verified before deleting). S46's
+  `worktree-s46-closeout-amendment` (merged via PR #64) was cleaned up the same way at S47. The repo now
+  has exactly **`dev` and `main`**. `rw250-test` was retired at DEC-0048; `rw350-test` / `rw400-test`
+  (same class, never on Docker Hub) were confirmed unused by any running container and deleted from the
+  NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S46 done → S47)
+## Next session actions (S47 done → S48)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S46 (2026-07-24):** ran the humidity-spike check directly rather than deferring it —
-decoded all 8,852 `log_humidity_raw` packets captured since the capture went live (2026-07-13 15:27
-through the current log), searched for the DEC-0044 16-37 %RH single-step signature, **zero matches**
-(largest -9.86 %RH/min, ordinary midday movement). Closed `eaglehunt-ops#37` (OPS-DEC-0019 rollout) —
-confirmed all three Eagle Hunt repos had merged their portion. Pulled `dev` forward 2 commits (PR #61)
-and removed the resulting stale worktree/branch. No code changed, no release. See CHANGELOG `[S46]`.
+**✅ Done in S47 (2026-07-25):** backlog + branch cleanup, no release. Removed the `[LoopData]`
+config section from the live `weewx.conf` and recreated `weewx-rtldavis-v2` without the `loopdata.py`
+mount (DEC-0005 closed; verified live — clean restart, 6 mounts, records publishing). Deleted
+`ops/reception_service.py` from the repo (confirmed vestigial). Deleted `rw350-test`/`rw400-test`
+Docker images from the NAS, confirmed unused (DEC-0048 fully closed). Removed the merged
+`worktree-s46-closeout-amendment` worktree + branch. Both removed source files kept on the NAS as
+`*.removed-S47` for rollback. See CHANGELOG `[S47]`.
+
+**S46 recap (2026-07-24):** ran the humidity-spike check directly rather than deferring it — decoded
+all 8,852 `log_humidity_raw` packets captured since the capture went live (2026-07-13 15:27 through
+the log at the time), searched for the DEC-0044 16-37 %RH single-step signature, **zero matches**
+(largest -9.86 %RH/min, ordinary midday movement). Closed `eaglehunt-ops#37` (OPS-DEC-0019 rollout).
+See CHANGELOG `[S46]`.
 
 **S45 recap (2026-07-20):** PR #59 merged — OPS-DEC-0019 env-twin permission rules. See CHANGELOG
 `[S45]`.
 
-**S44 recap (2026-07-19):** soak-check phantom-rain false positive fixed (DEC-0052 closeout-skeleton
-adoption too) — see CHANGELOG `[S44]` for the full story; nothing carries forward from it except the
-still-open watches below.
+**▶ ON RETURN (S48), in order:**
 
-**▶ ON RETURN (S47), in order:**
-
-1. **Keep watching the humidity-spike log — still nothing qualifying through S46.** `log_humidity_raw
-   True` has been active since the v2.0.7 restart at 2026-07-13 15:27 EDT; S46 checked the full
-   8,852-sample window and found nothing. Grep for `humidity_raw=` in the current + rotated
-   `weewx.log*` files for anything logged since. Spikes run ~2–3/week clustered **11:00–16:00** — need
-   the 16-37 % DEC-0044 signature (a single-step raw jump), not just an ordinary 5-10 %/min swing.
-   It logs the full `pkt[4]`/`pkt[3]` — **no averaging, no free parameter** — which settles the
-   nibble question **deterministically**: invert the bytes, re-decode under `0x2`/`0x8`/`0xE`
-   (humidity's real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits away), compare
-   with the concurrent archived sensor. **The method and the arithmetic are in DEC-0044; do not
-   re-derive them.**
+1. **Keep watching the humidity-spike log — still nothing qualifying through S46 (not re-checked at
+   S47, which was cleanup-only).** `log_humidity_raw True` has been active since the v2.0.7 restart at
+   2026-07-13 15:27 EDT; S46 checked the full 8,852-sample window and found nothing. Grep for
+   `humidity_raw=` in the current + rotated `weewx.log*` files for anything logged since — note the
+   container was recreated at S47 (2026-07-25 22:15 UTC), so the current `weewx.log` continues across
+   that restart (log file is bind-mounted, unaffected by the container recreate). Spikes run ~2–3/week
+   clustered **11:00–16:00** — need the 16-37 % DEC-0044 signature (a single-step raw jump), not just
+   an ordinary 5-10 %/min swing. It logs the full `pkt[4]`/`pkt[3]` — **no averaging, no free
+   parameter** — which settles the nibble question **deterministically**: invert the bytes, re-decode
+   under `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV, which are 2 and
+   3 bits away), compare with the concurrent archived sensor. **The method and the arithmetic are in
+   DEC-0044; do not re-derive them.**
 
 2. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
@@ -236,6 +250,10 @@ still-open watches below.
    If it reports a nonzero count, that already excludes the normal post-tip decay window (1 hour); a
    real hit is worth taking seriously as the DEC-0049-predicted event, not re-litigating as a false
    positive first.
+
+4. **`weewx-rtldavis-v2` was killed/recreated at S47** (loopdata mount removal) — watch for the S41
+   startup-race stall class (see "Needs a check" below) on the *next* restart after this one too; this
+   restart itself came back clean (no stall logged) with a 3 s settle delay between `rm` and `run`.
 
 **Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
 **config** is mounted and the image is inert (DEC-0046). Inverses. A release that changes shipped config

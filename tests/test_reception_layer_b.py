@@ -4,8 +4,7 @@ uploader (WU RapidFire etc.) then treats as a full weather update -- the
 ~1.6x reception/publish overcount measured at S21. freqError{n} also maps
 onto real archive schema columns via DEFAULT_SENSOR_MAP (consBatteryVoltage/
 hail/hailRate/heatingTemp/heatingVoltage), so it can't simply be dropped
-(Option A) without silently breaking that and ops/reception_service.py's
-freqError logging.
+(Option A) without silently breaking that.
 
 The fix (Option B, agreed design): cache a channel-hop packet's freqError
 fields and ride them in on the *next* real DATA packet instead of yielding a

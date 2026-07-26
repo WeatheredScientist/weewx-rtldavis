@@ -44,9 +44,9 @@ From `weewx.conf [Engine][Services]`:
 | `archive_services` | `StdArchive` |
 | `restful_services` | `StationRegistry, Wunderground, PWSweather, CWOP, WOW, WOWBE, AWEKAS, user.wcloud.WeatherCloud, user.windy.Windy, user.owm.OWM, user.influx.Influx, user.ogoxeUploader.OgoxeUploader` |
 
-> **Vestigial:** `user.loopdata.LoopData` is **not** in any active list, yet `loopdata.py` is still
-> volume-mounted and a `[LoopData]` config section remains. Dead weight — cleanup backlogged
-> (DEC-0005, BACKLOG). The dashboard feed is `loop_json_writer`, not loopdata.
+> **Removed (S47):** `user.loopdata.LoopData` was never in any active list; the `loopdata.py` mount
+> and the `[LoopData]` config section were dead weight, now removed from the live container and
+> `weewx.conf` (DEC-0005). The dashboard feed is `loop_json_writer`, not loopdata.
 
 ## 3. Deployment: what's mounted vs baked
 
@@ -60,7 +60,6 @@ authoritative over the published `docker-compose.yml` example (they differ — s
 | `influx.py` | `/volume1/docker/weewx-rtldavis/influx.py` |
 | `loop_json_writer.py` | `/volume1/docker/weewx-rtldavis/loop_json_writer.py` |
 | `ogoxeUploader.py` | `weewx-data/bin/user/ogoxeUploader.py` |
-| `loopdata.py` (vestigial) | `/volume1/docker/weewx-rtldavis/loopdata.py` |
 | `sortedcontainers/` (pip dep) | `/volume1/docker/weewx-rtldavis/sortedcontainers` |
 
 **Baked into the image (changing these requires an image REBUILD):**
