@@ -28,11 +28,23 @@ headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's
 **Contract:**
 - **Units are US/imperial**, encoded in the key names. The packet is `to_US()`-normalized before
   extraction, so `outTemp_F` is always °F regardless of WeeWX's internal unit config.
-- **Sparse fields are cached-forward.** The VP2+ rotates fields across packets (not every field in
-  every packet). The writer keeps the last non-None value per field and includes it in every write,
-  so consumers always see a full-ish object. `dateTime` is always the current packet's timestamp.
-- A field absent from the cache (never yet seen this run) is simply omitted — consumers must treat
-  any field as possibly-missing.
+- **Sparse fields are cached-forward, but the cache is BOUNDED (S48, DEC-0053).** The VP2+ rotates
+  fields across packets (not every field in every packet), so the writer keeps the last non-None
+  value per field and includes it in every write. `dateTime` is always the current packet's
+  timestamp — which means a cached value is *implicitly claiming to be current*. It may therefore
+  only be served for a bounded time:
+  - **300 s** for ISS-rotated fields (rotation is ~25–60 s at this station), matching
+    `dewpoint_service.CACHE_TIMEOUT_SECONDS`. Overridable via `[LoopJsonWriter] ttl_default`.
+  - **2 × `[DavisPressure] fetch_interval`** (7200 s at the shipped hourly setting) for
+    `barometer_inHg`, which comes from the WeatherLink API fetch, *not* the ISS rotation. Derived
+    from that service's own config so the two cannot drift apart.
+
+  Past its TTL a field is **omitted rather than frozen**, and the writer logs a `WARNING` naming the
+  field. Before S48 the cache was unbounded, so a dead or SensorQC-rejected sensor emitted its last
+  value indefinitely under a live timestamp — indistinguishable from a live reading (DEC-0006).
+- A field absent from the cache — never yet seen this run, **or expired** — is simply omitted;
+  consumers must treat any field as possibly-missing. **A missing field means "no current value,"
+  never "value unchanged."**
 
 **Fields** (`packet_key → output_key`):
 

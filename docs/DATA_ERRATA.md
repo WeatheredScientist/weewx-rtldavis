@@ -209,3 +209,24 @@ only the historical InfluxDB snapshots were stale.
 field must be propagated to every field derived from it.* Correcting `rain` and stopping there left
 wrong data in an infinite-retention bucket for eight days, in the field a reader would most naturally
 reach for as "the daily total."
+
+---
+
+## ERR-0001 + ERR-0002 — independently corroborated by the WeatherLink console (S48)
+
+**Logged:** 2026-07-25 (S48) · **Source:** dashboard S76 reconciliation, filed here as issue #48
+
+An external cross-check confirms both corrections were **right**. Reconciling the WeatherLink Live
+console's install-to-date total (7.26″ since May 1, owner-confirmed) against the corrected archive
+(6.11″ since May 19) leaves 1.15″, which decomposes to ≈0.79″ of real May 1–18 rain (ERA5 at station
+coords) plus ≈0.35″ lost to early-archive capture gaps — **residual 0.01″**.
+
+The books balance *only* if the console excludes the 2.56″ we corrected (ERR-0002's 1.28″ +
+ERR-0001's 2 × 0.64″). Had the console logged the same tips, implied May 1–18 rainfall would be
+**−1.41″** — impossible. This is what both root causes predict: ERR-0001 was our own wraparound
+handler adding 128 to a logged `rain_count=-64`, ERR-0002 a bit-7 flip passing CRC — faults strictly
+downstream of the shared RF broadcast, which a console decoding its own copy could never reproduce.
+
+**Does not bear on [DEC-0042](DECISIONS.md)** (the phantom *rainRate*), which is a separate class:
+33 `rainRate_qc` points carrying `rain = 0.0` throughout, contributing 0″ to any total. See DEC-0042's
+"Challenged and upheld (S48)" note — the two flags are independent by design (INTERFACES §2).
