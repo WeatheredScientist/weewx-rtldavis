@@ -43,8 +43,13 @@ the story, this file only points at it.
 > the surface the dashboard reads (the same failure `dewpoint_service.py` fixed for the archive path
 > at S33, never propagated to its sibling). Now bounded per-field (300 s; 2 × `fetch_interval` for
 > `barometer_inHg`, which is hourly-fetched, not ISS-rotated). Two identity gaps documented, not
-> closed — see BACKLOG. **⚠️ `loop_json_writer.py` is MOUNTED (DEC-0046), so merging this does NOT
-> change prod — it needs an scp + pyc clear + restart, verified in the running system.**
+> closed — see BACKLOG. **✅ DEPLOYED AND VERIFIED IN PROD** — `loop_json_writer.py` is MOUNTED
+> (DEC-0046), so the merge alone would have been inert: scp'd (md5 matched both ways, and the live
+> file was byte-identical to the repo's pre-change version first — no drift), pyc cleared, container
+> restarted. Live log confirms `cache TTL 300 s, barometer_inHg 7200 s` — the barometer TTL correctly
+> derived from the live `fetch_interval = 3600`. Watched 453 s (past the 300 s TTL): **zero** expiry
+> warnings, all fields still served, values updating. Rollback: `loop_json_writer.py.bak-pre-ttl-S48`
+> on the NAS, one scp + restart.
 
 _Last updated: 2026-07-25 (S48)._
 
@@ -52,12 +57,17 @@ _Last updated: 2026-07-25 (S48)._
 
 ## Active thread
 
-> **▶ Resume here (S47 → S48). Nothing is half-shipped and no PR is open.** The one still-open thread
-> is the humidity-spike watch (see "Next session actions" — `log_humidity_raw` capture is live, checked
+> **▶ Resume here (S48 → S49). Nothing is half-shipped and no PR is open.** Prod is running the S48
+> loop-JSON TTL fix (DEC-0053), deployed and verified. The one still-open data thread is the
+> humidity-spike watch (see "Next session actions" — `log_humidity_raw` capture is live, checked
 > directly at S46 across the full 8,852-sample window since capture start, still no qualifying spike;
-> not re-checked at S47, which was cleanup-only). The DEC-0049 phantom-rainRate prediction (a real
-> condensation event with the tip counter not advancing) also remains unfired — S44's event turned out
-> to be real rain, not that.
+> not re-checked at S47/S48). The DEC-0049 phantom-rainRate prediction (a real condensation event with
+> the tip counter not advancing) also remains unfired — S44's event turned out to be real rain, not
+> that; and S48 confirmed the WeatherLink reconciliation does **not** disturb DEC-0042 (issue #48).
+> **Watch item from S48's deploy:** `loop_json_writer.py` now logs a WARNING naming any field that
+> expires from its cache. None fired in the first 453 s. If one starts appearing regularly for a field
+> other than a genuinely dead sensor, that field's TTL is too tight — bump it rather than removing the
+> bound (DEC-0053).
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -238,11 +248,22 @@ _Last updated: 2026-07-25 (S48)._
   NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S47 done → S48)
+## Next session actions (S48 done → S49)
 
 **This section is the repo-visible handoff.** Read it first when resuming.
 
-**✅ Done in S47 (2026-07-25):** backlog + branch cleanup, no release. Removed the `[LoopData]`
+**✅ Done in S48 (2026-07-25):** closed the three open issues that were sitting on the tracker.
+**#55** — pytest wired into `.pre-commit-config.yaml` (the real hard gate was already `dev`'s branch
+protection; this adds immediate local signal). **#48** — DEC-0042 challenged and upheld: the
+WeatherLink reconciliation conflated `rain_qc` (3 counter points, 2.56″) with `rainRate_qc` (33 rate
+points, `rain = 0.0`); both classes independently require the console's absence, so it is confirmatory,
+and it independently validates our correction (residual 0.01″). **#45** — provenance audit, DEC-0053:
+found and fixed a real bug (`loop_json_writer.py`'s cache was unbounded, so a dead sensor emitted its
+last value forever under a live `dateTime`), **deployed and verified in prod**; two identity gaps
+documented in BACKLOG rather than closed. Also filed **#67** (CI's mypy `|| true` never gates, 19
+pre-existing errors). See CHANGELOG `[S48]` and `[S48b]`.
+
+**S47 recap (2026-07-25):** backlog + branch cleanup, no release. Removed the `[LoopData]`
 config section from the live `weewx.conf` and recreated `weewx-rtldavis-v2` without the `loopdata.py`
 mount (DEC-0005 closed; verified live — clean restart, 6 mounts, records publishing). Deleted
 `ops/reception_service.py` from the repo (confirmed vestigial). Deleted `rw350-test`/`rw400-test`
@@ -256,17 +277,20 @@ the log at the time), searched for the DEC-0044 16-37 %RH single-step signature,
 (largest -9.86 %RH/min, ordinary midday movement). Closed `eaglehunt-ops#37` (OPS-DEC-0019 rollout).
 See CHANGELOG `[S46]`.
 
-**S45 recap (2026-07-20):** PR #59 merged — OPS-DEC-0019 env-twin permission rules. See CHANGELOG
-`[S45]`.
+**▶ ON RETURN (S49), in order:**
 
-**▶ ON RETURN (S48), in order:**
+0. **New watch from S48's deploy:** grep `weewx.log` for `LoopJsonWriter: .* expired after`. That
+   WARNING names any field whose cached value aged past its TTL — by design it means "no current
+   value," and for a healthy station it should be rare. If one fires repeatedly for a field whose
+   sensor is fine, its TTL is too tight: **bump that field's TTL, do not remove the bound** (DEC-0053).
+   None fired in the 453 s after deploy.
 
 1. **Keep watching the humidity-spike log — still nothing qualifying through S46 (not re-checked at
-   S47, which was cleanup-only).** `log_humidity_raw True` has been active since the v2.0.7 restart at
+   S47 or S48).** `log_humidity_raw True` has been active since the v2.0.7 restart at
    2026-07-13 15:27 EDT; S46 checked the full 8,852-sample window and found nothing. Grep for
    `humidity_raw=` in the current + rotated `weewx.log*` files for anything logged since — note the
-   container was recreated at S47 (2026-07-25 22:15 UTC), so the current `weewx.log` continues across
-   that restart (log file is bind-mounted, unaffected by the container recreate). Spikes run ~2–3/week
+   container was restarted twice on 2026-07-25 (S47 recreate 22:15 UTC, S48 TTL hot-swap 00:28 UTC),
+   so the current `weewx.log` continues across both (the log file is bind-mounted, unaffected). Spikes run ~2–3/week
    clustered **11:00–16:00** — need the 16-37 % DEC-0044 signature (a single-step raw jump), not just
    an ordinary 5-10 %/min swing. It logs the full `pkt[4]`/`pkt[3]` — **no averaging, no free
    parameter** — which settles the nibble question **deterministically**: invert the bytes, re-decode
