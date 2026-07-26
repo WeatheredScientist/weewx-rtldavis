@@ -15,53 +15,23 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S48** (2026-07-25). **Issue #55 investigated and closed — no release.** Dug into
-> "closeout doesn't hard-gate on a green test suite": found the real exposure already narrow (`dev`
-> is protected, requiring `tests`/`lint`/`secret-scan` CI checks before any merge — exercised directly
-> at S47's PR #65), but pytest was never part of `.pre-commit-config.yaml` (only ruff/mypy/secret-scan
-> ran at commit time — the gap between DEC-0015's original intent and what got built). Added a `local`
-> pytest hook (isolated env via `additional_dependencies`, all-stdlib suite, `always_run: true`);
-> verified it fires on every commit. Commented on and closed #55. **Found something bigger while
-> verifying, not yet acted on:** CI's `mypy` step is `... || true` (`.github/workflows/ci.yml:81`) —
-> it never fails the job, so mypy has been advisory-only in CI, and pre-commit's mypy only checks each
-> commit's own diff. A full `--all-files` run surfaced **19 pre-existing mypy errors** (mostly
-> `influx.py`) that no gate has ever caught. Reverted incidental whitespace fixes that same run swept
-> in; the mypy findings themselves are untouched — see "Needs a check" below. Full story: CHANGELOG
-> `[S48]`.
->
-> **S47 recap** (backlog + branch cleanup — `loopdata.py`/`reception_service.py` removed, DEC-0005 and
-> DEC-0048 closed, stale worktree removed): see CHANGELOG `[S47]`. The DEC-0049 rainRate prediction and
-> the humidity-spike watch carry over unfired — see "Active thread" below.
+> **Current session: S50** (2026-07-26). Session start — clean pickup: `dev` up to date with
+> `origin/dev`, working tree clean, `pytest` 91/91 green, zero open PRs, no `repo:weewx` cross-repo
+> assignments waiting in eaglehunt-ops. This session's first action was fixing this file's own resume
+> pointer — it was still reading "S48 → S49" after S49 (issue #67, mypy CI gate) had already shipped
+> and closed; see "Shipped" below and CHANGELOG `[S49]`. No other work yet this session.
 
-> **S48 continued — issues #48 and #45 both closed (DEC-0053).** #48: the WeatherLink reconciliation
-> does **not** undercut DEC-0042 — it conflated `rain_qc` (3 counter points, 2.56″, owned by
-> DEC-0021/0033/0035) with `rainRate_qc` (33 rate points, `rain = 0.0`, 0″ contributed). Both classes
-> independently require the console's absence; the reconciliation is independent validation that our
-> correction was right (residual 0.01″). DEC-0042 amended "Challenged and upheld"; corroboration
-> recorded in DATA_ERRATA. #45: provenance audit found a **real bug** — `loop_json_writer.py`'s cache
-> was unbounded, so a dead/rejected sensor emitted its last value forever under a live `dateTime`, on
-> the surface the dashboard reads (the same failure `dewpoint_service.py` fixed for the archive path
-> at S33, never propagated to its sibling). Now bounded per-field (300 s; 2 × `fetch_interval` for
-> `barometer_inHg`, which is hourly-fetched, not ISS-rotated). Two identity gaps documented, not
-> closed — see BACKLOG. **✅ DEPLOYED AND VERIFIED IN PROD** — `loop_json_writer.py` is MOUNTED
-> (DEC-0046), so the merge alone would have been inert: scp'd (md5 matched both ways, and the live
-> file was byte-identical to the repo's pre-change version first — no drift), pyc cleared, container
-> restarted. Live log confirms `cache TTL 300 s, barometer_inHg 7200 s` — the barometer TTL correctly
-> derived from the live `fetch_interval = 3600`. Watched 453 s (past the 300 s TTL): **zero** expiry
-> warnings, all fields still served, values updating. Rollback: `loop_json_writer.py.bak-pre-ttl-S48`
-> on the NAS, one scp + restart.
-
-_Last updated: 2026-07-25 (S48)._
+_Last updated: 2026-07-26 (S50)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S48 → S49). Nothing is half-shipped and no PR is open.** Prod is running the S48
+> **▶ Resume here (S49 → S50). Nothing is half-shipped and no PR is open.** Prod is running the S48
 > loop-JSON TTL fix (DEC-0053), deployed and verified. The one still-open data thread is the
 > humidity-spike watch (see "Next session actions" — `log_humidity_raw` capture is live, checked
 > directly at S46 across the full 8,852-sample window since capture start, still no qualifying spike;
-> not re-checked at S47/S48). The DEC-0049 phantom-rainRate prediction (a real condensation event with
+> not re-checked at S47/S48/S49). The DEC-0049 phantom-rainRate prediction (a real condensation event with
 > the tip counter not advancing) also remains unfired — S44's event turned out to be real rain, not
 > that; and S48 confirmed the WeatherLink reconciliation does **not** disturb DEC-0042 (issue #48).
 > **Watch item from S48's deploy:** `loop_json_writer.py` now logs a WARNING naming any field that
@@ -97,6 +67,24 @@ _Last updated: 2026-07-25 (S48)._
 
 ## Shipped — nothing to do here
 
+- **S49** (issue #67 closed — mypy is now a real CI gate): 19 pre-existing mypy errors fixed (two
+  genuine bugs in `ops/recover_sweep_results.py` — a mismatched tuple element type and two loop
+  variables shadowing module-level names; one missing `types-requests` stub; 13 py2/py3-compat
+  `try/except ImportError` false positives suppressed per-line, never blanket). CI's
+  `.github/workflows/ci.yml:81` no longer has `|| true` — mypy failures now actually block CI,
+  mirroring what #55 did for pytest via pre-commit at S48. No DEC entry (closes an enforcement gap,
+  not a new decision). See CHANGELOG `[S49]`.
+- **S48** (issues #55, #48, #45 closed): **#55** — pytest wired into `.pre-commit-config.yaml` as
+  immediate local signal (the real hard gate was already `dev`'s branch protection). **#48** —
+  DEC-0042 challenged and upheld: the WeatherLink reconciliation conflated `rain_qc` (3 counter
+  points, 2.56″) with `rainRate_qc` (33 rate points, `rain = 0.0`); both independently require the
+  console's absence, so it's confirmatory, not contradictory. **#45** — provenance audit, DEC-0053:
+  `loop_json_writer.py`'s cache was unbounded, so a dead/rejected sensor could emit its last value
+  forever under a live `dateTime`; now bounded per-field (300 s, 2 × `fetch_interval` for
+  `barometer_inHg`). **Deployed and verified in prod** (scp'd, md5-matched, pyc cleared, container
+  restarted; zero expiry warnings across a 453 s watch). Two identity gaps documented, not closed, in
+  BACKLOG. Filed issue #67 (CI's mypy `|| true` never gates) — closed the next session, S49. See
+  CHANGELOG `[S48]` and `[S48b]`.
 - **S47** (backlog + branch cleanup — no release): `loopdata.py` mount + `[LoopData]` config section
   removed (DEC-0005, closed — live `weewx.conf` edited, `weewx-rtldavis-v2` recreated without the
   mount, verified clean restart); `ops/reception_service.py` deleted from the repo (confirmed vestigial);
@@ -185,14 +173,6 @@ _Last updated: 2026-07-25 (S48)._
 
 ## Needs a check / housekeeping
 
-- **✅ Issue #67 closed (S49): mypy is now a real gate.** The 19 pre-existing errors flagged at S48
-  are fixed — two genuine bugs in `ops/recover_sweep_results.py` (a mismatched tuple shape in the
-  `results` list, and two loop variables silently shadowing earlier module-level names of different
-  types), one missing `types-requests` stub for `pressure_service.py`, and 10 py2/py3-compat
-  `try/except ImportError` false positives in `influx.py`/`wcloud.py` suppressed with per-line
-  `# type: ignore[...]`. CI's `.github/workflows/ci.yml:81` no longer has `|| true`. See CHANGELOG
-  `[S49]`.
-
 - **⚠️ The freeze MECHANISM is still open (DEC-0036) — but the trigger and the fuel are both gone.**
   We never proved exactly which write blocked, and the evidence is gone. Do **not** invent one. What we
   now know for certain: the **trigger** (a bare `docker logs`) is blocked by a hook in both the agent and
@@ -242,36 +222,12 @@ _Last updated: 2026-07-25 (S48)._
   NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S48 done → S49)
+## Next session actions (S49 done → S50)
 
-**This section is the repo-visible handoff.** Read it first when resuming.
+**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S49
+now live only in "Shipped" above and CHANGELOG — not duplicated here.
 
-**✅ Done in S48 (2026-07-25):** closed the three open issues that were sitting on the tracker.
-**#55** — pytest wired into `.pre-commit-config.yaml` (the real hard gate was already `dev`'s branch
-protection; this adds immediate local signal). **#48** — DEC-0042 challenged and upheld: the
-WeatherLink reconciliation conflated `rain_qc` (3 counter points, 2.56″) with `rainRate_qc` (33 rate
-points, `rain = 0.0`); both classes independently require the console's absence, so it is confirmatory,
-and it independently validates our correction (residual 0.01″). **#45** — provenance audit, DEC-0053:
-found and fixed a real bug (`loop_json_writer.py`'s cache was unbounded, so a dead sensor emitted its
-last value forever under a live `dateTime`), **deployed and verified in prod**; two identity gaps
-documented in BACKLOG rather than closed. Also filed **#67** (CI's mypy `|| true` never gates, 19
-pre-existing errors). See CHANGELOG `[S48]` and `[S48b]`.
-
-**S47 recap (2026-07-25):** backlog + branch cleanup, no release. Removed the `[LoopData]`
-config section from the live `weewx.conf` and recreated `weewx-rtldavis-v2` without the `loopdata.py`
-mount (DEC-0005 closed; verified live — clean restart, 6 mounts, records publishing). Deleted
-`ops/reception_service.py` from the repo (confirmed vestigial). Deleted `rw350-test`/`rw400-test`
-Docker images from the NAS, confirmed unused (DEC-0048 fully closed). Removed the merged
-`worktree-s46-closeout-amendment` worktree + branch. Both removed source files kept on the NAS as
-`*.removed-S47` for rollback. See CHANGELOG `[S47]`.
-
-**S46 recap (2026-07-24):** ran the humidity-spike check directly rather than deferring it — decoded
-all 8,852 `log_humidity_raw` packets captured since the capture went live (2026-07-13 15:27 through
-the log at the time), searched for the DEC-0044 16-37 %RH single-step signature, **zero matches**
-(largest -9.86 %RH/min, ordinary midday movement). Closed `eaglehunt-ops#37` (OPS-DEC-0019 rollout).
-See CHANGELOG `[S46]`.
-
-**▶ ON RETURN (S49), in order:**
+**▶ ON RETURN (S50), in order:**
 
 0. **New watch from S48's deploy:** grep `weewx.log` for `LoopJsonWriter: .* expired after`. That
    WARNING names any field whose cached value aged past its TTL — by design it means "no current
@@ -280,7 +236,7 @@ See CHANGELOG `[S46]`.
    None fired in the 453 s after deploy.
 
 1. **Keep watching the humidity-spike log — still nothing qualifying through S46 (not re-checked at
-   S47 or S48).** `log_humidity_raw True` has been active since the v2.0.7 restart at
+   S47, S48, or S49).** `log_humidity_raw True` has been active since the v2.0.7 restart at
    2026-07-13 15:27 EDT; S46 checked the full 8,852-sample window and found nothing. Grep for
    `humidity_raw=` in the current + rotated `weewx.log*` files for anything logged since — note the
    container was restarted twice on 2026-07-25 (S47 recreate 22:15 UTC, S48 TTL hot-swap 00:28 UTC),
