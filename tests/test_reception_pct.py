@@ -18,7 +18,7 @@ sys.argv = ["weewx_monitor.py", "--test-alert"]
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
-CASES = []
+CASES: list[tuple[bool, str]] = []
 
 
 def check(cond, label):
