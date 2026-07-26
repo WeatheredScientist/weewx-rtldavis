@@ -33,6 +33,19 @@ the story, this file only points at it.
 > DEC-0048 closed, stale worktree removed): see CHANGELOG `[S47]`. The DEC-0049 rainRate prediction and
 > the humidity-spike watch carry over unfired — see "Active thread" below.
 
+> **S48 continued — issues #48 and #45 both closed (DEC-0053).** #48: the WeatherLink reconciliation
+> does **not** undercut DEC-0042 — it conflated `rain_qc` (3 counter points, 2.56″, owned by
+> DEC-0021/0033/0035) with `rainRate_qc` (33 rate points, `rain = 0.0`, 0″ contributed). Both classes
+> independently require the console's absence; the reconciliation is independent validation that our
+> correction was right (residual 0.01″). DEC-0042 amended "Challenged and upheld"; corroboration
+> recorded in DATA_ERRATA. #45: provenance audit found a **real bug** — `loop_json_writer.py`'s cache
+> was unbounded, so a dead/rejected sensor emitted its last value forever under a live `dateTime`, on
+> the surface the dashboard reads (the same failure `dewpoint_service.py` fixed for the archive path
+> at S33, never propagated to its sibling). Now bounded per-field (300 s; 2 × `fetch_interval` for
+> `barometer_inHg`, which is hourly-fetched, not ISS-rotated). Two identity gaps documented, not
+> closed — see BACKLOG. **⚠️ `loop_json_writer.py` is MOUNTED (DEC-0046), so merging this does NOT
+> change prod — it needs an scp + pyc clear + restart, verified in the running system.**
+
 _Last updated: 2026-07-25 (S48)._
 
 ---
