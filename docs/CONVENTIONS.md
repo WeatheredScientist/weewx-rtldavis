@@ -1,7 +1,7 @@
 # Conventions — weewx-rtldavis
 
 **Status:** Source of truth (how we operate)
-**Last updated:** 2026-07-04 (S17)
+**Last updated:** 2026-07-26 (S49)
 
 The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 
@@ -72,6 +72,12 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
   *(On the macOS dev box the interpreter is `python3` — there is no bare `python`; pre-commit and CI
   supply their own. Run the secret gate standalone with `bash scripts/check_secrets.sh` — it now
   passes cleanly with no staged files rather than erroring.)*
+- **A local `pre-commit run mypy --all-files` "Passed" is not proof CI will pass.** mypy's
+  incremental cache (`.mypy_cache/`, gitignored) persists between runs and can silently mask real
+  errors on files nothing else touched (S49, issue #67 follow-up: a stale cache hid 2 real errors
+  in `tests/test_reception_pct.py` that CI's cache-free run caught immediately). Before trusting a
+  local "0 errors" result — especially right before opening/merging a PR — `rm -rf .mypy_cache`
+  first.
 - Follow the WeeWX `RESTThread` pattern for uploaders (DEC-0007); honest nulls on rejection,
   never stale substitution (DEC-0006).
 
