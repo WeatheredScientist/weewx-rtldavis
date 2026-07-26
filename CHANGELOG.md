@@ -41,6 +41,14 @@ assumptions it was produced under travel with it. One real bug, two documented g
 `INTERFACES.md` §1 updated — the staleness bound is part of the contract, and a missing field now
 explicitly means "no current value," never "value unchanged."
 
+**Deployed and verified in prod** (PR #69 merged, then hot-swapped — `loop_json_writer.py` is MOUNTED
+per DEC-0046, so the merge alone would have been inert). Pre-flight drift check confirmed the live
+file was byte-identical to the repo's pre-change version; scp'd with md5 matched both ways, pyc
+cleared, container restarted (`kill` → `start`, DEC-0008). Live log: `cache TTL 300 s,
+barometer_inHg 7200 s` — the barometer TTL correctly derived from the live `fetch_interval = 3600`.
+Watched 453 s, past the default TTL: zero expiry warnings, all fields still served, values updating.
+Rollback is `loop_json_writer.py.bak-pre-ttl-S48` + restart. No image rebuild; `:v2.0.8` unaffected.
+
 ---
 
 ## [S48] — 2026-07-25 — pytest hard-gated at commit time; closes issue #55
