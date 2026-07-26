@@ -15,21 +15,25 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S47** (2026-07-25). **Cleanup only — backlog + branches, no release.** Closed out
-> the last two long-parked vestigial-file items: removed the `[LoopData]` config section from the live
-> `weewx.conf` and recreated `weewx-rtldavis-v2` without the `loopdata.py` mount (verified live — clean
-> restart, 6 mounts, records publishing normally); deleted `ops/reception_service.py` from the repo
-> (confirmed unwired, unimported, not baked into the Dockerfile). Both source files renamed aside on
-> the NAS (`*.removed-S47`) rather than deleted, for rollback. Deleted the `rw350-test`/`rw400-test`
-> Docker images from the NAS (confirmed unused by any running container), fully closing DEC-0048.
-> Removed the merged `worktree-s46-closeout-amendment` worktree + branch (PR #64 landed on `dev`).
-> No release, no image rebuild — `:v2.0.8` is unchanged. Full story: CHANGELOG `[S47]`.
+> **Current session: S48** (2026-07-25). **Issue #55 investigated and closed — no release.** Dug into
+> "closeout doesn't hard-gate on a green test suite": found the real exposure already narrow (`dev`
+> is protected, requiring `tests`/`lint`/`secret-scan` CI checks before any merge — exercised directly
+> at S47's PR #65), but pytest was never part of `.pre-commit-config.yaml` (only ruff/mypy/secret-scan
+> ran at commit time — the gap between DEC-0015's original intent and what got built). Added a `local`
+> pytest hook (isolated env via `additional_dependencies`, all-stdlib suite, `always_run: true`);
+> verified it fires on every commit. Commented on and closed #55. **Found something bigger while
+> verifying, not yet acted on:** CI's `mypy` step is `... || true` (`.github/workflows/ci.yml:81`) —
+> it never fails the job, so mypy has been advisory-only in CI, and pre-commit's mypy only checks each
+> commit's own diff. A full `--all-files` run surfaced **19 pre-existing mypy errors** (mostly
+> `influx.py`) that no gate has ever caught. Reverted incidental whitespace fixes that same run swept
+> in; the mypy findings themselves are untouched — see "Needs a check" below. Full story: CHANGELOG
+> `[S48]`.
 >
-> **S46 recap** (DEC-0044 humidity-spike check run directly, still unfired; `eaglehunt-ops#37` closed):
-> see CHANGELOG `[S46]`. **S45 recap** (PR #59 merged — OPS-DEC-0019 env-twin permission rules): see
-> CHANGELOG `[S45]`. The DEC-0049 rainRate prediction carries over unfired — see "Active thread" below.
+> **S47 recap** (backlog + branch cleanup — `loopdata.py`/`reception_service.py` removed, DEC-0005 and
+> DEC-0048 closed, stale worktree removed): see CHANGELOG `[S47]`. The DEC-0049 rainRate prediction and
+> the humidity-spike watch carry over unfired — see "Active thread" below.
 
-_Last updated: 2026-07-25 (S47)._
+_Last updated: 2026-07-25 (S48)._
 
 ---
 
@@ -157,6 +161,20 @@ _Last updated: 2026-07-25 (S47)._
   straight from the data with no parallel list. The dashboard side still has to *read* it.
 
 ## Needs a check / housekeeping
+
+- **⚠️ NEW (S48): mypy has never actually been a gate.** CI's mypy step is
+  `python -m mypy ... . || true` (`.github/workflows/ci.yml:81`) — it always exits 0, so a mypy
+  failure has never once blocked a PR; it's pure noise-suppression, not enforcement. Pre-commit's
+  mypy hook only checks each commit's own diff, so a file nobody has touched recently never gets
+  re-checked either. A full `--all-files` run (S48, while adding the pytest hook) surfaced **19
+  pre-existing errors in 4 files**: `influx.py` (12 — mostly `queue`/`urllib` py2/py3-compat
+  redefinition patterns plus a `Queue[Never]` assignment at line 638), `wcloud.py` (4, same
+  redefinition class), `pressure_service.py` (1, missing `types-requests` stub), and
+  `ops/recover_sweep_results.py` (2, a tuple-shape mismatch and a `str`/`datetime` assignment).
+  Not diagnosed or fixed — flagging only. Decide whether these are real bugs (the
+  `ops/recover_sweep_results.py` pair looks the most suspicious) or intentional py2/py3-compat
+  noise mypy can't see through, and whether CI's `|| true` should come off once the backlog is
+  clean.
 
 - **⚠️ The freeze MECHANISM is still open (DEC-0036) — but the trigger and the fuel are both gone.**
   We never proved exactly which write blocked, and the evidence is gone. Do **not** invent one. What we
