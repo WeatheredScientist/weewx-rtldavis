@@ -199,6 +199,13 @@ on hyperlocal's API_CONTRACT/TRAINING_DATA_CONTRACT pattern).
 gate and structural secret scan are direct insurance against shipping a broken or credential-leaking
 `.py`. Rejected from hyperlocal: its per-session file sprawl (superseded by STATUS + CHANGELOG).
 
+**Gap closed (S48, issue #55):** the original "pytest+ruff+mypy before done" intent only ever got
+ruff and mypy wired into `.pre-commit-config.yaml` — pytest was documented as a manual pre-close
+step (DEC-0052 step 1) and CI-enforced at PR time, but not gated at commit time. Added a `local`
+pytest hook (`language: python`, `additional_dependencies: [pytest]`, `always_run: true`) — the
+suite is all-stdlib, so pre-commit's isolated env needs nothing from this repo's own `.venv`.
+Verified live: fires on every commit regardless of which files changed, passes in isolation.
+
 ## DEC-0016 — Claude Opus 4.8 at high/xhigh as the Claude Code driver
 
 **Status:** Accepted · **Date:** 2026-07-04 (S16)

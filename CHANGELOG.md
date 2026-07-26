@@ -6,6 +6,27 @@ under [Pre-S16].
 
 ---
 
+## [S48] — 2026-07-25 — pytest hard-gated at commit time; closes issue #55
+
+Investigated [#55](https://github.com/WeatheredScientist/weewx-rtldavis/issues/55) ("closeout
+doesn't hard-gate on a green test suite"), filed 2026-07-16 before this repo's closeout skeleton
+existed. Found the practical exposure already narrow: `dev` is a protected branch requiring the
+`tests`/`lint`/`secret-scan` CI checks before any merge (verified directly this session via PR #65),
+so a broken-test commit has no path onto `dev` regardless of whether an agent remembers to run
+pytest locally. The one real remaining gap: pytest wasn't part of `.pre-commit-config.yaml` — only
+ruff/mypy/secret-scan ran at commit time, which is what DEC-0015 originally intended but never fully
+wired up. Added a `local` pytest hook (isolated pre-commit env, `additional_dependencies: [pytest]`,
+`always_run: true`) — the suite is all-stdlib so it needs nothing from this repo's `.venv`. Verified
+it fires on every commit and passes in isolation. Commented on and closed #55, citing the branch-
+protection/CI structure as the actual hard gate, with this as the immediate-local-signal bonus.
+
+(Caught, not fixed, as out of scope: running `pre-commit run --all-files` surfaced 19 pre-existing
+mypy errors and trailing-whitespace fixes across `influx.py`/`ogoxeUploader.py`/`weewx.conf.example`
+that normal per-commit runs never touch, since pre-commit only checks each commit's own diff.
+Reverted those incidental changes — not this session's task.)
+
+---
+
 ## [S47] — 2026-07-25 — Backlog + branch cleanup: loopdata.py / reception_service.py removed, rw350/400-test images deleted, stale worktree removed
 
 Cleared four long-parked, "not urgent" backlog items in one session.
