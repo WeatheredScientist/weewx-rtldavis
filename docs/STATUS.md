@@ -162,7 +162,7 @@ _Last updated: 2026-07-25 (S48)._
 
 ## Needs a check / housekeeping
 
-- **⚠️ NEW (S48): mypy has never actually been a gate.** CI's mypy step is
+- **⚠️ Tracked in [issue #67](https://github.com/WeatheredScientist/weewx-rtldavis/issues/67) (S48): mypy has never actually been a gate.** CI's mypy step is
   `python -m mypy ... . || true` (`.github/workflows/ci.yml:81`) — it always exits 0, so a mypy
   failure has never once blocked a PR; it's pure noise-suppression, not enforcement. Pre-commit's
   mypy hook only checks each commit's own diff, so a file nobody has touched recently never gets
