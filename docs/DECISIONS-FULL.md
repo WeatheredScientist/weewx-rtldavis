@@ -1367,6 +1367,28 @@ evidence existed at all — but the live rows had been overwritten in place (DEC
 supplied a pre-correction copy. **Snapshot the affected rows before a retrospective correction, not
 after.**
 
+**Challenged and upheld (S48, issue #48).** A dashboard-side reconciliation (their S76) found that
+WeatherLink's install-to-date total only balances against our archive if the console **excludes** the
+2.56″ of phantom rain we corrected — and asked whether that undercuts an ISS-side mechanism, since a
+real physical tip is broadcast to every listener. **It does not.** The challenge conflates the two
+phantom classes, which this repo's own data model already separates into two independent flags
+(INTERFACES §2): the 2.56″ is **`rain_qc` (3 points)** — the *counter*, which DEC-0042 explicitly
+disclaims and DEC-0021/0033/0035 own — while DEC-0042 governs **`rainRate_qc` (33 points)**, decoded
+from a different ISS message (type 0x5 vs 0xE) and carrying `rain = 0.0` in every one of those 33
+records. The rate events contributed **exactly 0″** to any accumulation, ours or the console's.
+
+Both classes independently *require* the console's absence, so the reconciliation is confirmatory:
+(1) the counter phantoms are receiver/driver-side — ERR-0001 is our own wraparound handler adding 128
+to a logged `rain_count=-64`, and ERR-0002 is a bit-7 flip passing CRC — both strictly downstream of
+the shared broadcast, so a console decoding its own copy with its own firmware could never reproduce
+them; (2) DEC-0042's mechanism *predicts no tip at all* ("rate set, counter untouched"), so there was
+never a tip for the console to count. Per INTERFACES §4 the WeatherLink console is our designated
+ground truth for **"did the bucket actually tip"** — and it says no, which is what DEC-0042 claims.
+
+Net: the reconciliation is **independent external validation that the 2.56″ correction was right**
+(residual 0.01″ against ERA5 + measured capture gaps), not evidence against the mechanism. No revision
+warranted; do not re-litigate.
+
 ---
 
 ## DEC-0043 — Override the ROOT logger, not just `weewx` and `user` (S39)
@@ -1909,3 +1931,66 @@ to session numbering, to the pause-before-commit/push rule, or to any prior DEC 
 the existing rule instead of restating it.
 
 Outcome reported to eaglehunt-ops#22 (cross-repo roll-up); closes weewx-rtldavis#56.
+
+---
+
+## DEC-0053 — Provenance audit: bound the loop-JSON cache; two identity gaps documented, not closed
+
+**Status:** Accepted · **Date:** 2026-07-25 (S48) · **Closes:** weewx-rtldavis#45 ·
+**Applies:** DEC-0006 (honest nulls, never stale substitution) to the real-time surface
+
+**Context.** Ported from the dashboard's S73 incident (their DEC-0104/0106): their forecast archive
+faithfully recorded the *wrong* coordinates in a column nothing read, and it saved nothing, because
+the artifact the consumer actually reads never carried the assumption. Issue #45 asked the same
+question of this repo: for each artifact a consumer reads, do the assumptions it was produced under
+travel **with** it?
+
+**The audit.**
+
+| Artifact | Units | Station identity | Staleness / cadence | Correction state |
+|---|---|---|---|---|
+| loop-JSON (`current.json`, `loop-data.txt`) | ✅ in key names | ❌ absent | ❌ **was unbounded** | n/a |
+| InfluxDB `record,binding=archive` | ✅ field suffixes | ❌ `tags` unset | ✅ `backfill = 1` | ✅ `*_qc` |
+| SQLite `weewx.sdb` | ✅ schema | ❌ absent | ✅ honest `interval` column | ❌ none |
+| `DATA_ERRATA.md` | n/a | n/a | n/a | ✅ (it *is* the record) |
+
+**Finding 1 — FIXED. The loop-JSON cache was unbounded, on the surface the dashboard reads.**
+`loop_json_writer.py` updated its cache only on non-None values, never expired them, and stamped every
+write with the *current* packet's `dateTime`. A dead — or SensorQC-rejected — sensor therefore emitted
+its last value forever, indistinguishable from a live reading. This is the same failure
+`dewpoint_service.py` fixed for the **archive** path at S33/DEC-0022, whose comment names it exactly:
+*"a stale substituted value masks that indefinitely."* The lesson was learned in one artifact and never
+propagated to its sibling. Not hypothetical — the anemometer failed and was replaced ~16–17 Jun 2026,
+precisely the class of event this masks.
+
+**Decision:** bound the cache per-field. 300 s default (matching DewpointCacher, and ~5–12× the ISS
+rotation), but **2 × `[DavisPressure] fetch_interval`** for `barometer_inHg` — a flat 300 s would have
+blanked the barometer for 55 minutes of every hour and regressed S43's Cold-load Fix B. The barometer
+TTL is *derived from that service's own config*, so the two cannot drift apart. Past its TTL a field is
+omitted and a `WARNING` names it, which also turns a silently-dead sensor into an observable event.
+Contract-compatible: INTERFACES §1 already required consumers to treat any field as possibly-missing.
+Guarded by 6 tests, including a mutation check confirming they go red against the old unbounded cache.
+
+**Finding 2 — DOCUMENTED, deliberately NOT fixed. InfluxDB carries no station identity.**
+`influx.py` supports `tags = station=A`; the live config sets none, so the only tag is
+`binding=archive` and every point in an infinite-retention bucket is anonymous. **The one-line fix is
+a trap:** a point's series key *is* measurement + full tag set, so adding a tag forks a parallel
+series — which INTERFACES §2 explicitly forbids for corrections/backfills, and which would split
+historical continuity and require dashboard coordination. Currently harmless (one producer, one
+station), and unlike the dashboard's incident we record *no* identity rather than a *wrong* one — the
+gap is unauditable but not misleading. **Revisit only if a second producer appears** (PRINCIPLES §1's
+multi-source future is exactly when it starts to matter), and treat it as a coordinated interface
+change, never a config tweak.
+
+**Finding 3 — DOCUMENTED, not fixed. The system of record is less provenanced than the derived store.**
+InfluxDB corrected points carry `rain_qc` / `rainRate_qc` / `backfill`; the SQLite archive carries
+nothing, so a corrected row is indistinguishable from a never-corrected one. Only `DATA_ERRATA.md` — a
+markdown file outside the data path — records it. Backlogged; a schema change to the archive is not
+justified by current need, but a reader treating SQLite as ground truth should know the flags live
+downstream, not here.
+
+**The rule this earns.** *A cached or substituted value must carry, or be bounded by, the assumption
+that makes it valid.* Units already travel in key names; staleness now travels as a bound; identity
+still does not, and that is recorded rather than assumed away. Corollary, from Finding 1's history:
+**when a data-integrity lesson is fixed in one artifact, check its siblings in the same commit** —
+DEC-0022 fixed the archive path and left the real-time path carrying the identical bug for 15 sessions.
