@@ -6,6 +6,41 @@ under [Pre-S16].
 
 ---
 
+## [S49] — 2026-07-26 — Issue #67 closed: mypy is now a real CI gate
+
+Triaged and fixed the 19 pre-existing mypy errors S48 flagged (`--all-files` run while adding the
+pytest hook) but didn't diagnose. Reproduced locally via `pre-commit run mypy --all-files`.
+
+**Two genuine bugs, both in `ops/recover_sweep_results.py`:** the `results` list's `NO_DATA` row
+appended an `int 0` for the pct column where every real-data row appends a `float`
+(`round(mean_pct, 1)`) — now `0.0`. Separately, the summary loop reused the module-level names `ts`
+(a `datetime` from the log-parsing loop) and `pct` (an `int` from the same) for unrelated `str`/
+`float` values unpacked from `results` tuples — silent shadowing, not a crash, but genuinely
+confusing and exactly the kind of thing mypy is right to flag. Renamed to `_ts` (unused) and
+`row_pct`. `results` also gained an explicit type annotation
+(`list[tuple[int, int, str, int, int, float, int | str]]`) documenting that its last column is
+intentionally either a window count or the `"NO_DATA"` sentinel string — a deliberate design choice,
+not something to unify.
+
+**One missing stub, not a bug:** `pressure_service.py` needs `types-requests`. Added to
+`.pre-commit-config.yaml`'s mypy hook `additional_dependencies` and to CI's `pip install` step.
+
+**13 py2/py3-compat false positives (`influx.py` 9, `wcloud.py` 4), plus one real
+shadowing bug in `influx.py` (3 cascading errors):** the `try: import X / except ImportError: import Y as X` compat shims
+mypy statically flags on the branch that never executes under Python 3.14 — suppressed per-line with
+`# type: ignore[no-redef]` / `[attr-defined]`, never a blanket per-file ignore, per the issue's own
+suggested triage. Separately, `influx.py`'s manual test harness (`if __name__ == "__main__":`) had
+`queue = queue.Queue()`, shadowing the `queue` module import with a same-named local — the two
+`Module has no attribute "put"` errors were downstream of this one root cause, not independent bugs.
+Renamed to `q: queue.Queue = queue.Queue()`.
+
+Verified clean: `pre-commit run mypy --all-files` 19 → 0 errors, ruff clean, pytest 91/91. Removed
+`.github/workflows/ci.yml:81`'s `|| true` — mypy failures now actually block CI, mirroring what
+#55/DEC-0015 did for pytest via pre-commit at S48. No DEC entry — this closes an enforcement gap,
+not a new design decision, same class as #55.
+
+---
+
 ## [S48b] — 2026-07-25 — Provenance audit (DEC-0053): loop-JSON cache bounded; #48 and #45 closed
 
 **Issue #48 — closed, DEC-0042 upheld.** A dashboard-side reconciliation found WeatherLink's
