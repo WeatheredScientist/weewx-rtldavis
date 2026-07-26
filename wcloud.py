@@ -46,21 +46,21 @@ try:
     import queue
 except ImportError:
     # Python 2
-    import Queue as queue
+    import Queue as queue  # type: ignore[no-redef]
 
 try:
     # Python 3
     from urllib.parse import urlencode
 except ImportError:
     # Python 2
-    from urllib import urlencode
+    from urllib import urlencode  # type: ignore[attr-defined,no-redef]
 
 try:
     # Python 3
     MAXSIZE = sys.maxsize
 except AttributeError:
     # Python 2
-    MAXSIZE = sys.maxint
+    MAXSIZE = sys.maxint  # type: ignore[attr-defined]
 
 import weewx
 import weewx.restx
