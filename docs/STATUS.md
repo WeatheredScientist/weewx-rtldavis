@@ -15,29 +15,35 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S50** (2026-07-26). Session start — clean pickup: `dev` up to date with
-> `origin/dev`, working tree clean, `pytest` 91/91 green, zero open PRs, no `repo:weewx` cross-repo
-> assignments waiting in eaglehunt-ops. This session's first action was fixing this file's own resume
-> pointer — it was still reading "S48 → S49" after S49 (issue #67, mypy CI gate) had already shipped
-> and closed; see "Shipped" below and CHANGELOG `[S49]`. No other work yet this session.
+> **Current session: S51** (2026-07-26). Watch-item session — all four S50-handoff checks run, no code
+> changed. Clean pickup (91/91 green, zero open PRs, no cross-repo assignments). Findings: the DEC-0053
+> TTL watch fired and both patterns are benign (see "Active thread"); the humidity-spike watch is still
+> unfired through 2026-07-26 20:42; soak check 14 PASS / 0 FAIL; no driver stalls. Filed
+> [#74](https://github.com/WeatheredScientist/weewx-rtldavis/issues/74) (calm-windDir warning noise,
+> needs design agreement before coding).
 
-_Last updated: 2026-07-26 (S50)._
+_Last updated: 2026-07-26 (S51)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S49 → S50). Nothing is half-shipped and no PR is open.** Prod is running the S48
-> loop-JSON TTL fix (DEC-0053), deployed and verified. The one still-open data thread is the
-> humidity-spike watch (see "Next session actions" — `log_humidity_raw` capture is live, checked
-> directly at S46 across the full 8,852-sample window since capture start, still no qualifying spike;
-> not re-checked at S47/S48/S49). The DEC-0049 phantom-rainRate prediction (a real condensation event with
-> the tip counter not advancing) also remains unfired — S44's event turned out to be real rain, not
-> that; and S48 confirmed the WeatherLink reconciliation does **not** disturb DEC-0042 (issue #48).
-> **Watch item from S48's deploy:** `loop_json_writer.py` now logs a WARNING naming any field that
-> expires from its cache. None fired in the first 453 s. If one starts appearing regularly for a field
-> other than a genuinely dead sensor, that field's TTL is too tight — bump it rather than removing the
-> bound (DEC-0053).
+> **▶ Resume here (S51 → S52). Nothing is half-shipped and no PR is open.** Prod is running the S48
+> loop-JSON TTL fix (DEC-0053), deployed and verified — soak check at S51: 14 PASS / 0 FAIL (the one
+> WARN is the known 67% reception baseline). The one still-open data thread is the humidity-spike
+> watch (see "Next session actions" — `log_humidity_raw` capture is live; S51 checked 2,755 samples
+> covering 2026-07-24 00:04 → 2026-07-26 20:42, largest single step −8.7 RH pts and that was across a
+> 4-min reception gap; still no 16–37 pt DEC-0044 signature). The DEC-0049 phantom-rainRate prediction
+> (a real condensation event with the tip counter not advancing) also remains unfired — 0 qualifying
+> rows in the S51 soak window.
+> **S48's TTL watch — RESOLVED at S51, both patterns benign.** First full day fired 10 WARNINGs:
+> (a) 3 humidity-derived fields at 20:09, a real ~13-min humidity-packet reception dropout
+> (19:59–20:12) — exactly what the bound is for; (b) 7× `windDir` at ~301 s during calm stretches —
+> the driver *deliberately* sets `wind_dir = None` on calm readings (`rtldavis.py` ~1356), so any
+> ≥5-min calm expires it. Healthy sensor, correct omission, misleading warning text. **Do not bump
+> windDir's TTL** (that would serve a stale direction during calm) — the log-hygiene fix is
+> [#74](https://github.com/WeatheredScientist/weewx-rtldavis/issues/74), which needs design agreement
+> first (PRINCIPLES §8).
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -222,31 +228,31 @@ _Last updated: 2026-07-26 (S50)._
   NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S49 done → S50)
+## Next session actions (S51 done → S52)
 
-**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S49
+**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S51
 now live only in "Shipped" above and CHANGELOG — not duplicated here.
 
-**▶ ON RETURN (S50), in order:**
+**▶ ON RETURN (S52), in order:**
 
-0. **New watch from S48's deploy:** grep `weewx.log` for `LoopJsonWriter: .* expired after`. That
-   WARNING names any field whose cached value aged past its TTL — by design it means "no current
-   value," and for a healthy station it should be rare. If one fires repeatedly for a field whose
-   sensor is fine, its TTL is too tight: **bump that field's TTL, do not remove the bound** (DEC-0053).
-   None fired in the 453 s after deploy.
+0. **Issue [#74](https://github.com/WeatheredScientist/weewx-rtldavis/issues/74) is waiting on a
+   design discussion** — the calm-windDir TTL-expiry WARNING fires ~7×/day (S51 diagnosis in "Active
+   thread"). Proposed: downgrade to DEBUG when concurrent `windSpeed` is 0.0, keep WARNING otherwise.
+   Get the owner's agreement (PRINCIPLES §8) before touching `loop_json_writer.py`; deploy is the
+   mounted-file path (scp + pyc-clear + restart), same as S48.
 
-1. **Keep watching the humidity-spike log — still nothing qualifying through S46 (not re-checked at
-   S47, S48, or S49).** `log_humidity_raw True` has been active since the v2.0.7 restart at
-   2026-07-13 15:27 EDT; S46 checked the full 8,852-sample window and found nothing. Grep for
-   `humidity_raw=` in the current + rotated `weewx.log*` files for anything logged since — note the
-   container was restarted twice on 2026-07-25 (S47 recreate 22:15 UTC, S48 TTL hot-swap 00:28 UTC),
-   so the current `weewx.log` continues across both (the log file is bind-mounted, unaffected). Spikes run ~2–3/week
-   clustered **11:00–16:00** — need the 16-37 % DEC-0044 signature (a single-step raw jump), not just
-   an ordinary 5-10 %/min swing. It logs the full `pkt[4]`/`pkt[3]` — **no averaging, no free
-   parameter** — which settles the nibble question **deterministically**: invert the bytes, re-decode
-   under `0x2`/`0x8`/`0xE` (humidity's real single-bit neighbours — *not* solar or UV, which are 2 and
-   3 bits away), compare with the concurrent archived sensor. **The method and the arithmetic are in
-   DEC-0044; do not re-derive them.**
+1. **Keep watching the humidity-spike log — still nothing qualifying through S51 (2026-07-26 20:42).**
+   `log_humidity_raw True` has been active since the v2.0.7 restart at 2026-07-13 15:27 EDT; S46
+   checked the full window to its date, S51 re-checked 2026-07-24 → 2026-07-26 (2,755 samples,
+   largest step −8.7 pts across a reception gap — not the signature). Grep for `humidity_raw=` in
+   current + rotated `weewx.log*` (rotation is daily). Spikes run ~2–3/week clustered **11:00–16:00**
+   — need the 16-37 % DEC-0044 signature (a single-step raw jump), not just an ordinary 5-10 %/min
+   swing. It logs the full `pkt[4]`/`pkt[3]` — **no averaging, no free parameter** — which settles
+   the nibble question **deterministically**: invert the bytes, re-decode under `0x2`/`0x8`/`0xE`
+   (humidity's real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits away), compare
+   with the concurrent archived sensor. **The method and the arithmetic are in DEC-0044; do not
+   re-derive them.** Decode of the logged word: `(pkt[4] << 8) + pkt[3]` in hex; RH =
+   `(((pkt[4] >> 4) << 8) + pkt[3]) / 10`.
 
 2. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
@@ -254,11 +260,11 @@ now live only in "Shipped" above and CHANGELOG — not duplicated here.
 3. **`ops/soak_check.sh`'s phantom-rain detector is now hardened (S44) — don't re-flag ordinary rain.**
    If it reports a nonzero count, that already excludes the normal post-tip decay window (1 hour); a
    real hit is worth taking seriously as the DEC-0049-predicted event, not re-litigating as a false
-   positive first.
+   positive first. S51's run: 0 rows in 1,214.
 
-4. **`weewx-rtldavis-v2` was killed/recreated at S47** (loopdata mount removal) — watch for the S41
-   startup-race stall class (see "Needs a check" below) on the *next* restart after this one too; this
-   restart itself came back clean (no stall logged) with a 3 s settle delay between `rm` and `run`.
+4. **Startup-race stall watch (S41 class): still clean.** No stall has recurred across the S43, S47,
+   and S48 restarts; S51 grepped today's log — nothing. Downgraded further: only revisit if a stall
+   shows up on consecutive restarts.
 
 **Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
 **config** is mounted and the image is inert (DEC-0046). Inverses. A release that changes shipped config
