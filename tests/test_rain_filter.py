@@ -78,14 +78,22 @@ CASES = [
     # --- genuine wraparounds: MUST pass (real ones observed were exactly -127) ---
     (127, 0,  1,   "real 127->0 wraparound, +1 tip"),
     (127, 5,  6,   "real wraparound with 5 concurrent tips at the boundary"),
-    (120, 10, 18,  "real wraparound across a gap: 120->(wrap)->10 = 18 real tips"),
+    (120, 6,  14,  "real wraparound across a modest gap: 120->(wrap)->6 = 14 tips < cap"),
     # --- normal rain: MUST pass unchanged ---
     (None, 42, 0,  "first packet ever (no prior count) -> 0"),
     (40, 43,  3,   "normal light rain, +3 tips"),
     (40, 40,  0,   "no change, 0 tips"),
-    (100, 118, 18, "heavy-but-real burst, +18 tips (0.18 in) < cap"),
-    (0, 60,   60,  "exactly at the cap (60 tips) -> allowed"),
-    (0, 61,   None, "one tip over the cap (61) -> reject"),
+    (100, 107, 7,  "worst-ever REAL single minute (7 tips, 2026-06-14 storm) -> 2.3x headroom"),
+    # --- the DEC-0056 boundary: cap is 16, and the check is `delta > max_tips` ---
+    (0, 16,   16,  "exactly at the cap: worst-ever REAL 3-min accumulation (2026-06-14, "
+                   "DEC-0056 evidence pass) is exactly 16 tips and MUST pass"),
+    (0, 17,   None, "one tip over the cap (17) -> reject"),
+    # --- cap-60-era cases that now reject: a genuine 18-tip delta needs a >72 s
+    # reading gap (~4 s/tip ceiling); worst observed in-service gap during rain
+    # is 60 s. If it ever really happens: loud log -> WeatherLink reconciliation
+    # (DEC-0056 playbook), not silent acceptance of a possible glitch. ---
+    (100, 118, None, "+18 in one delta -> reject under DEC-0056 (was allowed at cap 60)"),
+    (120, 10, None,  "wraparound + 18-tip catch-up (120->wrap->10) -> reject under DEC-0056"),
 ]
 
 
@@ -95,7 +103,7 @@ def _check(last, new, expected, desc):
 
 
 def test_cap_value():
-    assert MAX_PLAUSIBLE_TIPS == 60, "MAX_PLAUSIBLE_TIPS should be 60 (0.60 in) per S18 decision"
+    assert MAX_PLAUSIBLE_TIPS == 16, "MAX_PLAUSIBLE_TIPS should be 16 (0.16 in) per DEC-0056 (R2)"
 
 
 def test_all_cases():
