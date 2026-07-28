@@ -1,8 +1,9 @@
 # Status — weewx-rtldavis
 
 **In-flight working state (what's on the bench right now).** Read first at the start of a session,
-update last before finishing. ROADMAP.md holds the full prioritized plan; this file holds only what
-is actively in motion, parked, or needs a check.
+update last before finishing. ROADMAP.md holds the actively-sequenced plan (P0–P3 only, DEC-0058 —
+long-term/uncalendared direction lives in BACKLOG.md instead); this file holds only what is
+actively in motion, parked, or needs a check.
 
 - DECISIONS.md records *settled* decisions. **This file records open ones.**
 - CHANGELOG.md records *shipped* work. **This file records work not yet shipped.**
@@ -15,12 +16,14 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S56** (2026-07-28), docs-only, nothing deployed. Confirmed prod healthy on
-> v2.0.11 (co-rejecting watch 0 hits, positive-controlled) and ops#105 closed; found ops#110 newly
-> opened (winter 2027 planning). **ROADMAP.md reconciled** (5 stale-done items corrected) then
-> **fully restructured** — P1 + P1.5 folded into one arc covering v2.0.3–v2.0.11, a "Keeping this
-> current" tripwire added (next check due **by S66**). **DEC-0057**: ROADMAP updates join the
-> closeout ritual as step 5. See CHANGELOG `[S56]`.
+> **Current session: S56** (2026-07-28), two acts, docs-only, nothing deployed. Confirmed prod
+> healthy on v2.0.11 (co-rejecting watch 0 hits, positive-controlled) and ops#105 closed; found
+> ops#110 newly opened (winter 2027 planning). **ROADMAP.md reconciled** (5 stale-done items
+> corrected) then **fully restructured** — P1 + P1.5 folded into one arc covering v2.0.3–v2.0.11,
+> a "Keeping this current" tripwire added (next check due **by S66**). **DEC-0057**: ROADMAP
+> updates join the closeout ritual as step 5. **Second act:** verified `STATION_NAME` already set
+> (BACKLOG note was stale); **DEC-0058** trimmed ROADMAP.md to P0–P3, moving P4 + long-term
+> direction into a new BACKLOG.md section. See CHANGELOG `[S56]`/`[S56b]`.
 
 _Last updated: 2026-07-28 (S56)._
 
@@ -30,7 +33,9 @@ _Last updated: 2026-07-28 (S56)._
 
 > **▶ Resume here (S56 → S57). Docs-only session — nothing deployed, prod still v2.0.11
 > (`0.20+ws.3`); still watch-and-discuss.** Re-verified prod health and the co-rejecting watch;
-> reconciled and restructured ROADMAP.md; logged DEC-0057. CHANGELOG `[S56]` has the record.
+> reconciled and restructured ROADMAP.md (DEC-0057); split it to P0–P3 with long-term direction
+> moved to BACKLOG.md (DEC-0058); verified `STATION_NAME` already set. CHANGELOG `[S56]`/`[S56b]`
+> has the record.
 > **(a) DEC-0056 is LIVE end-to-end** — cap 16 in the running driver, tripwire email verified
 > (`--test-alert` received), WeatherLink playbook + revisit trigger in the DEC. R3 delivered
 > dashboard-side (their S151, DEC-0167); R4/R5 noted-not-built.
@@ -45,7 +50,7 @@ _Last updated: 2026-07-28 (S56)._
 > no co-rejection storm (the suite swept −0.1…−39.9 °F; winter confirms it on air).
 > **(e) Cross-repo:** [ops#110](https://github.com/WeatheredScientist/eaglehunt-ops/issues/110)
 > opened — winter 2027 sky-state instrumentation (IR sky sensor), planning horizon only, tracked in
-> ROADMAP's "Longer horizon."
+> BACKLOG.md's "Long-term direction" (moved there from ROADMAP at DEC-0058).
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -59,6 +64,11 @@ _Last updated: 2026-07-28 (S56)._
 > **Standing rule (DEC-0057, new):** a shipped/closed/reprioritized DEC gets its ROADMAP.md line
 > updated the same session — closeout step 5, not deferred (CLAUDE.md Session ritual). ROADMAP.md's
 > own "Keeping this current" section carries the next-check-due session number regardless.
+>
+> **Standing rule (DEC-0058, new):** ROADMAP.md is P0–P3 only — the actively-sequenced plan.
+> Anything P4-tier or uncalendared/aspirational belongs in BACKLOG.md's "Long-term direction"
+> section, not ROADMAP.md. Pull an item back into ROADMAP.md only when it's actually about to be
+> worked.
 >
 > Run `ops/soak_check.sh` any time for a fresh acceptance-criteria verdict (its `EXPECT_IMAGE` default
 > now tracks `:v2.0.11` — bump it in the same PR next time the deployed tag moves).
@@ -83,6 +93,10 @@ _Last updated: 2026-07-28 (S56)._
 
 ## Shipped — nothing to do here
 
+- **S56b** (docs-only, no deploy/no rollback needed — `STATION_NAME` verified already set, S31,
+  BACKLOG note was stale; DEC-0058 trims ROADMAP.md to P0–P3, moves P4 + long-term direction to a
+  new BACKLOG.md section; a second stale May-rain-total copy pruned from BACKLOG.md): see
+  CHANGELOG `[S56b]`.
 - **S56** (docs-only, no deploy/no rollback needed — ROADMAP.md reconciled then fully restructured:
   P1 + P1.5 folded into one arc covering v2.0.3–v2.0.11, 5 stale-done items corrected, "Keeping this
   current" tripwire added, next check due by S66; DEC-0057 makes ROADMAP updates closeout step 5):
