@@ -30,6 +30,33 @@ Docs-only, nothing deployed. Prompted by a routine status check that turned into
 
 ---
 
+## [S56c] — 2026-07-28 — the RX experiment gets an apparatus (DEC-0059); 7 dead sweep scripts deleted
+
+Design + tooling only — **nothing deployed, prod untouched** (still v2.0.11, gain 372).
+
+- **`-ex N` ≡ `receiveWindow 300+N`** — upstream sums them and `receiveWindow` appears nowhere else,
+  so the window axis is a mounted-config knob and **no arm of the experiment needs an image
+  rebuild**. The `rw250/rw350/rw400` images were redundant, not just misnamed (DEC-0048). Read from
+  upstream master; the deployed binary is older and unverified directly — caveat recorded.
+- **Measured baseline replaces "~67–70%"**: 447 samples → **73.3%, sd 4.67**, autocorrelation ~0,
+  no diurnal cycle. So 24 h/arm resolves 1.1 pts and DEC-0017's "1–2 weeks" was ~7× overkill.
+- **`ops/rx_experiment.sh`** — Latin-square scheduler with literal-only arms, atomic verified writes,
+  byte-exact whole-file revert, sticky STOP sentinel, self-termination to the production baseline,
+  and a mailer independent of `weewx_monitor.py`. Verified end-to-end against fixtures.
+- **`tests/test_rx_experiment.py`** (8 tests) — drives the real shell functions; includes a DEC-0045
+  positive control proving the old global-regex approach corrupts the same fixture, and a machine
+  check that the Latin square is balanced (mutation-tested: it goes red on a one-row typo).
+- **Deleted all 7 pre-governance sweep scripts.** `gain_sweep.sh` and `fc_sweep.sh` counted
+  `RAW_DATAPACKET_MATCH`, which prod no longer logs — they would have reported 0.0% for every arm
+  and looked like they worked. `gain_sweep.sh` also used a 2.5 s denominator against our 2.8125 s
+  ISS. The one durable finding living only in `fc_sweep.sh`'s header was moved to BACKLOG first.
+- **DEC-0008's `set_gain.sh` exemplar superseded** — the kill/start codification moves to
+  `restart_container()`; the rule itself is unchanged.
+- Secret gate caught the test fixture's credential-shaped line; fixed the fixture, **not** the
+  allow-list (DEC-0045).
+
+---
+
 ## [S56b] — 2026-07-28 — ROADMAP.md split to P0–P3; long-term direction moves to BACKLOG.md (DEC-0058)
 
 Same session, second act. Docs-only, nothing deployed.

@@ -50,10 +50,35 @@ S23 tail).
 - All clustered ~63–66%; no material improvement over baseline.
 - `-maxmissed 15` caused repeated 0/24 windows — **do not use**.
 
-**receiveWindow:**
+**receiveWindow — and `-ex` is the SAME AXIS (S56, DEC-0059):**
+- **`-ex N` ≡ `receiveWindow 300 + N`.** Upstream sums them — `int64((receiveWindow + ex) * 1000000)`
+  — and `receiveWindow` appears nowhere else in `main.go` (verified in lheijst/rtldavis master, S56).
+  So the window axis is reachable from the **mounted** `weewx.conf`, with no image rebuild. The
+  `rw250/rw350/rw400` images were not merely misnamed (DEC-0048) — they were **redundant**.
+- That also means the two findings below are one axis measured twice, and they agree: the CLI sweep's
+  `-ex 100` and the `rw400` image are the same configuration, and both landed ~63%. Independent
+  corroboration of the equivalence.
 - rw400-test (300ms → 400ms): ~63%, **worse** than baseline ~65%.
-- Larger receiveWindow is not supported by evidence so far; rw350 is the next candidate to test
-  properly (24 h averaged), and must be reconciled against the running image tag (ARCHITECTURE §6).
+- Larger receiveWindow is not supported by evidence so far. **Untested direction: narrower than 300**,
+  which needs negative `-ex` (unvalidated — could produce a negative loop period) or a rebuild.
+- **Caveat on provenance (S56):** the equivalence was read from upstream *master*. The deployed binary
+  is built from weewx-contrib's bundled `src.tgz` and is demonstrably older — it lacks master's
+  startup settings line (`tr=… gain=… ex=… receiveWindow=…`), which is absent from both `weewx.log`
+  and the container stdout. The deployed source has not been read directly.
+
+**Gain, from the retired sweeps (kept because the scripts are gone, S56):**
+- `fc_sweep.sh` held gain at 207, its header recording it as "confirmed best from gain sweep" — a
+  pre-governance, unaveraged result, and the only surviving trace of that claim now the scripts are
+  deleted. Consistent with DEC-0017 (207 optimal *with* the preamp). Weak evidence, but it is the
+  directional prior the DEC-0059 campaign tests properly.
+
+**FreqError — re-checked S56, still not visible.** Grepped the live `weewx.log` and the container
+stdout for `FreqError` at the current `debug_rtld = 1`: **zero hits**, positive-controlled (a
+`duplicate` grep on the same file returns hits). So the S21 observation below is not reproducible at
+the current debug level. DEC-0059's Phase 0 raises `debug_rtld` to 2 for a few hours to settle
+whether the telemetry exists at all — if it does, `ppm`/`fc` get set by *measurement* rather than by
+sweeping; if it does not, that axis is dropped. Note AFC is on by default upstream (`-noafc`
+defaults false), which likely absorbs offset anyway.
 
 **FreqError / ppm-fc telemetry gap — SUPERSEDED by live evidence (S21):**
 - ~~The compiled Go binary emits neither `ChannelIdx` nor `FreqError`.~~ **Contradicted:** the
