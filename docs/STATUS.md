@@ -236,13 +236,25 @@ now live only in "Shipped" above and CHANGELOG — not duplicated here.
 
 **▶ ON RETURN (S53), in order:**
 
-0. **First-days watch on v2.0.9 (DEC-0054):** grep `weewx.log*` for `co-rejecting` — each hit is a
+0. **[ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105) is the session's main
+   work (owner-directed, tier:frontier, weewx leads):** the cross-observable QC audit — find every
+   in-bounds corruption path that survives v2.0.9's co-rejection (co-rejection needs a bounds trip
+   somewhere in the frame; a corrupt frame that stays in-bounds everywhere still sails). The issue
+   carries starting material to VERIFY, not trust: a per-field mid-bit gap table (some encodings
+   flagged *inferred*), a not-yet-run historical-signature sweep (isolated extreme + calm neighbors +
+   rxCheckPercent collapse + same-minute rejection line), and an extreme-sensitive-consumer
+   inventory. Deliverable shape suggested there; reshape as needed. Design discussion before any
+   code (PRINCIPLES §8).
+
+1. **First-days watch on v2.0.9 (DEC-0054):** grep `weewx.log*` for `co-rejecting` — each hit is a
    frame the old filter would have partially trusted; sanity-check any hit against a concurrent
    `rxCheckPercent` dip. Also confirm the #74 calm-windDir WARNINGs (~7/day pre-fix) are gone.
    Run `ops/soak_check.sh` (its `EXPECT_IMAGE` now tracks `:v2.0.9`). Startup-race stall watch
-   (S41 class): check the deploy-window log once — no stall seen at the S52 recreate.
+   (S41 class): check the deploy-window log once — no stall seen at the S52 recreate. Also: first
+   Dependabot run (new at S52) may open a deps PR — that's the #78 notification mechanism working,
+   review don't auto-merge.
 
-1. **Keep watching the humidity-spike log — still nothing qualifying through S51 (2026-07-26 20:42).**
+2. **Keep watching the humidity-spike log — still nothing qualifying through S51 (2026-07-26 20:42).**
    `log_humidity_raw True` has been active since the v2.0.7 restart at 2026-07-13 15:27 EDT; S46
    checked the full window to its date, S51 re-checked 2026-07-24 → 2026-07-26 (2,755 samples,
    largest step −8.7 pts across a reception gap — not the signature). Grep for `humidity_raw=` in
@@ -255,15 +267,15 @@ now live only in "Shipped" above and CHANGELOG — not duplicated here.
    re-derive them.** Decode of the logged word: `(pkt[4] << 8) + pkt[3]` in hex; RH =
    `(((pkt[4] >> 4) << 8) + pkt[3]) / 10`.
 
-2. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
+3. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
 
-3. **`ops/soak_check.sh`'s phantom-rain detector is now hardened (S44) — don't re-flag ordinary rain.**
+4. **`ops/soak_check.sh`'s phantom-rain detector is now hardened (S44) — don't re-flag ordinary rain.**
    If it reports a nonzero count, that already excludes the normal post-tip decay window (1 hour); a
    real hit is worth taking seriously as the DEC-0049-predicted event, not re-litigating as a false
    positive first. S51's run: 0 rows in 1,214.
 
-4. *(folded into step 0's deploy-window check — the S41 stall class stays clean through S48; only
+5. *(folded into step 1's deploy-window check — the S41 stall class stays clean through S48; only
    revisit if a stall shows up on consecutive restarts.)*
 
 **Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
