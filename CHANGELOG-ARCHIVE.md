@@ -7,6 +7,13 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S50] — 2026-07-26 — STATUS resume pointer fixed (micro-session)
+
+One docs commit (PR #73): STATUS.md's `▶ Resume here` line still read "S48 → S49" after S49 had
+shipped and closed. No other work.
+
+---
+
 ## [S49] — 2026-07-26 — Issue #67 closed: mypy is now a real CI gate
 
 Triaged and fixed the 19 pre-existing mypy errors S48 flagged (`--all-files` run while adding the

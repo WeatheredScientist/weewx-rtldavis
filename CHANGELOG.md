@@ -6,6 +6,37 @@ under [Pre-S16].
 
 ---
 
+## [S53] — 2026-07-27/28 — ops#105 cross-observable QC audit delivered; archive swept CLEAN; temp sign bug found (no code)
+
+The owner-directed audit ([ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105),
+carry-forward of ops#103's "where else could this slip through") delivered as an
+[issue comment](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105#issuecomment-5099627052).
+Every encoding verified against `rtldavis.py` source (ops#103's *inferred* entries confirmed; its
+"rain closed since 07-12" claim corrected — counter deltas ≤ 30 tips = 0.30 in still clear both
+`MAX_PLAUSIBLE_TIPS = 60` and the 0.3 in StdQC cap, and a phantom is never reversed).
+
+- **Historical-signature sweep (full archive 2026-05-19 → 07-27, 95,901 rows, pre-correction
+  backup): CLEAN.** 13 gust-spike candidates all adjudicated genuine (storm outflow / breeze
+  context) except ERR-0004 itself; temp spike-and-return zero ever; humidity spikes all
+  pre-SensorQC (known DEC-0029 class); night radiation/UV zero; isolated rain zero. All 5
+  rejection events in 31 days of logs cross-checked — sibling fields clean in the archive. **No
+  new ERR entries.** Corroboration: ~722 dup frames/day × 1/65536 CRC-pass ≈ 1 in-bounds escape
+  per ~90 days — matches the 1 observed in ~4 months.
+- **NEW finding (R1, needs-design, pre-winter):** the temp decode is **unsigned**; Davis is two's
+  complement (verified vs weewx-meteostick, which also handles a second `0xFF8` sentinel both our
+  fork and upstream lack). First sub-0 °F morning → every temp frame decodes ~+400 °F →
+  bounds-trips → **DEC-0054 co-rejects the whole frame** (wind + payload nulled, ERROR-pair log
+  spam) for the duration of real cold weather. Inherited upstream bug, never fired only because
+  the station hasn't seen winter.
+- **Recommendations R1–R5** (temp sign fix; `MAX_PLAUSIBLE_TIPS` 60 → 16; wind residual
+  accepted driver-side / spike guard is dashboard's; radiation night-ceiling noted-not-built;
+  extra-station zero-QC docs note) — all awaiting design agreement, no code this session.
+- **v2.0.9 first-days watch:** co-rejection 0 hits (first post-deploy hour); #74 WARNINGs present
+  up to the 22:18 recreate, silent after (needs a full-day re-check); soak 15/0/0, reception 81 %;
+  no stalls; humidity watch through 07-27 23:14 still unfired; no Dependabot PRs yet.
+
+---
+
 ## [S52] — 2026-07-27 — ERR-0004 phantom 39 mph gust: corrected in both stores, frame-level co-rejection shipped as v2.0.9 (DEC-0054)
 
 **The incident (ERR-0004):** at 14:55:50 EDT, during an rxCheckPercent collapse to 13.2%, one
@@ -71,10 +102,3 @@ near the 16–37 pt DEC-0044 single-step signature. No SensorQC rejections in to
 **Soak check: 14 PASS / 1 WARN / 0 FAIL** (WARN = the known 67% reception baseline). Phantom-rainRate
 prediction (DEC-0049): 0 qualifying rows in 1,214. No driver stalls in today's log — the S41
 startup-race class is now clean across three consecutive restarts (S43, S47, S48).
-
----
-
-## [S50] — 2026-07-26 — STATUS resume pointer fixed (micro-session)
-
-One docs commit (PR #73): STATUS.md's `▶ Resume here` line still read "S48 → S49" after S49 had
-shipped and closed. No other work.
