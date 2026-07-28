@@ -3,13 +3,15 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see STATUS.md (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-07-28 (S56 — fuller restructure: folded the old P1 + P1.5 sections into one
-continuous data-integrity arc that now covers v2.0.3 through v2.0.11 — S35's version stopped at
-v2.0.3 and never grew to cover the five releases since; collapsed P0.5's mostly-done checklist to a
-pointer; added the ops#110 winter-2027 item; added the staleness guardrail below.)
+**Last updated:** 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
+"Long-term direction" section, per DEC-0058 — this file is now P0–P3 only, the actively sequenced
+plan, so it doesn't get cluttered by uncalendared/aspirational items. Earlier same-session pass:
+folded the old P1 + P1.5 sections into one continuous data-integrity arc covering v2.0.3–v2.0.11;
+collapsed P0.5's mostly-done checklist to a pointer; added the staleness guardrail below.)
 
-STATUS.md holds what's *in motion right now*; this holds the ordered plan. BACKLOG.md holds
-unordered ideas not yet scheduled.
+STATUS.md holds what's *in motion right now*; this holds the ordered, actively-sequenced plan
+(P0–P3 only, per DEC-0058). BACKLOG.md holds unordered near-term ideas **and** long-term/
+uncalendared direction — see its "Long-term direction" section for anything horizon-scale.
 
 ## Keeping this current (staleness guardrail)
 
@@ -37,9 +39,11 @@ so the community can use and extend it.
 ## Priority vocabulary (shared across the Eagle Hunt family)
 
 `P0` critical path / do first · `P1` important soon · `P2` later / measured · `P3` modularity ·
-`P4` housekeeping / community. Horizon mapping: **short-term = P0–P1**, **medium-term = P2–P3**,
-**long-term = P4 + the "longer horizon" section**. ✅ = done; annotations mark items *found stale
-during an audit* rather than deleting the history.
+`P4` housekeeping / community. Horizon mapping: **short-term = P0–P1**, **medium-term = P2–P3**.
+**This file stops at P3 (DEC-0058)** — P4 and anything uncalendared/aspirational lives in
+BACKLOG.md's "Long-term direction" section instead, so the active plan doesn't get buried under
+long-horizon items. ✅ = done; annotations mark items *found stale during an audit* rather than
+deleting the history.
 
 ## Guardrails
 
@@ -131,19 +135,7 @@ confirmed against DECISIONS.md at this reconciliation (S56).
 
 ---
 
-# LONG TERM (P4 + horizon) — housekeeping, community, direction
-
-## P4 — Housekeeping / community
-- [ ] Credential hygiene follow-ups — tracked in the gitignored local-infra doc, not here (public
-      repo). Move any inline secret to a `monitor.env` env-var (DEC-0012, DEC-0047).
-
-## Longer horizon — direction, not scheduled work
-- **Multi-source adaptability** (PRINCIPLES §1): keep the driver re-pointable so non-Davis WeeWX and
-  eventually CumulusMX can rely on the same data contract. Record a DEC before any code depends on it.
-- **Generic project-template harvest** (separate buildout): once the Governance Standard is proven here
-  and propagated once, harvest it into a versioned GitHub *template repository* for all future projects
-  (ASSESSMENT.md §5). Copy-not-link; tracked as its own effort, not part of this repo's release path.
-- **Winter 2027 sky-state instrumentation** ([ops#110](https://github.com/WeatheredScientist/eaglehunt-ops/issues/110),
-  opened S56): IR sky sensor alongside the lightning detector, targeted for the Jan–Feb 2027 winter
-  build. Cross-repo with the dashboard (`repo:dashboard, repo:weewx, tier:frontier`). Planning
-  horizon only — not scheduled.
+**P4 and long-term/uncalendared direction moved to BACKLOG.md's "Long-term direction" section
+(DEC-0058, S56)** — credential hygiene follow-ups, multi-source adaptability, the governance
+template harvest, and the winter-2027 sky-state instrumentation (ops#110) all live there now,
+not here.
