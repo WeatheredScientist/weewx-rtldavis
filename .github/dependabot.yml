@@ -1,0 +1,14 @@
+# Update notifications, not blind updates (issue #78): Dependabot opens a PR
+# when a pinned dep in requirements.txt has a new release (weewx above all).
+# The PR is the notification — review the upstream changelog, then ship it as
+# a deliberate version bump + image rebuild, or close it with a reason.
+# Nothing merges or deploys automatically.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    open-pull-requests-limit: 3
