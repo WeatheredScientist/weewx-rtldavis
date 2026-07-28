@@ -77,6 +77,12 @@
 #               out ~+400 F and (with DEC-0054) co-rejected the whole frame.
 #               Also adopts the 0xFF8 no-sensor sentinel from weewx-meteostick.
 #               (DEC-0055)
+#   2026-07-28  MAX_PLAUSIBLE_TIPS 60 -> 16 (DEC-0056): evidence pass over the
+#               full 70-day archive -- worst real minute 7 tips, worst real
+#               3-min window exactly 16, in-service gaps during rain never
+#               over 60 s, so a genuine delta > 16 is physically impossible at
+#               observed gaps (~4 s/tip ceiling). Halves the residual phantom
+#               a corrupt in-bounds counter reading can book (0.30 -> 0.16 in).
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   These fixes are offered upstream; this fork exists to ship them in the meantime.
@@ -199,19 +205,27 @@ DEBUG_PARSE = 0
 DEBUG_RTLD = 0
 MPH_TO_MPS = 1609.34 / 3600.0 # meter/mile * hour/second
 
-# --- Rain-counter glitch filter (S18 false-rain fix, DEC-0021) ---
+# --- Rain-counter glitch filter (S18 false-rain fix, DEC-0021; cap 60 -> 16 at S55, DEC-0056) ---
 # The Davis rain counter is 7-bit (0..127) and wraps at 128. A genuine 127->0
 # wraparound is a large negative delta (near -128); a *small* negative delta is
 # a single-bit RF-decode glitch, not a wraparound. The original driver treated
 # ANY negative delta as a wraparound and added 128, which turned a glitch into
 # phantom rain (the false-rain bug). MAX_PLAUSIBLE_TIPS additionally caps
 # implausibly large positive deltas (a high bit flipping on directly).
-# Physical basis: the world 1-minute rainfall record is ~1.23 in (123 tips at
-# 0.01 in/tip) and this is a temperate-climate station, nowhere near tropical --
-# 60 tips (0.60 in) between two received packets is generous headroom that still
-# catches the characteristic 64/128 glitches. Rejected deltas yield None
+# Physical basis for 16 (DEC-0056 evidence pass over the full 70-day archive,
+# 95,901 minutes, 2026-07-28): the bucket's ~4 s/tip rate ceiling means a
+# GENUINE delta can exceed 16 tips only across a reading gap > ~64 s, and the
+# worst in-service gap observed during rain here is 60 s (two 1-minute events
+# in 70 days; reception during rain never below 50%). Worst-ever real minute:
+# 7 tips. Worst-ever real 3-min accumulation: exactly 16 (2026-06-14 storm) --
+# which still PASSES, because the check is `delta > max_tips`. Note weewx's
+# [StdQC] 0.3 in/min cap already rejected anything over 30 tips system-wide,
+# so the band this tightening newly exposes is only 17-30 tips -- never once
+# occupied in the record. A false reject logs loudly (weewx_monitor emails on
+# the rejection line) and is reconcilable against the co-located WeatherLink
+# console -- playbook in DEC-0056. Rejected deltas yield None
 # (null-on-rejection, DEC-0006) rather than phantom rain.
-MAX_PLAUSIBLE_TIPS = 60
+MAX_PLAUSIBLE_TIPS = 16
 RAIN_WRAPAROUND_THRESHOLD = -100
 
 def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
@@ -254,9 +268,11 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
           one observed here was exactly -127). Only those get the +128 fix.
         * A small negative delta is a decode glitch -> rejected (None).
         * A delta above max_tips is a high-bit glitch flipping on directly
-          (the +128 case) -> rejected (None). max_tips (60 = 0.60") is far
-          above any rain physically possible between two received packets here,
-          yet safely below the characteristic 64/128 glitch magnitudes.
+          (the +128 case) -> rejected (None). max_tips (16 = 0.16", DEC-0056)
+          is above any accumulation physically possible between readings
+          gapped up to ~64 s (the bucket's ~4 s/tip ceiling), and the worst
+          in-service gap observed during rain on this station is 60 s -- while
+          sitting far below the characteristic 64/128 glitch magnitudes.
     Rejected deltas return None (weewx treats it as missing, not zero) -- an
     honest gap is always preferable to fabricated rain. A backstop [StdQC] rain
     cap in weewx.conf catches anything that slips past this.

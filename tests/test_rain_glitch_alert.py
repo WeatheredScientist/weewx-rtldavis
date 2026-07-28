@@ -54,6 +54,21 @@ def test_ignores_non_glitch_lines():
         assert wm.parse_rain_glitch(line) is None, f"false positive on: {line!r}"
 
 
+def test_marker_matches_driver_source():
+    """Cross-module contract (DEC-0056): the monitor's marker must appear
+    verbatim in rtldavis.py's rejection logerr. If the driver message is ever
+    reworded, the rejection tripwire dies silently -- this test is what breaks
+    instead. (The alert is the agreed detection path for a false reject, so
+    its coupling to the driver's exact wording is load-bearing.)"""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "rtldavis.py")) as f:
+        src = f.read()
+    assert wm.RAIN_GLITCH_MARKER in src, \
+        "monitor marker no longer present in rtldavis.py -- alert is dead"
+    assert 'rain: rejecting implausible counter delta last=' in src, \
+        "driver rejection message shape changed -- update parse_rain_glitch and this test together"
+
+
 if __name__ == "__main__":
     cases = [
         ("Jul-4 glitch detected", lambda: wm.parse_rain_glitch(JUL4) is not None),
