@@ -28,6 +28,20 @@ further discussion and is untouched.
   Also fixed a real cross-module test-isolation trap: these suites share `sys.modules` and replace
   `weewx.wxformulas` wholesale, so the stub is now additive and resolved through `rtldavis.weewx`
   (the object the driver actually dereferences) rather than `sys.modules['weewx']`.
+- **`CHANGES-FROM-UPSTREAM.md`** — two DEC-0034 fork-inventory gaps closed. DEC-0054 (frame-level
+  co-rejection, shipped in v2.0.9 at S52) had never been recorded there and is now behavior
+  change **11**. The `rtldavis.py` delta was **recounted against the real upstream baseline** —
+  fetched from the same `weewx-contrib` `src.tgz` the Dockerfile builds from, which this repo does
+  not vendor: **+477 / −88** (1422 → 1811 lines), replacing S37's **+263 / −51**. That figure was
+  one commit stale the day it was written (it is the exact count at `cd49214`, and the S37 commit
+  recording it also added the fork-identity header). The reproduce recipe now ships next to the
+  number, so the next recount is a paste rather than an archaeology session.
+- **Upstreaming table** — gained the temp-sign candidate (the prose already claimed 10 was part of
+  the intended contribution), and two **stale statuses corrected**: it still read *"draft comment …
+  not posted"* and *"not yet offered"* for work that has been live upstream since S38 —
+  [lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22) and
+  [david-lutz#1](https://github.com/david-lutz/weewx-influx2/pull/1) are both OPEN, and the issue #15
+  comment was posted 2026-07-13. The table was written at S37 and never re-read after the PRs landed.
 - Gates: pytest **111 passed**, `ruff check` clean (0.5.7, DEC-0027), `mypy --ignore-missing-imports
   --no-strict-optional .` clean on 33 files.
 - **Not released.** The driver is baked (DEC-0031) → needs an image rebuild + deliberate release,

@@ -64,8 +64,22 @@ you see it, the baked driver is the one running).
 ## `rtldavis.py`
 
 Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 2025-12-20
-`re.compile` deprecation patch). Delta: **+263 / −51 lines** — *counted at S37 and not recounted
-since; DEC-0054 (S52) and DEC-0055 (S54) both landed after it, so treat this figure as a floor.*
+`re.compile` deprecation patch). Delta: **+477 / −88 lines** (1422 → 1811 lines), recounted
+2026-07-28 (S54).
+
+The baseline is not vendored here — the Dockerfile fetches it at build time — so recount it rather
+than trusting this number:
+
+```sh
+curl -sL -o /tmp/src.tgz https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz
+tar -C /tmp -zxf /tmp/src.tgz src/weewx-rtldavis/bin/user/rtldavis.py
+git diff --numstat --no-index /tmp/src/weewx-rtldavis/bin/user/rtldavis.py rtldavis.py
+```
+
+Diff `bin/user/rtldavis.py`, **not** the sibling `rtldavis.py.dist` — the `.dist` is Skahan's
+pre-patch copy, so it reports a delta that includes his `re.compile` fix as if it were ours. The
+figure this replaces (**+263 / −51**, S37) was already one commit stale when written: it is the
+count at `cd49214`, and the S37 commit that recorded it added the fork-identity header itself.
 
 ### Bug fixes (these belong upstream)
 
@@ -90,6 +104,7 @@ cold-climate user of the stock driver. They are the intended content of an upstr
 | 7 | **Calm-air wind gate** | 2026-07-04 | Raw wind speed ≤ 2 with direction 0 is the 6410 hall-sensor floor, not wind. Record 0 speed and a **null** direction instead of a false "2 mph from due north" that pollutes wind roses. |
 | 8 | **freqError stored for US and NZ** | 2026-07-04 | Upstream stores frequency-error statistics only when `frequency == 'EU'`. We store for `EU`, `US` and `NZ` — the data is just as useful on 915 MHz, and this is a 915 MHz station. |
 | 9 | Lint / dead code | 2026-07-08 | Dropped unused imports (`timegm`, `fnmatch`, `string`), the dead `_fmt()`, and the unused `parse_readings()`. Bare `except:` → `except Exception:`. [DEC-0027] |
+| 11 | **Frame-level co-rejection** — a bounds failure condemns the whole frame | 2026-07-27 | Extends 6, which vetted each field independently — so a frame carrying *positive proof* of corruption could still have its other fields trusted. On 2026-07-27 one CRC-valid frame decoded humidity to 144.9 %RH (out of spec, rejected) and a wind byte to 39 mph from dead calm (in spec, under the delta cap, accepted) — the phantom became the archive interval's gust max and went out to ten external networks (ERR-0004). Every weather field rides the same 8-byte frame, so a **bounds** failure on any one of them now nulls all of them (`FRAME_WEATHER_KEYS`), skips the rain counter *without* resyncing `last_rain_count`, and moves no delta baselines. Diagnostics (battery flags, supercap, freqError, `pct_good`) deliberately survive: they describe the link, not the weather. A **delta** trip never co-rejects — a large step can be genuine weather; an impossible value cannot. Zero fitted parameters, so nothing can drift. Shipped in v2.0.9 (S52). [DEC-0054] |
 
 ### Why these filters exist: the corruption mechanism
 
@@ -185,10 +200,11 @@ The goal is for this list to get **shorter**. Standing policy:
 
 | Candidate | Where | Status |
 |-----------|-------|--------|
-| Rain-counter wraparound | `lheijst/weewx-rtldavis` | Draft comment written for issue #15, **not posted** — pending owner review |
+| Rain-counter wraparound | `lheijst/weewx-rtldavis` | **[PR #22](https://github.com/lheijst/weewx-rtldavis/pull/22) OPEN** since 2026-07-13 (S38); the [issue #15 comment](https://github.com/lheijst/weewx-rtldavis/issues/15#issuecomment-4960224128) went up the same day, owner-approved |
 | windDir branch bug | `lheijst/weewx-rtldavis` | Not yet offered |
 | `NameError` on unknown channel | `lheijst/weewx-rtldavis` | Not yet offered |
 | `rxCheckPercent` dead metric | `lheijst/weewx-rtldavis` | Not yet offered |
-| `e.read()` / TLS / `KeyError` fixes | `david-lutz/weewx-influx2` | Not yet offered |
+| Outside-temperature sign + `0xFF8` sentinel | `lheijst/weewx-rtldavis` | Not yet offered — belongs alongside [#22](https://github.com/lheijst/weewx-rtldavis/pull/22); bites every cold-climate user, so it is the strongest remaining candidate |
+| `e.read()` / TLS / `KeyError` fixes | `david-lutz/weewx-influx2` | **[PR #1](https://github.com/david-lutz/weewx-influx2/pull/1) OPEN** since 2026-07-13 (S38) — that repo's first-ever PR, and it has been quiet since 2023 |
 
 Whatever is not upstreamed stays here, with a reason. That is the point of the inventory.
