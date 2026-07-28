@@ -6,6 +6,30 @@ under [Pre-S16].
 
 ---
 
+## [S56] — 2026-07-28 — ROADMAP.md reconciled and restructured; DEC-0057 adds it to the closeout ritual
+
+Docs-only, nothing deployed. Prompted by a routine status check that turned into an audit.
+
+- Confirmed prod healthy on v2.0.11: co-rejecting grep 0 hits (positive-control-verified against a
+  known-present pattern), ops#105 confirmed CLOSED. Found ops#110 newly opened (winter 2027
+  sky-state instrumentation — IR sky sensor alongside the lightning detector; planning horizon
+  only).
+- **ROADMAP.md reconciliation pass:** found and fixed 5 items shown open that had already shipped —
+  the `cleanup_backlog.md` fold-in (done S27), remote-URL-casing + stale-branch cleanup, P1.5's
+  "deploy pending" (shipped v2.0.4, S34), the May rain-total reconciliation (done S48), and the
+  README public-onboarding refresh.
+- **Fuller restructure:** folded the old P1 ("false-rain fix") and P1.5 ("Sensor-QC hardening")
+  sections into one continuous data-integrity arc that now actually covers what shipped since —
+  v2.0.4 through v2.0.11 (sensor-QC filter, reception-metric fix, frame-level co-rejection, signed
+  temp decode, cap-16 tuning) — previously unrepresented on the page entirely. Collapsed P0.5's
+  mostly-done checklist to a pointer. Added the ops#110 item under Longer Horizon.
+- **DEC-0057:** ROADMAP.md joins the closeout ritual as step 5 — same-session update whenever a DEC
+  ships/closes/reprioritizes a line item — plus a "Keeping this current" tripwire inside
+  ROADMAP.md itself (next full check due **by S66**). CLAUDE.md's closeout steps renumbered
+  (5→6 model-tier restore, 6→7 commit+push).
+
+---
+
 ## [S55c] — 2026-07-28 — v2.0.11 shipped: cap 16 live in prod; ops#105 audit closed from this side
 
 Third act of the day, owner-approved after the ops relay flagged the gap: DEC-0056's cap was merged
