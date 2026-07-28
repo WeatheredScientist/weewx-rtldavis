@@ -2207,7 +2207,7 @@ physically out-tick ~15/min); only intensity × a >64 s reading gap can, gaps ar
 demonstrably does not do during rain, and if that ever changes the failure is loud, bounded
 (≤ 0.30 in exposure per event within the StdQC band), and same-day recoverable from an independent
 record. That is the assurance: not that the tail case can't happen, but that it cannot happen
-silently, unboundedly, or unrecoverably.
+*silently*.
 
 ---
 
@@ -2246,4 +2246,40 @@ DEC-shaped trigger would still miss it.
 **What changed:** CLAUDE.md's closeout skeleton (Session ritual → End) gains step 5; the model-tier
 restore check and commit+push steps renumber to 6 and 7. `docs/ROADMAP.md` gains the "Keeping this
 current" section, added this session alongside the fuller restructure that prompted this DEC.
-*silently*.
+
+---
+
+## DEC-0058 — ROADMAP.md trimmed to P0–P3; P4 and long-term direction move to BACKLOG.md
+
+**Status:** Accepted · **Date:** 2026-07-28 (S56) · **Extends:** DEC-0057's same-session doc
+discipline
+
+**Context.** Same session, immediate follow-on to DEC-0057. Reviewing the just-restructured
+`docs/ROADMAP.md`, the owner asked whether long-term material had a dedicated home separate from
+the active plan, or whether "it's all still one roadmap" — and suggested a division would make the
+active list easier to track. Looking at the page: P0–P1 were fully shipped history, P2–P3 were the
+only genuinely active/sequenced tiers, and P4 + "Longer horizon" (credential hygiene, multi-source
+adaptability, the governance-template harvest, and the newly-added ops#110 winter-2027 item) were
+uncalendared direction with no scheduled date — sitting in the same file and same visual weight as
+the work actually coming up next.
+
+**Decision:** `docs/ROADMAP.md` now covers **P0–P3 only** — the actively-sequenced plan. P4 and
+"Longer horizon" content moves to a new "## Long-term direction" section in `BACKLOG.md`, which
+already existed as the unordered-ideas pool and was the natural home rather than inventing a fourth
+doc. `BACKLOG.md`'s existing "Open ideas" section is left as-is (near-term-ish, ungraded); the new
+section is explicitly for uncalendared/aspirational items, with a one-line rule at its top: pull an
+item into ROADMAP.md's P0–P3 when it's actually about to be worked, not before.
+
+**Why BACKLOG.md and not a new file.** STATUS.md (now) / ROADMAP.md (next, ordered) / BACKLOG.md
+(someday, unordered) already covers the three horizons this repo needs. A fourth document would
+duplicate that shape rather than clarify it — the actual problem wasn't a missing file, it was that
+two different horizons (medium-term P2–P3 and uncalendared P4/direction) were sharing one file with
+no visual separation. Splitting *within* the existing three-doc structure keeps DEC-0030's docs-diet
+philosophy (tiered, not proliferating) intact.
+
+**What changed:** `docs/ROADMAP.md` — priority-vocabulary note, intro paragraph, and the "LONG TERM"
+section removed (replaced by a one-line pointer to BACKLOG.md). `BACKLOG.md` — intro updated, new
+"## Long-term direction" section added. `CLAUDE.md`'s doc-map table rows for both files annotated
+with the split. Same pass also pruned a second stale copy of the already-resolved (S48) May
+rain-total item, found in `BACKLOG.md`'s "Data integrity" section while editing nearby content —
+same fact DEC-0057's ROADMAP reconciliation had already corrected once, in the other file.
