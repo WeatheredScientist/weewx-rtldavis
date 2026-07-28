@@ -37,8 +37,8 @@ protocol is now two tiers. **The current docs live on `dev`** — check
 | `docs/DECISIONS-FULL.md` | full ADR text — grep the DEC id whenever a listed decision is near your change |
 | `docs/ARCHITECTURE.md` | touching the ISS→RTL-SDR→driver→WeeWX→sinks chain, volume mounts, entrypoint |
 | `docs/INTERFACES.md` | touching the data contract — loop-JSON fields + InfluxDB schema |
-| `docs/ROADMAP.md` | choosing or re-prioritizing what to work on next |
-| `BACKLOG.md` | open ideas / durable RF findings |
+| `docs/ROADMAP.md` | choosing or re-prioritizing what to work on next — **P0–P3 only** (DEC-0058) |
+| `BACKLOG.md` | open ideas / durable RF findings / **long-term direction** (DEC-0058) |
 | `CHANGELOG-ARCHIVE.md` | history older than the live CHANGELOG |
 | `docs/ASSESSMENT.md` | the strategic anchor (cross-repo governance alignment) |
 | `docs/DATA_ERRATA.md` | known-bad observations + corrections (DEC-0025) |

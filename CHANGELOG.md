@@ -30,6 +30,27 @@ Docs-only, nothing deployed. Prompted by a routine status check that turned into
 
 ---
 
+## [S56b] — 2026-07-28 — ROADMAP.md split to P0–P3; long-term direction moves to BACKLOG.md (DEC-0058)
+
+Same session, second act. Docs-only, nothing deployed.
+
+- **STATION_NAME check:** before doing any work, live-verified the NAS `monitor.env` —
+  `STATION_NAME="Eagle Hunt PWS"` was already set (since S31). BACKLOG.md's note was stale (dated
+  "observed S27," pre-fix); corrected, no NAS mutation needed.
+- **DEC-0058:** `docs/ROADMAP.md` trimmed to P0–P3 only (the actively-sequenced plan). P4 +
+  "Longer horizon" (credential hygiene, multi-source adaptability, the template harvest, ops#110)
+  moved to a new "Long-term direction" section in `BACKLOG.md` rather than a fourth document.
+  `CLAUDE.md`'s doc-map annotated with the split.
+- While editing `BACKLOG.md`, found and pruned a second stale copy of the already-resolved (S48)
+  May rain-total item — same fact CHANGELOG `[S56]`'s ROADMAP pass had already corrected once, in
+  the other file.
+- **Self-caught bug:** the DEC-0057 append (`[S56]`, above) had matched an `old_string` that didn't
+  include the file's true last line, stranding an orphaned original fragment (`*silently*.`) after
+  everything inserted, and papering over it with an invented duplicate sentence. Fixed before
+  appending DEC-0058: restored the original DEC-0056 closing line, removed the invented text.
+
+---
+
 ## [S55c] — 2026-07-28 — v2.0.11 shipped: cap 16 live in prod; ops#105 audit closed from this side
 
 Third act of the day, owner-approved after the ops relay flagged the gap: DEC-0056's cap was merged

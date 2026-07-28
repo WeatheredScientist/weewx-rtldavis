@@ -1,8 +1,11 @@
 # Backlog — weewx-rtldavis
 
-Unordered ideas and durable findings not yet scheduled. Scheduled work lives in ROADMAP.md;
-in-flight work in docs/STATUS.md. Carried forward from the pre-governance NAS `BACKLOG.md`; the
-open items from the retired root `cleanup_backlog.md` were folded in here (S27, S23 tail).
+Unordered near-term ideas and durable findings not yet scheduled, **plus long-term/uncalendared
+direction** (its own section below, moved here from ROADMAP.md's old P4 + "Longer horizon" at
+DEC-0058, S56 — keeps ROADMAP.md down to the actively-sequenced P0–P3 plan). Scheduled work lives
+in ROADMAP.md; in-flight work in docs/STATUS.md. Carried forward from the pre-governance NAS
+`BACKLOG.md`; the open items from the retired root `cleanup_backlog.md` were folded in here (S27,
+S23 tail).
 
 ## Open ideas
 - **Tuning infrastructure (owner idea, S34) — control panel and/or designed sweep plan.** Two
@@ -28,8 +31,9 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
   indistinguishable from a never-corrected one — the derived store is better provenanced than the
   system of record. Only `DATA_ERRATA.md` records it. Not urgent; a schema change isn't justified yet.
 - Credential hygiene follow-ups — tracked in the gitignored local-infra doc, not here (this repo is public). Secrets belong in `monitor.env` as env vars, never inline (DEC-0012, DEC-0047).
-- Set `STATION_NAME` in the NAS `monitor.env` — the monitor's alert/summary emails currently fall back
-  to the default "My PWS" (env var unset), so they're unbranded. Cosmetic, one-line fix (observed S27).
+- ~~Set `STATION_NAME` in the NAS `monitor.env`~~ — **already done, S31** (`STATION_NAME=
+  "Eagle Hunt PWS"`, live-verified S56). This note was stale since S31 (dated "observed S27,"
+  before the fix); see CHANGELOG-ARCHIVE `[S31]`. Pruned S56.
 - Verify OWM (OpenWeatherMap) measurements propagate into their API over time — a post-integration
   sanity check that the uploader's values actually land.
 - Long-term stability watch (uptime / reception drift / memory) — no formal monitor yet.
@@ -66,8 +70,10 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
   `lheijst/rtldavis` to understand which version is actually deployed.
 
 ## Data integrity
-- May monthly rain totals were noted as compromised by dev restarts; reconcile against the Davis
-  WeatherLink Live gold standard once the rain-spike fix lands — don't compound the error.
+- ~~May monthly rain totals were noted as compromised by dev restarts; reconcile against the Davis
+  WeatherLink Live gold standard once the rain-spike fix lands.~~ — **done S48:** the console
+  cross-check corroborated both ERR-0001 and ERR-0002, residual 0.01″ (DATA_ERRATA.md). Same fact
+  also corrected in ROADMAP.md this session (S56); this was the last stale copy. Pruned S56.
 - ~~[PRIORITIZED — owner, S30] Bad-packet root cause for temp/humidity/radiation/UV spikes~~ —
   **DONE (S33, DEC-0029):** root cause confirmed from the archive (bit-flip corruption passing CRC,
   same class as rain; 18 humidity spikes + impossible UV 16.29; loop-JSON path unfiltered) and fixed
@@ -75,3 +81,22 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
   The S30 `MAX_WIND_DELTA` unit-mismatch lead was disproven (post-StdConvert = mph). Ships with the
   v2.0.4 rebuild. Follow-ups live in DEC-0029/STATUS: cross-sensor consistency checks (UV↔radiation),
   monitor alert on the new rejection signature.
+
+## Long-term direction (moved from ROADMAP.md's P4 + "Longer horizon", DEC-0058, S56)
+
+Uncalendared or aspirational — direction, not scheduled work. Nothing here needs attention now;
+pull an item into ROADMAP.md's P0–P3 when it's actually about to be worked.
+
+- **Credential hygiene follow-ups** — tracked in the gitignored local-infra doc, not here (this repo
+  is public). Secrets belong in `monitor.env` as env vars, never inline (DEC-0012, DEC-0047). (Also
+  listed under "Open ideas" above — same item, not duplicated content.)
+- **Multi-source adaptability** (PRINCIPLES §1): keep the driver re-pointable so non-Davis WeeWX and
+  eventually CumulusMX can rely on the same data contract. Record a DEC before any code depends on it.
+- **Generic project-template harvest** (separate buildout): once the Governance Standard is proven
+  here and propagated once, harvest it into a versioned GitHub *template repository* for all future
+  projects (ASSESSMENT.md §5). Copy-not-link; tracked as its own effort, not part of this repo's
+  release path.
+- **Winter 2027 sky-state instrumentation** ([ops#110](https://github.com/WeatheredScientist/eaglehunt-ops/issues/110),
+  opened S56): IR sky sensor alongside the lightning detector, targeted for the Jan–Feb 2027 winter
+  build. Cross-repo with the dashboard (`repo:dashboard, repo:weewx, tier:frontier`). Planning
+  horizon only — not scheduled.
