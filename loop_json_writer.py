@@ -91,6 +91,10 @@ class LoopJsonWriter(StdService):
         # in every write until it exceeds its TTL (see module docstring).
         self._cache = {}      # out_key -> (value, timestamp last seen)
         self._expired = set()  # out_keys currently expired, for one-shot logging
+        # out_keys whose current expiry was the benign calm-windDir case
+        # (issue #74): logged at DEBUG, so the matching recovery line must
+        # be DEBUG too or the noise just moves down a level
+        self._expired_calm = set()
         self.bind(weewx.NEW_LOOP_PACKET, self.new_loop)
         log.info('LoopJsonWriter: writing to %s and %s (cache TTL %d s, %s %d s)'
                  % (self.path, self.current_path, self.ttl_default,
@@ -99,6 +103,17 @@ class LoopJsonWriter(StdService):
     def _ttl(self, out_key):
         """Seconds a cached value for out_key may still be served."""
         return self.ttls.get(out_key, self.ttl_default)
+
+    def _calm(self, now):
+        """True when the current (unexpired) windSpeed reading is 0.0 —
+        the calm-windDir expiry case of issue #74. An expired or absent
+        windSpeed is NOT calm: that is a real dropout and deserves the
+        WARNING."""
+        cached = self._cache.get('windSpeed_mph')
+        if cached is None:
+            return False
+        val, seen = cached
+        return val == 0.0 and (now - seen) <= self._ttl('windSpeed_mph')
 
     def new_loop(self, event):
         pkt = event.packet
@@ -121,8 +136,14 @@ class LoopJsonWriter(StdService):
                 self._cache[out_key] = (val, now)
                 if out_key in self._expired:
                     self._expired.discard(out_key)
-                    log.info('LoopJsonWriter: %s recovered, serving live values again'
-                             % out_key)
+                    if out_key in self._expired_calm:
+                        # benign calm-expiry (issue #74): wind picked back up
+                        self._expired_calm.discard(out_key)
+                        log.debug('LoopJsonWriter: %s recovered, serving live '
+                                  'values again' % out_key)
+                    else:
+                        log.info('LoopJsonWriter: %s recovered, serving live '
+                                 'values again' % out_key)
 
         # Build output: unexpired cached values + current timestamp. A field
         # past its TTL is omitted, never served stale under a live dateTime.
@@ -133,10 +154,22 @@ class LoopJsonWriter(StdService):
                 data[out_key] = val
             elif out_key not in self._expired:
                 self._expired.add(out_key)
-                log.warning('LoopJsonWriter: %s expired after %.0f s (TTL %d s) — '
-                            'omitting rather than serving a stale value under a '
-                            'live timestamp; sensor may be failing or rejected'
-                            % (out_key, age, self._ttl(out_key)))
+                if out_key == 'windDir' and self._calm(now):
+                    # issue #74: the driver deliberately reports wind_dir =
+                    # None while calm (no direction exists without wind), so
+                    # any >= TTL calm stretch expires windDir by design --
+                    # a healthy sensor correctly omitting, not a fault.
+                    # windDir expiry with nonzero windSpeed stays a WARNING.
+                    self._expired_calm.add(out_key)
+                    log.debug('LoopJsonWriter: windDir expired after %.0f s '
+                              '(TTL %d s) during calm (windSpeed 0.0) — '
+                              'no direction exists without wind (#74)'
+                              % (age, self._ttl(out_key)))
+                else:
+                    log.warning('LoopJsonWriter: %s expired after %.0f s (TTL %d s) — '
+                                'omitting rather than serving a stale value under a '
+                                'live timestamp; sensor may be failing or rejected'
+                                % (out_key, age, self._ttl(out_key)))
         data['dateTime'] = pkt.get('dateTime')
 
         for path in (self.path, self.current_path):

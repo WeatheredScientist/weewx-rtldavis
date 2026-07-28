@@ -69,6 +69,7 @@ a later entry.
 | DEC-0051 | Cold-load Fix B ships (`current.json` alongside `loop-data.txt`); `windchill` added — closes issue #44 | Accepted | 2026-07-15 (S43) |
 | DEC-0052 | Adopt eaglehunt-ops' shared closeout skeleton, adapted — docs-diet + DEC log kept as-is, model-tier restore check added as step 5 | Accepted · **adapts** OPS-DEC-0016 · closes weewx#56 | 2026-07-19 (S44) |
 | DEC-0053 | **Provenance audit:** loop-JSON cache bounded per-field (was unbounded — a dead sensor looked live); InfluxDB station identity + SQLite correction state documented as deliberate gaps, not closed | Accepted · **applies** DEC-0006 to the real-time surface · closes weewx#45 | 2026-07-25 (S48) |
+| DEC-0054 | **Frame-level co-rejection:** a SensorQC *bounds* failure (positive corruption proof) nulls every weather field of the same frame and skips the rain-counter without resync; a *delta* trip never triggers it. Zero free parameters — NOT the parked DEC-0044 coupling filter. Motivated by ERR-0004 (phantom 39 mph gust rode a frame whose own humidity decoded to 144.9%) | Accepted · **extends** DEC-0029 · ships v2.0.9 · closes #76 | 2026-07-27 (S52) |
 
 ## Open / deferred
 
