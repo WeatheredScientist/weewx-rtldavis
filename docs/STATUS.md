@@ -15,34 +15,37 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S55** (2026-07-28), three acts, all shipped. **v2.0.10** (R1/DEC-0055 signed
-> temp decode, 09:28) → **R2 decided via evidence pass (DEC-0056)** + monitor tripwire live →
-> **v2.0.11** (cap 16, banner `0.20+ws.3`, 11:00, `prod-baseline-20260728b`). Upstream
-> [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) opened; **ops#105 audit complete
-> from this side (R1 + R2 both live-verified)**. See CHANGELOG `[S55]`/`[S55b]`/`[S55c]`.
+> **Current session: S56** (2026-07-28), docs-only, nothing deployed. Confirmed prod healthy on
+> v2.0.11 (co-rejecting watch 0 hits, positive-controlled) and ops#105 closed; found ops#110 newly
+> opened (winter 2027 planning). **ROADMAP.md reconciled** (5 stale-done items corrected) then
+> **fully restructured** — P1 + P1.5 folded into one arc covering v2.0.3–v2.0.11, a "Keeping this
+> current" tripwire added (next check due **by S66**). **DEC-0057**: ROADMAP updates join the
+> closeout ritual as step 5. See CHANGELOG `[S56]`.
 
-_Last updated: 2026-07-28 (S55c)._
+_Last updated: 2026-07-28 (S56)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S55 → S56). Everything shipped — prod runs v2.0.11 (`0.20+ws.3`); back to
-> watch-and-discuss.** The day's arc: v2.0.10 (R1/DEC-0055, 09:28) → DEC-0056 decided on evidence
-> → v2.0.11 (R2 cap 16, 11:00, `prod-baseline-20260728b`). CHANGELOG `[S55]`–`[S55c]` has the
-> record; ops#105's code items are complete from this side.
+> **▶ Resume here (S56 → S57). Docs-only session — nothing deployed, prod still v2.0.11
+> (`0.20+ws.3`); still watch-and-discuss.** Re-verified prod health and the co-rejecting watch;
+> reconciled and restructured ROADMAP.md; logged DEC-0057. CHANGELOG `[S56]` has the record.
 > **(a) DEC-0056 is LIVE end-to-end** — cap 16 in the running driver, tripwire email verified
 > (`--test-alert` received), WeatherLink playbook + revisit trigger in the DEC. R3 delivered
 > dashboard-side (their S151, DEC-0167); R4/R5 noted-not-built.
-> **(b) Watches** — co-rejection grep: **0 hits** through 09:00 07-28 (positive-control-verified).
-> #74 calm-windDir: last WARNING 21:59 07-27 (19 min before the v2.0.9 recreate), **zero in the
-> ~11.5 h since** at a prior base rate of ~1/hr — one more full-day look and call it confirmed.
-> Humidity: unfired (largest step 0.7 pts in the 240 samples to 08:52 07-28). DEC-0049
-> phantom-rainRate: unfired. **(c) Upstream replies** — NEW
+> **(b) Watches** — co-rejection grep: **0 hits** through 11:48 07-28 (re-verified S56,
+> positive-control-verified). #74 calm-windDir: last WARNING 21:59 07-27, zero since at a prior
+> base rate of ~1/hr — one more full-day look and call it confirmed. Humidity: unfired (largest
+> step 0.7 pts in the 240 samples to 08:52 07-28). DEC-0049 phantom-rainRate: unfired.
+> **(c) Upstream replies** — NEW
 > [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) (temp sign + `0xFF8`, credits
 > LloydR's #19 diagnosis) joins #22, issue #15 and david-lutz#1 on the reply watch.
 > **(d) First frost is now the free live test**: expect ordinary negative temps, no bounds trips,
 > no co-rejection storm (the suite swept −0.1…−39.9 °F; winter confirms it on air).
+> **(e) Cross-repo:** [ops#110](https://github.com/WeatheredScientist/eaglehunt-ops/issues/110)
+> opened — winter 2027 sky-state instrumentation (IR sky sensor), planning horizon only, tracked in
+> ROADMAP's "Longer horizon."
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -52,6 +55,10 @@ _Last updated: 2026-07-28 (S55c)._
 > **Standing rule (DEC-0047):** the transcript is an egress path. Use **`readconf`** to read a config
 > (section-scoped, fingerprinted) and **`scan-transcripts`** to audit; never a line-count window on a
 > sectioned config.
+>
+> **Standing rule (DEC-0057, new):** a shipped/closed/reprioritized DEC gets its ROADMAP.md line
+> updated the same session — closeout step 5, not deferred (CLAUDE.md Session ritual). ROADMAP.md's
+> own "Keeping this current" section carries the next-check-due session number regardless.
 >
 > Run `ops/soak_check.sh` any time for a fresh acceptance-criteria verdict (its `EXPECT_IMAGE` default
 > now tracks `:v2.0.11` — bump it in the same PR next time the deployed tag moves).
@@ -76,6 +83,10 @@ _Last updated: 2026-07-28 (S55c)._
 
 ## Shipped — nothing to do here
 
+- **S56** (docs-only, no deploy/no rollback needed — ROADMAP.md reconciled then fully restructured:
+  P1 + P1.5 folded into one arc covering v2.0.3–v2.0.11, 5 stale-done items corrected, "Keeping this
+  current" tripwire added, next check due by S66; DEC-0057 makes ROADMAP updates closeout step 5):
+  see CHANGELOG `[S56]`.
 - **S55c** (**v2.0.11 shipped** — DEC-0056 cap 16 live in prod; banner `0.20+ws.3`, digest
   `sha256:b8f35f36…`, `prod-baseline-20260728b`; monitor tripwire verified end-to-end
   (`--test-alert` received); ops#105 audit complete from this side): see CHANGELOG `[S55c]`.
