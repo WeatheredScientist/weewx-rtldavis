@@ -70,8 +70,8 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
   `scp -P <SSH_PORT> -O` · no `bc`/`tmux`/`screen` (use bash integer arithmetic + `nohup`).
   Real values in gitignored `docs/LOCAL_INFRA.md`.
 - Docker: `/usr/local/bin/docker` (no sudo); container `weewx-rtldavis-v2`
-- **Published `:v2.0.9` (+ `:latest`) == what prod runs.** `main` == `prod-baseline-20260727`, no
-  drift (S52). Rollback: `:v2.0.8` is still on the NAS.
+- **Published `:v2.0.10` (+ `:latest`) == what prod runs.** `main` == `prod-baseline-20260728`, no
+  drift (S55). Rollback: `:v2.0.9` is still on the NAS.
 - **The driver is BAKED, never mounted** (DEC-0031) — `weewx-data/bin/user/rtldavis.py` is NOT what
   runs. A driver fix needs an image rebuild; an `scp`/hot-swap there is a silent no-op.
 - Project root on NAS: `/volume1/docker/weewx-rtldavis/` · live config:

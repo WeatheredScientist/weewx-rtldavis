@@ -15,35 +15,33 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S54** (2026-07-28). **R1 landed in code (DEC-0055)** — the outside-temperature
-> decode is now true two's complement, plus the `0xFF8` sentinel; 10 new tests, all three plausible
-> regressions mutation-tested red; pytest 111 / ruff / mypy green. **Not released** — the driver is
-> baked (DEC-0031), so this needs an image rebuild before first frost. **R2 (`MAX_PLAUSIBLE_TIPS`
-> 60 → 16) was NOT taken up** — the owner wants more discussion first; the constant is untouched.
-> See CHANGELOG `[S54]` and DEC-0055.
+> **Current session: S55** (2026-07-28). **v2.0.10 RELEASED and LIVE** — DEC-0055's signed temp
+> decode is in prod (banner `0.20+ws.2`, deployed 09:28 EDT, `prod-baseline-20260728`, soak
+> 13/2/0). Upstream [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) opened
+> (owner-reviewed); R1 closed out on ops#105. **R2 (`MAX_PLAUSIBLE_TIPS` 60 → 16) remains OPEN,
+> deliberately untouched** — awaiting design discussion. See CHANGELOG `[S55]`.
 
-_Last updated: 2026-07-28 (S54)._
+_Last updated: 2026-07-28 (S55)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S54 → S55). R1 is CODED but NOT RELEASED — the release is the open item.**
-> DEC-0055 shipped the signed temp decode + `0xFF8` sentinel into `rtldavis.py` on `dev`. Because the
-> driver is **baked** (DEC-0031), prod still runs the unsigned decode: **an image rebuild + release is
-> required before first frost**, or the bug is live all winter. Two follow-ons ride with it:
-> (a) a companion **upstream PR** alongside lheijst#22 — the sign bug and the missing `0xFF8`
-> sentinel are both inherited from upstream; (b) report R1's completion back on
-> [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105).
-> **R2 is still OPEN and deliberately untouched** — the owner wants to discuss `MAX_PLAUSIBLE_TIPS`
-> 60 → 16 (closes the ≤0.30 in phantom-rain residual to ≤0.16 in) before any code. Do not implement
-> it unprompted. R3 (wind spike guard) rides the dashboard side of the ops#105 thread; R4 (radiation
-> night ceiling) and R5 (extra-station zero-QC docs note) are noted-not-built.
-> S53 watch results: co-rejection **0 hits** in the deploy's first hour (expected-rare); #74
-> calm-windDir WARNINGs confirmed present right up to the 22:18 recreate and absent after, but the
-> post-deploy window was <1 day — **re-verify over a full day**. Humidity watch through
-> 2026-07-27 23:14: still no DEC-0044 signature (996 samples, largest non-ERR-0004 step 6.1 pts).
-> Soak 15 PASS / 0 WARN / 0 FAIL. DEC-0049 phantom-rainRate prediction remains unfired.
+> **▶ Resume here (S55 → S56). v2.0.10 is LIVE — the release thread is CLOSED; back to
+> watch-and-discuss.** DEC-0055's signed temp decode deployed 2026-07-28 09:28 EDT (banner
+> `0.20+ws.2`, `prod-baseline-20260728`; CHANGELOG `[S55]` has the full release record). Open:
+> **(a) R2 discussion** — `MAX_PLAUSIBLE_TIPS` 60 → 16 (phantom-rain residual 0.30 → 0.16 in) is
+> owner-held for design talk; the constant is untouched — do not implement unprompted
+> (PRINCIPLES §8). R3 (wind spike guard) rides the dashboard side of ops#105; R4/R5 noted-not-built.
+> **(b) Watches** — co-rejection grep: **0 hits** through 09:00 07-28 (positive-control-verified).
+> #74 calm-windDir: last WARNING 21:59 07-27 (19 min before the v2.0.9 recreate), **zero in the
+> ~11.5 h since** at a prior base rate of ~1/hr — one more full-day look and call it confirmed.
+> Humidity: unfired (largest step 0.7 pts in the 240 samples to 08:52 07-28). DEC-0049
+> phantom-rainRate: unfired. **(c) Upstream replies** — NEW
+> [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) (temp sign + `0xFF8`, credits
+> LloydR's #19 diagnosis) joins #22, issue #15 and david-lutz#1 on the reply watch.
+> **(d) First frost is now the free live test**: expect ordinary negative temps, no bounds trips,
+> no co-rejection storm (the suite swept −0.1…−39.9 °F; winter confirms it on air).
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -55,10 +53,14 @@ _Last updated: 2026-07-28 (S54)._
 > sectioned config.
 >
 > Run `ops/soak_check.sh` any time for a fresh acceptance-criteria verdict (its `EXPECT_IMAGE` default
-> now tracks `:v2.0.9` — bump it in the same PR next time the deployed tag moves).
+> now tracks `:v2.0.10` — bump it in the same PR next time the deployed tag moves).
 
-## Upstream — all three landed (S38)
+## Upstream — four live threads (S38, S55)
 
+- **[lheijst/weewx-rtldavis#23](https://github.com/lheijst/weewx-rtldavis/pull/23)** — the temp-sign
+  + `0xFF8` companion PR (S55, owner-reviewed before posting). Credits LloydR's #19 for the
+  diagnosis; offers the masked 12-bit two's complement as an alternative (#19's 16-bit-signed ÷16
+  leaks the `pkt[4]` flag nibble, +0.05 °F constant). OPEN.
 - **[lheijst/weewx-rtldavis#22](https://github.com/lheijst/weewx-rtldavis/pull/22)** — the rain-counter
   wraparound fix. OPEN.
 - **[Issue #15 comment](https://github.com/lheijst/weewx-rtldavis/issues/15#issuecomment-4960224128)** —
@@ -73,6 +75,15 @@ _Last updated: 2026-07-28 (S54)._
 
 ## Shipped — nothing to do here
 
+- **S55** (**v2.0.10 shipped** — DEC-0055 signed temp decode live in prod; Docker Hub `:v2.0.10`
+  + `:latest` at digest `sha256:ee3027e1…`, GitHub release, `main` == prod,
+  `prod-baseline-20260728`; prod recreated and live-verified: banner `0.20+ws.2`, `sensor_qc True`,
+  records publishing, soak 13/2/0; upstream
+  [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) opened; R1 closed on ops#105;
+  repo housekeeping back to exactly `dev` + `main`): see CHANGELOG `[S55]`.
+  **Rollback: `:v2.0.9`** on the NAS and Docker Hub.
+- **S54** (R1 coded — DEC-0055 signed decode + `0xFF8`, 10 tests, fork inventory updated; released
+  the next session as v2.0.10): see CHANGELOG `[S54]`.
 - **S53** (ops#105 cross-observable QC audit delivered — no code): per-observable verdict table
   (all encodings verified from source), historical sweep = archive CLEAN (ERR-0004 the only
   in-bounds escape ever; zero new ERR entries), consumer inventory completed (adds WU RapidFire +
@@ -84,74 +95,7 @@ _Last updated: 2026-07-28 (S54)._
   with `windGust_qc`/`windSpeed_qc` flags; issues #74 + #76 closed; ops#103 answered, ops#104
   unblocked): see CHANGELOG `[S52]` and DATA_ERRATA `ERR-0004`. Rollback: `:v2.0.8` on the NAS;
   `loop_json_writer.py.bak-pre-v2.0.9`; `weewx.sdb.bak-err0004-20260727`.
-- **S49** (issue #67 closed — mypy is now a real CI gate): 19 pre-existing mypy errors fixed (two
-  genuine bugs in `ops/recover_sweep_results.py` — a mismatched tuple element type and two loop
-  variables shadowing module-level names; one missing `types-requests` stub; 13 py2/py3-compat
-  `try/except ImportError` false positives suppressed per-line, never blanket). CI's
-  `.github/workflows/ci.yml:81` no longer has `|| true` — mypy failures now actually block CI,
-  mirroring what #55 did for pytest via pre-commit at S48. No DEC entry (closes an enforcement gap,
-  not a new decision). See CHANGELOG `[S49]`.
-- **S48** (issues #55, #48, #45 closed): **#55** — pytest wired into `.pre-commit-config.yaml` as
-  immediate local signal (the real hard gate was already `dev`'s branch protection). **#48** —
-  DEC-0042 challenged and upheld: the WeatherLink reconciliation conflated `rain_qc` (3 counter
-  points, 2.56″) with `rainRate_qc` (33 rate points, `rain = 0.0`); both independently require the
-  console's absence, so it's confirmatory, not contradictory. **#45** — provenance audit, DEC-0053:
-  `loop_json_writer.py`'s cache was unbounded, so a dead/rejected sensor could emit its last value
-  forever under a live `dateTime`; now bounded per-field (300 s, 2 × `fetch_interval` for
-  `barometer_inHg`). **Deployed and verified in prod** (scp'd, md5-matched, pyc cleared, container
-  restarted; zero expiry warnings across a 453 s watch). Two identity gaps documented, not closed, in
-  BACKLOG. Filed issue #67 (CI's mypy `|| true` never gates) — closed the next session, S49. See
-  CHANGELOG `[S48]` and `[S48b]`.
-- **S47** (backlog + branch cleanup — no release): `loopdata.py` mount + `[LoopData]` config section
-  removed (DEC-0005, closed — live `weewx.conf` edited, `weewx-rtldavis-v2` recreated without the
-  mount, verified clean restart); `ops/reception_service.py` deleted from the repo (confirmed vestigial);
-  `rw350-test`/`rw400-test` Docker images deleted from the NAS (DEC-0048 fully closed); merged
-  `worktree-s46-closeout-amendment` worktree + branch removed. No code/driver change, no image rebuild.
-  See CHANGELOG `[S47]`.
-- **S46** (humidity-spike watch checked directly, still unfired; `eaglehunt-ops#37` closed — all
-  three Eagle Hunt repos confirmed on OPS-DEC-0019; routine `dev` housekeeping; **PR #63** fixed a
-  CI break the closeout PR surfaced — unpinned `ruff` had drifted to 0.16.0 and was silently
-  blocking the required `lint` check on `dev`, pinned to `0.5.7` matching DEC-0027; both #63 and
-  the closeout PR #62 merged). No source/driver code changed; the CI workflow did. No release. See
-  CHANGELOG `[S46]`.
-- **S45** (PR #59 merged — OPS-DEC-0019 env-twin permission rules): `.claude/settings.json` gained
-  the env-wrapped ask-rule twins for the two protected-branch `git merge` rules (matches the
-  cross-repo pattern already used for `git push`), part of the OPS-DEC-0019 rollout
-  (`eaglehunt-ops#37`). Mechanical, no code touched, CI green. See CHANGELOG `[S45]`.
-- **S44** (soak-check false positive fixed; closeout skeleton adopted): `ops/soak_check.sh`'s
-  phantom-rain detector was flagging normal post-tip rain-rate decay as the DEC-0042 signature —
-  fixed to require no real tip in the preceding hour, verified live (49 → 0 false positives) against
-  a real 2026-07-18 storm. **DEC-0052**: adopted eaglehunt-ops' locked closeout skeleton (adapted),
-  closes weewx-rtldavis#56, reported to eaglehunt-ops#22. Both via PR #57. See CHANGELOG `[S44]`.
-- **S43** (**v2.0.8 shipped** — Docker Hub `:v2.0.8` + `:latest` at digest `sha256:2c05493a`, GitHub
-  release, `main` == prod, `prod-baseline-20260715`; prod recreated and verified): Reception Layer B
-  (DEC-0024, fully resolved — WU-published count now matches unique record epochs exactly, confirmed
-  53/53 over a 3-min window post-deploy; `weewx_monitor.py`'s live `WINDOW:` metric confirmed fixed
-  too, now reading 67-81% matching the driver's trusted `rxCheckPercent` range instead of pinning near
-  100%), the duplicate-frame counter (DEC-0035 — `duplicate frames this period: N` logging live),
-  Cold-load Fix B + windchill (DEC-0051, closes issue #44 — `current.json` confirmed writing real data
-  incl. `windchill_F`). Local pre-commit's `ruff-format` hook (silently contradicting DEC-0027 since
-  S31) removed. See CHANGELOG `[S43]`.
-  **Rollback:** `:v2.0.7` (`e22fea3c744c`) is still on the NAS; the pre-deploy `loop_json_writer.py`
-  is at `loop_json_writer.py.bak-pre-v2.0.8`.
-- **S38** (v2.0.5 → **v2.0.6** on Docker Hub; prod recreated + verified; `prod-baseline-20260713` tagged;
-  `influx.py` drift closed; the `~/.claude/hooks/` enforcement layer live and tested; 47 MB reclaimed):
-  see CHANGELOG `[S38]` and DEC-0038/0039/0040/0041/0042.
-- **S39** (root-logger fix DEC-0043; nibble theory falsified DEC-0044): CHANGELOG `[S39]`. **Released in
-  S41 as v2.0.7.**
-- **S41** (**v2.0.7 shipped** — Docker Hub `:v2.0.7` + `:latest` at digest `sha256:31cad4d2`, GitHub
-  release, `main` == prod, `prod-baseline-20260713b`; prod recreated and verified; **DEC-0046** — the baked
-  config is shadowed by the prod bind-mount; `log_humidity_raw` now active): CHANGELOG `[S41]`.
-  **Rollback:** `:v2.0.6` (`e23cabd53591`) is still on the NAS; the pre-deploy config is at
-  `weewx-data/weewx.conf.bak-pre-v2.0.7`.
-- **S41 (security)** — **DEC-0047**: the secret gate guards commits, not reads. A `sed -n '…,+44p'` on the
-  live `weewx.conf` overran its section and leaked live credentials into the transcript. Now guarded
-  mechanically: `~/.claude/hooks/secret-read-guard.sh` (38/38 both directions; mutation test → 18 red),
-  `~/.claude/bin/readconf` (section-scoped, fingerprinted), `~/.claude/bin/scan-transcripts` (self-tests
-  before every run). **Rotation still owed — see the section below.**
-- **S40** (the secret gate scans comments like code — DEC-0045; suite 28 → 41; a full-history scan of all
-  333 blobs proved the hole was never exploited): CHANGELOG `[S40]`. **DEC-0039's "28/28 proven" is
-  superseded** — two of those 28 asserted a *commented-out* credential must PASS.
+- **S44–S49 and earlier** — pruned to pointers (DEC-0030): the stories live in `CHANGELOG-ARCHIVE.md` (S51 and older) and the DEC index. Operationally still true from that era: the `~/.claude/` guard layer is live and tested (DEC-0040/0047), pre-commit is installed, and no real credential has ever been committed (S40/S41 full-history scans — also asserted under Needs-a-check below).
 
 ## Open threads (backlog — none of these block anything)
 
@@ -239,58 +183,43 @@ _Last updated: 2026-07-28 (S54)._
   NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S54 done → S55)
+## Next session actions (S55 done → S56)
 
-**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S54
-now live only in "Shipped" above and CHANGELOG — not duplicated here.
+**This section is the repo-visible handoff.** Read it first when resuming. Session recaps live in
+"Shipped" above and CHANGELOG — not duplicated here.
 
-**▶ ON RETURN (S55), in order:**
+**▶ ON RETURN (S56), in order:**
 
-0. **Release the R1 fix (DEC-0055) — this is the only item with a hard deadline.** The code is on
-   `dev`; prod runs the **unsigned** decode until an image is rebuilt (DEC-0031: the driver is baked,
-   an `scp` is a silent no-op). **Deadline: before first frost.** Same window: the companion
-   **upstream PR** alongside [lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22) (both the
-   sign bug and the missing `0xFF8` sentinel are inherited upstream), and a note back on
-   [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105) closing out R1.
-   Carry DEC-0046 through the release: verify in the **running system**, not the artifact.
+1. **Watches (all read-only, nasctl):** (a) grep `weewx.log*` for `co-rejecting` (single-word
+   pattern — multi-word patterns silently match nothing; positive-control any zero). 0 hits through
+   09:00 07-28. Each hit is a frame v2.0.8 would have partially trusted; an rxCheckPercent dip
+   corroborates but is NOT required. (b) **#74 calm-windDir WARNINGs** — last one 21:59 07-27,
+   zero in the ~11.5 h after at a prior ~1/hr base rate; one clean full-day check closes it.
+   (c) Run `ops/soak_check.sh` (S55 post-deploy: 13/2/0; `EXPECT_IMAGE` tracks `:v2.0.10`).
+   (d) Dependabot may open a deps PR — review, don't auto-merge (#78 mechanism).
 
-0b. **R2 is awaiting discussion, not implementation.** `MAX_PLAUSIBLE_TIPS` 60 → 16 (residual
-   phantom-rain ceiling 0.30 → 0.16 in) was explicitly held by the owner at S54 for more design
-   discussion. The constant in `rtldavis.py` is **unchanged**. Do not code it unprompted
-   (PRINCIPLES §8).
+2. **Humidity-spike watch — still unfired through 08:52 07-28** (largest step 0.7 pts in the last
+   240 samples; S53's checkpoint before that: 996 samples, max 6.1 pts). Grep `humidity_raw=` in
+   current + rotated `weewx.log*` (daily rotation). Spikes run ~2–3/week clustered **11:00–16:00**
+   — need the 16-37 pt DEC-0044 single-step signature, not an ordinary 5-10 %/min swing. **The
+   method and the arithmetic are in DEC-0044; do not re-derive them.** Decode of the logged word:
+   `(pkt[4] << 8) + pkt[3]` in hex; RH = `(((pkt[4] >> 4) << 8) + pkt[3]) / 10`.
 
-1. **Continue the v2.0.9 watch (DEC-0054):** grep `weewx.log*` for `co-rejecting` (single-word
-   pattern via nasctl — multi-word patterns silently match nothing) — 0 hits in the first hour
-   post-deploy (22:18 2026-07-27). Each future hit is a frame v2.0.8 would have partially trusted;
-   an rxCheckPercent dip corroborates but is NOT required (the 2026-07-17 corrupt frame arrived at
-   77 %). **Re-check the #74 calm-windDir WARNINGs over a full day** — confirmed silent in the
-   first post-deploy hour only. Run `ops/soak_check.sh` (S53: 15/0/0). First Dependabot run may
-   open a deps PR — review, don't auto-merge (#78 mechanism).
+3. **R2 is awaiting discussion, not implementation.** `MAX_PLAUSIBLE_TIPS` 60 → 16 (residual
+   phantom-rain ceiling 0.30 → 0.16 in) is owner-held for design discussion. The constant in
+   `rtldavis.py` is **unchanged**. Do not code it unprompted (PRINCIPLES §8).
 
-2. **Keep watching the humidity-spike log — still nothing qualifying through S53 (2026-07-27 23:14;
-   996 samples since S51's checkpoint, largest non-ERR-0004 step 6.1 pts).**
-   `log_humidity_raw True` has been active since the v2.0.7 restart at 2026-07-13 15:27 EDT; S46
-   checked the full window to its date, S51 re-checked 2026-07-24 → 2026-07-26 (2,755 samples,
-   largest step −8.7 pts across a reception gap — not the signature). Grep for `humidity_raw=` in
-   current + rotated `weewx.log*` (rotation is daily). Spikes run ~2–3/week clustered **11:00–16:00**
-   — need the 16-37 % DEC-0044 signature (a single-step raw jump), not just an ordinary 5-10 %/min
-   swing. It logs the full `pkt[4]`/`pkt[3]` — **no averaging, no free parameter** — which settles
-   the nibble question **deterministically**: invert the bytes, re-decode under `0x2`/`0x8`/`0xE`
-   (humidity's real single-bit neighbours — *not* solar or UV, which are 2 and 3 bits away), compare
-   with the concurrent archived sensor. **The method and the arithmetic are in DEC-0044; do not
-   re-derive them.** Decode of the logged word: `(pkt[4] << 8) + pkt[3]` in hex; RH =
-   `(((pkt[4] >> 4) << 8) + pkt[3]) / 10`.
+4. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The
+   mechanism is the open question, not the threshold.
 
-3. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
-   is the open question, not the threshold.
+5. **`ops/soak_check.sh`'s phantom-rain detector is hardened (S44) — don't re-flag ordinary rain.**
+   A nonzero count already excludes the post-tip decay window; treat a hit as the
+   DEC-0049-predicted event first, not a false positive. Latest run: 0 rows.
 
-4. **`ops/soak_check.sh`'s phantom-rain detector is now hardened (S44) — don't re-flag ordinary rain.**
-   If it reports a nonzero count, that already excludes the normal post-tip decay window (1 hour); a
-   real hit is worth taking seriously as the DEC-0049-predicted event, not re-litigating as a false
-   positive first. S51's run: 0 rows in 1,214.
-
-5. *(folded into step 1's deploy-window check — the S41 stall class stays clean through S48; only
-   revisit if a stall shows up on consecutive restarts.)*
+6. **At first frost:** the signed decode's negative branch gets its first live air test. Expected:
+   ordinary sub-zero readings, no bounds trips, no co-rejection storm (the suite swept
+   −0.1…−39.9 °F). If a cold snap instead lights up `co-rejecting` pairs, that is a DEC-0055
+   regression — investigate before anything else.
 
 **Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
 **config** is mounted and the image is inert (DEC-0046). Inverses. A release that changes shipped config
@@ -305,6 +234,7 @@ phantom rainRate is an ISS sensor artifact — condensation trips the rate timer
 bucket. **A third event is predictable on the next calm, saturated, cooling night**, which is a free test.
 
 **Watch:** replies on [lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22),
+[lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23),
 [issue #15](https://github.com/lheijst/weewx-rtldavis/issues/15) and
 [david-lutz#1](https://github.com/david-lutz/weewx-influx2/pull/1).
 
