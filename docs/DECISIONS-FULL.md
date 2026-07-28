@@ -2110,3 +2110,101 @@ red: unsigned decode, dropped `0xFF8`, and meteostick's one's complement.
 **Not yet shipped.** The driver is baked (DEC-0031), so this needs an image rebuild and a deliberate
 release — deadline is **first frost**, not this session. A companion upstream PR belongs alongside
 lheijst#22.
+
+---
+
+## DEC-0056 — `MAX_PLAUSIBLE_TIPS` 60 → 16 (ops#105 R2): evidence-bounded tightening, with a loud-failure tripwire instead of silent headroom
+
+**Date:** 2026-07-28 (S55) · **Status:** Accepted · **amends** DEC-0021 · **executes** ops#105 R2 · owner-approved after evidence review
+
+### The question, and the worry that shaped the answer
+
+The S53 audit (ops#105) recommended tightening the rain-counter delta cap from 60 to 16 tips,
+halving the residual phantom a corrupt in-bounds counter reading can book (0.30 → 0.16 in — a
+phantom is never reversed in-band, DEC-0021's rejection only nulls, it cannot subtract). The owner
+held the change for discussion with one specific worry: **a filter restrictive enough to reject a
+genuine intense rainstorm loses real data silently and permanently** — the always-resync at the
+call site (`rtldavis.py` ~1182) means a rejected delta's tips are never booked, and an undercount,
+unlike a phantom, is invisible after the fact. The decision below is shaped by that asymmetry:
+phantom rain is visible (rain on a dry day sticks out) and correctable (ERR process, four
+precedents); missed rain during a storm is neither. So the cap change ships **as a package** whose
+other parts convert "silent permanent loss" into "loud, bounded, recoverable."
+
+### The evidence pass (2026-07-28, full pre-correction archive: 70 days, 95,901 minutes, 6.25 in of rain, 490 wet minutes)
+
+- **Worst-ever real minute: 7 tips** (twice, 2026-06-14 storm, reception healthy at 63–71%).
+  Histogram cliff: 417 of 490 wet minutes are 1 tip; 8 minutes ≥ 4 tips; nothing above 7.
+- **Worst-ever real accumulation windows:** 2-min 12 tips · **3-min exactly 16** · 4-min 23 ·
+  5-min 28 · 13-min 44 (all the same 06-14 storm).
+- **In-service reading gaps during rain effectively do not happen:** reception has never been
+  below 50% in a wet minute; station-wide rx<20% collapses total 31 minutes in 70 days with a
+  longest run of **1 minute**; rain-NULL runs within ±15 min of actual rain: **two events ever,
+  both 1 minute**. (The S51 "13-minute dropout" that motivated caution was humidity-message-
+  specific; no sustained whole-link collapse exists in the record. Multi-hour archive gaps are
+  full station outages, where the driver restarts and re-seeds its baseline — the cap never
+  evaluates those.)
+- **Physics closes the loop:** at the bucket's ~4 s/tip ceiling, a genuine delta can exceed
+  16 tips only across a reading gap > ~64 s — and the worst observed in-service gap during rain
+  is 60 s. So cap 16 is safe against **any physically possible intensity** at every gap length
+  the station has ever exhibited. The audit's "zero false-positive cost" claim, previously
+  resting on an assumed ~60 s worst-case gap, now rests on measurement.
+- **The filter is idle at 60:** zero rain-counter rejections in the 30-day retained logs (all
+  five "implausible" hits are SensorQC wind/humidity, one being ERR-0004 itself).
+- **Boundary semantics preserved deliberately:** the check is `delta > max_tips`, so 16 itself
+  passes — and the worst-ever real 3-minute accumulation is *exactly* 16. Even the never-observed
+  freak case (a 3-min gap landing on our worst-ever burst) still books its rain.
+
+### The reframing that shrinks the change
+
+weewx's own `[StdQC]` layer caps rain at 0.3 in per archive minute, and a catch-up delta lands in
+a single archive minute. So genuine deltas over 30 tips were **already being discarded system-wide
+at cap 60** — the apparent tolerance of big catch-ups was an illusion. The band this change newly
+exposes is **17–30 tips only** (gaps of ~68 s–2 min at maximum physical rate), never once occupied
+in the record. "60 → 16" is really "30 → 16."
+
+### The decision (the package, all four parts)
+
+1. **`MAX_PLAUSIBLE_TIPS = 16`** (`rtldavis.py`; rides `dev` until the next image cut — a
+   hardening, not a live bug, so it forces no deploy).
+2. **The rejection email is the tripwire.** `weewx_monitor.py`'s existing DEC-0021 glitch alert
+   (marker `rejecting implausible counter delta`, 300 s cooldown, live on the NAS) has its body
+   reframed: a rejection is *probably* a caught glitch, but the email now explicitly prompts the
+   WeatherLink cross-check in case it is real rain across a rare long gap. Base rate is zero per
+   30 days — a zero-noise tripwire. A cross-module contract test now pins the monitor's marker to
+   the driver's exact logerr wording, so a reworded message breaks CI instead of silently killing
+   the alert.
+3. **The recovery playbook** (this section is it): the co-located WeatherLink console receives the
+   same ISS broadcast independently and keeps its own rain record. On any rejection that coincides
+   with real rain: compare the console's window total against ours, and book the shortfall via the
+   established ERR correction process (DEC-0025/0032/0037 — both stores, derived fields included).
+   Worst case is therefore a bounded 0.17–0.30 in gap, reconciled same-day — never a lost storm.
+4. **The revisit trigger, predefined:** any rejection alert on a genuinely wet day reopens this
+   decision with that event's data in hand. The tripwire makes the revisit evidence-driven instead
+   of vigilance-driven, in both directions.
+
+### Alternatives declined, and when they would win
+
+- **Keep 60:** keeps headroom the system already didn't have (StdQC), for a gap tail the station
+  demonstrably doesn't produce, at the price of double the phantom ceiling. Declined.
+- **Time-aware cap** (`allowed ≈ gap_seconds / 4 s-per-tip`): structurally elegant, no free
+  parameter — but the multi-minute in-service gap it defends against does not occur here during
+  rain, and its allowance grows exactly when a corrupt reading after a long quiet gap would ride
+  it. Over-engineering for this station's measured conditions. Declined without prejudice — it
+  remains the natural shape for upstream-grade robustness where gap behavior is unknown.
+- **Confirm-on-reject** (hold the old baseline on an implausible delta; book the accumulation one
+  reading later if the next independent transmission confirms the counter really moved): makes
+  losing real rain structurally impossible rather than improbable, because real rain persists in
+  the cumulative counter and a glitch does not. Declined **for now**: it adds a state machine to a
+  deliberately pure function, and any confirmed catch-up over 30 tips still collides with StdQC,
+  which needs its own design pass. **This is the designed escalation if the tripwire ever fires
+  on real rain** — and the alert's data is exactly the evidence that would justify building it.
+
+### Honest bounds on the evidence
+
+70 days, one partial summer: no tropical remnant, no winter storm in the record. The protection's
+shape is what carries the extrapolation — intensity alone *cannot* false-reject (the bucket cannot
+physically out-tick ~15/min); only intensity × a >64 s reading gap can, gaps are what the station
+demonstrably does not do during rain, and if that ever changes the failure is loud, bounded
+(≤ 0.30 in exposure per event within the StdQC band), and same-day recoverable from an independent
+record. That is the assurance: not that the tail case can't happen, but that it cannot happen
+*silently*.
