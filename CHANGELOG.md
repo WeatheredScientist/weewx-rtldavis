@@ -6,6 +6,34 @@ under [Pre-S16].
 
 ---
 
+## [S55c] — 2026-07-28 — v2.0.11 shipped: cap 16 live in prod; ops#105 audit closed from this side
+
+Third act of the day, owner-approved after the ops relay flagged the gap: DEC-0056's cap was merged
+but inert (the driver is baked, DEC-0031 — v2.0.10 was built before PR #93). Released same-day so
+R2 actually protects the station.
+
+- **Release:** `DRIVER_VERSION` → **0.20+ws.3**, Dockerfile header → v2.0.11 (one PR this time,
+  #95); promoted via #96 (merge `a4628769`); NAS build from the md5-verified tree (the build
+  script's tree gate caught my own stale ws.2 assertion from the v2.0.10 template and refused to
+  build until corrected — the check working as designed, on its author); pushed `:v2.0.11` +
+  `:latest` (digest `sha256:b8f35f36…`); prod recreated 11:00 EDT; live-verified banner
+  `0.20+ws.3`, sensor_qc active, records publishing, soak 13/2/0 (restart-window WARNs). Tagged
+  **`prod-baseline-20260728b`**;
+  [GitHub release v2.0.11](https://github.com/WeatheredScientist/weewx-rtldavis/releases/tag/v2.0.11).
+  **Rollback: `:v2.0.10`.** Fifth consecutive clean recreate; no stall.
+- **Monitor tripwire live end-to-end:** owner killed the old monitor 10:28, scheduler respawned it
+  on the reframed code (sha-verified), startup email received, `--test-alert` fired through the
+  new wording and received.
+- **Prod moved v2.0.9 → v2.0.10 → v2.0.11 in one day** (R1 then R2), each with its own baseline
+  tag and retained rollback.
+- **ops#105: both code items (R1 + R2) now released, deployed, live-verified** — audit umbrella
+  closeable from this repo's side
+  ([completion note](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105#issuecomment-5105845282)).
+- Docs: CONVENTIONS/CLAUDE quick-ref → v2.0.11 / `prod-baseline-20260728b` / rollback `:v2.0.10`;
+  soak `EXPECT_IMAGE` default → `:v2.0.11`.
+
+---
+
 ## [S55b] — 2026-07-28 — R2 decided and coded: `MAX_PLAUSIBLE_TIPS` 60 → 16 (DEC-0056), rejection email reframed as the tripwire
 
 Same session, second act: the owner opened the R2 design discussion, an **evidence pass over the
