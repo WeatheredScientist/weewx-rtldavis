@@ -190,6 +190,77 @@ def test_ttl_default_is_configurable():
         assert 'outTemp_F' not in _read(w)
 
 
+# --- Calm-windDir expiry is DEBUG, not WARNING (issue #74, S52) ---------------
+# The driver deliberately reports wind_dir = None while calm, so any >= TTL
+# calm stretch expires windDir by design -- ~7 spurious WARNINGs/day was
+# desensitizing the watch for real sensor failures.
+
+def test_calm_winddir_expiry_logs_debug_not_warning(caplog):
+    import logging
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir)
+        # calm: windSpeed 0.0 keeps refreshing, windDir last seen at t=1000
+        w.new_loop(types.SimpleNamespace(packet={
+            'dateTime': 1000, 'windSpeed': 0.0, 'windDir': 200.0}))
+        with caplog.at_level(logging.DEBUG, logger='loop_json_writer'):
+            w.new_loop(types.SimpleNamespace(packet={
+                'dateTime': 1301, 'windSpeed': 0.0}))
+        assert 'windDir' not in _read(w), "expiry itself is unchanged (DEC-0053)"
+        warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not warnings, "calm windDir expiry must not WARN (#74)"
+        debugs = [r for r in caplog.records if r.levelno == logging.DEBUG
+                  and 'windDir' in r.getMessage()]
+        assert debugs, "the expiry is still logged, at DEBUG"
+
+
+def test_winddir_expiry_with_wind_still_warns(caplog):
+    import logging
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir)
+        w.new_loop(types.SimpleNamespace(packet={
+            'dateTime': 1000, 'windSpeed': 5.0, 'windDir': 200.0}))
+        # wind is blowing but direction vanished for a full TTL: anomalous
+        with caplog.at_level(logging.DEBUG, logger='loop_json_writer'):
+            w.new_loop(types.SimpleNamespace(packet={
+                'dateTime': 1301, 'windSpeed': 5.0}))
+        warnings = [r for r in caplog.records if r.levelno >= logging.WARNING
+                    and 'windDir' in r.getMessage()]
+        assert warnings, "windDir expiry with nonzero wind stays a WARNING"
+
+
+def test_winddir_expiry_with_windspeed_also_expired_warns(caplog):
+    import logging
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir)
+        w.new_loop(types.SimpleNamespace(packet={
+            'dateTime': 1000, 'windSpeed': 0.0, 'windDir': 200.0}))
+        # BOTH wind fields go silent -- a real dropout, not calm; the last
+        # cached windSpeed 0.0 is itself expired and must not count as calm
+        with caplog.at_level(logging.DEBUG, logger='loop_json_writer'):
+            w.new_loop(types.SimpleNamespace(packet={
+                'dateTime': 1301, 'outTemp': 70.0}))
+        warnings = [r for r in caplog.records if r.levelno >= logging.WARNING
+                    and 'windDir' in r.getMessage()]
+        assert warnings, "expired windSpeed is a dropout, not calm (#74)"
+
+
+def test_calm_winddir_recovery_logs_debug_not_info(caplog):
+    import logging
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir)
+        w.new_loop(types.SimpleNamespace(packet={
+            'dateTime': 1000, 'windSpeed': 0.0, 'windDir': 200.0}))
+        w.new_loop(types.SimpleNamespace(packet={
+            'dateTime': 1301, 'windSpeed': 0.0}))          # calm expiry (DEBUG)
+        with caplog.at_level(logging.DEBUG, logger='loop_json_writer'):
+            w.new_loop(types.SimpleNamespace(packet={
+                'dateTime': 1350, 'windSpeed': 3.0, 'windDir': 210.0}))
+        assert _read(w)['windDir'] == 210.0
+        infos = [r for r in caplog.records if r.levelno == logging.INFO
+                 and 'recovered' in r.getMessage()]
+        assert not infos, "recovery from a calm expiry must be DEBUG too (#74)"
+
+
 if __name__ == '__main__':
     fails = 0
     for name, fn in sorted(globals().items()):

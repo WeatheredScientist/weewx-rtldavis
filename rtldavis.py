@@ -67,6 +67,11 @@
 #               wind, UV and radiation -- sensor-spec bounds plus a per-reading delta
 #               check. Rejected values become NULL, never a substituted reading.
 #               (DEC-0029)
+#   2026-07-27  frame-level co-rejection: a bounds failure on ANY field proves the
+#               whole 8-byte frame corrupt, so every weather field it carries is
+#               nulled and the rain counter is not resynced to it. Motivated by the
+#               phantom 39 mph gust whose frame's own humidity decoded to 144.9%.
+#               (DEC-0054, ERR-0004)
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   These fixes are offered upstream; this fork exists to ship them in the meantime.
@@ -323,6 +328,23 @@ SENSOR_QC_DEFAULTS = {
     'solar_radiation': (0.0, 1800.0, None),   # spec 0..1800; no delta (cloud edges genuine)
 }
 
+# Frame-level co-rejection (DEC-0054): every weather-observation key a single
+# iss/anemometer/temp_hum frame can carry. All of them ride the same 8-byte
+# CRC-checked frame -- wind in pkt[1]/pkt[2] on EVERY such frame, plus one
+# message-type payload in pkt[3..5] -- so when any field fails a BOUNDS check
+# (positive proof of corruption: the sensor cannot report that value), none of
+# its same-frame siblings can be trusted either. The 2026-07-27 phantom 39 mph
+# gust (ERR-0004) rode a frame whose own humidity decoded to 144.9%: humidity
+# was rejected, the wind byte sailed through and became the interval's gust
+# max on every external network. Diagnostics (battery flags, supercap_volt,
+# solar_power, freqError telemetry, pct_good) are deliberately NOT in this
+# set -- they describe the link/station, not the weather.
+FRAME_WEATHER_KEYS = (
+    'temperature', 'humidity', 'wind_speed', 'wind_dir', 'wind_speed_ec',
+    'wind_speed_raw', 'uv', 'solar_radiation', 'rain_rate',
+    'temp_1', 'temp_2', 'humid_1', 'humid_2',
+)
+
 
 class SensorQC(object):
     """Plausibility-filter state machine. Pure logic, no I/O -- unit-tested in
@@ -335,14 +357,26 @@ class SensorQC(object):
         self.reseed_seconds = reseed_seconds
         self._baseline = {}  # key -> (value, time of last accepted or resynced)
 
+    def check_bounds(self, key, value):
+        """Bounds-only test: return the reject reason if value is impossible
+        per sensor spec, else None. Reads no state and never moves a
+        baseline, so it is safe as a frame-level pre-pass (DEC-0054)."""
+        if value is None or key not in self.limits:
+            return None
+        lo, hi, _max_delta = self.limits[key]
+        if value < lo or value > hi:
+            return "out of sensor range %g..%g" % (lo, hi)
+        return None
+
     def check(self, key, value, now):
         """Return (value_or_None, reject_reason_or_None)."""
         if value is None or key not in self.limits:
             return value, None
-        lo, hi, max_delta = self.limits[key]
-        if value < lo or value > hi:
+        bounds_reason = self.check_bounds(key, value)
+        if bounds_reason is not None:
             # impossible per sensor spec: reject, keep the old baseline
-            return None, "out of sensor range %g..%g" % (lo, hi)
+            return None, bounds_reason
+        lo, hi, max_delta = self.limits[key]
         if max_delta is not None:
             last = self._baseline.get(key)
             if last is not None and (now - last[1]) <= self.reseed_seconds:
@@ -1083,21 +1117,43 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         # decode-layer plausibility filter (DEC-0029): reject RF-glitch values
         # at the source so every consumer (including the pre-QC loop-JSON
         # feed) sees an honest null instead of a corrupt reading
+        frame_corrupt = False
         if self._sensor_qc_enabled:
             qc_now = time.time()
+            # Frame-level co-rejection pre-pass (DEC-0054): a bounds failure
+            # is positive proof the frame is corrupt, and every weather field
+            # rides the same 8-byte frame -- so null them all and move no
+            # baselines. A delta trip never triggers this: a large step can
+            # be genuine weather; an impossible value cannot.
             for qc_key in self._sensor_qc.limits:
-                if data.get(qc_key) is None:
-                    continue
-                qc_value, qc_reason = self._sensor_qc.check(
-                    qc_key, data[qc_key], qc_now)
+                qc_reason = self._sensor_qc.check_bounds(
+                    qc_key, data.get(qc_key))
                 if qc_reason is not None:
+                    frame_corrupt = True
                     logerr("%s: rejecting implausible value %s (%s -- "
                            "RF glitch, not weather; DEC-0029)" %
                            (qc_key, data[qc_key], qc_reason))
-                    data[qc_key] = None            # null-on-rejection, DEC-0006
-                    if qc_key == 'wind_speed':
-                        # the same-packet direction byte is equally suspect
-                        data['wind_dir'] = None
+            if frame_corrupt:
+                nulled = [k for k in FRAME_WEATHER_KEYS
+                          if data.get(k) is not None]
+                for k in nulled:
+                    data[k] = None             # null-on-rejection, DEC-0006
+                logerr("frame failed bounds proof -- co-rejecting same-frame "
+                       "fields: %s (DEC-0054)" % ', '.join(sorted(nulled)))
+            else:
+                for qc_key in self._sensor_qc.limits:
+                    if data.get(qc_key) is None:
+                        continue
+                    qc_value, qc_reason = self._sensor_qc.check(
+                        qc_key, data[qc_key], qc_now)
+                    if qc_reason is not None:
+                        logerr("%s: rejecting implausible value %s (%s -- "
+                               "RF glitch, not weather; DEC-0029)" %
+                               (qc_key, data[qc_key], qc_reason))
+                        data[qc_key] = None    # null-on-rejection, DEC-0006
+                        if qc_key == 'wind_speed':
+                            # the same-packet direction byte is equally suspect
+                            data['wind_dir'] = None
         packet = dict()
         # map sensor observations to database field names
         for k in self.sensor_map:
@@ -1105,19 +1161,30 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 packet[k] = data[self.sensor_map[k]]
         # convert the rain count to a rain delta measure (glitch-filtered, DEC-0021)
         if 'rain_count' in data:
-            prev = self.last_rain_count
-            tips = rain_delta_tips(prev, data['rain_count'])
-            self.last_rain_count = data['rain_count']   # always resync, even on reject
-            if tips is None:
-                logerr("rain: rejecting implausible counter delta last=%s new=%s "
-                       "(RF glitch, not rain -- DEC-0021)" %
-                       (prev, data['rain_count']))
-                packet['rain'] = None                   # null-on-rejection, DEC-0006
+            if frame_corrupt:
+                # DEC-0054: the counter byte shares the proven-corrupt frame.
+                # Do NOT resync last_rain_count to it -- the counter is
+                # cumulative, so genuine tips still land in the next clean
+                # frame's delta; resyncing to garbage would swallow or
+                # invent them.
+                logerr("rain: skipping counter from co-rejected frame "
+                       "last=%s new=%s (DEC-0054)" %
+                       (self.last_rain_count, data['rain_count']))
+                packet['rain'] = None               # null-on-rejection, DEC-0006
             else:
-                packet['rain'] = float(tips) * self.rain_per_tip
-            if DEBUG_RAIN:
-                logdbg("rain=%s tips=%s last=%s new=%s" %
-                       (packet.get('rain'), tips, prev, data['rain_count']))
+                prev = self.last_rain_count
+                tips = rain_delta_tips(prev, data['rain_count'])
+                self.last_rain_count = data['rain_count']   # always resync, even on reject
+                if tips is None:
+                    logerr("rain: rejecting implausible counter delta last=%s new=%s "
+                           "(RF glitch, not rain -- DEC-0021)" %
+                           (prev, data['rain_count']))
+                    packet['rain'] = None               # null-on-rejection, DEC-0006
+                else:
+                    packet['rain'] = float(tips) * self.rain_per_tip
+                if DEBUG_RAIN:
+                    logdbg("rain=%s tips=%s last=%s new=%s" %
+                           (packet.get('rain'), tips, prev, data['rain_count']))
         packet['dateTime'] = int(time.time() + 0.5)
         packet['usUnits'] = weewx.METRICWX
         return packet
