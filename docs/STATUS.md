@@ -16,21 +16,21 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **▶ S56 third act (DEC-0059): the DEC-0048 RX experiment now has an apparatus** —
-> `ops/rx_experiment.sh` + 8 tests, design accepted, **NOT deployed** (prod untouched, still
-> v2.0.11 / gain 372). Key finding: **`-ex N` ≡ `receiveWindow 300+N`**, so no arm needs an image
-> rebuild. Baseline re-measured at **73.3% (sd 4.67)**, not the stale "~67–70%". 7 dead sweep
-> scripts deleted. **Next: Phase 0** (`debug_rtld=2`, a few hours, is `FreqError` telemetry there
-> at all?) → then owner-run deploy. See CHANGELOG `[S56c]`.
->
-> **Current session: S56** (2026-07-28), three acts, nothing deployed. Confirmed prod
-> healthy on v2.0.11 (co-rejecting watch 0 hits, positive-controlled) and ops#105 closed; found
-> ops#110 newly opened (winter 2027 planning). **ROADMAP.md reconciled** (5 stale-done items
-> corrected) then **fully restructured** — P1 + P1.5 folded into one arc covering v2.0.3–v2.0.11,
-> a "Keeping this current" tripwire added (next check due **by S66**). **DEC-0057**: ROADMAP
-> updates join the closeout ritual as step 5. **Second act:** verified `STATION_NAME` already set
-> (BACKLOG note was stale); **DEC-0058** trimmed ROADMAP.md to P0–P3, moving P4 + long-term
-> direction into a new BACKLOG.md section. See CHANGELOG `[S56]`/`[S56b]`.
+> **Current session: S56** (2026-07-28), three acts, **nothing deployed — prod untouched
+> throughout** (v2.0.11, gain 372, LNA in circuit). Confirmed prod healthy (co-rejecting watch
+> 0 hits, positive-controlled), ops#105 closed, ops#110 newly opened (winter 2027 planning).
+> **Act 1 (DEC-0057):** ROADMAP.md reconciled — 5 stale-done items — then restructured; P1 + P1.5
+> folded into one arc covering v2.0.3–v2.0.11; "Keeping this current" tripwire added (next check
+> due **by S66**); ROADMAP updates join the closeout ritual as step 5.
+> **Act 2 (DEC-0058):** `STATION_NAME` verified already set (BACKLOG note was stale); ROADMAP
+> trimmed to P0–P3, P4 + long-term direction moved to BACKLOG.md.
+> **Act 3 (DEC-0059):** the DEC-0048 RX experiment finally has an apparatus —
+> `ops/rx_experiment.sh` + 8 tests, design accepted, **not deployed**. Key finding: **`-ex N` ≡
+> `receiveWindow 300+N`**, so no arm needs an image rebuild and the `rw*` images were redundant,
+> not just misnamed. Baseline re-measured at **73.3% (sd 4.67)** with zero autocorrelation and no
+> diurnal cycle — the stale "~67–70%" is retired, and DEC-0017's assumed "1–2 weeks" was ~7×
+> overkill. 7 dead pre-governance sweep scripts deleted (two would have reported 0.0% for every
+> arm). See CHANGELOG `[S56]`/`[S56b]`/`[S56c]`.
 
 _Last updated: 2026-07-28 (S56)._
 
@@ -38,11 +38,16 @@ _Last updated: 2026-07-28 (S56)._
 
 ## Active thread
 
-> **▶ Resume here (S56 → S57). Docs-only session — nothing deployed, prod still v2.0.11
-> (`0.20+ws.3`); still watch-and-discuss.** Re-verified prod health and the co-rejecting watch;
-> reconciled and restructured ROADMAP.md (DEC-0057); split it to P0–P3 with long-term direction
-> moved to BACKLOG.md (DEC-0058); verified `STATION_NAME` already set. CHANGELOG `[S56]`/`[S56b]`
-> has the record.
+> **▶ Resume here (S56 → S57). THREE ITEMS, in order: (1) Phase 0 — `debug_rtld=2` a few hours,
+> does `FreqError` telemetry exist? revert straight after. (2) Deploy `ops/rx_experiment.sh` —
+> scp + two owner-run DSM scheduler entries (`tick`, `guard`, 5 min, root). (3) Regenerate the
+> schedule if the start slipped past 2026-07-29 — the Latin-square test does NOT catch stale
+> dates.** Full detail in "Next session actions" below; design in **DEC-0059**.
+>
+> Prod is untouched — still v2.0.11 (`0.20+ws.3`), gain 372, LNA in circuit. S56 was three acts,
+> nothing deployed: ROADMAP reconciled + restructured (DEC-0057), split to P0–P3 (DEC-0058), and
+> the RX experiment apparatus built and merged (DEC-0059). CHANGELOG `[S56]`–`[S56c]` has the
+> record. Everything below is standing watch state.
 > **(a) DEC-0056 is LIVE end-to-end** — cap 16 in the running driver, tripwire email verified
 > (`--test-alert` received), WeatherLink playbook + revisit trigger in the DEC. R3 delivered
 > dashboard-side (their S151, DEC-0167); R4/R5 noted-not-built.
@@ -220,19 +225,48 @@ _Last updated: 2026-07-28 (S56)._
   NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S55 done → S56)
+## Next session actions (S56 done → S57)
 
 **This section is the repo-visible handoff.** Read it first when resuming. Session recaps live in
 "Shipped" above and CHANGELOG — not duplicated here.
 
-**▶ ON RETURN (S56), in order:**
+### ▶ THE THREE S57 ITEMS — the RX experiment, in this order
+
+Everything below this block is standing watch state. **These three are the actual work**, and they
+are strictly sequential: 1 gates 2, and 2 gates the campaign. Full design in **DEC-0059**; the
+apparatus is `ops/rx_experiment.sh` (+ `tests/test_rx_experiment.py`), merged S56c but **not
+deployed** — prod is untouched, still v2.0.11 / gain 372 / LNA in circuit.
+
+1. **Phase 0 — does `FreqError` telemetry exist at all?** Set `debug_rtld = 2` in the live
+   `weewx.conf`, run a few hours, then **revert it immediately** (log volume — this is the
+   `weewx.log` bloat path, DEC-0041). Re-checked at S56 on the current level `1`: **zero hits**,
+   positive-controlled. If the telemetry is there, `ppm`/`fc` get set by *measurement*, not swept;
+   if it isn't, that axis is dropped. **This runs first on purpose** — correcting a systematic
+   frequency offset would move the operating point under the factorial and invalidate it.
+
+2. **Deploy the apparatus.** `scp` `ops/rx_experiment.sh` from the merged `dev` tip (repo is source
+   of truth — sha-verify, per the monitor-deploy pattern), then **owner-run**: two DSM scheduler
+   entries, `tick` and `guard`, every 5 min, as root. Both the scp and the task creation are Class C
+   / owner actions. Run `install` once first — it snapshots the baseline `weewx.conf` and arms
+   nothing.
+
+3. **Regenerate the schedule if the start slipped past 2026-07-29.** The table has hardcoded dates.
+   **The Latin-square test will NOT catch a stale start date** — it only proves the balance is
+   intact, not that the dates are live. Check by eye: `ops/rx_experiment.sh schedule`.
+
+Then campaign A (LNA in circuit) runs itself for 8 days and emails on completion or abort.
+**Campaign B** (LNA physically removed, gain arms centered higher ~{372, 496}) gets its own schedule
+written after A reports — do not reuse A's arms, the optimum moves up once ~20 dB of front-end gain
+is gone.
+
+### Standing watches (unchanged from S56 — none of these block the three above)
 
 1. **Watches (all read-only, nasctl):** (a) grep `weewx.log*` for `co-rejecting` (single-word
-   pattern — multi-word patterns silently match nothing; positive-control any zero). 0 hits through
-   09:00 07-28. Each hit is a frame v2.0.8 would have partially trusted; an rxCheckPercent dip
-   corroborates but is NOT required. (b) **#74 calm-windDir WARNINGs** — last one 21:59 07-27,
-   zero in the ~11.5 h after at a prior ~1/hr base rate; one clean full-day check closes it.
-   (c) Run `ops/soak_check.sh` (S55 post-deploy: 13/2/0; `EXPECT_IMAGE` tracks `:v2.0.10`).
+   pattern — multi-word patterns silently match nothing; positive-control any zero). **0 hits
+   through 11:48 07-28** (re-verified S56). Each hit is a frame v2.0.8 would have partially trusted;
+   an rxCheckPercent dip corroborates but is NOT required. (b) **#74 calm-windDir WARNINGs** — last
+   one 21:59 07-27, zero since at a prior ~1/hr base rate; one clean full-day check closes it.
+   (c) Run `ops/soak_check.sh` (`EXPECT_IMAGE` tracks `:v2.0.11`).
    (d) Dependabot may open a deps PR — review, don't auto-merge (#78 mechanism).
 
 2. **Humidity-spike watch — still unfired through 08:52 07-28** (largest step 0.7 pts in the last
