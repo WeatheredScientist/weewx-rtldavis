@@ -1,0 +1,15 @@
+# Python deps baked into the image venv (Dockerfile "Install weewx" stage).
+#
+# weewx is PINNED (issue #78): the v2.0.9 rebuild silently moved prod from
+# 5.3.1 to 5.4.0 because the old `pip install weewx` took whatever PyPI had
+# that day — the same silent-drift class as the S46 unpinned-ruff CI break.
+# An engine bump is a deliberate, changelog-read decision: Dependabot
+# (.github/dependabot.yml) opens a PR when a new weewx version exists, and
+# that PR — reviewed, then released via a normal version bump — is the ONLY
+# sanctioned way this number changes.
+weewx==5.4.0
+
+# requests: deliberately unpinned (weewx's own dependency solver constrains
+# it; it has never drifted in a way that mattered here). Revisit if it ever
+# does.
+requests
