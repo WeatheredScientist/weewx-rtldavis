@@ -3,7 +3,7 @@
 An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](https://weewx.com/) plus a **patched** version of Luc Heijst's [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver. It intercepts a Davis Vantage station off the air with an RTL-SDR USB dongle and uploads to multiple weather services — no proprietary Davis hardware required.
 
 > **This is not stock upstream.** The driver shipped here is a fork of rtldavis v0.20 and reports
-> itself as `0.20+ws.1`. It carries a rain-counter glitch filter, a decode-layer sensor plausibility
+> itself as `0.20+ws.2`. It carries a rain-counter glitch filter, a decode-layer sensor plausibility
 > filter, and five bug fixes that do not exist upstream — see
 > **[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)** for every divergence, why it is there, and
 > whether it is headed upstream.
