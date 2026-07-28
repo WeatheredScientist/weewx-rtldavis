@@ -13,12 +13,21 @@ An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](htt
 
 📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
 ```bash
-docker pull weatheredscientist/weewx-rtldavis:v2.0.8   # or :latest
+docker pull weatheredscientist/weewx-rtldavis:v2.0.9   # or :latest
 ```
-Pin a version tag (`:v2.0.8`) for reproducible deploys; `:latest` always tracks the newest release.
+Pin a version tag (`:v2.0.9`) for reproducible deploys; `:latest` always tracks the newest release.
 
-> **Current version:** v2.0.8 — **upgrade if you are on any earlier tag.**
-> **New in v2.0.8:** the driver no longer publishes frequency-hop telemetry as its own dataless LOOP
+> **Current version:** v2.0.9 — **upgrade if you are on any earlier tag.**
+> **New in v2.0.9:** frame-level co-rejection in the decode-layer sensor filter. Davis frames carry
+> wind in every packet plus one rotating sensor payload, and a corrupt frame can pass CRC (multi-bit
+> errors). Previously each field was checked independently, so a frame whose humidity decoded to an
+> impossible 144.9% could still contribute a phantom 39 mph wind gust from its wind bytes — which is
+> exactly what happened on 2026-07-27 (published to every connected network before detection). Now a
+> provably-impossible value in ANY field of a frame rejects the whole frame's weather fields, and the
+> rain counter is not resynced to it. Zero new tunables. Also quiets a spurious once-per-calm-stretch
+> log warning in the loop-JSON writer (issue #74).
+>
+> **From v2.0.8:** the driver no longer publishes frequency-hop telemetry as its own dataless LOOP
 > packet — it now rides in on the next real sensor reading instead, which removes a ~1.6x overcount in
 > published/reception metrics for every uploader (Wunderground RapidFire etc.). Also adds a permanent
 > duplicate-frame counter (one INFO log line per archive period) so how often the SDR demodulator

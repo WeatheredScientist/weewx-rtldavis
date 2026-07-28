@@ -230,3 +230,49 @@ downstream of the shared RF broadcast, which a console decoding its own copy cou
 **Does not bear on [DEC-0042](DECISIONS.md)** (the phantom *rainRate*), which is a separate class:
 33 `rainRate_qc` points carrying `rain = 0.0` throughout, contributing 0″ to any total. See DEC-0042's
 "Challenged and upheld (S48)" note — the two flags are independent by design (INTERFACES §2).
+
+---
+
+## ERR-0004 — 2026-07-27 phantom 39 mph wind gust (calm afternoon)
+
+| Field | Value |
+|---|---|
+| **Observed (bad)** | `windGust = 39 mph` (windGustDir 209°) in the single archive record at **2026-07-27 18:56:00 UTC** (14:56 EDT, epoch `1785178560`); `windSpeed = 2.87 mph` (the interval mean, contaminated by the same ~1 sample at 39). New all-time max on record at the time (prior real peak: 24.0 mph, 2026-07-04). |
+| **Corrected** | `windSpeed`, `windDir`, `windGust`, `windGustDir` → **NULL**, plus the derived `ET`, `appTemp`, `windrun` (DEC-0037). NULL, not a substituted value: calm brackets don't *prove* a max/mean the way zero brackets prove rain (DEC-0032 — never fabricate). The true gust that minute was ~2–3 mph, but that is inference. |
+| **Actual weather** | Dead calm. Every surrounding minute 18:30–19:30Z: gust 0–5 mph, mean ≤ 2.9 mph. KMQS (~12 mi reference): 6 kt, no gusts flagged anywhere 17:15–21:15Z. A 39 mph sheltered gust implies ≈105 mph in the open per the dashboard's DEC-0095 shelter factor — nothing remotely near it occurred. |
+| **Root cause** | The DEC-0033 failure class, caught red-handed at frame level: during an `rxCheckPercent` collapse to **13.2%**, one multi-bit-corrupt-but-CRC-valid frame carried `humidity_raw 2b32 → 59a9` (56.2% → 144.9 %RH, **rejected by SensorQC bounds**) *and* the wind byte that decoded to 39 mph. Same 8-byte frame: the humidity rejection was positive proof of corruption, and the wind field of that proven-corrupt frame was still trusted. The frame was also the last decode before a ~3.7-min outage (14:55:51–14:59:34). |
+| **Why the filter didn't catch it** | SensorQC checked fields independently. 39 mph = 17.4 m/s is inside the 6410's 0–200 mph spec (bounds pass), and +16.5 m/s from a calm baseline is under the 20 m/s delta cap that was calibrated against high-bit flips (the 201 mph class). Mid-magnitude corruption threads that needle — and a genuine 25–35 mph first squall gust from calm is routine, so tightening the cap can't close the gap. **Fixed properly in v2.0.9: frame-level co-rejection (DEC-0054)** — a bounds failure now nulls every weather field of its frame. A verbatim replay of this frame is in the test suite. |
+
+**Provenance:** found by the owner on the public dashboard hours after publication (like ERR-0001's
+rainRate pass — the consumer surface is where these get seen). Externally diagnosed in parallel by
+dashboard S149 ([weewx-rtldavis#76](https://github.com/WeatheredScientist/weewx-rtldavis/issues/76),
+InfluxDB + KMQS evidence) and an eaglehunt-ops intermediary session (ops#103, log forensics + code-level
+cause). Independently re-verified in weewx S52 against `weewx.log` and the driver source before any
+correction: every load-bearing claim held.
+
+**Propagation & correction status:**
+
+- **local-archive:** ✅ **applied 2026-07-27 (S52)** — guarded
+  `UPDATE archive SET windSpeed=NULL, windDir=NULL, windGust=NULL, windGustDir=NULL, ET=NULL WHERE
+  dateTime=1785178560 AND windGust>38` (rows_changed=1), follow-up `appTemp=NULL, windrun=NULL`
+  (the archive is the **wview-extended** schema — the derived fields live in the row, DEC-0037),
+  then `weectl database rebuild-daily --date=2026-07-27` (local date). Verified: row reads all-NULL;
+  day-max gust now **12 mph** (22:55Z, genuine). Backup: `weewx.sdb.bak-err0004-20260727`.
+- **influxdb:** ✅ **applied 2026-07-27 (S52)** — point at `record,binding=archive` 18:56:00Z deleted
+  (fields can't be deleted individually) and rewritten minus `windGust_mph`, `windGustDir`,
+  `windSpeed_mph`, `windDir`, `appTemp_F`, `ET_in`, `windrun_mile`, with sparse **`windGust_qc = 1`**
+  and **`windSpeed_qc = 1`** flags (the DEC-0032/DEC-0099 contract). `windchill_F` kept — at 84.8 °F
+  it is wind-independent (weewx returns temperature above 50 °F). Verified via the public `/query`
+  proxy: 24 fields, both flags present, `max(windGust_mph)` for the local day = 12.
+- **external:** ⛔ immutable — published 14:59:34 EDT to **all ten sinks**: Wunderground (PWS *and*
+  the 14:55:51 RapidFire packet at the corrupt frame's own timestamp), InfluxDB (now corrected),
+  PWSWeather, OWM, CWOP → NOAA MADIS, AWEKAS, Windy, WOW, WOW-BE, Ogoxe. **Unlike precipitation,
+  MADIS does buddy-check wind** (temperature/dew point/pressure/wind get the consistency checks), so
+  CWOP's copy stands a real chance of being auto-flagged downstream — the first errata event where
+  the external network may partially self-correct. The WU/RapidFire and other copies stand.
+
+**Lesson:** the phantom's magnitude sat in the blind spot *between* the bounds check and the delta
+cap — and the proof that would have caught it was already computed, in the same function, for a
+different field of the same frame. Evidence available at the choke point must be applied to the whole
+frame, not per-field (DEC-0054). Also: 14:57–14:59 have no archive rows (the decode outage) — an
+honest 3-minute gap, no backfill warranted.

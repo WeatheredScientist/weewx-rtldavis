@@ -1994,3 +1994,58 @@ that makes it valid.* Units already travel in key names; staleness now travels a
 still does not, and that is recorded rather than assumed away. Corollary, from Finding 1's history:
 **when a data-integrity lesson is fixed in one artifact, check its siblings in the same commit** —
 DEC-0022 fixed the archive path and left the real-time path carrying the identical bug for 15 sessions.
+
+## DEC-0054 — Frame-level co-rejection: a bounds failure condemns the whole frame
+
+**Status:** Accepted · **Date:** 2026-07-27 (S52) · **Extends:** DEC-0029 · **Bounded by:** DEC-0044
+(this is NOT the parked coupling filter) · **Motivated by:** ERR-0004 / issue #76 / ops#103
+
+**Context — the event the old filter was structurally blind to.** 2026-07-27 14:55:50 EDT: during an
+`rxCheckPercent` collapse to 13.2%, one multi-bit-corrupt-but-CRC-valid frame (the DEC-0033 class)
+arrived carrying `humidity_raw = 59a9` → 144.9 %RH *and* a wind byte decoding to 39 mph, from dead
+calm. SensorQC checked each field independently: humidity failed **bounds** (impossible per sensor
+spec) and was rejected; wind — 17.4 m/s, inside the 6410's 0–200 mph spec, +16.5 m/s from a calm
+baseline, *under* the 20 m/s delta cap — sailed through, became the archive interval's gust max, and
+went out to all ten external sinks. The system had **positive proof the frame was corrupt and still
+trusted every other field of that same frame.** Diagnosis credit: dashboard S149 (external evidence,
+issue #76) and an eaglehunt-ops intermediary session (log forensics, ops#103); both independently
+re-verified here against `weewx.log` and the driver source before this was designed.
+
+**Why not just tighten the wind delta cap.** The 20 m/s cap was calibrated against high-bit flips
+(the 201 mph spike: +128/+64 mph). This event sits in the mid-magnitude gap (+~36 mph territory) —
+and so does a *genuine* first gust of a squall from calm (25–35 mph is meteorologically routine).
+Field-level thresholds cannot separate those two; frame-level evidence can.
+
+**Decision.** In `_data_to_packet`, a bounds-only pre-pass runs before per-field QC. If ANY QC-covered
+field in the decoded frame fails its sensor-spec **bounds** check:
+
+1. Every weather-observation field the frame carries (`FRAME_WEATHER_KEYS`: wind triple + direction,
+   the message-type payload — temperature/humidity/UV/radiation/rain-rate, extra temp/humid channels)
+   is nulled (DEC-0006 honest null). One log line names the co-rejected set.
+2. The rain counter, if present, is **skipped without resyncing** `last_rain_count` — the counter is
+   cumulative, so genuine tips still land in the next clean frame's delta; resyncing to a corrupt
+   counter byte would swallow or invent tips.
+3. **No baselines move.** The corrupt frame's in-spec values must not become delta history; the next
+   genuine reading is judged against pre-glitch state and accepted immediately (tested).
+4. Diagnostics (battery flags, supercap/solar power, freqError, pct_good) survive — they describe the
+   link, not the weather, and nulling them would blind the very telemetry that flags these events.
+
+**The asymmetry is the design.** Only a *bounds* failure triggers co-rejection — positive proof, a
+value the sensor cannot emit. A *delta* trip never does: it may be genuine weather, and the existing
+per-field resync handles it at a documented cost of 1–2 readings. This keeps the false-positive cost
+of co-rejection at (probability a frame contains an impossible value) × (2–3 sibling fields nulled
+for one reading) — negligible against serving a phantom to ten immutable external networks.
+
+**Why this is not DEC-0044's coupling filter.** DEC-0044 parked a *cross-sensor delta-correlation*
+filter whose fitted thresholds failed re-derivation on our own data — "instrument, don't filter."
+Co-rejection has **zero free parameters**: it fires only on the bounds proof DEC-0029 already
+computes, within one frame, at one choke point. Nothing is fitted, so nothing can drift.
+
+**Precedent, generalized.** The driver already co-rejected `wind_dir` when `wind_speed` failed ("the
+same-packet direction byte is equally suspect") — a two-field special case of exactly this rule. And
+the old test suite *asserted the gap*: `test_packet_gets_explicit_null_and_wind_dir_nulled` required
+same-frame humidity to SURVIVE a wind bounds failure. That assertion is now inverted — the S40 lesson
+(a passing test is not evidence if the assertion is wrong) applied in the other direction.
+
+**Ships in v2.0.9** (driver is baked, DEC-0031 — image rebuild, deliberate release). Guarded by 6 new
+tests including a verbatim replay of the 2026-07-27 frame.

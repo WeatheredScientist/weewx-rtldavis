@@ -62,7 +62,7 @@ _weeutil.weeutil, _weeutil.logger = _wu, _wlog
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rtldavis import (  # noqa: E402
-    SensorQC, QC_RESEED_SECONDS, RtldavisDriver)
+    SensorQC, QC_RESEED_SECONDS, RtldavisDriver, FRAME_WEATHER_KEYS)
 
 T0 = 1_000_000.0  # arbitrary epoch for the fake clock
 
@@ -176,12 +176,19 @@ def _bare_driver(enabled=True):
     return drv
 
 def test_packet_gets_explicit_null_and_wind_dir_nulled():
+    # AMENDED for DEC-0054: this test used to assert the same-frame humidity
+    # SURVIVES a wind bounds failure (pkt['outHumidity'] == 55.0). That
+    # assertion encoded exactly the gap ERR-0004 exposed from the other
+    # direction -- a bounds failure proves the whole frame corrupt, so the
+    # sibling must now be nulled too (the S40 lesson: a passing test is not
+    # evidence if the assertion is wrong).
     drv = _bare_driver()
     pkt = drv._data_to_packet({'wind_speed': 201 * 0.44704, 'wind_dir': 180.0,
                                'humidity': 55.0})
     assert pkt['windSpeed'] is None, "rejected windSpeed must be an explicit null"
     assert pkt['windDir'] is None, "same-packet direction byte is suspect too"
-    assert pkt['outHumidity'] == 55.0
+    assert pkt['outHumidity'] is None, \
+        "bounds proof on wind co-rejects same-frame humidity (DEC-0054)"
 
 def test_filter_can_be_disabled():
     drv = _bare_driver(enabled=False)
@@ -196,6 +203,82 @@ def test_good_packet_unchanged():
     assert (pkt['outTemp'], pkt['outHumidity'], pkt['windSpeed'],
             pkt['windDir'], pkt['radiation'], pkt['UV']) == (
         21.5, 48.0, 3.2, 270.0, 850.0, 6.1)
+
+
+# --- Frame-level co-rejection (DEC-0054, the ERR-0004 phantom-gust class) ---
+
+MPH_TO_MPS = 0.44704
+
+
+def test_err0004_replay_corrupt_humidity_co_rejects_wind():
+    # The 2026-07-27 14:55:50 EDT frame verbatim: humidity_raw 59a9 decoded
+    # to 144.9 %RH (bounds reject) while the same frame's wind byte decoded
+    # to 39 mph from a calm baseline -- under the old per-field filter the
+    # wind passed (17.4 m/s is in spec, +16.5 m/s is under the 20 m/s delta
+    # cap) and became the interval's gust max on every external network.
+    drv = _bare_driver()
+    # establish a calm baseline, as prod had (~1-3 mph readings)
+    drv._data_to_packet({'wind_speed': 0.9 * MPH_TO_MPS, 'wind_dir': 210.0})
+    pkt = drv._data_to_packet({'humidity': 144.9,
+                               'wind_speed': 39 * MPH_TO_MPS,
+                               'wind_dir': 209.0})
+    assert pkt['outHumidity'] is None
+    assert pkt['windSpeed'] is None, "the phantom gust must not survive"
+    assert pkt['windDir'] is None
+
+def test_delta_trip_does_not_co_reject():
+    # a delta trip is not corruption proof -- a genuine squall front from
+    # calm can exceed the cap; only the tripped field (and its direction
+    # pair) is nulled, the same-frame payload flows
+    drv = _bare_driver()
+    drv._data_to_packet({'wind_speed': 0.5, 'wind_dir': 180.0,
+                         'humidity': 55.0})
+    pkt = drv._data_to_packet({'wind_speed': 25.0, 'wind_dir': 190.0,
+                               'humidity': 55.5})
+    assert pkt['windSpeed'] is None, "delta trip still nulls the field itself"
+    assert pkt['outHumidity'] == 55.5, \
+        "a delta trip must NOT co-reject the frame (DEC-0054 asymmetry)"
+
+def test_corrupt_frame_does_not_poison_baselines():
+    # the corrupt frame's in-spec wind (17.4 m/s) must not become the delta
+    # baseline: the next genuine calm reading is judged against pre-glitch
+    # history and accepted immediately, with zero extra nulled readings
+    drv = _bare_driver()
+    drv._data_to_packet({'wind_speed': 1.0, 'wind_dir': 200.0})
+    drv._data_to_packet({'humidity': 144.9, 'wind_speed': 17.4,
+                         'wind_dir': 209.0})                 # corrupt frame
+    pkt = drv._data_to_packet({'wind_speed': 1.2, 'wind_dir': 205.0})
+    assert pkt['windSpeed'] == 1.2, \
+        "post-glitch calm must be accepted against the pre-glitch baseline"
+
+def test_corrupt_frame_skips_rain_counter_without_resync():
+    # the counter is cumulative: skipping the corrupt frame entirely means
+    # genuine tips still land in the next clean frame's delta
+    drv = _bare_driver()
+    p0 = drv._data_to_packet({'rain_count': 10})     # cold start: 0 tips
+    assert p0['rain'] == 0.0 and drv.last_rain_count == 10
+    p1 = drv._data_to_packet({'humidity': 144.9, 'rain_count': 77})
+    assert p1['rain'] is None, "corrupt frame's counter must not count"
+    assert drv.last_rain_count == 10, \
+        "baseline must NOT resync to the corrupt frame's counter byte"
+    p2 = drv._data_to_packet({'rain_count': 12})     # 2 genuine tips survive
+    assert p2['rain'] == 2 * drv.rain_per_tip
+
+def test_co_rejection_nulls_only_weather_fields():
+    # diagnostics describe the link/station, not the weather: battery flag
+    # and reception stats must survive a co-rejected frame
+    drv = _bare_driver()
+    pkt = drv._data_to_packet({'uv': 16.29, 'wind_speed': 2.0,
+                               'wind_dir': 90.0, 'bat_iss': 0,
+                               'pct_good_all': 67.0})
+    assert pkt['UV'] is None and pkt['windSpeed'] is None
+    assert pkt['txBatteryStatus'] == 0
+    assert pkt['rxCheckPercent'] == 67.0
+
+def test_frame_weather_keys_cover_all_qc_keys():
+    # every QC-bounded field must be in the co-rejection set, or a corrupt
+    # frame could null its siblings while a later-added field escapes
+    assert set(SensorQC().limits) <= set(FRAME_WEATHER_KEYS)
 
 
 if __name__ == "__main__":
