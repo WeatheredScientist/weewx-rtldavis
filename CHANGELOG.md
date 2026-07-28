@@ -6,6 +6,35 @@ under [Pre-S16].
 
 ---
 
+## [S54] — 2026-07-28 — R1 landed: outside-temperature decode is now signed two's complement (DEC-0055); not yet released
+
+Owner approved **R1** from the S53 ops#105 audit; **R2** (`MAX_PLAUSIBLE_TIPS` 60 → 16) held for
+further discussion and is untouched.
+
+- **`rtldavis.py`** — the 12-bit digital temperature field is decoded as **two's complement**
+  (`(temp_raw - 0x1000) / 10.0` when bit 11 is set), and `0xFF8` joins `0xFFC` as a no-sensor
+  sentinel. Unsigned, a −5 °F reading decoded to 404.6 °F (207 °C), tripped the −40…65 °C SensorQC
+  bounds, and — since v2.0.9 — **co-rejected the entire frame** (DEC-0054), so an ordinary cold
+  snap would have nulled wind + payload every ~30–60 s and saturated the corruption alarm we are
+  currently watching. Analog/thermistor branch untouched.
+- **Deliberate one-LSB deviation from weewx-meteostick** (DEC-0055): its
+  `-(temp_raw ^ 0xFFF)` is *one's* complement — 0.1 °F warm on every negative, maps `0xFFF` and
+  `0x000` both to 0.0 °F, and flips the truncation bias at zero. Its two real contributions (the
+  field is signed; the `0xFF8` sentinel) are adopted.
+- **`tests/test_temp_twos_complement.py`** — 10 new tests: −40 °F frame, the `0xFFF` case that
+  distinguishes this from meteostick, both sentinels, a DEC-0054 **co-rejection non-fire** sweep
+  (−0.1…−39.9 °F), plus two positive controls (frame-builder round-trip; proof the bounds gate
+  really fires on the old unsigned decode). All three plausible regressions **mutation-tested red**.
+  Also fixed a real cross-module test-isolation trap: these suites share `sys.modules` and replace
+  `weewx.wxformulas` wholesale, so the stub is now additive and resolved through `rtldavis.weewx`
+  (the object the driver actually dereferences) rather than `sys.modules['weewx']`.
+- Gates: pytest **111 passed**, `ruff check` clean (0.5.7, DEC-0027), `mypy --ignore-missing-imports
+  --no-strict-optional .` clean on 33 files.
+- **Not released.** The driver is baked (DEC-0031) → needs an image rebuild + deliberate release,
+  deadline **before first frost**. A companion upstream PR belongs alongside lheijst#22.
+
+---
+
 ## [S53] — 2026-07-27/28 — ops#105 cross-observable QC audit delivered; archive swept CLEAN; temp sign bug found (no code)
 
 The owner-directed audit ([ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105),

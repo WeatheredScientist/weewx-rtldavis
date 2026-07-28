@@ -15,27 +15,30 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S53** (2026-07-27/28). Audit session — the
-> [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105) cross-observable QC
-> audit, delivered as an issue comment (per-observable verdict table, historical sweep = archive
-> CLEAN, consumer inventory, recommendations R1–R5). Headline finding: the temp decode is
-> **unsigned** where Davis uses two's complement — the first sub-0 °F morning would bounds-trip
-> every temp frame and v2.0.9's co-rejection would null whole frames all cold snap (R1, fix before
-> winter). No code changed; no new ERR entries. See CHANGELOG `[S53]`.
+> **Current session: S54** (2026-07-28). **R1 landed in code (DEC-0055)** — the outside-temperature
+> decode is now true two's complement, plus the `0xFF8` sentinel; 10 new tests, all three plausible
+> regressions mutation-tested red; pytest 111 / ruff / mypy green. **Not released** — the driver is
+> baked (DEC-0031), so this needs an image rebuild before first frost. **R2 (`MAX_PLAUSIBLE_TIPS`
+> 60 → 16) was NOT taken up** — the owner wants more discussion first; the constant is untouched.
+> See CHANGELOG `[S54]` and DEC-0055.
 
-_Last updated: 2026-07-27 (S53)._
+_Last updated: 2026-07-28 (S54)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S53 → S54). ops#105 audit is DELIVERED — next step is the owner's design call
-> on R1/R2 (see the [audit comment](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105#issuecomment-5099627052)).**
-> R1 = temp two's-complement + 0xFF8 sentinel fix (**seasonal deadline: before first frost** — an
-> unsigned decode turns real sub-0 °F weather into bounds trips, and DEC-0054 then co-rejects whole
-> frames); R2 = `MAX_PLAUSIBLE_TIPS` 60 → 16 (closes the ≤0.30 in phantom-rain residual to
-> ≤0.16 in). Both need design agreement before code (PRINCIPLES §8). R3 (wind spike guard) rides
-> the dashboard side of the ops#105 thread.
+> **▶ Resume here (S54 → S55). R1 is CODED but NOT RELEASED — the release is the open item.**
+> DEC-0055 shipped the signed temp decode + `0xFF8` sentinel into `rtldavis.py` on `dev`. Because the
+> driver is **baked** (DEC-0031), prod still runs the unsigned decode: **an image rebuild + release is
+> required before first frost**, or the bug is live all winter. Two follow-ons ride with it:
+> (a) a companion **upstream PR** alongside lheijst#22 — the sign bug and the missing `0xFF8`
+> sentinel are both inherited from upstream; (b) report R1's completion back on
+> [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105).
+> **R2 is still OPEN and deliberately untouched** — the owner wants to discuss `MAX_PLAUSIBLE_TIPS`
+> 60 → 16 (closes the ≤0.30 in phantom-rain residual to ≤0.16 in) before any code. Do not implement
+> it unprompted. R3 (wind spike guard) rides the dashboard side of the ops#105 thread; R4 (radiation
+> night ceiling) and R5 (extra-station zero-QC docs note) are noted-not-built.
 > S53 watch results: co-rejection **0 hits** in the deploy's first hour (expected-rare); #74
 > calm-windDir WARNINGs confirmed present right up to the 22:18 recreate and absent after, but the
 > post-deploy window was <1 day — **re-verify over a full day**. Humidity watch through
@@ -236,22 +239,25 @@ _Last updated: 2026-07-27 (S53)._
   NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S53 done → S54)
+## Next session actions (S54 done → S55)
 
-**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S53
+**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S54
 now live only in "Shipped" above and CHANGELOG — not duplicated here.
 
-**▶ ON RETURN (S54), in order:**
+**▶ ON RETURN (S55), in order:**
 
-0. **Check [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105) for the owner's
-   design call on the S53 audit's R1/R2** (the
-   [audit comment](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105#issuecomment-5099627052)
-   is the deliverable — per-observable verdicts, sweep = clean, consumer inventory, R1–R5). If
-   agreed: **R1** = temp two's-complement + `0xFF8` sentinel decode fix (adopt the
-   weewx-meteostick handling; tests incl. a sub-0 °F frame + a co-rejection non-fire assertion;
-   companion upstream PR alongside lheijst#22) — **before first frost**; **R2** =
-   `MAX_PLAUSIBLE_TIPS` 60 → 16 in `rtldavis.py`. Both are driver changes → image rebuild
-   (DEC-0031) → release. Do not start either without the design agreement (PRINCIPLES §8).
+0. **Release the R1 fix (DEC-0055) — this is the only item with a hard deadline.** The code is on
+   `dev`; prod runs the **unsigned** decode until an image is rebuilt (DEC-0031: the driver is baked,
+   an `scp` is a silent no-op). **Deadline: before first frost.** Same window: the companion
+   **upstream PR** alongside [lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22) (both the
+   sign bug and the missing `0xFF8` sentinel are inherited upstream), and a note back on
+   [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105) closing out R1.
+   Carry DEC-0046 through the release: verify in the **running system**, not the artifact.
+
+0b. **R2 is awaiting discussion, not implementation.** `MAX_PLAUSIBLE_TIPS` 60 → 16 (residual
+   phantom-rain ceiling 0.30 → 0.16 in) was explicitly held by the owner at S54 for more design
+   discussion. The constant in `rtldavis.py` is **unchanged**. Do not code it unprompted
+   (PRINCIPLES §8).
 
 1. **Continue the v2.0.9 watch (DEC-0054):** grep `weewx.log*` for `co-rejecting` (single-word
    pattern via nasctl — multi-word patterns silently match nothing) — 0 hits in the first hour
