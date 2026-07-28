@@ -102,10 +102,15 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
      doc move rehomes.
   4. **Decision-log row** — if a design call was made this session, full body in
      `DECISIONS-FULL.md` + index row in `DECISIONS.md`, same session, not deferred.
-  5. **Model-tier restore check** *(new)* — if a bare `/model` switch happened this session,
+  5. **ROADMAP.md reconciliation** (DEC-0057) — if a DEC logged in step 4 ships, closes, or
+     reprioritizes a line item on `docs/ROADMAP.md`, update that line now, same session, not
+     deferred. `docs/ROADMAP.md` also carries its own tripwire (a next-check-due session number
+     under "Keeping this current") — if the session counter is at or past it, run the full
+     reconciliation pass regardless of whether a DEC prompted this session.
+  6. **Model-tier restore check** *(new)* — if a bare `/model` switch happened this session,
      confirm the Sonnet floor is restored before ending, or confirm a session-only switch was
      used and there is nothing to restore.
-  6. **Commit + push**, per the branch model — subject to the pause-for-approval rule above
+  7. **Commit + push**, per the branch model — subject to the pause-for-approval rule above
      (Non-negotiable rules).
 - Sessions use **this repo's own independent counter** — a session number means something only within
   this repo (cross-repo refs are prefixed, e.g. `weewx S23` vs `dash S40`). **`docs/STATUS.md` is the
