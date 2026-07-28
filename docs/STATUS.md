@@ -38,11 +38,18 @@ _Last updated: 2026-07-28 (S56)._
 
 ## Active thread
 
-> **▶ Resume here (S56 → S57). THREE ITEMS, in order: (1) Phase 0 — `debug_rtld=2` a few hours,
-> does `FreqError` telemetry exist? revert straight after. (2) Deploy `ops/rx_experiment.sh` —
-> scp + two owner-run DSM scheduler entries (`tick`, `guard`, 5 min, root). (3) Regenerate the
-> schedule if the start slipped past 2026-07-29 — the Latin-square test does NOT catch stale
-> dates.** Full detail in "Next session actions" below; design in **DEC-0059**.
+> **▶ Resume here (S57, in progress). Phase 0 is LIVE: `debug_rtld` set to `2` on the live
+> `weewx.conf` at 2026-07-28 19:11 EDT** (backup: `weewx.conf.bak-debugrtld2-20260728`;
+> container restarted clean, banner `0.20+ws.3` unchanged, `sensor_qc True`, no errors).
+> **Next action: after a few hours, grep `weewx.log` for `FreqError` (single-word pattern) to
+> settle whether the telemetry exists at all, then revert `debug_rtld` to `1` immediately**
+> (log-bloat risk, DEC-0041) and restart the container the same way (`docker kill` + `docker
+> start`). **This is a live prod config change awaiting revert — do not let a session end
+> without either reverting it or updating this line.** After that: (2) Deploy
+> `ops/rx_experiment.sh` — scp + two owner-run DSM scheduler entries (`tick`, `guard`, 5 min,
+> root). (3) Regenerate the schedule if the start slipped past 2026-07-29 — the Latin-square
+> test does NOT catch stale dates.** Full detail in "Next session actions" below; design in
+> **DEC-0059**.
 >
 > Prod is untouched — still v2.0.11 (`0.20+ws.3`), gain 372, LNA in circuit. S56 was three acts,
 > nothing deployed: ROADMAP reconciled + restructured (DEC-0057), split to P0–P3 (DEC-0058), and
