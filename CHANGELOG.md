@@ -39,9 +39,13 @@ claim held. Coordinated in real time on #76 (3 comments: pickup → correction l
   live-verified: driver banner `0.20+ws.1`, `sensor_qc True`, records publishing, `current.json`
   writing (calm windDir correctly omitted), soak 14 PASS / 1 WARN (restart-empty reception window) /
   0 FAIL, no startup stall. Rollback: `:v2.0.8` remains on the NAS and Docker Hub.
-- **Found in passing: the Dockerfile installs weewx UNPINNED** — this rebuild silently moved prod
-  weewx 5.3.1 → 5.4.0 (came up clean, daily summaries fine). Same silent-drift class as S46's
-  unpinned-ruff CI break; filed as an issue to pin it.
+- **Found in passing: the Dockerfile installed weewx UNPINNED** — this rebuild silently moved prod
+  weewx 5.3.1 → 5.4.0 (came up clean, daily summaries fine; 5.4.0's changelog is reporting/tooling
+  only — `weectl rest`, skin fixes — nothing touching the driver API, restx, schema, or QC paths).
+  Same silent-drift class as S46's unpinned-ruff CI break. **Closed same session (#78):**
+  `requirements.txt` pins `weewx==5.4.0` (matching what is verified-live), the Dockerfile installs
+  from it, and `.github/dependabot.yml` turns future weewx releases into review PRs — notification
+  and deliberate bump, never a blind update. No rebuild needed: the pin equals the running version.
 
 ---
 
