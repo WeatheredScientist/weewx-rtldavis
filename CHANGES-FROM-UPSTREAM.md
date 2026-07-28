@@ -1,7 +1,7 @@
 # Changes from upstream
 
 **Status:** Source of truth for what this project changed in code it did not write.
-**Last updated:** 2026-07-12 (S37)
+**Last updated:** 2026-07-28 (S54)
 
 This project is a Docker distribution of a **modified** Davis/rtldavis receiver stack. It is not
 stock upstream, and several of the files it ships are other people's work with our patches on top.
@@ -64,7 +64,8 @@ you see it, the baked driver is the one running).
 ## `rtldavis.py`
 
 Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 2025-12-20
-`re.compile` deprecation patch). Delta: **+263 / −51 lines.**
+`re.compile` deprecation patch). Delta: **+263 / −51 lines** — *counted at S37 and not recounted
+since; DEC-0054 (S52) and DEC-0055 (S54) both landed after it, so treat this figure as a floor.*
 
 ### Bug fixes (these belong upstream)
 
@@ -75,9 +76,11 @@ Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 
 | 3 | **`NameError` on unknown channel** | 2026-07-05 | The unknown-station handler logs `raw`, which is not defined in that scope — so the error path meant to report a bad packet crashes instead. Now logs `pkt`. |
 | 4 | **`rxCheckPercent` was permanently dead** | 2026-07-05 | `pct_good_all` is only computed `if total_max_count > 0 and self.stats['pct_good_all'] is not None`, but `_init_stats()`/`_reset_stats()` set `pct_good_all = None` every archive period — so the guard can never pass and the driver's own reception metric is never populated. Separately, `self.stats['pct_good']` (a list) was compared against `None` instead of `pct_good[i]`, which is always truthy. |
 | 5 | **Per-packet logging at INFO** | 2026-07-05 | `RAW_CHANNEL_PAYLOAD`, `Hop:` and `ChannelIdx:` lines were logged at INFO on every frequency hop, flooding `weewx.log`. Moved behind `debug_rtld` levels. |
+| 10 | **Outside temperature decoded UNSIGNED** — `parse_raw`, message type 8 | 2026-07-28 | Davis encodes the 12-bit digital temperature as **two's complement**; upstream divides the raw value by 10 with no sign handling, so every sub-0 °F reading decodes to ~+400 °F. On this station that trips the SensorQC bounds and (since DEC-0054) co-rejects the whole frame, i.e. real winter reads as RF corruption. Upstream also lacks the second no-sensor sentinel `0xFF8` that the sibling weewx-meteostick driver checks; both are fixed here. We use `temp_raw - 0x1000`, **not** meteostick's `-(temp_raw ^ 0xFFF)` — the latter is one's complement and is 0.1 °F warm on every negative reading. [DEC-0055] |
 
-Numbers 1–4 are real defects in upstream that any US Davis user hits. They are the intended content
-of an upstream contribution (see [Upstreaming](#upstreaming) below).
+Numbers 1–4 and 10 are real defects in upstream that any US Davis user hits — 10 bites any
+cold-climate user of the stock driver. They are the intended content of an upstream contribution
+(see [Upstreaming](#upstreaming) below).
 
 ### Behavior changes (ours; would need discussion upstream)
 
