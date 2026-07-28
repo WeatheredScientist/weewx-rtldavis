@@ -1,7 +1,7 @@
 # Changes from upstream
 
 **Status:** Source of truth for what this project changed in code it did not write.
-**Last updated:** 2026-07-12 (S37)
+**Last updated:** 2026-07-28 (S54)
 
 This project is a Docker distribution of a **modified** Davis/rtldavis receiver stack. It is not
 stock upstream, and several of the files it ships are other people's work with our patches on top.
@@ -16,7 +16,7 @@ It exists for three reasons:
 2. **Honesty.** Until S37 the driver logged `driver version is 0.20` — the stock upstream version —
    while carrying a rain filter, a sensor plausibility filter and five bug fixes that do not exist
    upstream. Anyone debugging from our logs (including us, and including anyone we try to help on an
-   upstream issue) was being misled. It now logs `0.20+ws.1`.
+   upstream issue) was being misled. It now logs `0.20+ws.2`.
 3. **It is the checklist for shrinking the fork.** Every row below is either something to upstream or
    something to justify keeping. A fork with no inventory only grows.
 
@@ -51,7 +51,7 @@ suffix: upstream's base version, `+ws`, our revision.
 
 | File | Upstream version | Ours |
 |------|------------------|------|
-| `rtldavis.py` | `0.20` | `0.20+ws.1` |
+| `rtldavis.py` | `0.20` | `0.20+ws.2` |
 | `influx.py` | `0.20` | `0.20+ws.1` |
 
 The suffix sorts after the base version and is unambiguous about its parent. `rtldavis.py` also logs
@@ -64,7 +64,22 @@ you see it, the baked driver is the one running).
 ## `rtldavis.py`
 
 Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 2025-12-20
-`re.compile` deprecation patch). Delta: **+263 / −51 lines.**
+`re.compile` deprecation patch). Delta: **+477 / −88 lines** (1422 → 1811 lines), recounted
+2026-07-28 (S54).
+
+The baseline is not vendored here — the Dockerfile fetches it at build time — so recount it rather
+than trusting this number:
+
+```sh
+curl -sL -o /tmp/src.tgz https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz
+tar -C /tmp -zxf /tmp/src.tgz src/weewx-rtldavis/bin/user/rtldavis.py
+git diff --numstat --no-index /tmp/src/weewx-rtldavis/bin/user/rtldavis.py rtldavis.py
+```
+
+Diff `bin/user/rtldavis.py`, **not** the sibling `rtldavis.py.dist` — the `.dist` is Skahan's
+pre-patch copy, so it reports a delta that includes his `re.compile` fix as if it were ours. The
+figure this replaces (**+263 / −51**, S37) was already one commit stale when written: it is the
+count at `cd49214`, and the S37 commit that recorded it added the fork-identity header itself.
 
 ### Bug fixes (these belong upstream)
 
@@ -75,9 +90,11 @@ Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 
 | 3 | **`NameError` on unknown channel** | 2026-07-05 | The unknown-station handler logs `raw`, which is not defined in that scope — so the error path meant to report a bad packet crashes instead. Now logs `pkt`. |
 | 4 | **`rxCheckPercent` was permanently dead** | 2026-07-05 | `pct_good_all` is only computed `if total_max_count > 0 and self.stats['pct_good_all'] is not None`, but `_init_stats()`/`_reset_stats()` set `pct_good_all = None` every archive period — so the guard can never pass and the driver's own reception metric is never populated. Separately, `self.stats['pct_good']` (a list) was compared against `None` instead of `pct_good[i]`, which is always truthy. |
 | 5 | **Per-packet logging at INFO** | 2026-07-05 | `RAW_CHANNEL_PAYLOAD`, `Hop:` and `ChannelIdx:` lines were logged at INFO on every frequency hop, flooding `weewx.log`. Moved behind `debug_rtld` levels. |
+| 10 | **Outside temperature decoded UNSIGNED** — `parse_raw`, message type 8 | 2026-07-28 | Davis encodes the 12-bit digital temperature as **two's complement**; upstream divides the raw value by 10 with no sign handling, so every sub-0 °F reading decodes to ~+400 °F. On this station that trips the SensorQC bounds and (since DEC-0054) co-rejects the whole frame, i.e. real winter reads as RF corruption. Upstream also lacks the second no-sensor sentinel `0xFF8` that the sibling weewx-meteostick driver checks; both are fixed here. We use `temp_raw - 0x1000`, **not** meteostick's `-(temp_raw ^ 0xFFF)` — the latter is one's complement and is 0.1 °F warm on every negative reading. [DEC-0055] |
 
-Numbers 1–4 are real defects in upstream that any US Davis user hits. They are the intended content
-of an upstream contribution (see [Upstreaming](#upstreaming) below).
+Numbers 1–4 and 10 are real defects in upstream that any US Davis user hits — 10 bites any
+cold-climate user of the stock driver. They are the intended content of an upstream contribution
+(see [Upstreaming](#upstreaming) below).
 
 ### Behavior changes (ours; would need discussion upstream)
 
@@ -87,6 +104,7 @@ of an upstream contribution (see [Upstreaming](#upstreaming) below).
 | 7 | **Calm-air wind gate** | 2026-07-04 | Raw wind speed ≤ 2 with direction 0 is the 6410 hall-sensor floor, not wind. Record 0 speed and a **null** direction instead of a false "2 mph from due north" that pollutes wind roses. |
 | 8 | **freqError stored for US and NZ** | 2026-07-04 | Upstream stores frequency-error statistics only when `frequency == 'EU'`. We store for `EU`, `US` and `NZ` — the data is just as useful on 915 MHz, and this is a 915 MHz station. |
 | 9 | Lint / dead code | 2026-07-08 | Dropped unused imports (`timegm`, `fnmatch`, `string`), the dead `_fmt()`, and the unused `parse_readings()`. Bare `except:` → `except Exception:`. [DEC-0027] |
+| 11 | **Frame-level co-rejection** — a bounds failure condemns the whole frame | 2026-07-27 | Extends 6, which vetted each field independently — so a frame carrying *positive proof* of corruption could still have its other fields trusted. On 2026-07-27 one CRC-valid frame decoded humidity to 144.9 %RH (out of spec, rejected) and a wind byte to 39 mph from dead calm (in spec, under the delta cap, accepted) — the phantom became the archive interval's gust max and went out to ten external networks (ERR-0004). Every weather field rides the same 8-byte frame, so a **bounds** failure on any one of them now nulls all of them (`FRAME_WEATHER_KEYS`), skips the rain counter *without* resyncing `last_rain_count`, and moves no delta baselines. Diagnostics (battery flags, supercap, freqError, `pct_good`) deliberately survive: they describe the link, not the weather. A **delta** trip never co-rejects — a large step can be genuine weather; an impossible value cannot. Zero fitted parameters, so nothing can drift. Shipped in v2.0.9 (S52). [DEC-0054] |
 
 ### Why these filters exist: the corruption mechanism
 
@@ -182,10 +200,11 @@ The goal is for this list to get **shorter**. Standing policy:
 
 | Candidate | Where | Status |
 |-----------|-------|--------|
-| Rain-counter wraparound | `lheijst/weewx-rtldavis` | Draft comment written for issue #15, **not posted** — pending owner review |
+| Rain-counter wraparound | `lheijst/weewx-rtldavis` | **[PR #22](https://github.com/lheijst/weewx-rtldavis/pull/22) OPEN** since 2026-07-13 (S38); the [issue #15 comment](https://github.com/lheijst/weewx-rtldavis/issues/15#issuecomment-4960224128) went up the same day, owner-approved |
 | windDir branch bug | `lheijst/weewx-rtldavis` | Not yet offered |
 | `NameError` on unknown channel | `lheijst/weewx-rtldavis` | Not yet offered |
 | `rxCheckPercent` dead metric | `lheijst/weewx-rtldavis` | Not yet offered |
-| `e.read()` / TLS / `KeyError` fixes | `david-lutz/weewx-influx2` | Not yet offered |
+| Outside-temperature sign + `0xFF8` sentinel | `lheijst/weewx-rtldavis` | Not yet offered — belongs alongside [#22](https://github.com/lheijst/weewx-rtldavis/pull/22); bites every cold-climate user, so it is the strongest remaining candidate |
+| `e.read()` / TLS / `KeyError` fixes | `david-lutz/weewx-influx2` | **[PR #1](https://github.com/david-lutz/weewx-influx2/pull/1) OPEN** since 2026-07-13 (S38) — that repo's first-ever PR, and it has been quiet since 2023 |
 
 Whatever is not upstreamed stays here, with a reason. That is the point of the inventory.
