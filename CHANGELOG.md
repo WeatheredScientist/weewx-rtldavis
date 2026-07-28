@@ -6,6 +6,76 @@ under [Pre-S16].
 
 ---
 
+## [S55b] — 2026-07-28 — R2 decided and coded: `MAX_PLAUSIBLE_TIPS` 60 → 16 (DEC-0056), rejection email reframed as the tripwire
+
+Same session, second act: the owner opened the R2 design discussion, an **evidence pass over the
+full 70-day archive** settled it, and the owner approved the package (PR #93).
+
+- **The evidence** (pre-correction backup, 95,901 minutes, 490 wet): worst real minute **7 tips**;
+  worst real 3-min window **exactly 16** (2026-06-14 storm — still passes, the check is
+  `delta > max_tips`); reception during rain never below 50%; in-service gaps near rain: two
+  1-minute events ever; rain-counter rejections at cap 60 in the 30-day logs: **zero** (all five
+  "implausible" hits are SensorQC wind/humidity). Physics: at the bucket's ~4 s/tip ceiling a
+  genuine delta can exceed 16 only across a >64 s gap — longer than any gap observed during rain.
+  **Reframing:** weewx `[StdQC]` (0.3 in/min) already discarded anything over 30 tips, so
+  "60 → 16" really exposes only the never-occupied 17–30 band.
+- **The worry that shaped the package** (owner: don't lose an intense storm to an over-tight
+  filter): the change ships with the failure mode converted from silent-permanent to
+  loud-bounded-recoverable — `weewx_monitor.py`'s existing DEC-0021 glitch email is reframed as
+  the **DEC-0056 tripwire** (prompts the WeatherLink cross-check; a rejection on a wet day is the
+  predefined revisit trigger), a **recovery playbook** is written into DEC-0056 (console
+  reconciliation via the ERR process), and a **driver↔monitor marker contract test** pins the
+  alert to the driver's exact wording. Confirm-on-reject documented as the designed escalation if
+  the tripwire ever fires on real rain.
+- Tests 111 → **112**: boundary 16-passes/17-rejects, the 06-14 evidence vectors, cap-60-era
+  cases retuned as documented rejects; cap and marker assertions both **mutation-tested red**.
+- **Deployment split:** the monitor (mounted layer) deployed NAS-side same session — scp'd from
+  the merged tip, sha-verified `383f5baa…`, restarted via the scheduler respawn. The driver cap
+  (baked layer, DEC-0031) **rides `dev` until the next image cut (v2.0.11)** — prod's running
+  driver keeps cap 60 until then; a hardening, not a live bug, so it forces no deploy.
+- R2 closed out on [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105).
+
+---
+
+## [S55] — 2026-07-28 — v2.0.10 shipped: the signed temperature decode is live in prod; upstream PR #23 opened
+
+**The R1 release (DEC-0055), executed end-to-end** — prod ran the unsigned decode until 09:28 EDT.
+
+- **Version bump first** ([#88](https://github.com/WeatheredScientist/weewx-rtldavis/pull/88)):
+  `DRIVER_VERSION` 0.20+ws.1 → **0.20+ws.2** — the banner is the live-verify marker (DEC-0046), so
+  a driver release must be distinguishable in the running log — plus the missing 2026-07-28
+  DEC-0055 entry in the driver's header change list, README, and the CHANGES-FROM-UPSTREAM version
+  table (`influx.py` stays ws.1, untouched). Dockerfile header → v2.0.10
+  ([#90](https://github.com/WeatheredScientist/weewx-rtldavis/pull/90); every release since v2.0.6
+  bumps it). Promoted dev → main (PRs #89 + #91, merge `2d3bc09a`), CI green throughout.
+- **Built on the NAS from the verified tree** (S52 pattern: staged tarball → fresh
+  `build-v2.0.10/`, with `rtldavis.py` md5-checked against `git show` before the build could
+  start); pushed `:v2.0.10` + `:latest`, digest `sha256:ee3027e1…`. weewx stays pinned 5.4.0
+  (#78) — no silent drift this rebuild.
+- **Prod recreated** from the re-captured live inspect config (kill→rm→3 s→run; no mounted-layer
+  changes this release — `loop_json_writer.py`/`influx.py` untouched since v2.0.9).
+  **Live-verified (DEC-0046):** banner `0.20+ws.2`, `sensor_qc True`, records arriving, outTemp
+  74.1 °F sane, soak **13 PASS / 2 WARN / 0 FAIL** (both WARNs restart artifacts). No startup
+  stall — 4th consecutive clean recreate. Tagged **`prod-baseline-20260728`**;
+  [GitHub release v2.0.10](https://github.com/WeatheredScientist/weewx-rtldavis/releases/tag/v2.0.10).
+  **Rollback: `:v2.0.9`** on the NAS and Docker Hub.
+- **Upstream [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) opened**
+  (owner-reviewed verbatim), companion to #22. Found while drafting: **upstream #19 (LloydR) had
+  already diagnosed the sign bug** — its 16-bit-signed ÷16 form carries the `pkt[4]` flag nibble
+  into the value (a constant +0.05 °F on digital frames) and lacks `0xFF8`; #23 credits the
+  diagnosis and offers the masked 12-bit form as an alternative, non-stepping per #22's precedent.
+- **R1 closed out on [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105#issuecomment-5104787452)**;
+  **R2 untouched** (owner holds it for design discussion).
+- Housekeeping: two stale `.claude/worktrees/` (+ their `claude/*` snapshot branches, 0 unique
+  commits) removed; four merged `s54-*` branches deleted local + origin — the repo is back to
+  exactly `dev` + `main`. Session-start watches: co-rejection 0 hits (positive-control-verified),
+  #74 calm-windDir silent 10.6 h post-v2.0.9 (last WARNING 21:59, 19 min before that deploy),
+  humidity largest step 0.7 pts in 240 new samples, soak 10/5/0 pre-release.
+  `ops/soak_check.sh` `EXPECT_IMAGE` default → `:v2.0.10` (STATUS's standing instruction). No new
+  DEC — the session executed DEC-0031/0038/0046/0055 as designed.
+
+---
+
 ## [S54] — 2026-07-28 — R1 landed: outside-temperature decode is now signed two's complement (DEC-0055); not yet released
 
 Owner approved **R1** from the S53 ops#105 audit; **R2** (`MAX_PLAUSIBLE_TIPS` 60 → 16) held for
@@ -83,71 +153,3 @@ Every encoding verified against `rtldavis.py` source (ops#103's *inferred* entri
 - **v2.0.9 first-days watch:** co-rejection 0 hits (first post-deploy hour); #74 WARNINGs present
   up to the 22:18 recreate, silent after (needs a full-day re-check); soak 15/0/0, reception 81 %;
   no stalls; humidity watch through 07-27 23:14 still unfired; no Dependabot PRs yet.
-
----
-
-## [S52] — 2026-07-27 — ERR-0004 phantom 39 mph gust: corrected in both stores, frame-level co-rejection shipped as v2.0.9 (DEC-0054)
-
-**The incident (ERR-0004):** at 14:55:50 EDT, during an rxCheckPercent collapse to 13.2%, one
-multi-bit-corrupt-but-CRC-valid frame (DEC-0033 class) carried humidity decoding to 144.9% — rejected
-by SensorQC bounds — *and* a wind byte decoding to 39 mph from dead calm, which passed (in-spec, and
-+16.5 m/s sat under the 20 m/s delta cap). It became the archive interval's gust max and went out to
-all ten external sinks. Owner spotted it on the dashboard hours later; dashboard S149 and an
-eaglehunt-ops session had already filed [#76](https://github.com/WeatheredScientist/weewx-rtldavis/issues/76)
-+ ops#103 with the diagnosis — independently re-verified here (log + code) before acting; every
-claim held. Coordinated in real time on #76 (3 comments: pickup → correction landed → release).
-
-- **Correction applied live, both stores, same session (DEC-0025/0032/0037):** archive row
-  1785178560 → windSpeed/windDir/windGust/windGustDir/ET/appTemp/windrun all NULL (wview-extended
-  schema carries the derived fields in-row), guarded UPDATE + `rebuild-daily`; InfluxDB point
-  rewritten minus 7 wind-affected fields with sparse `windGust_qc=1`/`windSpeed_qc=1` (DEC-0099
-  contract). Verified via the public /query proxy: day-max gust now a genuine 12 mph. Dashboard's
-  ops#104 verification unblocked the same hour. Backup: `weewx.sdb.bak-err0004-20260727`.
-- **DEC-0054 — frame-level co-rejection (v2.0.9):** a bounds failure on ANY field now nulls every
-  weather field of that frame and skips the rain counter *without* resyncing its baseline; delta
-  trips never co-reject. Zero free parameters — explicitly not the parked DEC-0044 coupling filter.
-  6 new tests incl. a verbatim replay of the corrupt frame; the old test asserting same-frame
-  humidity *survives* a wind bounds failure was inverted (it encoded exactly this gap).
-- **Issue #74 closed (bundled):** calm-windDir TTL expiry logs DEBUG when windSpeed is 0.0 (calm is
-  Davis semantics, not a fault); WARNING kept for expiry with wind, and an expired windSpeed counts
-  as a dropout. Recovery line downgraded symmetrically. 4 tests.
-- **BACKLOG pruned:** DEC-0024 bullet (shipped v2.0.8) and RAW_* log bloat (resolved; live log has
-  zero RAW_ lines) marked done.
-- **v2.0.9 released:** PR #77 → dev (CI green), image built on the NAS from a fresh checkout, pushed
-  to Docker Hub `:v2.0.9` + `:latest` (digest `sha256:5eb38850`), prod container recreated from the
-  live inspect config (kill→rm→3s→run), `loop_json_writer.py` hot-swapped (`.bak-pre-v2.0.9`),
-  live-verified: driver banner `0.20+ws.1`, `sensor_qc True`, records publishing, `current.json`
-  writing (calm windDir correctly omitted), soak 14 PASS / 1 WARN (restart-empty reception window) /
-  0 FAIL, no startup stall. Rollback: `:v2.0.8` remains on the NAS and Docker Hub.
-- **Found in passing: the Dockerfile installed weewx UNPINNED** — this rebuild silently moved prod
-  weewx 5.3.1 → 5.4.0 (came up clean, daily summaries fine; 5.4.0's changelog is reporting/tooling
-  only — `weectl rest`, skin fixes — nothing touching the driver API, restx, schema, or QC paths).
-  Same silent-drift class as S46's unpinned-ruff CI break. **Closed same session (#78):**
-  `requirements.txt` pins `weewx==5.4.0` (matching what is verified-live), the Dockerfile installs
-  from it, and `.github/dependabot.yml` turns future weewx releases into review PRs — notification
-  and deliberate bump, never a blind update. No rebuild needed: the pin equals the running version.
-
----
-
-## [S51] — 2026-07-26 — Watch items all run: DEC-0053 TTL watch resolved benign, humidity spike still unfired; issue #74 filed
-
-No code changed. All four S50-handoff watch items executed against prod:
-
-**DEC-0053 TTL-expiry watch — fired 10× in its first full day, both patterns benign, watch RESOLVED.**
-(a) One real event: `dewpoint_F`/`outHumidity`/`heatindex_F` all expired at 20:09:44 after a genuine
-~13-min humidity-packet reception dropout (19:59–20:12 EDT) — the bound doing exactly its job (the
-~611 s of tolerated absence is the two caches stacking: DewpointCacher carries the value ≤300 s, then
-the writer's own 300 s TTL runs). (b) Seven `windDir` expiries at ~301 s during calm stretches — the
-driver *deliberately* sets `wind_dir = None` on calm readings (`rtldavis.py` ~1356), so any ≥5-min
-calm expires the cache. Healthy sensor, semantically correct omission, misleading "sensor may be
-failing" text. Filed [#74](https://github.com/WeatheredScientist/weewx-rtldavis/issues/74)
-(tier:mid): proposed calm-aware downgrade to DEBUG, needs design agreement first (PRINCIPLES §8).
-Explicitly NOT a bump-the-TTL case — a longer TTL would serve a stale direction during calm.
-
-**Humidity-spike watch — still unfired.** 2,755 raw samples decoded covering 2026-07-24 00:04 →
-2026-07-26 20:42; largest single step −8.7 RH pts, and that across a 4-min reception gap. Nothing
-near the 16–37 pt DEC-0044 single-step signature. No SensorQC rejections in today's log at all.
-
-**Soak check: 14 PASS / 1 WARN / 0 FAIL** (WARN = the known 67% reception baseline). Phantom-rainRate
-prediction (DEC-0049): 0 qualifying rows in 1,214. No driver stalls in today's log — the S41
-startup-race class is now clean across three consecutive restarts (S43, S47, S48).
