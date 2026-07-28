@@ -1,7 +1,7 @@
 # Conventions — weewx-rtldavis
 
 **Status:** Source of truth (how we operate)
-**Last updated:** 2026-07-04 (S17)
+**Last updated:** 2026-07-26 (S49)
 
 The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 
@@ -13,8 +13,8 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 | SSH / SCP | `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` · `scp -P <SSH_PORT> -O` (capital `-P`, `-O` for the legacy protocol) |
 | Real values | gitignored `docs/LOCAL_INFRA.md` (this repo is public — placeholders only in committed docs, DEC-0012) |
 | Docker binary | `/usr/local/bin/docker` (no sudo needed; not on the default PATH) |
-| Container | `weewx-rtldavis-v2` · **prod runs `:v2.0.8`** (rollback: `:v2.0.7`) |
-| Published image | **`:v2.0.8` + `:latest`** — matches prod, no drift (S43). |
+| Container | `weewx-rtldavis-v2` · **prod runs `:v2.0.9`** (rollback: `:v2.0.8`) |
+| Published image | **`:v2.0.9` + `:latest`** — matches prod, no drift (S52). |
 | Driver location | **BAKED** in the image venv (`site-packages/user/rtldavis.py`) — *not* `weewx-data/bin/user/`. Never bind-mount it (DEC-0031); a driver change needs a rebuild. |
 | Project root (NAS) | `/volume1/docker/weewx-rtldavis/` |
 | Live config | `.../weewx-data/weewx.conf` (bind-mounted; gain/ppm edits need only a restart) |
@@ -72,6 +72,12 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
   *(On the macOS dev box the interpreter is `python3` — there is no bare `python`; pre-commit and CI
   supply their own. Run the secret gate standalone with `bash scripts/check_secrets.sh` — it now
   passes cleanly with no staged files rather than erroring.)*
+- **A local `pre-commit run mypy --all-files` "Passed" is not proof CI will pass.** mypy's
+  incremental cache (`.mypy_cache/`, gitignored) persists between runs and can silently mask real
+  errors on files nothing else touched (S49, issue #67 follow-up: a stale cache hid 2 real errors
+  in `tests/test_reception_pct.py` that CI's cache-free run caught immediately). Before trusting a
+  local "0 errors" result — especially right before opening/merging a PR — `rm -rf .mypy_cache`
+  first.
 - Follow the WeeWX `RESTThread` pattern for uploaders (DEC-0007); honest nulls on rejection,
   never stale substitution (DEC-0006).
 

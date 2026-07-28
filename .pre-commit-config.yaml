@@ -27,6 +27,7 @@ repos:
         # WeeWX isn't installed in the hook env; ignore missing imports rather
         # than vendor stubs for the whole weewx package.
         args: ["--ignore-missing-imports", "--no-strict-optional"]
+        additional_dependencies: ["types-requests"]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
@@ -44,3 +45,16 @@ repos:
         entry: scripts/check_secrets.sh
         language: script
         pass_filenames: true
+
+      # DEC-0015 named "pytest+ruff+mypy before done" as the intended validation
+      # rule; only ruff/mypy actually got wired into pre-commit, so a broken test
+      # was only caught at CI/PR time, not at commit time (issue #55). The suite
+      # is all-stdlib (no project deps needed), so pre-commit's isolated env just
+      # needs pytest itself.
+      - id: pytest
+        name: run test suite
+        entry: python -m pytest -q
+        language: python
+        additional_dependencies: ["pytest"]
+        pass_filenames: false
+        always_run: true

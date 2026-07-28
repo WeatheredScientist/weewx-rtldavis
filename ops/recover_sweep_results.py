@@ -64,7 +64,9 @@ print(f"  Last:  {monitor_windows[-1][0] if monitor_windows else 'none'}")
 print()
 
 # ── Match WINDOW lines to collection windows ──────────────────────────────────
-results = []
+# n_windows is an int for a real row, or the sentinel string "NO_DATA" when no
+# WINDOW lines fell inside the collection window (checked at line 103).
+results: list[tuple[int, int, str, int, int, float, int | str]] = []
 
 for gain, rep, start, end in windows_parsed:
     matching = [(ts, recv, poss, pct) for ts, recv, poss, pct in monitor_windows
@@ -72,7 +74,7 @@ for gain, rep, start, end in windows_parsed:
 
     if not matching:
         print(f"  gain={gain} rep={rep}: NO WINDOW lines found in [{start} -> {end}]")
-        results.append((gain, rep, start.strftime(fmt), 0, 0, 0, "NO_DATA"))
+        results.append((gain, rep, start.strftime(fmt), 0, 0, 0.0, "NO_DATA"))
         continue
 
     total_received = sum(r for _, r, _, _ in matching)
@@ -99,9 +101,9 @@ print(f"{'gain':>6}  {'reps':>4}  {'mean_pct':>8}  {'min':>6}  {'max':>6}  {'ran
 print("-" * 55)
 
 by_gain = defaultdict(list)
-for gain, rep, ts, recv, poss, pct, nw in results:
+for gain, rep, _ts, recv, poss, row_pct, nw in results:
     if nw != "NO_DATA" and poss > 0:
-        by_gain[gain].append(pct)
+        by_gain[gain].append(row_pct)
 
 best_gain, best_mean = None, -1.0
 for gain in sorted(by_gain.keys()):

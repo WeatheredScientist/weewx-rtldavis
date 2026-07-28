@@ -76,7 +76,10 @@ extension.
 exactly the loop-JSON contract the dashboard expects (PRINCIPLES §6, INTERFACES). *Known state
 (S16):* a `loopdata.py` copy is still volume-mounted and a stale `[LoopData]` config section remains,
 but `user.loopdata.LoopData` is in **no** active service list — vestigial; cleanup backlogged
-(BACKLOG, ROADMAP).
+(BACKLOG, ROADMAP). **Cleanup done (S47):** live `weewx.conf`'s `[LoopData]` section removed, the
+`loopdata.py` mount dropped from the recreated `weewx-rtldavis-v2` container (verified: 6 mounts,
+clean restart, records publishing), and the file renamed aside on the NAS
+(`loopdata.py.removed-S47`) rather than deleted outright.
 
 ## DEC-0006 — Null-on-rejection filter philosophy
 
@@ -195,6 +198,13 @@ on hyperlocal's API_CONTRACT/TRAINING_DATA_CONTRACT pattern).
 *Rationale:* this is a Python extension the WeeWX venv imports and that feeds prod — a lint/type/test
 gate and structural secret scan are direct insurance against shipping a broken or credential-leaking
 `.py`. Rejected from hyperlocal: its per-session file sprawl (superseded by STATUS + CHANGELOG).
+
+**Gap closed (S48, issue #55):** the original "pytest+ruff+mypy before done" intent only ever got
+ruff and mypy wired into `.pre-commit-config.yaml` — pytest was documented as a manual pre-close
+step (DEC-0052 step 1) and CI-enforced at PR time, but not gated at commit time. Added a `local`
+pytest hook (`language: python`, `additional_dependencies: [pytest]`, `always_run: true`) — the
+suite is all-stdlib, so pre-commit's isolated env needs nothing from this repo's own `.venv`.
+Verified live: fires on every commit regardless of which files changed, passes in isolation.
 
 ## DEC-0016 — Claude Opus 4.8 at high/xhigh as the Claude Code driver
 
@@ -1357,6 +1367,28 @@ evidence existed at all — but the live rows had been overwritten in place (DEC
 supplied a pre-correction copy. **Snapshot the affected rows before a retrospective correction, not
 after.**
 
+**Challenged and upheld (S48, issue #48).** A dashboard-side reconciliation (their S76) found that
+WeatherLink's install-to-date total only balances against our archive if the console **excludes** the
+2.56″ of phantom rain we corrected — and asked whether that undercuts an ISS-side mechanism, since a
+real physical tip is broadcast to every listener. **It does not.** The challenge conflates the two
+phantom classes, which this repo's own data model already separates into two independent flags
+(INTERFACES §2): the 2.56″ is **`rain_qc` (3 points)** — the *counter*, which DEC-0042 explicitly
+disclaims and DEC-0021/0033/0035 own — while DEC-0042 governs **`rainRate_qc` (33 points)**, decoded
+from a different ISS message (type 0x5 vs 0xE) and carrying `rain = 0.0` in every one of those 33
+records. The rate events contributed **exactly 0″** to any accumulation, ours or the console's.
+
+Both classes independently *require* the console's absence, so the reconciliation is confirmatory:
+(1) the counter phantoms are receiver/driver-side — ERR-0001 is our own wraparound handler adding 128
+to a logged `rain_count=-64`, and ERR-0002 is a bit-7 flip passing CRC — both strictly downstream of
+the shared broadcast, so a console decoding its own copy with its own firmware could never reproduce
+them; (2) DEC-0042's mechanism *predicts no tip at all* ("rate set, counter untouched"), so there was
+never a tip for the console to count. Per INTERFACES §4 the WeatherLink console is our designated
+ground truth for **"did the bucket actually tip"** — and it says no, which is what DEC-0042 claims.
+
+Net: the reconciliation is **independent external validation that the 2.56″ correction was right**
+(residual 0.01″ against ERA5 + measured capture gaps), not evidence against the mechanism. No revision
+warranted; do not re-litigate.
+
 ---
 
 ## DEC-0043 — Override the ROOT logger, not just `weewx` and `user` (S39)
@@ -1862,3 +1894,158 @@ cache headers (`no-store`) is the dashboard/eh-proxy's responsibility (DEC-0010)
 ends at producing the file. 3 offline unit tests (`tests/test_loop_json_writer.py`), suite 85/85. No
 driver involved — `loop_json_writer.py` is a `data_service` (DEC-0005), not the baked driver, so this
 ships on the next ordinary config/service deploy, independent of any image rebuild.
+
+---
+
+## DEC-0052 — Adopt the shared closeout skeleton (adapted), from eaglehunt-ops OPS-DEC-0016
+
+**Status:** Accepted · **Date:** 2026-07-19 (S44)
+
+ops#22 found all three trio repos (+ coffeeradar) had independently invented their own closeout
+ritual despite common tiered-read/DECISIONS-index/STATUS.md-as-source-of-truth ancestry. This repo's
+was the loosest of the four: split across two separate CLAUDE.md paragraphs ("Session ritual — End"
+and a separate "Docs-diet ritual at close"), no numbered list. eaglehunt-ops published a generic
+6-step closeout skeleton (OPS-DEC-0016, locked OPS-DEC-0019 once three of four repos had adopted)
+and filed an adoption ask in each repo's own tracker (this repo's: weewx-rtldavis#56) — adopt, adapt,
+or decline is each repo's own call, per OPS-DEC-0001's charter that ops is not a master repo.
+
+**Call: adopt, adapted — not verbatim.** Four of the template's five mechanical steps (green gate,
+STATUS pointer, CHANGELOG entry, decision-log row) already matched this repo's practice; the fifth,
+commit+push, already has a stricter local rule (pause for approval before every commit and every
+push — Non-negotiable rules) that the template doesn't override. This repo's own docs-diet ritual
+(DEC-0030) is richer than the template's step 3 for a *public* repo — CHANGELOG archival to
+`CHANGELOG-ARCHIVE.md`, and `scripts/check_secrets.sh` run over anything a doc move rehomes — so it
+is kept as-is and layered after step 3, per the template's own "repo-specific addenda, not replaced"
+pattern.
+
+**The one genuinely new step: step 5, the model-tier restore check.** Nothing in this repo's docs
+previously prompted a check, at session close, of whether a bare `/model` switch (which persists as
+the new session default — user's global CLAUDE.md, OPS-DEC-0010) needs restoring to the Sonnet
+floor. Two other adopters (hyperlocal-forecast DEC-0126, coffeeradar DEC-0054) independently reported
+step 5 as the only genuinely new content in the template; this repo's adoption reaches the same
+conclusion a third time, from its own review rather than by import.
+
+**What changed:** CLAUDE.md's "Session ritual" now carries one 6-step numbered "End" list in place
+of the old two-paragraph split, with the docs-diet ritual folded in as step 3's addendum. No change
+to session numbering, to the pause-before-commit/push rule, or to any prior DEC — step 6 points at
+the existing rule instead of restating it.
+
+Outcome reported to eaglehunt-ops#22 (cross-repo roll-up); closes weewx-rtldavis#56.
+
+---
+
+## DEC-0053 — Provenance audit: bound the loop-JSON cache; two identity gaps documented, not closed
+
+**Status:** Accepted · **Date:** 2026-07-25 (S48) · **Closes:** weewx-rtldavis#45 ·
+**Applies:** DEC-0006 (honest nulls, never stale substitution) to the real-time surface
+
+**Context.** Ported from the dashboard's S73 incident (their DEC-0104/0106): their forecast archive
+faithfully recorded the *wrong* coordinates in a column nothing read, and it saved nothing, because
+the artifact the consumer actually reads never carried the assumption. Issue #45 asked the same
+question of this repo: for each artifact a consumer reads, do the assumptions it was produced under
+travel **with** it?
+
+**The audit.**
+
+| Artifact | Units | Station identity | Staleness / cadence | Correction state |
+|---|---|---|---|---|
+| loop-JSON (`current.json`, `loop-data.txt`) | ✅ in key names | ❌ absent | ❌ **was unbounded** | n/a |
+| InfluxDB `record,binding=archive` | ✅ field suffixes | ❌ `tags` unset | ✅ `backfill = 1` | ✅ `*_qc` |
+| SQLite `weewx.sdb` | ✅ schema | ❌ absent | ✅ honest `interval` column | ❌ none |
+| `DATA_ERRATA.md` | n/a | n/a | n/a | ✅ (it *is* the record) |
+
+**Finding 1 — FIXED. The loop-JSON cache was unbounded, on the surface the dashboard reads.**
+`loop_json_writer.py` updated its cache only on non-None values, never expired them, and stamped every
+write with the *current* packet's `dateTime`. A dead — or SensorQC-rejected — sensor therefore emitted
+its last value forever, indistinguishable from a live reading. This is the same failure
+`dewpoint_service.py` fixed for the **archive** path at S33/DEC-0022, whose comment names it exactly:
+*"a stale substituted value masks that indefinitely."* The lesson was learned in one artifact and never
+propagated to its sibling. Not hypothetical — the anemometer failed and was replaced ~16–17 Jun 2026,
+precisely the class of event this masks.
+
+**Decision:** bound the cache per-field. 300 s default (matching DewpointCacher, and ~5–12× the ISS
+rotation), but **2 × `[DavisPressure] fetch_interval`** for `barometer_inHg` — a flat 300 s would have
+blanked the barometer for 55 minutes of every hour and regressed S43's Cold-load Fix B. The barometer
+TTL is *derived from that service's own config*, so the two cannot drift apart. Past its TTL a field is
+omitted and a `WARNING` names it, which also turns a silently-dead sensor into an observable event.
+Contract-compatible: INTERFACES §1 already required consumers to treat any field as possibly-missing.
+Guarded by 6 tests, including a mutation check confirming they go red against the old unbounded cache.
+
+**Finding 2 — DOCUMENTED, deliberately NOT fixed. InfluxDB carries no station identity.**
+`influx.py` supports `tags = station=A`; the live config sets none, so the only tag is
+`binding=archive` and every point in an infinite-retention bucket is anonymous. **The one-line fix is
+a trap:** a point's series key *is* measurement + full tag set, so adding a tag forks a parallel
+series — which INTERFACES §2 explicitly forbids for corrections/backfills, and which would split
+historical continuity and require dashboard coordination. Currently harmless (one producer, one
+station), and unlike the dashboard's incident we record *no* identity rather than a *wrong* one — the
+gap is unauditable but not misleading. **Revisit only if a second producer appears** (PRINCIPLES §1's
+multi-source future is exactly when it starts to matter), and treat it as a coordinated interface
+change, never a config tweak.
+
+**Finding 3 — DOCUMENTED, not fixed. The system of record is less provenanced than the derived store.**
+InfluxDB corrected points carry `rain_qc` / `rainRate_qc` / `backfill`; the SQLite archive carries
+nothing, so a corrected row is indistinguishable from a never-corrected one. Only `DATA_ERRATA.md` — a
+markdown file outside the data path — records it. Backlogged; a schema change to the archive is not
+justified by current need, but a reader treating SQLite as ground truth should know the flags live
+downstream, not here.
+
+**The rule this earns.** *A cached or substituted value must carry, or be bounded by, the assumption
+that makes it valid.* Units already travel in key names; staleness now travels as a bound; identity
+still does not, and that is recorded rather than assumed away. Corollary, from Finding 1's history:
+**when a data-integrity lesson is fixed in one artifact, check its siblings in the same commit** —
+DEC-0022 fixed the archive path and left the real-time path carrying the identical bug for 15 sessions.
+
+## DEC-0054 — Frame-level co-rejection: a bounds failure condemns the whole frame
+
+**Status:** Accepted · **Date:** 2026-07-27 (S52) · **Extends:** DEC-0029 · **Bounded by:** DEC-0044
+(this is NOT the parked coupling filter) · **Motivated by:** ERR-0004 / issue #76 / ops#103
+
+**Context — the event the old filter was structurally blind to.** 2026-07-27 14:55:50 EDT: during an
+`rxCheckPercent` collapse to 13.2%, one multi-bit-corrupt-but-CRC-valid frame (the DEC-0033 class)
+arrived carrying `humidity_raw = 59a9` → 144.9 %RH *and* a wind byte decoding to 39 mph, from dead
+calm. SensorQC checked each field independently: humidity failed **bounds** (impossible per sensor
+spec) and was rejected; wind — 17.4 m/s, inside the 6410's 0–200 mph spec, +16.5 m/s from a calm
+baseline, *under* the 20 m/s delta cap — sailed through, became the archive interval's gust max, and
+went out to all ten external sinks. The system had **positive proof the frame was corrupt and still
+trusted every other field of that same frame.** Diagnosis credit: dashboard S149 (external evidence,
+issue #76) and an eaglehunt-ops intermediary session (log forensics, ops#103); both independently
+re-verified here against `weewx.log` and the driver source before this was designed.
+
+**Why not just tighten the wind delta cap.** The 20 m/s cap was calibrated against high-bit flips
+(the 201 mph spike: +128/+64 mph). This event sits in the mid-magnitude gap (+~36 mph territory) —
+and so does a *genuine* first gust of a squall from calm (25–35 mph is meteorologically routine).
+Field-level thresholds cannot separate those two; frame-level evidence can.
+
+**Decision.** In `_data_to_packet`, a bounds-only pre-pass runs before per-field QC. If ANY QC-covered
+field in the decoded frame fails its sensor-spec **bounds** check:
+
+1. Every weather-observation field the frame carries (`FRAME_WEATHER_KEYS`: wind triple + direction,
+   the message-type payload — temperature/humidity/UV/radiation/rain-rate, extra temp/humid channels)
+   is nulled (DEC-0006 honest null). One log line names the co-rejected set.
+2. The rain counter, if present, is **skipped without resyncing** `last_rain_count` — the counter is
+   cumulative, so genuine tips still land in the next clean frame's delta; resyncing to a corrupt
+   counter byte would swallow or invent tips.
+3. **No baselines move.** The corrupt frame's in-spec values must not become delta history; the next
+   genuine reading is judged against pre-glitch state and accepted immediately (tested).
+4. Diagnostics (battery flags, supercap/solar power, freqError, pct_good) survive — they describe the
+   link, not the weather, and nulling them would blind the very telemetry that flags these events.
+
+**The asymmetry is the design.** Only a *bounds* failure triggers co-rejection — positive proof, a
+value the sensor cannot emit. A *delta* trip never does: it may be genuine weather, and the existing
+per-field resync handles it at a documented cost of 1–2 readings. This keeps the false-positive cost
+of co-rejection at (probability a frame contains an impossible value) × (2–3 sibling fields nulled
+for one reading) — negligible against serving a phantom to ten immutable external networks.
+
+**Why this is not DEC-0044's coupling filter.** DEC-0044 parked a *cross-sensor delta-correlation*
+filter whose fitted thresholds failed re-derivation on our own data — "instrument, don't filter."
+Co-rejection has **zero free parameters**: it fires only on the bounds proof DEC-0029 already
+computes, within one frame, at one choke point. Nothing is fitted, so nothing can drift.
+
+**Precedent, generalized.** The driver already co-rejected `wind_dir` when `wind_speed` failed ("the
+same-packet direction byte is equally suspect") — a two-field special case of exactly this rule. And
+the old test suite *asserted the gap*: `test_packet_gets_explicit_null_and_wind_dir_nulled` required
+same-frame humidity to SURVIVE a wind bounds failure. That assertion is now inverted — the S40 lesson
+(a passing test is not evidence if the assertion is wrong) applied in the other direction.
+
+**Ships in v2.0.9** (driver is baked, DEC-0031 — image rebuild, deliberate release). Guarded by 6 new
+tests including a verbatim replay of the 2026-07-27 frame.

@@ -18,23 +18,27 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
 - ESP32 secondary sensor node — lightning (AS3935), pressure (BMP390), air quality (SEN55);
   solar-powered (parts shopping list done).
 - Blitzortung lightning integration (System Blue — the detection-network route; longer term).
-- Remove vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005).
+- **InfluxDB points carry no station identity (DEC-0053 Finding 2) — do NOT "just add the tag."**
+  `influx.py` supports `tags = station=...`; the live config sets none, so every point in an
+  infinite-retention bucket is anonymous. Adding a tag **forks the series key** (INTERFACES §2), which
+  splits historical continuity and needs dashboard coordination. Harmless with one producer; revisit as
+  a coordinated interface change if a second producer ever satisfies the contract (PRINCIPLES §1).
+- **SQLite archive carries no correction flag (DEC-0053 Finding 3).** InfluxDB corrected points carry
+  `rain_qc`/`rainRate_qc`/`backfill`; the archive carries nothing, so a corrected row is
+  indistinguishable from a never-corrected one — the derived store is better provenanced than the
+  system of record. Only `DATA_ERRATA.md` records it. Not urgent; a schema change isn't justified yet.
 - Credential hygiene follow-ups — tracked in the gitignored local-infra doc, not here (this repo is public). Secrets belong in `monitor.env` as env vars, never inline (DEC-0012, DEC-0047).
 - Set `STATION_NAME` in the NAS `monitor.env` — the monitor's alert/summary emails currently fall back
   to the default "My PWS" (env var unset), so they're unbranded. Cosmetic, one-line fix (observed S27).
 - Verify OWM (OpenWeatherMap) measurements propagate into their API over time — a post-integration
   sanity check that the uploader's values actually land.
 - Long-term stability watch (uptime / reception drift / memory) — no formal monitor yet.
-- **Reception-metric over-count (DEC-0024, root cause confirmed S21):** the daily RF-Reception email
-  reads ~150% because `weewx_monitor.py` counts `Wunderground-RF: Published` *log lines* while the
-  driver publishes freqError freq-hop channel packets as extra dataless loop packets (~1.66×). Fix
-  Layer A (monitor: count unique record epochs) is the likely first move — safe, monitor-only,
-  reversible. Layer B (driver: stop publishing dataless freqError packets + disable `RAW_*` debug
-  logging) is deeper and needs a prod plan. See DEC-0024.
-- **`weewx.log` bloat / rotation:** the driver's `RAW_RTL_*`/`RAW_CHANNEL_PAYLOAD` `loginf` debug
-  lines flood the log (15 MB / 122 k lines observed S21). Disable in prod and/or add log rotation;
-  the monitor re-reads the whole file each poll, so an unbounded log also drags the monitor. Ties
-  into DEC-0024 Layer B.
+- ~~Reception-metric over-count (DEC-0024)~~ — **SHIPPED in v2.0.8 (S43):** both layers landed
+  (monitor counts unique record epochs; driver no longer publishes dataless freqError packets — see
+  CHANGELOG `[S43]`, DEC-0024 fully resolved). Pruned S52.
+- ~~`weewx.log` bloat from `RAW_*` debug lines~~ — **resolved in practice:** the RAW logging moved
+  behind `debug_rtld` levels (2026-07-05 driver change) and prod runs with it off — S52 grepped the
+  live log: zero `RAW_` lines. Log rotation is daily and working. Pruned S52.
 
 ## Durable RF findings (from 2026-06-01 tuning sweeps — keep; these guide P2)
 

@@ -32,7 +32,7 @@ case "${NAS_PORT}${NAS_USER}${NAS_HOST}" in (*'<'*)
 esac
 WINDOW="${1:-0}"          # seconds; 0 = since container start
 CONTAINER=weewx-rtldavis-v2
-EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.8}"
+EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.9}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }
@@ -93,10 +93,22 @@ echo \"record_age_s=\$((now - lt))\"
 echo \"window_pct=\$(grep 'WINDOW:' \"\$M\" | tail -1 | grep -oE '\([0-9]+%\)' | tr -d '()%')\"
 
 # --- phantom rain: the DEC-0042 signature, auto-detected ---
+# A raw rainRate>0/rain=0 row is NOT itself the signature: the ISS's own rain-rate message
+# (rtldavis.py message_type 5) reports 'time since last tip' for a while after a REAL tip,
+# decaying to 0 on its own — normal hardware behavior, confirmed against a real storm on
+# 2026-07-18 (3 tips, 49 false-flagged decay rows; the tail of one decay ran 38 min past the
+# light-rain formula's nominal ~1022s ceiling, so the window below is generous, not exact).
+# Only rows with NO real tip in the preceding DECAY_S are counted (S44).
 \$D exec \$C /opt/weewx-venv/bin/python3 -c \"
 import sqlite3
 db = sqlite3.connect('/opt/weewx-data/archive/weewx.sdb')
-n = db.execute('SELECT COUNT(*) FROM archive WHERE dateTime > ? AND rainRate > 0 AND (rain IS NULL OR rain = 0)', (\$t0,)).fetchone()[0]
+DECAY_S = 3600  # generous margin above the observed 38-min decay tail
+rows = db.execute('SELECT dateTime FROM archive WHERE dateTime > ? AND rainRate > 0 AND (rain IS NULL OR rain = 0)', (\$t0,)).fetchall()
+n = 0
+for (dt,) in rows:
+    tip = db.execute('SELECT COUNT(*) FROM archive WHERE dateTime <= ? AND dateTime > ? AND rain > 0', (dt, dt - DECAY_S)).fetchone()[0]
+    if tip == 0:
+        n += 1
 t = db.execute('SELECT COUNT(*) FROM archive WHERE dateTime > ?', (\$t0,)).fetchone()[0]
 print('phantom_rain=%d' % n); print('archive_rows=%d' % t)
 \" 2>/dev/null
