@@ -41,7 +41,13 @@ _Last updated: 2026-07-28 (S56)._
 > **▶ Resume here (S57, in progress). Phase 0 is LIVE: `debug_rtld` set to `2` on the live
 > `weewx.conf` at 2026-07-28 19:11 EDT** (backup: `weewx.conf.bak-debugrtld2-20260728`;
 > container restarted clean, banner `0.20+ws.3` unchanged, `sensor_qc True`, no errors).
-> **Next action: after a few hours, grep `weewx.log` for `FreqError` (single-word pattern) to
+> **Official window: revert target 22:11 EDT tonight (2026-07-28), 3h from activation** — ISS
+> hops channels ~every 2.5s, and at the measured 73.3% average reception with no diurnal cycle
+> (DEC-0059), evidence would show up within minutes if the deployed Go binary emits `FreqError`
+> telemetry at all. 3h is a confidence margin, not a statistical requirement, chosen to close
+> this the same evening. Tracked at
+> [ops#112](https://github.com/WeatheredScientist/eaglehunt-ops/issues/112).
+> **Next action: at or after 22:11 EDT, grep `weewx.log` for `FreqError` (single-word pattern) to
 > settle whether the telemetry exists at all, then revert `debug_rtld` to `1` immediately**
 > (log-bloat risk, DEC-0041) and restart the container the same way (`docker kill` + `docker
 > start`). **This is a live prod config change awaiting revert — do not let a session end
