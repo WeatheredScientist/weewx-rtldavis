@@ -15,35 +15,32 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S51** (2026-07-26). Watch-item session — all four S50-handoff checks run, no code
-> changed. Clean pickup (91/91 green, zero open PRs, no cross-repo assignments). Findings: the DEC-0053
-> TTL watch fired and both patterns are benign (see "Active thread"); the humidity-spike watch is still
-> unfired through 2026-07-26 20:42; soak check 14 PASS / 0 FAIL; no driver stalls. Filed
-> [#74](https://github.com/WeatheredScientist/weewx-rtldavis/issues/74) (calm-windDir warning noise,
-> needs design agreement before coding).
+> **Current session: S52** (2026-07-27). Incident session — the ERR-0004 phantom 39 mph gust
+> (2026-07-27 18:56Z, published to all ten external sinks before detection). Diagnosis arrived
+> cross-repo (dashboard S149 → [#76](https://github.com/WeatheredScientist/weewx-rtldavis/issues/76),
+> ops#103) and was independently re-verified here before acting. Shipped, all in-session: both-store
+> data correction (archive + InfluxDB, `windGust_qc`/`windSpeed_qc` flags), ERR-0004 errata entry,
+> **DEC-0054 frame-level co-rejection**, the #74 calm-windDir log fix (bundled), and the **v2.0.9
+> release + prod deploy**. See CHANGELOG `[S52]`.
 
-_Last updated: 2026-07-26 (S51)._
+_Last updated: 2026-07-27 (S52)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S51 → S52). Nothing is half-shipped and no PR is open.** Prod is running the S48
-> loop-JSON TTL fix (DEC-0053), deployed and verified — soak check at S51: 14 PASS / 0 FAIL (the one
-> WARN is the known 67% reception baseline). The one still-open data thread is the humidity-spike
-> watch (see "Next session actions" — `log_humidity_raw` capture is live; S51 checked 2,755 samples
-> covering 2026-07-24 00:04 → 2026-07-26 20:42, largest single step −8.7 RH pts and that was across a
-> 4-min reception gap; still no 16–37 pt DEC-0044 signature). The DEC-0049 phantom-rainRate prediction
-> (a real condensation event with the tip counter not advancing) also remains unfired — 0 qualifying
-> rows in the S51 soak window.
-> **S48's TTL watch — RESOLVED at S51, both patterns benign.** First full day fired 10 WARNINGs:
-> (a) 3 humidity-derived fields at 20:09, a real ~13-min humidity-packet reception dropout
-> (19:59–20:12) — exactly what the bound is for; (b) 7× `windDir` at ~301 s during calm stretches —
-> the driver *deliberately* sets `wind_dir = None` on calm readings (`rtldavis.py` ~1356), so any
-> ≥5-min calm expires it. Healthy sensor, correct omission, misleading warning text. **Do not bump
-> windDir's TTL** (that would serve a stale direction during calm) — the log-hygiene fix is
-> [#74](https://github.com/WeatheredScientist/weewx-rtldavis/issues/74), which needs design agreement
-> first (PRINCIPLES §8).
+> **▶ Resume here (S52 → S53). v2.0.9 is in prod; watch the first days of DEC-0054 in the wild.**
+> S52 shipped the ERR-0004 phantom-gust response end-to-end (correction + co-rejection + release —
+> CHANGELOG `[S52]` has the full story; the errata is DATA_ERRATA `ERR-0004`). What to watch now:
+> co-rejection log lines (`frame failed bounds proof -- co-rejecting`) — expect them rare (bounds
+> rejections ran ~1/day-ish); each one is a phantom that v2.0.8 would have published. A co-rejection
+> coinciding with an rxCheckPercent dip is the ERR-0004 signature working as designed.
+> The humidity-spike watch continues (S51 checked through 2026-07-26 20:42, still no 16–37 pt
+> DEC-0044 signature) — note the S51 grep command in "Next session actions" step 1 still applies,
+> and ERR-0004's humidity_raw 2b32→59a9 was a *bounds* event, not the DEC-0044 in-range signature.
+> The DEC-0049 phantom-rainRate prediction also remains unfired.
+> **#74 shipped at S52** (calm-windDir expiry → DEBUG when windSpeed 0.0, WARNING otherwise);
+> verify the ~7/day WARNING noise is actually gone from `weewx.log` after a full day.
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -55,7 +52,7 @@ _Last updated: 2026-07-26 (S51)._
 > sectioned config.
 >
 > Run `ops/soak_check.sh` any time for a fresh acceptance-criteria verdict (its `EXPECT_IMAGE` default
-> now tracks `:v2.0.8` — bump it in the same PR next time the deployed tag moves).
+> now tracks `:v2.0.9` — bump it in the same PR next time the deployed tag moves).
 
 ## Upstream — all three landed (S38)
 
@@ -73,6 +70,10 @@ _Last updated: 2026-07-26 (S51)._
 
 ## Shipped — nothing to do here
 
+- **S52** (**v2.0.9 shipped** — DEC-0054 frame-level co-rejection; ERR-0004 corrected in both stores
+  with `windGust_qc`/`windSpeed_qc` flags; issues #74 + #76 closed; ops#103 answered, ops#104
+  unblocked): see CHANGELOG `[S52]` and DATA_ERRATA `ERR-0004`. Rollback: `:v2.0.8` on the NAS;
+  `loop_json_writer.py.bak-pre-v2.0.9`; `weewx.sdb.bak-err0004-20260727`.
 - **S49** (issue #67 closed — mypy is now a real CI gate): 19 pre-existing mypy errors fixed (two
   genuine bugs in `ops/recover_sweep_results.py` — a mismatched tuple element type and two loop
   variables shadowing module-level names; one missing `types-requests` stub; 13 py2/py3-compat
@@ -228,18 +229,18 @@ _Last updated: 2026-07-26 (S51)._
   NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S51 done → S52)
+## Next session actions (S52 done → S53)
 
-**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S51
+**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S52
 now live only in "Shipped" above and CHANGELOG — not duplicated here.
 
-**▶ ON RETURN (S52), in order:**
+**▶ ON RETURN (S53), in order:**
 
-0. **Issue [#74](https://github.com/WeatheredScientist/weewx-rtldavis/issues/74) is waiting on a
-   design discussion** — the calm-windDir TTL-expiry WARNING fires ~7×/day (S51 diagnosis in "Active
-   thread"). Proposed: downgrade to DEBUG when concurrent `windSpeed` is 0.0, keep WARNING otherwise.
-   Get the owner's agreement (PRINCIPLES §8) before touching `loop_json_writer.py`; deploy is the
-   mounted-file path (scp + pyc-clear + restart), same as S48.
+0. **First-days watch on v2.0.9 (DEC-0054):** grep `weewx.log*` for `co-rejecting` — each hit is a
+   frame the old filter would have partially trusted; sanity-check any hit against a concurrent
+   `rxCheckPercent` dip. Also confirm the #74 calm-windDir WARNINGs (~7/day pre-fix) are gone.
+   Run `ops/soak_check.sh` (its `EXPECT_IMAGE` now tracks `:v2.0.9`). Startup-race stall watch
+   (S41 class): check the deploy-window log once — no stall seen at the S52 recreate.
 
 1. **Keep watching the humidity-spike log — still nothing qualifying through S51 (2026-07-26 20:42).**
    `log_humidity_raw True` has been active since the v2.0.7 restart at 2026-07-13 15:27 EDT; S46
@@ -262,9 +263,8 @@ now live only in "Shipped" above and CHANGELOG — not duplicated here.
    real hit is worth taking seriously as the DEC-0049-predicted event, not re-litigating as a false
    positive first. S51's run: 0 rows in 1,214.
 
-4. **Startup-race stall watch (S41 class): still clean.** No stall has recurred across the S43, S47,
-   and S48 restarts; S51 grepped today's log — nothing. Downgraded further: only revisit if a stall
-   shows up on consecutive restarts.
+4. *(folded into step 0's deploy-window check — the S41 stall class stays clean through S48; only
+   revisit if a stall shows up on consecutive restarts.)*
 
 **Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
 **config** is mounted and the image is inert (DEC-0046). Inverses. A release that changes shipped config
