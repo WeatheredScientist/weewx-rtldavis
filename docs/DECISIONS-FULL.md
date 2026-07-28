@@ -2049,3 +2049,64 @@ same-frame humidity to SURVIVE a wind bounds failure. That assertion is now inve
 
 **Ships in v2.0.9** (driver is baked, DEC-0031 — image rebuild, deliberate release). Guarded by 6 new
 tests including a verbatim replay of the 2026-07-27 frame.
+
+---
+
+## DEC-0055 — The outside-temperature field is SIGNED; decode it as true two's complement, not meteostick's one's complement
+
+**Status:** Accepted · **Date:** 2026-07-28 (S54) · **Fixes:** the R1 finding of the ops#105 audit
+(weewx S53) · **Bounded by:** DEC-0054 (co-rejection is what makes this urgent) · **Deviates from:**
+weewx-meteostick, deliberately, by one LSB
+
+**Context — a latent bug that only fires in winter.** `rtldavis.py` decoded the 12-bit digital
+temperature field as **unsigned**. Davis encodes it as **two's complement**. The station has never
+seen a sub-0 °F reading, so the bug has never fired; the ops#105 cross-observable QC audit found it
+by reading the encoding out of the source rather than observing an event.
+
+The failure chain on the first hard freeze, with the numbers:
+
+| Step | Value |
+|---|---|
+| Real reading | −5.0 °F |
+| On the wire (12-bit two's complement tenths) | `0xFCE` = 4046 |
+| Unsigned decode (the bug) | 4046 / 10 = **404.6 °F = 207 °C** |
+| SensorQC `temperature` bounds (`rtldavis.py`) | −40…65 °C → **trip** |
+| DEC-0054 co-rejection | bounds failure is *positive corruption proof* → **the whole frame is nulled** |
+
+So genuine cold weather reads as proof of RF corruption. Pre-v2.0.9 that nulled temperature alone
+(the station goes blind below 0 °F). **Post-v2.0.9 it is strictly worse:** every type-8 frame co-rejects
+its wind siblings too, and the co-rejection log line — which we are actively watching as a corruption
+alarm (STATUS "Active thread") — fires every ~30–60 s for the duration of the cold snap. The alarm we
+built to catch corruption would have been saturated by ordinary winter.
+
+**Why not copy weewx-meteostick verbatim.** The audit recommended adopting meteostick's handling, and
+meteostick is right about the two things that matter — the field is signed, and there is a **second
+no-sensor sentinel `0xFF8`** that our fork and upstream lheijst both lack. But its arithmetic is
+`-(temp_raw ^ 0xFFF) / 10.0`, which is **one's** complement:
+
+- `temp_raw ^ 0xFFF` = `4095 − temp_raw`, so it computes `temp_raw − 4095`; true two's complement is
+  `temp_raw − 4096`. Every negative reading comes out **0.1 °F warm**.
+- The tell: `0xFFF` should be −0.1 °F. Meteostick maps it to **0.0 °F** — the same output as `0x000`.
+  One code point is duplicated and −0.1 °F is unrepresentable.
+- It also breaks sign symmetry. The positive branch truncates toward zero (floor); `− 4096` floors on
+  the negative side too, keeping the truncation bias uniform across zero. `− 4095` flips the bias
+  direction at 0, putting a discontinuity exactly where readings cluster in winter.
+
+We ship `(temp_raw - 0x1000) / 10.0` when bit 11 is set, and adopt the `0xFF8` sentinel. Verified
+against the meteostick source (read directly, not quoted from the audit) and the DavisRFM69 protocol
+notes ("the value is signed"). The `osengr.org` RF-protocol PDF surfaced by search does **not** cover
+Davis and was discarded rather than cited — checked, per the verify-externally rule.
+
+**The analog/thermistor branch is untouched.** That path reads an unsigned ADC value; sign handling
+lives inside the digital branch only, matching meteostick.
+
+**Guarded by 10 new tests** (`tests/test_temp_twos_complement.py`), including: a −40 °F frame, the
+`0xFFF` case that *distinguishes this decision from meteostick's*, both sentinels, a positive-control
+frame builder, a DEC-0054 **co-rejection non-fire** sweep across −0.1…−39.9 °F, and a positive control
+proving the bounds gate really does fire on the old unsigned decode (the S40 lesson: a passing test is
+not evidence if the assertion cannot fail). All three plausible regressions were **mutation-tested**
+red: unsigned decode, dropped `0xFF8`, and meteostick's one's complement.
+
+**Not yet shipped.** The driver is baked (DEC-0031), so this needs an image rebuild and a deliberate
+release — deadline is **first frost**, not this session. A companion upstream PR belongs alongside
+lheijst#22.

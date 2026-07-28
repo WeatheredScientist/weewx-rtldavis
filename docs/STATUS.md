@@ -15,32 +15,35 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S52** (2026-07-27). Incident session — the ERR-0004 phantom 39 mph gust
-> (2026-07-27 18:56Z, published to all ten external sinks before detection). Diagnosis arrived
-> cross-repo (dashboard S149 → [#76](https://github.com/WeatheredScientist/weewx-rtldavis/issues/76),
-> ops#103) and was independently re-verified here before acting. Shipped, all in-session: both-store
-> data correction (archive + InfluxDB, `windGust_qc`/`windSpeed_qc` flags), ERR-0004 errata entry,
-> **DEC-0054 frame-level co-rejection**, the #74 calm-windDir log fix (bundled), and the **v2.0.9
-> release + prod deploy**. See CHANGELOG `[S52]`.
+> **Current session: S54** (2026-07-28). **R1 landed in code (DEC-0055)** — the outside-temperature
+> decode is now true two's complement, plus the `0xFF8` sentinel; 10 new tests, all three plausible
+> regressions mutation-tested red; pytest 111 / ruff / mypy green. **Not released** — the driver is
+> baked (DEC-0031), so this needs an image rebuild before first frost. **R2 (`MAX_PLAUSIBLE_TIPS`
+> 60 → 16) was NOT taken up** — the owner wants more discussion first; the constant is untouched.
+> See CHANGELOG `[S54]` and DEC-0055.
 
-_Last updated: 2026-07-27 (S52)._
+_Last updated: 2026-07-28 (S54)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S52 → S53). v2.0.9 is in prod; watch the first days of DEC-0054 in the wild.**
-> S52 shipped the ERR-0004 phantom-gust response end-to-end (correction + co-rejection + release —
-> CHANGELOG `[S52]` has the full story; the errata is DATA_ERRATA `ERR-0004`). What to watch now:
-> co-rejection log lines (`frame failed bounds proof -- co-rejecting`) — expect them rare (bounds
-> rejections ran ~1/day-ish); each one is a phantom that v2.0.8 would have published. A co-rejection
-> coinciding with an rxCheckPercent dip is the ERR-0004 signature working as designed.
-> The humidity-spike watch continues (S51 checked through 2026-07-26 20:42, still no 16–37 pt
-> DEC-0044 signature) — note the S51 grep command in "Next session actions" step 1 still applies,
-> and ERR-0004's humidity_raw 2b32→59a9 was a *bounds* event, not the DEC-0044 in-range signature.
-> The DEC-0049 phantom-rainRate prediction also remains unfired.
-> **#74 shipped at S52** (calm-windDir expiry → DEBUG when windSpeed 0.0, WARNING otherwise);
-> verify the ~7/day WARNING noise is actually gone from `weewx.log` after a full day.
+> **▶ Resume here (S54 → S55). R1 is CODED but NOT RELEASED — the release is the open item.**
+> DEC-0055 shipped the signed temp decode + `0xFF8` sentinel into `rtldavis.py` on `dev`. Because the
+> driver is **baked** (DEC-0031), prod still runs the unsigned decode: **an image rebuild + release is
+> required before first frost**, or the bug is live all winter. Two follow-ons ride with it:
+> (a) a companion **upstream PR** alongside lheijst#22 — the sign bug and the missing `0xFF8`
+> sentinel are both inherited from upstream; (b) report R1's completion back on
+> [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105).
+> **R2 is still OPEN and deliberately untouched** — the owner wants to discuss `MAX_PLAUSIBLE_TIPS`
+> 60 → 16 (closes the ≤0.30 in phantom-rain residual to ≤0.16 in) before any code. Do not implement
+> it unprompted. R3 (wind spike guard) rides the dashboard side of the ops#105 thread; R4 (radiation
+> night ceiling) and R5 (extra-station zero-QC docs note) are noted-not-built.
+> S53 watch results: co-rejection **0 hits** in the deploy's first hour (expected-rare); #74
+> calm-windDir WARNINGs confirmed present right up to the 22:18 recreate and absent after, but the
+> post-deploy window was <1 day — **re-verify over a full day**. Humidity watch through
+> 2026-07-27 23:14: still no DEC-0044 signature (996 samples, largest non-ERR-0004 step 6.1 pts).
+> Soak 15 PASS / 0 WARN / 0 FAIL. DEC-0049 phantom-rainRate prediction remains unfired.
 >
 > **Standing rule (DEC-0046):** for any file we ship, ask **"which layer actually wins in prod?"** The
 > **driver** is baked and the mount is inert (DEC-0031). The **config** is mounted and the image is inert
@@ -70,6 +73,13 @@ _Last updated: 2026-07-27 (S52)._
 
 ## Shipped — nothing to do here
 
+- **S53** (ops#105 cross-observable QC audit delivered — no code): per-observable verdict table
+  (all encodings verified from source), historical sweep = archive CLEAN (ERR-0004 the only
+  in-bounds escape ever; zero new ERR entries), consumer inventory completed (adds WU RapidFire +
+  loop-JSON cache-forward + daily summaries), R1–R5 recommendations awaiting design agreement.
+  Corrections to ops#103 recorded there: rain NOT closed (≤0.30 in residual), rx-collapse is a
+  correlate not a fingerprint requirement. See CHANGELOG `[S53]` and the
+  [audit comment](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105#issuecomment-5099627052).
 - **S52** (**v2.0.9 shipped** — DEC-0054 frame-level co-rejection; ERR-0004 corrected in both stores
   with `windGust_qc`/`windSpeed_qc` flags; issues #74 + #76 closed; ops#103 answered, ops#104
   unblocked): see CHANGELOG `[S52]` and DATA_ERRATA `ERR-0004`. Rollback: `:v2.0.8` on the NAS;
@@ -229,20 +239,36 @@ _Last updated: 2026-07-27 (S52)._
   NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S52 done → S53)
+## Next session actions (S54 done → S55)
 
-**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S52
+**This section is the repo-visible handoff.** Read it first when resuming. Session recaps for S46-S54
 now live only in "Shipped" above and CHANGELOG — not duplicated here.
 
-**▶ ON RETURN (S53), in order:**
+**▶ ON RETURN (S55), in order:**
 
-0. **First-days watch on v2.0.9 (DEC-0054):** grep `weewx.log*` for `co-rejecting` — each hit is a
-   frame the old filter would have partially trusted; sanity-check any hit against a concurrent
-   `rxCheckPercent` dip. Also confirm the #74 calm-windDir WARNINGs (~7/day pre-fix) are gone.
-   Run `ops/soak_check.sh` (its `EXPECT_IMAGE` now tracks `:v2.0.9`). Startup-race stall watch
-   (S41 class): check the deploy-window log once — no stall seen at the S52 recreate.
+0. **Release the R1 fix (DEC-0055) — this is the only item with a hard deadline.** The code is on
+   `dev`; prod runs the **unsigned** decode until an image is rebuilt (DEC-0031: the driver is baked,
+   an `scp` is a silent no-op). **Deadline: before first frost.** Same window: the companion
+   **upstream PR** alongside [lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22) (both the
+   sign bug and the missing `0xFF8` sentinel are inherited upstream), and a note back on
+   [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105) closing out R1.
+   Carry DEC-0046 through the release: verify in the **running system**, not the artifact.
 
-1. **Keep watching the humidity-spike log — still nothing qualifying through S51 (2026-07-26 20:42).**
+0b. **R2 is awaiting discussion, not implementation.** `MAX_PLAUSIBLE_TIPS` 60 → 16 (residual
+   phantom-rain ceiling 0.30 → 0.16 in) was explicitly held by the owner at S54 for more design
+   discussion. The constant in `rtldavis.py` is **unchanged**. Do not code it unprompted
+   (PRINCIPLES §8).
+
+1. **Continue the v2.0.9 watch (DEC-0054):** grep `weewx.log*` for `co-rejecting` (single-word
+   pattern via nasctl — multi-word patterns silently match nothing) — 0 hits in the first hour
+   post-deploy (22:18 2026-07-27). Each future hit is a frame v2.0.8 would have partially trusted;
+   an rxCheckPercent dip corroborates but is NOT required (the 2026-07-17 corrupt frame arrived at
+   77 %). **Re-check the #74 calm-windDir WARNINGs over a full day** — confirmed silent in the
+   first post-deploy hour only. Run `ops/soak_check.sh` (S53: 15/0/0). First Dependabot run may
+   open a deps PR — review, don't auto-merge (#78 mechanism).
+
+2. **Keep watching the humidity-spike log — still nothing qualifying through S53 (2026-07-27 23:14;
+   996 samples since S51's checkpoint, largest non-ERR-0004 step 6.1 pts).**
    `log_humidity_raw True` has been active since the v2.0.7 restart at 2026-07-13 15:27 EDT; S46
    checked the full window to its date, S51 re-checked 2026-07-24 → 2026-07-26 (2,755 samples,
    largest step −8.7 pts across a reception gap — not the signature). Grep for `humidity_raw=` in
@@ -255,15 +281,15 @@ now live only in "Shipped" above and CHANGELOG — not duplicated here.
    re-derive them.** Decode of the logged word: `(pkt[4] << 8) + pkt[3]` in hex; RH =
    `(((pkt[4] >> 4) << 8) + pkt[3]) / 10`.
 
-2. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
+3. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The mechanism
    is the open question, not the threshold.
 
-3. **`ops/soak_check.sh`'s phantom-rain detector is now hardened (S44) — don't re-flag ordinary rain.**
+4. **`ops/soak_check.sh`'s phantom-rain detector is now hardened (S44) — don't re-flag ordinary rain.**
    If it reports a nonzero count, that already excludes the normal post-tip decay window (1 hour); a
    real hit is worth taking seriously as the DEC-0049-predicted event, not re-litigating as a false
    positive first. S51's run: 0 rows in 1,214.
 
-4. *(folded into step 0's deploy-window check — the S41 stall class stays clean through S48; only
+5. *(folded into step 1's deploy-window check — the S41 stall class stays clean through S48; only
    revisit if a stall shows up on consecutive restarts.)*
 
 **Carry DEC-0046 into any future release:** the **driver** is baked and the mount is inert (DEC-0031); the
