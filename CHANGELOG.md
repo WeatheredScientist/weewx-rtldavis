@@ -6,6 +6,45 @@ under [Pre-S16].
 
 ---
 
+## [S52] — 2026-07-27 — ERR-0004 phantom 39 mph gust: corrected in both stores, frame-level co-rejection shipped as v2.0.9 (DEC-0054)
+
+**The incident (ERR-0004):** at 14:55:50 EDT, during an rxCheckPercent collapse to 13.2%, one
+multi-bit-corrupt-but-CRC-valid frame (DEC-0033 class) carried humidity decoding to 144.9% — rejected
+by SensorQC bounds — *and* a wind byte decoding to 39 mph from dead calm, which passed (in-spec, and
++16.5 m/s sat under the 20 m/s delta cap). It became the archive interval's gust max and went out to
+all ten external sinks. Owner spotted it on the dashboard hours later; dashboard S149 and an
+eaglehunt-ops session had already filed [#76](https://github.com/WeatheredScientist/weewx-rtldavis/issues/76)
++ ops#103 with the diagnosis — independently re-verified here (log + code) before acting; every
+claim held. Coordinated in real time on #76 (3 comments: pickup → correction landed → release).
+
+- **Correction applied live, both stores, same session (DEC-0025/0032/0037):** archive row
+  1785178560 → windSpeed/windDir/windGust/windGustDir/ET/appTemp/windrun all NULL (wview-extended
+  schema carries the derived fields in-row), guarded UPDATE + `rebuild-daily`; InfluxDB point
+  rewritten minus 7 wind-affected fields with sparse `windGust_qc=1`/`windSpeed_qc=1` (DEC-0099
+  contract). Verified via the public /query proxy: day-max gust now a genuine 12 mph. Dashboard's
+  ops#104 verification unblocked the same hour. Backup: `weewx.sdb.bak-err0004-20260727`.
+- **DEC-0054 — frame-level co-rejection (v2.0.9):** a bounds failure on ANY field now nulls every
+  weather field of that frame and skips the rain counter *without* resyncing its baseline; delta
+  trips never co-reject. Zero free parameters — explicitly not the parked DEC-0044 coupling filter.
+  6 new tests incl. a verbatim replay of the corrupt frame; the old test asserting same-frame
+  humidity *survives* a wind bounds failure was inverted (it encoded exactly this gap).
+- **Issue #74 closed (bundled):** calm-windDir TTL expiry logs DEBUG when windSpeed is 0.0 (calm is
+  Davis semantics, not a fault); WARNING kept for expiry with wind, and an expired windSpeed counts
+  as a dropout. Recovery line downgraded symmetrically. 4 tests.
+- **BACKLOG pruned:** DEC-0024 bullet (shipped v2.0.8) and RAW_* log bloat (resolved; live log has
+  zero RAW_ lines) marked done.
+- **v2.0.9 released:** PR #77 → dev (CI green), image built on the NAS from a fresh checkout, pushed
+  to Docker Hub `:v2.0.9` + `:latest` (digest `sha256:5eb38850`), prod container recreated from the
+  live inspect config (kill→rm→3s→run), `loop_json_writer.py` hot-swapped (`.bak-pre-v2.0.9`),
+  live-verified: driver banner `0.20+ws.1`, `sensor_qc True`, records publishing, `current.json`
+  writing (calm windDir correctly omitted), soak 14 PASS / 1 WARN (restart-empty reception window) /
+  0 FAIL, no startup stall. Rollback: `:v2.0.8` remains on the NAS and Docker Hub.
+- **Found in passing: the Dockerfile installs weewx UNPINNED** — this rebuild silently moved prod
+  weewx 5.3.1 → 5.4.0 (came up clean, daily summaries fine). Same silent-drift class as S46's
+  unpinned-ruff CI break; filed as an issue to pin it.
+
+---
+
 ## [S51] — 2026-07-26 — Watch items all run: DEC-0053 TTL watch resolved benign, humidity spike still unfired; issue #74 filed
 
 No code changed. All four S50-handoff watch items executed against prod:
