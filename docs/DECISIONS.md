@@ -1,7 +1,7 @@
 # Decision Log (INDEX) — weewx-rtldavis
 
 **Status:** Source of truth (index) · **Tier 1 session read** (DEC-0030)
-**Last updated:** 2026-07-28 (S55 — DEC-0056; full bodies in DECISIONS-FULL.md)
+**Last updated:** 2026-07-28 (S56 — DEC-0057; full bodies in DECISIONS-FULL.md)
 
 One row per decision — scan this at session start; **do not re-litigate** anything listed. The
 complete append-only bodies live in `docs/DECISIONS-FULL.md`; grep the DEC id there whenever a task
@@ -72,6 +72,7 @@ a later entry.
 | DEC-0054 | **Frame-level co-rejection:** a SensorQC *bounds* failure (positive corruption proof) nulls every weather field of the same frame and skips the rain-counter without resync; a *delta* trip never triggers it. Zero free parameters — NOT the parked DEC-0044 coupling filter. Motivated by ERR-0004 (phantom 39 mph gust rode a frame whose own humidity decoded to 144.9%) | Accepted · **extends** DEC-0029 · ships v2.0.9 · closes #76 | 2026-07-27 (S52) |
 | DEC-0055 | **The outside-temperature field is SIGNED** — decoded unsigned, a −5 °F reading became 404.6 °F, tripped the −40…65 °C bounds and (post-v2.0.9) co-rejected the whole frame, so ordinary winter would have saturated the corruption alarm. Ships true two's complement (`− 0x1000`), **not** meteostick's one's-complement `^ 0xFFF` (0.1 °F warm; maps `0xFFF` and `0x000` both to 0.0 °F) · adopts meteostick's missing `0xFF8` sentinel | Accepted · **fixes** ops#105 R1 · **bounded by** DEC-0054 · **released v2.0.10, live in prod (S55)** | 2026-07-28 (S54) |
 | DEC-0056 | **`MAX_PLAUSIBLE_TIPS` 60 → 16 (ops#105 R2)** — evidence-bounded (70-day archive: worst real minute 7 tips, worst 3-min window exactly 16, gaps during rain never > 60 s, filter idle at 60; StdQC already capped the system at 30, so the newly exposed band is 17–30, never occupied). Ships as a package: cap + reframed rejection email as tripwire + WeatherLink recovery playbook + predefined revisit trigger (any rejection on a wet day). Confirm-on-reject held as the designed escalation | Accepted · **amends** DEC-0021 · rides `dev` until the next image cut | 2026-07-28 (S55) |
+| DEC-0057 | **ROADMAP.md joins the closeout ritual** — a same-session update whenever a DEC ships/closes/reprioritizes a ROADMAP line (closeout step 5), plus a next-check-due tripwire inside ROADMAP.md itself, after it was found 20 sessions / 8 releases stale (S35 → S56) | Accepted · **extends** DEC-0052 | 2026-07-28 (S56) |
 
 ## Open / deferred
 
