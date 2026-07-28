@@ -15,28 +15,25 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S55** (2026-07-28). **v2.0.10 RELEASED and LIVE** — DEC-0055's signed temp
-> decode is in prod (banner `0.20+ws.2`, deployed 09:28 EDT, `prod-baseline-20260728`, soak
-> 13/2/0). Upstream [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) opened
-> (owner-reviewed); R1 closed out on ops#105. **Second act (S55b): R2 DECIDED — DEC-0056** —
-> evidence pass over the full 70-day archive, owner-approved: `MAX_PLAUSIBLE_TIPS` 60 → 16 coded
-> on `dev` (rides until the v2.0.11 image cut; prod's baked driver keeps 60 until then), monitor
-> rejection email reframed as the tripwire and deployed NAS-side. See CHANGELOG `[S55]`/`[S55b]`.
+> **Current session: S55** (2026-07-28), three acts, all shipped. **v2.0.10** (R1/DEC-0055 signed
+> temp decode, 09:28) → **R2 decided via evidence pass (DEC-0056)** + monitor tripwire live →
+> **v2.0.11** (cap 16, banner `0.20+ws.3`, 11:00, `prod-baseline-20260728b`). Upstream
+> [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) opened; **ops#105 audit complete
+> from this side (R1 + R2 both live-verified)**. See CHANGELOG `[S55]`/`[S55b]`/`[S55c]`.
 
-_Last updated: 2026-07-28 (S55b)._
+_Last updated: 2026-07-28 (S55c)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S55 → S56). v2.0.10 is LIVE — the release thread is CLOSED; back to
-> watch-and-discuss.** DEC-0055's signed temp decode deployed 2026-07-28 09:28 EDT (banner
-> `0.20+ws.2`, `prod-baseline-20260728`; CHANGELOG `[S55]` has the full release record). Open:
-> **(a) R2 DECIDED (DEC-0056, S55b)** — cap 16 is coded on `dev` with the tripwire package
-> (reframed monitor email, WeatherLink recovery playbook, predefined revisit trigger: any
-> rejection on a wet day). **Prod's baked driver still runs cap 60 until the v2.0.11 image cut**
-> — no deadline, it's a hardening. R3 (wind spike guard) delivered dashboard-side (their S151,
-> DEC-0167); R4/R5 noted-not-built.
+> **▶ Resume here (S55 → S56). Everything shipped — prod runs v2.0.11 (`0.20+ws.3`); back to
+> watch-and-discuss.** The day's arc: v2.0.10 (R1/DEC-0055, 09:28) → DEC-0056 decided on evidence
+> → v2.0.11 (R2 cap 16, 11:00, `prod-baseline-20260728b`). CHANGELOG `[S55]`–`[S55c]` has the
+> record; ops#105's code items are complete from this side.
+> **(a) DEC-0056 is LIVE end-to-end** — cap 16 in the running driver, tripwire email verified
+> (`--test-alert` received), WeatherLink playbook + revisit trigger in the DEC. R3 delivered
+> dashboard-side (their S151, DEC-0167); R4/R5 noted-not-built.
 > **(b) Watches** — co-rejection grep: **0 hits** through 09:00 07-28 (positive-control-verified).
 > #74 calm-windDir: last WARNING 21:59 07-27 (19 min before the v2.0.9 recreate), **zero in the
 > ~11.5 h since** at a prior base rate of ~1/hr — one more full-day look and call it confirmed.
@@ -57,7 +54,7 @@ _Last updated: 2026-07-28 (S55b)._
 > sectioned config.
 >
 > Run `ops/soak_check.sh` any time for a fresh acceptance-criteria verdict (its `EXPECT_IMAGE` default
-> now tracks `:v2.0.10` — bump it in the same PR next time the deployed tag moves).
+> now tracks `:v2.0.11` — bump it in the same PR next time the deployed tag moves).
 
 ## Upstream — four live threads (S38, S55)
 
@@ -79,6 +76,10 @@ _Last updated: 2026-07-28 (S55b)._
 
 ## Shipped — nothing to do here
 
+- **S55c** (**v2.0.11 shipped** — DEC-0056 cap 16 live in prod; banner `0.20+ws.3`, digest
+  `sha256:b8f35f36…`, `prod-baseline-20260728b`; monitor tripwire verified end-to-end
+  (`--test-alert` received); ops#105 audit complete from this side): see CHANGELOG `[S55c]`.
+  **Rollback: `:v2.0.10`** on the NAS and Docker Hub.
 - **S55** (**v2.0.10 shipped** — DEC-0055 signed temp decode live in prod; Docker Hub `:v2.0.10`
   + `:latest` at digest `sha256:ee3027e1…`, GitHub release, `main` == prod,
   `prod-baseline-20260728`; prod recreated and live-verified: banner `0.20+ws.2`, `sensor_qc True`,
@@ -209,10 +210,10 @@ _Last updated: 2026-07-28 (S55b)._
    method and the arithmetic are in DEC-0044; do not re-derive them.** Decode of the logged word:
    `(pkt[4] << 8) + pkt[3]` in hex; RH = `(((pkt[4] >> 4) << 8) + pkt[3]) / 10`.
 
-3. **R2 is DONE in code (DEC-0056) — the open remnant is the v2.0.11 cut.** Cap 16 + tests are
-   on `dev`; the monitor tripwire is live on the NAS. Cut v2.0.11 whenever the next release
-   window is convenient (same playbook as v2.0.10; no deadline). Until then prod's baked driver
-   runs cap 60 — the tripwire email works under either cap.
+3. **R2/DEC-0056 is fully SHIPPED (v2.0.11, S55c) — nothing left to cut.** If a rain-rejection
+   email ever arrives on a genuinely wet day, that is the predefined DEC-0056 revisit trigger:
+   reconcile against the WeatherLink console per the playbook and reopen the cap decision with
+   that event's data. On a dry day it's the filter catching a glitch — log it and move on.
 
 4. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The
    mechanism is the open question, not the threshold.
