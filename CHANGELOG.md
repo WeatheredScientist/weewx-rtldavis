@@ -42,6 +42,12 @@ further discussion and is untouched.
   [lheijst#22](https://github.com/lheijst/weewx-rtldavis/pull/22) and
   [david-lutz#1](https://github.com/david-lutz/weewx-influx2/pull/1) are both OPEN, and the issue #15
   comment was posted 2026-07-13. The table was written at S37 and never re-read after the PRs landed.
+- **Stray `0` file removed** from the repo root ([#86](https://github.com/WeatheredScientist/weewx-rtldavis/pull/86)) —
+  a zero-byte artifact committed by accident in `5e3c3dd` (S41) alongside `ops/soak_check.sh`, a
+  script dense with redirects; a stray `2>0` for `2>&1` is the likely mechanism. It landed as
+  `0 | 0` and was never referenced: nothing redirects to it, the `Dockerfile` `COPY`s only named
+  files (no root glob, so it never entered the image), and there is no packaging manifest to sweep
+  it up. Tracked files 82 → 81.
 - Gates: pytest **111 passed**, `ruff check` clean (0.5.7, DEC-0027), `mypy --ignore-missing-imports
   --no-strict-optional .` clean on 33 files.
 - **Not released.** The driver is baked (DEC-0031) → needs an image rebuild + deliberate release,
