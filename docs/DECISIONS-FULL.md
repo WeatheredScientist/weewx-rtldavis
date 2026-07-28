@@ -2207,4 +2207,43 @@ physically out-tick ~15/min); only intensity × a >64 s reading gap can, gaps ar
 demonstrably does not do during rain, and if that ever changes the failure is loud, bounded
 (≤ 0.30 in exposure per event within the StdQC band), and same-day recoverable from an independent
 record. That is the assurance: not that the tail case can't happen, but that it cannot happen
+silently, unboundedly, or unrecoverably.
+
+---
+
+## DEC-0057 — ROADMAP.md joins the closeout ritual: same-session updates + a next-check-due tripwire
+
+**Status:** Accepted · **Date:** 2026-07-28 (S56) · **Extends:** DEC-0052 (closeout skeleton)
+
+**Context.** A user-asked audit this session (S56) found `docs/ROADMAP.md` had drifted 20 sessions
+and 8 releases (S35 → S55c, v2.0.3 → v2.0.11) out of date: five real P1-tier releases (sensor-QC
+decode filter v2.0.4, reception-metric fix v2.0.8, frame-level co-rejection v2.0.9, signed temp
+decode v2.0.10, cap-16 tuning v2.0.11) had zero representation, and several already-completed
+housekeeping items (remote URL casing, stale-branch cleanup, the May rain-total reconciliation
+against the WeatherLink console, the README refresh) still showed as open checkboxes. Nothing in
+the closeout ritual (DEC-0052) ever asked whether a shipped DEC should move a ROADMAP line — the
+ritual updates STATUS.md and DECISIONS.md every session, but ROADMAP.md was only touched by the
+periodic docs-diet pass or an ad-hoc audit, so "same session" discipline never applied to it.
+
+**Decision:** two additions, not one, because they cover different failure modes.
+
+1. **Closeout step 5 (new):** if a DEC logged this session (step 4) ships, closes, or reprioritizes
+   a line item on `docs/ROADMAP.md`, update that line in the same session — not deferred to the
+   next docs-diet pass or the next audit. Mirrors the discipline step 4 already applies to
+   `DECISIONS.md` itself.
+2. **A tripwire inside ROADMAP.md**, not just a rule in CLAUDE.md: a "Keeping this current"
+   section naming the date of the last full reconciliation and a next-check-due session number
+   (~10 sessions out). If the session counter reaches or passes that number, run the full
+   reconciliation pass regardless of whether any DEC prompted it.
+
+**Why both, not just one.** The same-session rule (1) catches drift *at the moment it's created* —
+cheap, since the relevant context is already loaded that session. The tripwire (2) is the backstop
+for drift that accumulates from elapsed time or a missed trigger rather than any single DEC — the
+same failure mode that produced this session's 20-session gap in the first place: no individual
+session's DEC made the whole page stale, it went stale by accretion, so a rule that only fires on a
+DEC-shaped trigger would still miss it.
+
+**What changed:** CLAUDE.md's closeout skeleton (Session ritual → End) gains step 5; the model-tier
+restore check and commit+push steps renumber to 6 and 7. `docs/ROADMAP.md` gains the "Keeping this
+current" section, added this session alongside the fuller restructure that prompted this DEC.
 *silently*.
