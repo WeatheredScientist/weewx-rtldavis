@@ -16,7 +16,14 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S56** (2026-07-28), two acts, docs-only, nothing deployed. Confirmed prod
+> **▶ S56 third act (DEC-0059): the DEC-0048 RX experiment now has an apparatus** —
+> `ops/rx_experiment.sh` + 8 tests, design accepted, **NOT deployed** (prod untouched, still
+> v2.0.11 / gain 372). Key finding: **`-ex N` ≡ `receiveWindow 300+N`**, so no arm needs an image
+> rebuild. Baseline re-measured at **73.3% (sd 4.67)**, not the stale "~67–70%". 7 dead sweep
+> scripts deleted. **Next: Phase 0** (`debug_rtld=2`, a few hours, is `FreqError` telemetry there
+> at all?) → then owner-run deploy. See CHANGELOG `[S56c]`.
+>
+> **Current session: S56** (2026-07-28), three acts, nothing deployed. Confirmed prod
 > healthy on v2.0.11 (co-rejecting watch 0 hits, positive-controlled) and ops#105 closed; found
 > ops#110 newly opened (winter 2027 planning). **ROADMAP.md reconciled** (5 stale-done items
 > corrected) then **fully restructured** — P1 + P1.5 folded into one arc covering v2.0.3–v2.0.11,
