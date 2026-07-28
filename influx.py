@@ -99,10 +99,10 @@ Results in this:
 name: value
 time                CS H19 H20 H21 H22 H23 I   PPV V     VPV   binding
 ----                -- --- --- --- --- --- -   --- -     ---   -------
-1536086335000000000 5  528 19  115 23  93  0.6 9   13.41 63.68 loop   
-1536086337000000000 5  528 19  115 23  93  0.6 9   13.43 63.68 loop   
-1536086339000000000 5  528 19  115 23  93  0.6 9   13.43 63.71 loop   
-1536086341000000000 5  528 19  115 23  93  0.6 9   13.43 63.74 loop   
+1536086335000000000 5  528 19  115 23  93  0.6 9   13.41 63.68 loop
+1536086337000000000 5  528 19  115 23  93  0.6 9   13.43 63.68 loop
+1536086339000000000 5  528 19  115 23  93  0.6 9   13.43 63.71 loop
+1536086341000000000 5  528 19  115 23  93  0.6 9   13.43 63.74 loop
 
 A multi-line configuration:
 
@@ -155,7 +155,7 @@ try:
     import queue
 except ImportError:
     # Python 2
-    import Queue as queue
+    import Queue as queue  # type: ignore[no-redef]
 import base64
 # from distutils.version import StrictVersion
 # distutils removed in Python 3.12+; use tuple version comparison instead
@@ -165,7 +165,7 @@ try:
     import http.client as http_client
 except ImportError:
     # Python 2
-    import httplib as http_client
+    import httplib as http_client  # type: ignore[no-redef]
 import socket
 try:
     # Python 3
@@ -174,9 +174,9 @@ try:
     from urllib.error import HTTPError, URLError
 except ImportError:
     # Python 2
-    from urlparse import urlparse
-    from urllib import urlencode
-    from urllib2 import urlopen, Request, HTTPError, URLError
+    from urlparse import urlparse  # type: ignore[no-redef]
+    from urllib import urlencode  # type: ignore[attr-defined,no-redef]
+    from urllib2 import urlopen, Request, HTTPError, URLError  # type: ignore[no-redef]
     from httplib import BadStatusLine
 import sys
 
@@ -601,7 +601,7 @@ if __name__ == "__main__":
 
     usage = """Usage: python -m influx --help
        python -m influx --version
-       python -m influx [--server-url=SERVER-URL] 
+       python -m influx [--server-url=SERVER-URL]
                         [--org=ORG] [--bucket=BUCKET] [--token=TOKEN]
                         [--measurement=MEASUREMENT]
                         [--tags=TAGS]"""
@@ -635,8 +635,8 @@ if __name__ == "__main__":
 
     print("Using server-url of '%s'" % options.server_url)
 
-    queue = queue.Queue()
-    t = InfluxThread(queue,
+    q: queue.Queue = queue.Queue()
+    t = InfluxThread(q,
                      manager_dict=None,
                      org=options.org,
                      bucket=options.bucket,
@@ -644,10 +644,10 @@ if __name__ == "__main__":
                      measurement=options.measurement,
                      tags=options.tags,
                      server_url=options.server_url)
-    queue.put({'dateTime': int(time.time() + 0.5),
+    q.put({'dateTime': int(time.time() + 0.5),
                'usUnits': weewx.US,
                'outTemp': 32.5,
                'inTemp': 75.8,
                'outHumidity': 24})
-    queue.put(None)
+    q.put(None)
     t.run()

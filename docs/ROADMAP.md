@@ -99,7 +99,7 @@ is STATUS's active thread.
 ## P3 — Modularity toward multi-source (PRINCIPLES §1)
 - [ ] Harden INTERFACES.md as the stable contract; document it well enough for a non-Davis WeeWX or
       CumulusMX producer to satisfy it.
-- [ ] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005).
+- [x] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005) — done S47.
 
 ---
 
