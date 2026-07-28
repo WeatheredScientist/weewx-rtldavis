@@ -5,28 +5,13 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S56d] — 2026-07-28 — S56 closeout
 
-## [S56] — 2026-07-28 — ROADMAP.md reconciled and restructured; DEC-0057 adds it to the closeout ritual
-
-Docs-only, nothing deployed. Prompted by a routine status check that turned into an audit.
-
-- Confirmed prod healthy on v2.0.11: co-rejecting grep 0 hits (positive-control-verified against a
-  known-present pattern), ops#105 confirmed CLOSED. Found ops#110 newly opened (winter 2027
-  sky-state instrumentation — IR sky sensor alongside the lightning detector; planning horizon
-  only).
-- **ROADMAP.md reconciliation pass:** found and fixed 5 items shown open that had already shipped —
-  the `cleanup_backlog.md` fold-in (done S27), remote-URL-casing + stale-branch cleanup, P1.5's
-  "deploy pending" (shipped v2.0.4, S34), the May rain-total reconciliation (done S48), and the
-  README public-onboarding refresh.
-- **Fuller restructure:** folded the old P1 ("false-rain fix") and P1.5 ("Sensor-QC hardening")
-  sections into one continuous data-integrity arc that now actually covers what shipped since —
-  v2.0.4 through v2.0.11 (sensor-QC filter, reception-metric fix, frame-level co-rejection, signed
-  temp decode, cap-16 tuning) — previously unrepresented on the page entirely. Collapsed P0.5's
-  mostly-done checklist to a pointer. Added the ops#110 item under Longer Horizon.
-- **DEC-0057:** ROADMAP.md joins the closeout ritual as step 5 — same-session update whenever a DEC
-  ships/closes/reprioritizes a line item — plus a "Keeping this current" tripwire inside
-  ROADMAP.md itself (next full check due **by S66**). CLAUDE.md's closeout steps renumbered
-  (5→6 model-tier restore, 6→7 commit+push).
+- Handoff rewritten so S57 opens on the three RX items in order (Phase 0 → deploy → regenerate the
+  schedule if the start date slipped), with the standing watches demoted below them.
+- Docs diet (DEC-0030): `[S53]` rolled verbatim to `CHANGELOG-ARCHIVE.md`; entries here now run
+  S54–S56, and the S56 entries were **reordered newest-first** — they had landed S56, S56c, S56b,
+  contradicting this file's own "most recent first" rule.
 
 ---
 
@@ -75,6 +60,30 @@ Same session, second act. Docs-only, nothing deployed.
   include the file's true last line, stranding an orphaned original fragment (`*silently*.`) after
   everything inserted, and papering over it with an invented duplicate sentence. Fixed before
   appending DEC-0058: restored the original DEC-0056 closing line, removed the invented text.
+
+---
+
+## [S56] — 2026-07-28 — ROADMAP.md reconciled and restructured; DEC-0057 adds it to the closeout ritual
+
+Docs-only, nothing deployed. Prompted by a routine status check that turned into an audit.
+
+- Confirmed prod healthy on v2.0.11: co-rejecting grep 0 hits (positive-control-verified against a
+  known-present pattern), ops#105 confirmed CLOSED. Found ops#110 newly opened (winter 2027
+  sky-state instrumentation — IR sky sensor alongside the lightning detector; planning horizon
+  only).
+- **ROADMAP.md reconciliation pass:** found and fixed 5 items shown open that had already shipped —
+  the `cleanup_backlog.md` fold-in (done S27), remote-URL-casing + stale-branch cleanup, P1.5's
+  "deploy pending" (shipped v2.0.4, S34), the May rain-total reconciliation (done S48), and the
+  README public-onboarding refresh.
+- **Fuller restructure:** folded the old P1 ("false-rain fix") and P1.5 ("Sensor-QC hardening")
+  sections into one continuous data-integrity arc that now actually covers what shipped since —
+  v2.0.4 through v2.0.11 (sensor-QC filter, reception-metric fix, frame-level co-rejection, signed
+  temp decode, cap-16 tuning) — previously unrepresented on the page entirely. Collapsed P0.5's
+  mostly-done checklist to a pointer. Added the ops#110 item under Longer Horizon.
+- **DEC-0057:** ROADMAP.md joins the closeout ritual as step 5 — same-session update whenever a DEC
+  ships/closes/reprioritizes a line item — plus a "Keeping this current" tripwire inside
+  ROADMAP.md itself (next full check due **by S66**). CLAUDE.md's closeout steps renumbered
+  (5→6 model-tier restore, 6→7 commit+push).
 
 ---
 
@@ -224,32 +233,3 @@ further discussion and is untouched.
   deadline **before first frost**. A companion upstream PR belongs alongside lheijst#22.
 
 ---
-
-## [S53] — 2026-07-27/28 — ops#105 cross-observable QC audit delivered; archive swept CLEAN; temp sign bug found (no code)
-
-The owner-directed audit ([ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105),
-carry-forward of ops#103's "where else could this slip through") delivered as an
-[issue comment](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105#issuecomment-5099627052).
-Every encoding verified against `rtldavis.py` source (ops#103's *inferred* entries confirmed; its
-"rain closed since 07-12" claim corrected — counter deltas ≤ 30 tips = 0.30 in still clear both
-`MAX_PLAUSIBLE_TIPS = 60` and the 0.3 in StdQC cap, and a phantom is never reversed).
-
-- **Historical-signature sweep (full archive 2026-05-19 → 07-27, 95,901 rows, pre-correction
-  backup): CLEAN.** 13 gust-spike candidates all adjudicated genuine (storm outflow / breeze
-  context) except ERR-0004 itself; temp spike-and-return zero ever; humidity spikes all
-  pre-SensorQC (known DEC-0029 class); night radiation/UV zero; isolated rain zero. All 5
-  rejection events in 31 days of logs cross-checked — sibling fields clean in the archive. **No
-  new ERR entries.** Corroboration: ~722 dup frames/day × 1/65536 CRC-pass ≈ 1 in-bounds escape
-  per ~90 days — matches the 1 observed in ~4 months.
-- **NEW finding (R1, needs-design, pre-winter):** the temp decode is **unsigned**; Davis is two's
-  complement (verified vs weewx-meteostick, which also handles a second `0xFF8` sentinel both our
-  fork and upstream lack). First sub-0 °F morning → every temp frame decodes ~+400 °F →
-  bounds-trips → **DEC-0054 co-rejects the whole frame** (wind + payload nulled, ERROR-pair log
-  spam) for the duration of real cold weather. Inherited upstream bug, never fired only because
-  the station hasn't seen winter.
-- **Recommendations R1–R5** (temp sign fix; `MAX_PLAUSIBLE_TIPS` 60 → 16; wind residual
-  accepted driver-side / spike guard is dashboard's; radiation night-ceiling noted-not-built;
-  extra-station zero-QC docs note) — all awaiting design agreement, no code this session.
-- **v2.0.9 first-days watch:** co-rejection 0 hits (first post-deploy hour); #74 WARNINGs present
-  up to the 22:18 recreate, silent after (needs a full-day re-check); soak 15/0/0, reception 81 %;
-  no stalls; humidity watch through 07-27 23:14 still unfired; no Dependabot PRs yet.
