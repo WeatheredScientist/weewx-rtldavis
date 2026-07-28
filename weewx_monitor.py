@@ -146,11 +146,16 @@ def get_new_lines(offset):
     lines = data[:consumed].decode('utf-8', 'replace').splitlines()
     return lines, offset + consumed
 
-# --- Rain-counter glitch alert (DEC-0021) ---
+# --- Rain-counter glitch alert (DEC-0021; tripwire role added by DEC-0056) ---
 # rtldavis.py logs this exact phrase when it rejects an implausible rain-counter
 # delta -- an RF-decode glitch that, before the fix, would have become phantom
 # rain. Watching for it turns each catch into an email: confirmation the filter
 # earned its keep, plus a running record of how often the glitch actually fires.
+# Since DEC-0056 tightened the cap (60 -> 16 tips), this email is ALSO the
+# tripwire for the rare other explanation: real rain suppressed across a long
+# reception gap. The body prompts the WeatherLink cross-check either way, and
+# any rejection on a genuinely wet day is the predefined trigger to revisit
+# the cap with that event's data (DEC-0056).
 RAIN_GLITCH_MARKER = 'rejecting implausible counter delta'
 RAIN_GLITCH_CD     = 300   # seconds between glitch emails (dedupe a repeated line)
 
@@ -179,9 +184,17 @@ def send_rain_glitch_alert(ts, detail, phantom_in, raw_line, test=False):
     tag = '[TEST] ' if test else ''
     body = (f"{tag}At {ts}, the rtldavis driver rejected an implausible "
             f"rain-counter delta ({detail}).\n\n"
-            f"No phantom rain was recorded -- the DEC-0021 filter caught it.\n")
+            f"No rain was recorded for that reading (DEC-0021 filter, cap tightened "
+            f"by DEC-0056).\n\n"
+            f"Most likely: an RF-decode glitch, caught working as designed.\n"
+            f"But check one thing: if heavy rain was actually falling around this "
+            f"time, this could be REAL rain suppressed across a rare long reception "
+            f"gap. Cross-check the WeatherLink console total for this window and "
+            f"reconcile per the DEC-0056 playbook (docs/DECISIONS-FULL.md). A "
+            f"rejection on a genuinely wet day is the agreed trigger to revisit "
+            f"the cap with this event's data.\n")
     if phantom_in is not None:
-        body += f"Before the fix this would have logged a false +{phantom_in}\" of rain.\n"
+        body += f"\nA naive (pre-fix) decode would have logged +{phantom_in}\" of rain here.\n"
     if test:
         body += "\nThis is a TEST of the rain-glitch email alert. If you got it, alerting works."
     else:
