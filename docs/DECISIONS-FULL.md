@@ -2283,3 +2283,131 @@ section removed (replaced by a one-line pointer to BACKLOG.md). `BACKLOG.md` —
 with the split. Same pass also pruned a second stale copy of the already-resolved (S48) May
 rain-total item, found in `BACKLOG.md`'s "Data integrity" section while editing nearby content —
 same fact DEC-0057's ROADMAP reconciliation had already corrected once, in the other file.
+
+---
+
+## DEC-0059 — The RX experiment gets an apparatus; `-ex` collapses the window axis into the cheap layer
+
+**Status:** Accepted (design) · **Date:** 2026-07-28 (S56) · **Executes** DEC-0048 ·
+**amends** DEC-0048's "same run" clause · **supersedes** DEC-0008's `set_gain.sh` exemplar ·
+**absorbs** DEC-0017 · owner-approved after design review
+
+### What prompted it
+
+DEC-0048 committed to a designed RX experiment — hypothesis, control arm, averaged window,
+pre-registered metric — and then deferred it for 15 sessions because no apparatus existed. DEC-0017
+has been open since S16 for the same reason. The owner asked for the design, with two constraints:
+no data may go uncollected because of poor reception, and there must be an immediate rollback if
+anything egregious happens.
+
+### The finding that reshaped the design
+
+**`-ex N` is mathematically identical to `receiveWindow = 300 + N`.** Upstream sums them —
+`int64((receiveWindow + ex) * 1000000)` — and `receiveWindow` appears in no other expression. So the
+receive-window axis, which DEC-0048 treated as rebuild-only and therefore inseparable from the gain
+question, is actually reachable from the **mounted** `weewx.conf` at the same cost as gain.
+
+Consequences: the `rw250/rw350/rw400` images were **redundant**, not merely misnamed as DEC-0048
+recorded; the old CLI `-ex` sweep and the old `rw400` image were the same configuration measured
+twice (both ~63%, which is what equivalence predicts); and **no arm of this experiment requires an
+image build**, so the owner's immediate-rollback constraint is satisfiable on every axis.
+
+*Honest bound:* this was read from upstream master. The deployed binary comes from weewx-contrib's
+bundled `src.tgz` and is demonstrably older — it lacks master's startup settings line, absent from
+both `weewx.log` and container stdout. The deployed source has not been read directly. The
+equivalence is load-bearing only for how arms are *labelled*, not for validity: `-ex` is a real knob
+whose effect is measured directly either way.
+
+### The measured baseline, replacing a stale one
+
+447 five-minute reception samples (2026-07-27 full day + 07-28 to 13:29): **mean 73.3%, sd 4.67 pts**;
+p5/median/p95 = 67/74/79. The docs' long-quoted "~67–70%" was pessimistic. Two properties matter more
+than the mean:
+
+- **Autocorrelation ~0 beyond 10–15 min** (lag1 0.08, lag3 0.02) — samples are effectively
+  independent, so precision scales cleanly with time.
+- **No detectable diurnal cycle** — hourly means 70–75 with no systematic pattern.
+
+Together these say the "1–2 week averaged window" assumed by DEC-0017 and BACKLOG is roughly **7×
+more than the variance requires**. 24h per arm resolves 1.1 pts; 48h resolves 0.8.
+
+### The design
+
+Two campaigns, blocked by hardware state, at the owner's direction: **LNA in circuit first, then the
+LNA physically removed.** Within each campaign, a 2×2 factorial (gain × `ex`) run as a **Latin
+square** — 6-hour blocks on the monitor's existing 00/06/12/18 summary boundaries, rotated so each
+arm visits each quarter of the day exactly twice over 8 days. Campaign B's gain arms are centered
+higher: with ~20 dB of front-end gain removed the optimum moves up, so reusing campaign A's values
+would sweep two points that are both too low.
+
+Adoption rule, fixed in advance: beat the incumbent by **≥2 pts on reception without materially
+raising the duplicate-frame rate**. Incumbent wins ties. Two outcome metrics, not one, because a
+wider window buys marginal packets by increasing preamble false-alarm opportunities — the same
+mechanism as DEC-0035's ~722/day double-decodes. Both metrics are already logged; no new measurement
+code.
+
+**Declined: bracketing the LNA swap.** A blocked design confounds the LNA contrast with ~10 days of
+seasonal drift, and the analytically clean answer is a tight paired swap at the moment of removal.
+The owner judged that not worth the handling, which is their call to make. Mitigation instead of
+argument: campaign A's own 8 days measure multi-day drift directly, and that becomes the honest error
+bar on the LNA comparison rather than a confound we pretend isn't there.
+
+### Why a new apparatus rather than extending `ops/gain_sweep.sh` (DEC-0014 cause)
+
+It is **sequential** — every arm confounded with time-of-day, the precise flaw DEC-0048 exists to
+replace. Its metric is **dead**: it counts `RAW_DATAPACKET_MATCH`, which prod no longer logs, so it
+would report 0.0% for every arm and look like it worked — the green-exit-code-wrong-answer class that
+has bitten the secret gate four times. Its denominator is **wrong** (2.5 s hardcoded; this ISS is
+2.8125 s — the same ~13% error S29 already fixed once in the monitor). And it has no verification,
+rollback, abort, or health check. Patching would touch every line.
+
+**All seven pre-governance RF sweep scripts are deleted** (`gain_sweep.sh`, `gain_sweep_analyze.py`,
+`set_gain.sh`, `fc_sweep.sh`, `gain_ppm_check.sh`, `autotest_rf_timing.sh`,
+`recover_sweep_results.py`). DEC-0048's own complaint was artifacts outliving their meaning, and a
+silently-broken sweep script is worse than no script. Git history preserves them; the one durable
+finding that lived only in `fc_sweep.sh`'s header (gain 207 "confirmed best") was moved to BACKLOG
+before deletion.
+
+**This supersedes DEC-0008's closing sentence.** That DEC cites `set_gain.sh` as codifying
+`docker kill` + `docker start`; the codification moves to `rx_experiment.sh`'s `restart_container()`,
+which implements the same pattern plus S47's 3 s dongle-release sleep. DEC-0008's rule is unchanged —
+only its exemplar moves.
+
+### The safety model
+
+The script rewrites the live, credential-bearing `weewx.conf` 32 times and restarts prod each time.
+Six properties make that acceptable rather than merely convenient:
+
+1. **Arms are complete literal strings** — never assembled. A bug can only select the wrong
+   known-good arm, never synthesize a malformed one.
+2. **Revert is a whole-file snapshot restore**, not line surgery. Byte-exact.
+3. **Writes are atomic and verified by re-reading** before the container is ever restarted.
+4. **The abort tripwire is sticky** — a STOP sentinel halts the campaign until a human clears it; a
+   later scheduled tick cannot silently override it.
+5. **The schedule self-terminates into the production baseline**, so a forgotten campaign ends at
+   prod-normal rather than on an experimental arm.
+6. **Every failure path restores the baseline and emails**, via a mailer deliberately independent of
+   `weewx_monitor.py` — if the monitor is wedged, the abort must still reach a human.
+
+Abort threshold is 55% on a 30-min rolling mean: ~9.6 SE below the measured baseline, so it cannot
+fire on noise. The deeper reassurance is that reception degradation is **not** data loss — the ISS
+sends ~21.3 packets/min into 1-minute archive records, so a record only nulls if a full minute
+decodes zero packets. Even an arm halving reception to ~36% loses nothing. Corroborated empirically:
+DEC-0056's 70-day pass found rx<20% totaled 31 minutes with a longest run of one minute.
+
+### Tests
+
+`tests/test_rx_experiment.py` drives the real shell functions. It asserts the write is surgical
+against a fixture carrying two traps (a `-gain` in an unrelated section, another in a doc comment),
+that malformed configs are refused with the file unmodified, and — per DEC-0045 — carries a
+**positive control** proving the old global-regex approach corrupts that same fixture. If that
+control ever passes, the fixture has lost its teeth. The Latin square is machine-checked too: a
+one-row typo silently reintroduces the confound the design exists to remove, and nothing at runtime
+would notice. Mutation-tested; it goes red.
+
+### Status
+
+Design accepted; **not yet deployed**. Phase 0 (a few hours at `debug_rtld = 2` to settle whether
+`FreqError` telemetry exists, and so whether `ppm`/`fc` are an axis at all) runs first. The schedule
+table assumes a 2026-07-29 start and is regenerated if that slips. Deployment is a Class C NAS
+mutation and the two DSM scheduler entries are owner-run.
