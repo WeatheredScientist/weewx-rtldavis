@@ -18,10 +18,12 @@ the story, this file only points at it.
 > **Current session: S55** (2026-07-28). **v2.0.10 RELEASED and LIVE** — DEC-0055's signed temp
 > decode is in prod (banner `0.20+ws.2`, deployed 09:28 EDT, `prod-baseline-20260728`, soak
 > 13/2/0). Upstream [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) opened
-> (owner-reviewed); R1 closed out on ops#105. **R2 (`MAX_PLAUSIBLE_TIPS` 60 → 16) remains OPEN,
-> deliberately untouched** — awaiting design discussion. See CHANGELOG `[S55]`.
+> (owner-reviewed); R1 closed out on ops#105. **Second act (S55b): R2 DECIDED — DEC-0056** —
+> evidence pass over the full 70-day archive, owner-approved: `MAX_PLAUSIBLE_TIPS` 60 → 16 coded
+> on `dev` (rides until the v2.0.11 image cut; prod's baked driver keeps 60 until then), monitor
+> rejection email reframed as the tripwire and deployed NAS-side. See CHANGELOG `[S55]`/`[S55b]`.
 
-_Last updated: 2026-07-28 (S55)._
+_Last updated: 2026-07-28 (S55b)._
 
 ---
 
@@ -30,9 +32,11 @@ _Last updated: 2026-07-28 (S55)._
 > **▶ Resume here (S55 → S56). v2.0.10 is LIVE — the release thread is CLOSED; back to
 > watch-and-discuss.** DEC-0055's signed temp decode deployed 2026-07-28 09:28 EDT (banner
 > `0.20+ws.2`, `prod-baseline-20260728`; CHANGELOG `[S55]` has the full release record). Open:
-> **(a) R2 discussion** — `MAX_PLAUSIBLE_TIPS` 60 → 16 (phantom-rain residual 0.30 → 0.16 in) is
-> owner-held for design talk; the constant is untouched — do not implement unprompted
-> (PRINCIPLES §8). R3 (wind spike guard) rides the dashboard side of ops#105; R4/R5 noted-not-built.
+> **(a) R2 DECIDED (DEC-0056, S55b)** — cap 16 is coded on `dev` with the tripwire package
+> (reframed monitor email, WeatherLink recovery playbook, predefined revisit trigger: any
+> rejection on a wet day). **Prod's baked driver still runs cap 60 until the v2.0.11 image cut**
+> — no deadline, it's a hardening. R3 (wind spike guard) delivered dashboard-side (their S151,
+> DEC-0167); R4/R5 noted-not-built.
 > **(b) Watches** — co-rejection grep: **0 hits** through 09:00 07-28 (positive-control-verified).
 > #74 calm-windDir: last WARNING 21:59 07-27 (19 min before the v2.0.9 recreate), **zero in the
 > ~11.5 h since** at a prior base rate of ~1/hr — one more full-day look and call it confirmed.
@@ -205,9 +209,10 @@ _Last updated: 2026-07-28 (S55)._
    method and the arithmetic are in DEC-0044; do not re-derive them.** Decode of the logged word:
    `(pkt[4] << 8) + pkt[3]` in hex; RH = `(((pkt[4] >> 4) << 8) + pkt[3]) / 10`.
 
-3. **R2 is awaiting discussion, not implementation.** `MAX_PLAUSIBLE_TIPS` 60 → 16 (residual
-   phantom-rain ceiling 0.30 → 0.16 in) is owner-held for design discussion. The constant in
-   `rtldavis.py` is **unchanged**. Do not code it unprompted (PRINCIPLES §8).
+3. **R2 is DONE in code (DEC-0056) — the open remnant is the v2.0.11 cut.** Cap 16 + tests are
+   on `dev`; the monitor tripwire is live on the NAS. Cut v2.0.11 whenever the next release
+   window is convenient (same playbook as v2.0.10; no deadline). Until then prod's baked driver
+   runs cap 60 — the tripwire email works under either cap.
 
 4. **Do NOT rebuild the coupling filter** (DEC-0044). Its premise failed on our own data. The
    mechanism is the open question, not the threshold.
