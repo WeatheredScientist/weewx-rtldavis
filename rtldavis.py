@@ -40,7 +40,7 @@
 #
 #   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
 #   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
-#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.1'
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.2'
 #   so the difference is visible in the logs. Bugs here are ours, not upstream's.
 #
 #   Changes, with the date each was recorded in git. Entries dated 2026-07-04
@@ -72,6 +72,11 @@
 #               nulled and the rain counter is not resynced to it. Motivated by the
 #               phantom 39 mph gust whose frame's own humidity decoded to 144.9%.
 #               (DEC-0054, ERR-0004)
+#   2026-07-28  outside temperature decoded as SIGNED two's complement; upstream
+#               decodes the 12-bit field unsigned, so every sub-0 F reading came
+#               out ~+400 F and (with DEC-0054) co-rejected the whole frame.
+#               Also adopts the 0xFF8 no-sensor sentinel from weewx-meteostick.
+#               (DEC-0055)
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   These fixes are offered upstream; this fork exists to ship them in the meantime.
@@ -163,7 +168,7 @@ DRIVER_NAME = 'Rtldavis'
 # version identifier: upstream base 0.20, WeatheredScientist revision 1. Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.1'
+DRIVER_VERSION = '0.20+ws.2'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
