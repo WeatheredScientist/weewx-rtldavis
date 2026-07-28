@@ -6,6 +6,37 @@ under [Pre-S16].
 
 ---
 
+## [S55b] — 2026-07-28 — R2 decided and coded: `MAX_PLAUSIBLE_TIPS` 60 → 16 (DEC-0056), rejection email reframed as the tripwire
+
+Same session, second act: the owner opened the R2 design discussion, an **evidence pass over the
+full 70-day archive** settled it, and the owner approved the package (PR #93).
+
+- **The evidence** (pre-correction backup, 95,901 minutes, 490 wet): worst real minute **7 tips**;
+  worst real 3-min window **exactly 16** (2026-06-14 storm — still passes, the check is
+  `delta > max_tips`); reception during rain never below 50%; in-service gaps near rain: two
+  1-minute events ever; rain-counter rejections at cap 60 in the 30-day logs: **zero** (all five
+  "implausible" hits are SensorQC wind/humidity). Physics: at the bucket's ~4 s/tip ceiling a
+  genuine delta can exceed 16 only across a >64 s gap — longer than any gap observed during rain.
+  **Reframing:** weewx `[StdQC]` (0.3 in/min) already discarded anything over 30 tips, so
+  "60 → 16" really exposes only the never-occupied 17–30 band.
+- **The worry that shaped the package** (owner: don't lose an intense storm to an over-tight
+  filter): the change ships with the failure mode converted from silent-permanent to
+  loud-bounded-recoverable — `weewx_monitor.py`'s existing DEC-0021 glitch email is reframed as
+  the **DEC-0056 tripwire** (prompts the WeatherLink cross-check; a rejection on a wet day is the
+  predefined revisit trigger), a **recovery playbook** is written into DEC-0056 (console
+  reconciliation via the ERR process), and a **driver↔monitor marker contract test** pins the
+  alert to the driver's exact wording. Confirm-on-reject documented as the designed escalation if
+  the tripwire ever fires on real rain.
+- Tests 111 → **112**: boundary 16-passes/17-rejects, the 06-14 evidence vectors, cap-60-era
+  cases retuned as documented rejects; cap and marker assertions both **mutation-tested red**.
+- **Deployment split:** the monitor (mounted layer) deployed NAS-side same session — scp'd from
+  the merged tip, sha-verified `383f5baa…`, restarted via the scheduler respawn. The driver cap
+  (baked layer, DEC-0031) **rides `dev` until the next image cut (v2.0.11)** — prod's running
+  driver keeps cap 60 until then; a hardening, not a live bug, so it forces no deploy.
+- R2 closed out on [ops#105](https://github.com/WeatheredScientist/eaglehunt-ops/issues/105).
+
+---
+
 ## [S55] — 2026-07-28 — v2.0.10 shipped: the signed temperature decode is live in prod; upstream PR #23 opened
 
 **The R1 release (DEC-0055), executed end-to-end** — prod ran the unsigned decode until 09:28 EDT.
