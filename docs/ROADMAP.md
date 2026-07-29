@@ -114,18 +114,19 @@ bound and done via reversible live hot-swap with an instant rollback path.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P2 — RF optimization, done honestly (PRINCIPLES §3) — **APPARATUS BUILT (DEC-0059), not yet run**
-DEC-0048 (S41) deferred this into one designed experiment. **The apparatus now exists**
-(`ops/rx_experiment.sh` + `tests/test_rx_experiment.py`, S56/DEC-0059) — design accepted, deployment
-pending. The seven pre-governance sweep scripts are deleted; two of them were silently broken.
-- [ ] **Run campaign A — LNA in circuit.** 2×2 factorial gain {372, 207} × ex {0, 50}, Latin square,
-      6 h blocks, 8 days. Settles DEC-0017 (**absorbed**). Blocked on Phase 0 + owner deployment.
+## P2 — RF optimization, done honestly (PRINCIPLES §3) — **CAMPAIGN A RUNNING (DEC-0059)**
+DEC-0048 (S41) deferred this into one designed experiment; the apparatus (`ops/rx_experiment.sh` +
+`tests/test_rx_experiment.py`, S56/DEC-0059) is now deployed and executing. The seven
+pre-governance sweep scripts are deleted; two of them were silently broken.
+- [x] **Phase 0: `FreqError` telemetry CONFIRMED TO EXIST** (S57) — found within 13s of a restart
+      once a logger-level gotcha was fixed (DEC-0060). `ppm`/`fc` measurement-by-value is a
+      deliberately deferred follow-up, not done this campaign (arms run unmeasured `0`/`0`).
+- [ ] **Campaign A — LNA in circuit — RUNNING.** 2×2 factorial gain {372, 207} × ex {0, 50}, Latin
+      square, 6 h blocks, 8 days. Deployed and confirmed live 2026-07-29 (arm B active as of
+      10:52:37 EDT); expected self-terminating completion ~2026-08-06. Settles DEC-0017
+      (**absorbed**). Tracked at [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
 - [ ] **Run campaign B — LNA physically removed**, gain arms centered higher (~{372, 496}); the
       optimum moves up once ~20 dB of front-end gain is gone. Schedule written after A reports.
-- [ ] **Phase 0:** a few hours at `debug_rtld = 2` to settle whether `FreqError` telemetry exists.
-      Re-checked S56 at the current level: **zero hits**, positive-controlled. If it exists,
-      `ppm`/`fc` are set by measurement, not swept; if not, that axis is dropped. Runs first, because
-      correcting a systematic frequency offset would move the operating point under the factorial.
 - [x] ~~24 h **receiveWindow sweep**; reconcile image tag ↔ Dockerfile~~ — **dissolved by DEC-0059.**
       `-ex N` ≡ `receiveWindow 300+N` (upstream sums them), so the window is a mounted-config knob,
       no rebuild, and it is simply the second factor of the campaigns above. The `rw*` image tags
@@ -134,9 +135,9 @@ pending. The seven pre-governance sweep scripts are deleted; two of them were si
       cannot be read from logs: the deployed binary is older than upstream master and lacks master's
       startup settings line (absent from both `weewx.log` and container stdout, checked S56). Needs
       the deployed `src.tgz` read directly, or a rebuild. No longer blocks the campaigns.
-- [ ] Investigate rebuilding `rtldavis` from newer Go source for `FreqError`/`ChannelIdx` telemetry
-      (BACKLOG RF history). The DEC-0024 Layer B half is already closed for the current binary at
-      v2.0.8; this item is specifically about a *rebuilt* binary.
+- [x] ~~Investigate rebuilding `rtldavis` from newer Go source for `FreqError`/`ChannelIdx`
+      telemetry~~ — **moot.** S57 confirmed the *currently deployed* binary already emits it; no
+      rebuild needed for this purpose.
 
 ## P3 — Modularity toward multi-source (PRINCIPLES §1)
 - [ ] Harden INTERFACES.md as the stable contract; document it well enough for a non-Davis WeeWX or
