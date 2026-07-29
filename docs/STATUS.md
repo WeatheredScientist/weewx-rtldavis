@@ -51,10 +51,13 @@ _Last updated: 2026-07-29 (S57)._
 > [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114). `ppm`/`fc`
 > measurement-by-value remains a deliberately deferred follow-up (owner call, not blocking).
 >
-> **⚠️ Owed, security:** prod logs a live credential at INFO on every startup, so any
-> startup-window log read is an egress path (DEC-0047's class, but for *logs*, which the read-guard
-> does not cover). Specifics deliberately NOT in this public repo — see the gitignored
-> `docs/LOCAL_INFRA.md`.
+> **⚠️ Security — FIXED IN REPO, awaiting the next image release (DEC-0062).** A startup log line
+> emitted 8 characters of a live credential on every restart, and **`weewx.log` is not covered by
+> the DEC-0047 read-guard** (which guards configs), so a routine restart-verify tail is an egress
+> path. Redacted and guarded by an AST test. **`pressure_service.py` is BAKED (`Dockerfile:117`),
+> not mounted — an `scp` there is a silent no-op (DEC-0031); it needs an image rebuild.**
+> Deliberately NOT rebuilt mid-campaign: swapping the image under a running RX experiment would
+> confound its arms. Specifics stay out of this public repo — see gitignored `docs/LOCAL_INFRA.md`.
 >
 > Prod driver unchanged — still v2.0.11 (`0.20+ws.3`); only the `[Rtldavis]` config (gain/`-ex`)
 > cycles through the Latin square. Everything below is standing watch state.
