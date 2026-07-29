@@ -5,6 +5,33 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S57] — 2026-07-29 — Phase 0 confirms FreqError telemetry (DEC-0060); RX campaign A deployed and running
+
+- **Phase 0 answered:** `FreqError` telemetry exists in the deployed driver — confirmed within 13s
+  of a restart (`Hop: {ChannelIdx:0 ChannelFreq:902419338 FreqError:0 Transmitter:0}`). Getting
+  there took a real correction: the first attempt (`debug_rtld=2` alone, ~19:11 EDT 07-28) produced
+  zero evidence for ~7h because the live `[Logging][[[user]]]` logger was at `INFO`, independent of
+  `debug_rtld` — `dbg_rtld()` calls `log.debug()`, silently dropped regardless of verbosity. Fixed
+  with a scoped `[[[user.rtldavis]]]` DEBUG logger entry (DEC-0060), not the broader `[[[user]]]`.
+  Both changes fully reverted once confirmed (09:34 EDT 07-29). Honest tally: elevated-debug window
+  ran ~14.5h against a planned 3h (a session gap), `weewx.log` grew to ~8.8 MB vs. a normal
+  ~4 MB/day — non-critical, but a real DEC-0041 bloat instance. `ppm`/`fc` measurement-by-value
+  deliberately deferred, not blocking the campaign.
+- **`ops/rx_experiment.sh` deployed and running.** Scp'd to the NAS project root (sha-verified),
+  `install` run (baseline snapshotted). Owner created the two DSM Task Scheduler entries (`tick`,
+  `guard`, 5 min, root); first automatic tick swapped to arm B (gain 207, `-ex 0`) at 10:52:37 EDT.
+  Campaign A runs unattended for 8 days, self-terminating to baseline (~2026-08-06 expected).
+- **DEC-0059 status updated** (deployed/running, was design-only) and **DEC-0060 added** (the
+  logger-level gotcha, so it isn't re-derived next time debug output is needed). ROADMAP.md P2
+  section reconciled: Phase 0 checked off, campaign A marked running, the "rebuild for FreqError
+  telemetry" item closed as moot (the current binary already has it).
+- **Cross-repo:** [ops#112](https://github.com/WeatheredScientist/eaglehunt-ops/issues/112) closed
+  with the full finding; [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114)
+  tracks the running campaign; [ops#113](https://github.com/WeatheredScientist/eaglehunt-ops/issues/113)
+  (the transient-state tracking proposal, filed this session) was independently built and closed by
+  ops the same day — worth adopting `.claude/transient-state` here for future transient prod state.
+
+---
 ## [S56d] — 2026-07-28 — S56 closeout
 
 - Handoff rewritten so S57 opens on the three RX items in order (Phase 0 → deploy → regenerate the
