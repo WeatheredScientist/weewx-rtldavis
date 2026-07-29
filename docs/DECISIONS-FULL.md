@@ -2460,3 +2460,82 @@ over-scopes the verbosity increase (broader logger raised). This is now the conf
 recipe — don't re-derive it from scratch, and don't assume `debug_rtld` alone is sufficient just
 because it *was* sufficient for the always-DEBUG `chan:`/`data:` design intent (it never has been,
 in this deployed config).
+
+---
+
+## DEC-0061 — Campaign A died of two defects the apparatus's own tests could not see; a timeout budget must be derived, not guessed
+
+**Status:** Accepted · **Date:** 2026-07-29 (S57b) · **fixes** DEC-0059's apparatus ·
+**extends** DEC-0045's positive-control rule to *runtime* budgets
+
+### What happened
+
+Campaign A ran for 80 minutes and aborted in its third block. The abort path did exactly what it
+was designed to do — restored the baseline snapshot, halted with a sticky STOP sentinel, left prod
+healthy — and then failed at the last step: it told nobody. Two independent defects, neither of
+which any of the 8 shipped tests could have caught, because both live in the gap between the script
+and the machine it runs on.
+
+### Defect 1 — the health-check budget was too small BY CONSTRUCTION
+
+`health_ok()` waited 18 × 5s (~90s) for a new archive record after a container restart. But a
+restart cannot produce one faster than:
+
+| term | value |
+|---|---|
+| weewx boot to "Starting main packet loop" | ~25 s |
+| wait for the next archive boundary | **up to 60 s** (the archive interval) |
+| write lag after that boundary | ~15–30 s |
+| **worst case** | **~115 s** |
+
+90 s could not cover 115 s. The check was a coin flip on where the restart landed relative to the
+minute boundary. Arm B won it at 10:52; arm C lost it at 12:13 — measured: `weewxd` init 12:11:46,
+first record 12:13:30, abort fired 12:13:27. **Three seconds.**
+
+The number 18 appears nowhere in a specification; it was a guess that happened to be near the true
+worst case, which is the most dangerous kind of wrong — it passes often enough to look correct.
+`HEALTH_TRIES` is now 36 (~180 s), and the test asserts *the arithmetic* (`boot + archive_interval
++ write_lag`) rather than the literal, so lowering it fails with the reason attached.
+
+**The generalizable rule: a timeout that waits on a periodic system must budget for a FULL period
+of that system, plus the work, plus slack. Derive it from the system's own constants and write the
+derivation next to the number.**
+
+### Defect 2 — every alert the script could send was broken
+
+`send_mail()` ran `. "$ENVFILE"`, which sets shell variables but does **not export** them. The
+`python3` heredoc that actually sends the mail is a *child process*, so it saw none of them and
+died on `KeyError: 'ALERT_FROM'`. This had been true since the file was written; no alert had ever
+been sent, so nothing had ever disproved it.
+
+This is the same shape as DEC-0060 one day earlier: **a configured-looking thing that was inert,
+and looked fine precisely because it had never been exercised.** Extracted `load_env()` with
+`set -a`/`set +a`, and tested the property that actually failed — that a *child process* can read
+the value — rather than that the shell can. Verified against the real `monitor.env` on the NAS
+after deploy (booleans only, never values): `ALERT_FROM/GMAIL_PASS/ALERT_TO` all `True`.
+
+### What the tests did right, and what they could not reach
+
+The suite's design held up where it applied: when a bad edit produced a mangled 28-row schedule
+mid-session, `test_schedule_is_a_balanced_latin_square` caught it immediately, and the new
+export test was mutation-verified (removed `set -a`, watched it go red, restored **from a file
+copy — never `git checkout`**, per the S55 gotcha).
+
+But both defects were *environmental* — one about wall-clock timing on this specific station, one
+about process boundaries — and the tests were all offline and hermetic. **A hermetic suite cannot
+falsify a claim about the machine.** That is not an argument for integration tests here (there is
+one dongle and no dev receiver, DEC-0011); it is an argument for writing the environmental
+assumption down as an assertion, which is what the health-budget test now does.
+
+### Schedule regenerated, not resumed
+
+The 07-29 run lost `A@00:05` entirely, took a partial `B@06:05`, and lost `C@12:05` — three
+damaged cells of the Latin square, which is precisely the time-of-day confound the design exists
+to remove. Resuming would have analyzed a broken square. The schedule was regenerated for a clean
+2026-07-30 start (completing 08-07), the stale state file was reset to `NONE` — otherwise the
+first tick would have "harvested" a period that ran on *baseline* config and recorded it as arm B
+data — and the aborted run's 88 samples were rotated aside rather than left to contaminate the
+data log. **~10 hours of delay to keep the experiment valid was the cheap side of that trade.**
+
+Also corrected: a comment claiming a `schedule --generate <date>` mode that **has never existed**
+in the code. The dev-side recipe that actually produces the table is recorded in its place.
