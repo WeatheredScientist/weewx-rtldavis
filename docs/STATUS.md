@@ -35,14 +35,26 @@ _Last updated: 2026-07-29 (S57)._
 
 ## Active thread
 
-> **▶ Resume here (S58). Campaign A is running — nothing to actively do, just watch.** Phase 0
-> confirmed `FreqError` telemetry exists and campaign A is deployed and live: arm B active since
-> 10:52:37 EDT 07-29, next transitions per the Latin-square schedule (`ops/rx_experiment.sh
-> schedule`), self-terminating to baseline ~2026-08-06. Full story: CHANGELOG `[S57]`, DEC-0059
-> (status)/DEC-0060 (the logger gotcha that cost the first Phase 0 attempt ~7h), ROADMAP.md P2.
-> Tracked at [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114) — check
-> that or `ops/rx_experiment.sh status` for the current arm/samples, not this file. `ppm`/`fc`
+> **▶ Resume here (S58). Campaign A is RE-ARMED and starts itself at 2026-07-30 00:05 — nothing to
+> do but watch.** The first attempt ran 80 minutes and aborted (DEC-0061): the health check's 90s
+> budget was ~25s short of what a restart structurally needs, and it fired **3 seconds** before the
+> record landed. Both that and a second defect — every alert the script could send was inert, an
+> unexported env var — are fixed, tested and deployed (sha `88c1aeaf…`, byte-verified). Schedule
+> regenerated for a clean 07-30 start (completes **08-07**) because the aborted run damaged three
+> Latin-square cells. State reset, STOP cleared, aborted samples rotated aside.
+>
+> **First thing to check next session:** `ops/rx_experiment.sh status` — expect arm `A` from
+> 00:05 07-30. If it still says `NONE` well after that, the DSM scheduler entries are not firing.
+> If a STOP sentinel is back, read `logs/rx_experiment.log` first; an abort email should now
+> actually arrive (it could not before). Full story: CHANGELOG `[S57]`/`[S57b]`, DEC-0059
+> (design/status), DEC-0060 (logger gotcha), DEC-0061 (the two defects), ROADMAP.md P2. Tracked at
+> [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114). `ppm`/`fc`
 > measurement-by-value remains a deliberately deferred follow-up (owner call, not blocking).
+>
+> **⚠️ Owed, security:** prod logs a live credential at INFO on every startup, so any
+> startup-window log read is an egress path (DEC-0047's class, but for *logs*, which the read-guard
+> does not cover). Specifics deliberately NOT in this public repo — see the gitignored
+> `docs/LOCAL_INFRA.md`.
 >
 > Prod driver unchanged — still v2.0.11 (`0.20+ws.3`); only the `[Rtldavis]` config (gain/`-ex`)
 > cycles through the Latin square. Everything below is standing watch state.
