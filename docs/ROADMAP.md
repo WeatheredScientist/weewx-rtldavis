@@ -121,10 +121,21 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
 - [x] **Phase 0: `FreqError` telemetry CONFIRMED TO EXIST** (S57) — found within 13s of a restart
       once a logger-level gotcha was fixed (DEC-0060). `ppm`/`fc` measurement-by-value is a
       deliberately deferred follow-up, not done this campaign (arms run unmeasured `0`/`0`).
-- [ ] **Campaign A — LNA in circuit — RUNNING.** 2×2 factorial gain {372, 207} × ex {0, 50}, Latin
-      square, 6 h blocks, 8 days. Deployed and confirmed live 2026-07-29 (arm B active as of
-      10:52:37 EDT); expected self-terminating completion ~2026-08-06. Settles DEC-0017
-      (**absorbed**). Tracked at [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
+- [ ] **Campaign A — LNA in circuit — ARMED, starts 2026-07-30 00:05.** 2×2 factorial gain
+      {372, 207} × ex {0, 50}, Latin square, 6 h blocks, 8 days; self-terminating completion
+      **~2026-08-07**. The 07-29 attempt ran 80 min and aborted on two apparatus defects
+      (DEC-0061 — a health-check budget ~25s short of what a restart structurally needs, and an
+      alert path that was inert); both fixed and redeployed, and the schedule was regenerated from
+      a clean day boundary because the aborted run damaged three Latin-square cells. Settles
+      DEC-0017 (**absorbed**). Tracked at
+      [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
+- [ ] **QUEUED BEHIND CAMPAIGN A — cut an image release carrying DEC-0062** (not RF work; parked
+      here because the campaign is what gates it). `pressure_service.py` no longer logs credential
+      material, but it is **BAKED** (`Dockerfile:117`) — fixed in the repo, inert in prod until an
+      image rebuild. A rebuild restarts prod, and restarting under a running factorial would
+      confound its arms, so it waits for ~08-07. Fold in anything else baked that has accumulated
+      by then, and carry DEC-0046 into the release: verify in the **running system**, never in the
+      artifact.
 - [ ] **Run campaign B — LNA physically removed**, gain arms centered higher (~{372, 496}); the
       optimum moves up once ~20 dB of front-end gain is gone. Schedule written after A reports.
 - [x] ~~24 h **receiveWindow sweep**; reconcile image tag ↔ Dockerfile~~ — **dissolved by DEC-0059.**
