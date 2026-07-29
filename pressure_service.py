@@ -26,7 +26,23 @@ class DavisPressureFetcher(StdService):
         self.fetch_interval = int(pressure_dict.get('fetch_interval', 3600))
         self.last_pressure = None
         self.last_fetch = 0
-        log.info("DavisPressureFetcher: api_key=%s station_id=%s", self.api_key[:8], self.station_id)
+        # S57b: never log key material, not even a prefix. This line used to log
+        # api_key[:8], putting 8 characters of the live WeatherLink key into
+        # weewx.log -- and its 30 daily rotations -- on EVERY startup. weewx.log
+        # is not covered by the DEC-0047 read-guard (which guards configs), so a
+        # routine "tail the log to check the restart was clean" pulls it into an
+        # agent transcript; that happened twice on 2026-07-29. The diagnostic
+        # intent was "did the credentials load?" -- which this answers better,
+        # since it now distinguishes WHICH one is missing, and leaks nothing.
+        # The presence flags are resolved BEFORE the log call, so no credential
+        # attribute appears in a log argument at all. That keeps the invariant
+        # the test enforces simple and absolute -- "no credential in any log
+        # call" -- instead of needing a checker that reasons about which uses
+        # are safe. A checker with exceptions is a weaker checker.
+        key_state = "present" if self.api_key else "MISSING"
+        secret_state = "present" if self.api_secret else "MISSING"
+        log.info("DavisPressureFetcher: api_key %s, api_secret %s, station_id=%s",
+                 key_state, secret_state, self.station_id)
         if self.api_key and self.api_secret and self.station_id:
             self.bind(weewx.NEW_LOOP_PACKET, self.new_loop_packet)
             log.info("DavisPressureFetcher: bound to NEW_LOOP_PACKET")
