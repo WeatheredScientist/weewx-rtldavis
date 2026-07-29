@@ -2539,3 +2539,57 @@ data log. **~10 hours of delay to keep the experiment valid was the cheap side o
 
 Also corrected: a comment claiming a `schedule --generate <date>` mode that **has never existed**
 in the code. The dev-side recipe that actually produces the table is recorded in its place.
+
+---
+
+## DEC-0062 — Logs are an egress path the read-guard does not cover; never log key material
+
+**Status:** Accepted · **Date:** 2026-07-29 (S57b) · **extends** DEC-0047 from configs to logs ·
+**applies** DEC-0046's layer question
+
+### The finding
+
+`pressure_service.py` logged `api_key[:8]` at INFO on every weewx startup. Eight characters, not
+the whole key — but *where* it lands is what matters:
+
+- It sits in `logs/weewx.log` **and its 30 daily rotations**, in plaintext.
+- **DEC-0047's `secret-read-guard` covers configs** (`weewx.conf`, `*.env`) — it does **not** cover
+  `weewx.log`. So the single most routine operation in this repo, *tail the log to confirm a
+  restart was clean*, walks straight past the guard and into an agent transcript.
+- That happened **twice on 2026-07-29** in one session, both times while verifying a restart.
+
+DEC-0047 modeled reading a *config* as an egress path. It did not model reading a *log*, because
+nothing was supposed to be in the log. Something was.
+
+### The rule
+
+**Never pass credential material to a log call — not the value, not a prefix, not a slice.** If the
+diagnostic question is "did the credentials load?", log the *answer* (`present`/`MISSING`), never a
+fragment of the input. Resolve presence flags into locals **before** the log call, so no credential
+attribute appears in a log argument at all — that keeps the invariant absolute and the checker
+simple. *A checker with exceptions is a weaker checker*: the first draft of the test here allowed
+"safe" truthiness reads, and the exception immediately made it ambiguous whether a given use was
+safe. Removing the exception from the *code* was better than adding it to the *test*.
+
+Guarded by `tests/test_pressure_service_no_key_logging.py`, which walks the AST rather than
+matching the wording — a reworded log line stays green, a reintroduced credential does not — and
+carries a positive control (DEC-0045) proving it still flags the exact line that shipped, including
+the `[:8]` slice form that made the original look harmless.
+
+### The layer trap, again
+
+The first note written about this said `pressure_service.py` was *mounted* and could be patched
+live. **Wrong.** `Dockerfile:117` bakes it, and `docker inspect` confirms it is absent from the
+mount list — an `scp` would have been a **silent no-op** with a green checkmark, which is exactly
+DEC-0031's trap and exactly what DEC-0046's standing question exists to catch. It was caught only
+by actually asking "which layer wins in prod?" instead of trusting the note. **Ask the question
+every time; a previous session's answer about a *different* file proves nothing about this one.**
+
+### Deployment: deliberately deferred
+
+The fix needs an image rebuild, and a rebuild restarts prod. Campaign A (DEC-0059/DEC-0061) is
+armed and running an 8-day factorial; swapping the image mid-campaign would change the binary
+under the arms and confound the very comparison the design exists to make. **The fix rides the
+next image release after the campaign completes (~2026-08-07).** The exposure it closes is a
+partial-prefix re-leak, and the full-key exposure it does *not* close (S41) has rotation as its
+only real remedy — so nothing is gained by rushing it into a running experiment.
