@@ -31,6 +31,17 @@ under [Pre-S16].
 - Also corrected a comment promising a `schedule --generate <date>` mode that **has never existed**;
   the dev-side recipe that actually produces the table is recorded in its place.
 - Gates: pytest **123 passed** (was 120), mypy clean. See DEC-0061.
+- **Credential redacted from a startup log line (DEC-0062).** `pressure_service.py` logged
+  `api_key[:8]` at INFO on every restart, into `weewx.log` and its 30 rotations. The point isn't the
+  8 characters — it's that **DEC-0047's read-guard covers configs, not logs**, so the most routine
+  operation in this repo (tail the log to confirm a restart was clean) walks past the guard into an
+  agent transcript. It did, twice, on 2026-07-29. Now logs `present`/`MISSING` with the flags
+  resolved into locals *before* the call, so no credential attribute appears in a log argument at
+  all — guarded by an AST test with a positive control. **The file is BAKED (`Dockerfile:117`), not
+  mounted as first assumed** — an `scp` would have been a silent no-op (DEC-0031), caught only by
+  actually asking DEC-0046's "which layer wins in prod?". **Deploy deliberately deferred to the next
+  image release:** rebuilding restarts prod, and swapping the image under a running 8-day factorial
+  would confound its arms. pytest **125 passed**, mypy clean on 33 files.
 
 ---
 ## [S57] — 2026-07-29 — Phase 0 confirms FreqError telemetry (DEC-0060); RX campaign A deployed and running
