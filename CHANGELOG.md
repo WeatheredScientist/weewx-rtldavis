@@ -5,6 +5,34 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S57b] — 2026-07-29 — campaign A aborted after 80 min; two defects fixed (DEC-0061), schedule regenerated, re-armed
+
+- **Campaign A aborted 12:13 EDT in its third block.** The safety model worked: baseline snapshot
+  restored, sticky STOP sentinel set, prod left healthy on `gain 372` — verified. The one thing it
+  failed to do was tell anyone.
+- **Defect 1 — the health check was too small by construction.** `health_ok` allowed ~90s for a new
+  archive record after a restart, but a restart needs boot (~25s) + up to a full 60s archive
+  interval + ~30s write lag ≈ **115s worst case**. Measured on the failure: `weewxd` init 12:11:46,
+  first record 12:13:30, abort fired 12:13:27 — **three seconds early**. Arm B had won the same coin
+  flip 80 minutes before. Now `HEALTH_TRIES=36` (~180s), and the test asserts the *arithmetic*
+  rather than the literal, so lowering it fails with the reason attached.
+- **Defect 2 — every alert this script could send was inert.** `send_mail` sourced `monitor.env`
+  without exporting, so its `python3` child saw nothing and died on `KeyError: 'ALERT_FROM'`. True
+  since the file was written; never disproved because no alert had ever fired. Extracted
+  `load_env()` (`set -a`/`set +a`), tested against a real child process, mutation-verified. Confirmed
+  live against the real `monitor.env` after deploy (booleans only, never values) — all `True`.
+- **Schedule regenerated for a 2026-07-30 start** (completes 08-07). The 07-29 run lost `A@00:05`,
+  took a partial `B@06:05` and lost `C@12:05` — three damaged Latin-square cells, the exact
+  time-of-day confound the design exists to remove. ~10h of delay bought a valid experiment.
+- **Re-armed:** fixed script deployed (sha `88c1aeaf…`, byte-verified against the merged `dev` tip),
+  stale state reset to `NONE` (otherwise the first tick would have harvested a baseline-config period
+  and recorded it as arm-B data), STOP cleared, the aborted run's 88 samples rotated aside. Campaign
+  starts itself at 00:05.
+- Also corrected a comment promising a `schedule --generate <date>` mode that **has never existed**;
+  the dev-side recipe that actually produces the table is recorded in its place.
+- Gates: pytest **123 passed** (was 120), mypy clean. See DEC-0061.
+
+---
 ## [S57] — 2026-07-29 — Phase 0 confirms FreqError telemetry (DEC-0060); RX campaign A deployed and running
 
 - **Phase 0 answered:** `FreqError` telemetry exists in the deployed driver — confirmed within 13s
