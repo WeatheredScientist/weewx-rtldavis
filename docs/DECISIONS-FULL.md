@@ -2407,7 +2407,56 @@ would notice. Mutation-tested; it goes red.
 
 ### Status
 
-Design accepted; **not yet deployed**. Phase 0 (a few hours at `debug_rtld = 2` to settle whether
-`FreqError` telemetry exists, and so whether `ppm`/`fc` are an axis at all) runs first. The schedule
-table assumes a 2026-07-29 start and is regenerated if that slips. Deployment is a Class C NAS
-mutation and the two DSM scheduler entries are owner-run.
+**Deployed and running (S57, 2026-07-29).** Phase 0 ran first and confirmed `FreqError` telemetry
+exists (see DEC-0060 for what that took). `ppm`/`fc` remain unmeasured (`0`/`0`) in all four
+arms — measuring them by value instead of leaving the axis dropped is a deliberately deferred
+follow-up, not a blocker (owner call: get the campaign running the same day). `rx_experiment.sh`
+deployed to the NAS project root, sha-verified, `install` run (baseline snapshotted). Owner created
+the two DSM Task Scheduler entries; the first automatic tick swapped to arm B (gain 207, `-ex 0`)
+at 10:52:37 EDT. Campaign A runs unattended for 8 days from there, self-terminating to baseline
+(expected completion ~2026-08-06). Tracked at
+[ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
+
+---
+
+## DEC-0060 — `debug_rtld` alone doesn't turn on driver debug logging — the `user` logger also has to be at DEBUG
+
+**Status:** Accepted · **Date:** 2026-07-29 (S57) · **extends** DEC-0043's root-logger override ·
+**explains** why DEC-0059's Phase 0 first attempt produced nothing
+
+### The gotcha
+
+`rtldavis.py`'s `dbg_rtld(verbosity, msg)` calls `logdbg(msg)` → `log.debug(msg)` — a plain Python
+`logging` call. Python's logging module filters at the **logger's** configured level before a
+handler ever sees the record. The live `weewx.conf`'s `[Logging][[loggers]][[[user]]]` carries
+`level = INFO`. So every `dbg_rtld()` call — at *any* `debug_rtld` value, 1, 2, or 3 — was being
+silently dropped by the logger itself, independent of the driver's own verbosity gate. `debug_rtld`
+only decides whether the driver *calls* `log.debug()`; it does not decide whether that call
+actually reaches the log file.
+
+This is not a new bug — it likely explains why `ops/find_duplicate_frames.py`'s own header already
+warns it "Requires `debug_rtld = 1` (or higher) **AND** the `user` logger at DEBUG in `[Logging]`."
+Nobody had connected that comment to a live Phase 0 attempt before now: `debug_rtld=2` ran for ~7h
+on 2026-07-28 and produced zero `chan:`/`FreqError` lines — not because the telemetry doesn't
+exist, but because the logger gate was closed the whole time.
+
+### The fix, and why it's scoped
+
+Adding a **`[[[user.rtldavis]]]`** logger entry at `level = DEBUG` — rather than raising the
+existing broader `[[[user]]]` entry — confirmed the telemetry within 13 seconds of the next
+restart. Scoping it to `user.rtldavis` specifically means `pressure_service`, `wcloud`, `influx`,
+`windy`, `owm`, and `loop_json_writer` (all children of the same `user` logger namespace, per
+Python's dotted-logger hierarchy) stay at `INFO` throughout — raising the parent would have
+changed verbosity for all of them at once, with no assessment of what each one's own debug-gated
+log calls would have dumped.
+
+### Standing rule
+
+**Any future need for `dbg_rtld()`/`dbg_parse()` output requires BOTH**: (1) `debug_rtld`/
+`debug_parse` at the right verbosity in `[Rtldavis]`, **and** (2) a scoped `[[[user.<module>]]]`
+logger entry at `DEBUG` in `[Logging][[loggers]]` — never the broader `[[[user]]]`. Revert both
+together when done; leaving either one in place either produces nothing (logger still at INFO) or
+over-scopes the verbosity increase (broader logger raised). This is now the confirmed, tested
+recipe — don't re-derive it from scratch, and don't assume `debug_rtld` alone is sufficient just
+because it *was* sufficient for the always-DEBUG `chan:`/`data:` design intent (it never has been,
+in this deployed config).
