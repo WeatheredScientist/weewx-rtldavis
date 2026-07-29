@@ -169,3 +169,61 @@ def test_every_arm_is_a_complete_literal_command():
         assert re.fullmatch(
             r"    cmd = /usr/local/bin/rtldavis -gain \d+ -v -fc 0 -ppm 0 -ex \d+",
             line), f"arm {arm} is not a well-formed literal: {line!r}"
+
+
+# --- S57 regressions: the two defects that broke the first live campaign ------
+
+def test_load_env_exports_to_child_processes(tmp_path):
+    """REGRESSION (S57). Sourcing the env file set shell variables but did not
+    EXPORT them, so send_mail's python3 heredoc -- a child process -- saw nothing
+    and died on KeyError. Every alert this script could send was broken,
+    including the abort notification: the campaign aborted for real on
+    2026-07-29, restored the baseline correctly, and told nobody.
+
+    This drives the real load_env() and asserts a CHILD process can see the
+    value, which is the property that actually failed.
+    """
+    envfile = tmp_path / "fixture.env"
+    envfile.write_text("ALERT_FROM=someone@example.invalid\n")
+
+    prog = (
+        f'source <(sed "/^# ── Modes/,\\$d" {SCRIPT}); '
+        f"ENVFILE={envfile}; load_env; "
+        f"""python3 -c "import os; print(os.environ['ALERT_FROM'])" """
+    )
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+    assert r.returncode == 0, f"child could not read the exported var: {r.stderr}"
+    assert "someone@example.invalid" in r.stdout
+
+
+def test_load_env_reports_failure_when_envfile_missing(tmp_path):
+    prog = (
+        f'source <(sed "/^# ── Modes/,\\$d" {SCRIPT}); '
+        f'ENVFILE={tmp_path / "does-not-exist"}; load_env'
+    )
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+    assert r.returncode != 0, "load_env must fail loudly when the env file is absent"
+
+
+def test_health_check_budget_covers_a_full_archive_interval():
+    """REGRESSION (S57). The health check's 18 tries (~90s) was too small BY
+    CONSTRUCTION and aborted a live campaign 3 seconds early.
+
+    A restart cannot produce an archive record faster than boot + up to a full
+    archive interval + the post-boundary write lag. The arithmetic is asserted
+    here rather than the bare number, so lowering the budget fails the test with
+    the reason attached. Measured on the real failure: weewxd init 12:11:46,
+    first record 12:13:30 = 104s, abort at 12:13:27.
+    """
+    src = SCRIPT.read_text()
+    tries = int(re.search(r"^HEALTH_TRIES=(\d+)", src, re.M).group(1))
+    sleep_s = int(re.search(
+        r'for i in \$\(seq 1 "\$HEALTH_TRIES"\); do\s*\n\s*sleep (\d+)', src, re.M).group(1))
+
+    boot_s, archive_interval_s, write_lag_s = 25, 60, 30   # observed on this station
+    worst_case = boot_s + archive_interval_s + write_lag_s  # ~115s
+
+    assert tries * sleep_s >= worst_case, (
+        f"health budget {tries * sleep_s}s cannot cover the {worst_case}s worst case "
+        f"(boot {boot_s} + archive interval {archive_interval_s} + write lag {write_lag_s})"
+    )
