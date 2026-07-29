@@ -118,6 +118,13 @@ _Last updated: 2026-07-29 (S57)._
 
 ## Shipped — nothing to do here
 
+- **S57b** (campaign A aborted after 80 min, two apparatus defects fixed + redeployed, schedule
+  regenerated for a clean 07-30 start; credential redacted from a startup log line but **NOT
+  deployed** — it is baked, and rebuilding mid-campaign would confound the arms): see CHANGELOG
+  `[S57b]`, DEC-0061, DEC-0062. **Rollback:** the campaign self-restores its own baseline
+  (`ops/rx_experiment.sh abort`, or `weewx.conf.rx-baseline` on the NAS); the aborted run's samples
+  are preserved at `logs/rx_experiment_data.log.aborted-20260729`. No image changed, so no image
+  rollback applies.
 - **S57** (**RX campaign A live in prod** — Phase 0 confirmed `FreqError` telemetry exists
   (DEC-0060 documents a logger-level gotcha that cost the first attempt ~7h of nothing);
   `ops/rx_experiment.sh` deployed + sha-verified + installed; owner's two DSM Task Scheduler
