@@ -62,16 +62,16 @@ _Last updated: 2026-07-28 (S56)._
 > (owner call 2026-07-29: get the sweep going today). Revisit as a separate, short (minutes, not
 > hours) measurement pass later if worth it.
 >
-> **Campaign deploy — in progress.** `rx_experiment.sh` scp'd to the NAS project root
-> (`/volume1/docker/weewx-rtldavis/rx_experiment.sh`, sha256 `ea0ff106…`, byte-verified) from the
-> merged `dev` tip. `install` run — baseline snapshotted, state `NONE`, due arm `B` (today's
-> 00:05 A slot had already passed by install time; the 32-block schedule self-corrects to
-> whatever's due rather than requiring exact alignment). Schedule table confirmed already dated
-> for a 2026-07-29 start — **no regeneration needed**, closing out that open question from the
-> original plan. **Owner action still needed: create the two DSM Task Scheduler entries** (`tick`
-> and `guard`, every 5 min, as root — see chat for exact commands) before the campaign actually
-> starts ticking. Once both exist, campaign A (LNA in circuit, gain×`-ex` 2×2 factorial) runs
-> itself for 8 days and self-terminates to the baseline.
+> **Campaign A is LIVE** — deployed and confirmed running as of 2026-07-29. `rx_experiment.sh`
+> scp'd to the NAS project root (`/volume1/docker/weewx-rtldavis/rx_experiment.sh`, sha256
+> `ea0ff106…`, byte-verified) from the merged `dev` tip; `install` run to snapshot the baseline;
+> owner created the two DSM Task Scheduler entries (`tick`, `guard`, every 5 min, as root). First
+> tick fired automatically and swapped to **arm B (gain 207, `-ex 0`) at 10:52:37 EDT** — today's
+> 00:05 A slot had already passed by install time, and the 32-block schedule self-corrects to
+> whatever's due rather than requiring exact alignment. Confirmed live config
+> (`cmd = ... -gain 207 -v -fc 0 -ppm 0 -ex 0`) and healthy container post-swap. Runs unattended
+> for 8 days (next transition: arm C at 12:05 EDT today) and self-terminates to the baseline.
+> Tracked at [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
 >
 > Prod is untouched — still v2.0.11 (`0.20+ws.3`), gain 372, LNA in circuit. S56 was three acts,
 > nothing deployed: ROADMAP reconciled + restructured (DEC-0057), split to P0–P3 (DEC-0058), and
