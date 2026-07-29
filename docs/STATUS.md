@@ -38,24 +38,40 @@ _Last updated: 2026-07-28 (S56)._
 
 ## Active thread
 
-> **▶ Resume here (S57, in progress). Phase 0 is LIVE: `debug_rtld` set to `2` on the live
-> `weewx.conf` at 2026-07-28 19:11 EDT** (backup: `weewx.conf.bak-debugrtld2-20260728`;
-> container restarted clean, banner `0.20+ws.3` unchanged, `sensor_qc True`, no errors).
-> **Official window: revert target 22:11 EDT tonight (2026-07-28), 3h from activation** — ISS
-> hops channels ~every 2.5s, and at the measured 73.3% average reception with no diurnal cycle
-> (DEC-0059), evidence would show up within minutes if the deployed Go binary emits `FreqError`
-> telemetry at all. 3h is a confidence margin, not a statistical requirement, chosen to close
-> this the same evening. Tracked at
-> [ops#112](https://github.com/WeatheredScientist/eaglehunt-ops/issues/112).
-> **Next action: at or after 22:11 EDT, grep `weewx.log` for `FreqError` (single-word pattern) to
-> settle whether the telemetry exists at all, then revert `debug_rtld` to `1` immediately**
-> (log-bloat risk, DEC-0041) and restart the container the same way (`docker kill` + `docker
-> start`). **This is a live prod config change awaiting revert — do not let a session end
-> without either reverting it or updating this line.** After that: (2) Deploy
-> `ops/rx_experiment.sh` — scp + two owner-run DSM scheduler entries (`tick`, `guard`, 5 min,
-> root). (3) Regenerate the schedule if the start slipped past 2026-07-29 — the Latin-square
-> test does NOT catch stale dates.** Full detail in "Next session actions" below; design in
-> **DEC-0059**.
+> **▶ Resume here (S57, in progress). Phase 0 is CLOSED — `FreqError` telemetry CONFIRMED TO
+> EXIST.** Found within 13s of the 2026-07-29 02:10 EDT restart:
+> `Hop: {ChannelIdx:0 ChannelFreq:902419338 FreqError:0 Transmitter:0}`. Getting there took a
+> real correction: the first attempt (19:11 EDT 07-28, `debug_rtld=2` alone) produced zero
+> evidence for ~7h because the live `[Logging][[loggers]][[[user]]]` was set to `level = INFO` —
+> `dbg_rtld()` calls `log.debug()`, which the logger silently dropped regardless of
+> `debug_rtld`'s value (matches a comment in `ops/find_duplicate_frames.py`: needs *both*
+> `debug_rtld >= 1` *and* the `user` logger at DEBUG). Fix: a scoped
+> `[[[user.rtldavis]]]` logger entry at DEBUG (not the broader `[[[user]]]`, to avoid raising
+> verbosity for `pressure_service`/`wcloud`/`influx`/etc.) — added 02:10 EDT 07-29, restart
+> confirmed the telemetry immediately. **Reverted 09:34 EDT 07-29** (both `debug_rtld`→`1` and
+> the `[[[user.rtldavis]]]` entry removed entirely) — confirmed via a fresh post-restart log tail
+> showing clean INFO-only output, no `DEBUG`/`chan:` lines. Honest tally: the elevated-debug
+> window ran ~19:11 07-28 → ~09:34 07-29 (~14.5h, well past the planned 3h, due to a session
+> gap) — `weewx.log` grew to ~8.8 MB for the day vs. a normal ~4 MB/day baseline. Non-critical
+> (no `CRITICAL` errors, no disk pressure) but a real instance of the DEC-0041 bloat risk.
+> Tracked at [ops#112](https://github.com/WeatheredScientist/eaglehunt-ops/issues/112) (closing).
+>
+> **Consequence for the campaign:** all four hardcoded arms in `ops/rx_experiment.sh` (A/B/C/D)
+> carry unmeasured `-fc 0 -ppm 0`. Now that telemetry is confirmed to exist, those *could* be set
+> by a real measurement instead — **deliberately deferred, not blocking the campaign start**
+> (owner call 2026-07-29: get the sweep going today). Revisit as a separate, short (minutes, not
+> hours) measurement pass later if worth it.
+>
+> **Campaign deploy — in progress.** `rx_experiment.sh` scp'd to the NAS project root
+> (`/volume1/docker/weewx-rtldavis/rx_experiment.sh`, sha256 `ea0ff106…`, byte-verified) from the
+> merged `dev` tip. `install` run — baseline snapshotted, state `NONE`, due arm `B` (today's
+> 00:05 A slot had already passed by install time; the 32-block schedule self-corrects to
+> whatever's due rather than requiring exact alignment). Schedule table confirmed already dated
+> for a 2026-07-29 start — **no regeneration needed**, closing out that open question from the
+> original plan. **Owner action still needed: create the two DSM Task Scheduler entries** (`tick`
+> and `guard`, every 5 min, as root — see chat for exact commands) before the campaign actually
+> starts ticking. Once both exist, campaign A (LNA in circuit, gain×`-ex` 2×2 factorial) runs
+> itself for 8 days and self-terminates to the baseline.
 >
 > Prod is untouched — still v2.0.11 (`0.20+ws.3`), gain 372, LNA in circuit. S56 was three acts,
 > nothing deployed: ROADMAP reconciled + restructured (DEC-0057), split to P0–P3 (DEC-0058), and
