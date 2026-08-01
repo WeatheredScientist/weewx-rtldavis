@@ -1,7 +1,7 @@
 # Roadmap — weewx-rtldavis
 
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
-ARCHITECTURE.md; for *what's on the bench right now* see STATUS.md (the single source of truth for
+ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
 **Last updated:** 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
 "Long-term direction" section, per DEC-0058 — this file is now P0–P3 only, the actively sequenced
@@ -9,7 +9,7 @@ plan, so it doesn't get cluttered by uncalendared/aspirational items. Earlier sa
 folded the old P1 + P1.5 sections into one continuous data-integrity arc covering v2.0.3–v2.0.11;
 collapsed P0.5's mostly-done checklist to a pointer; added the staleness guardrail below.)
 
-STATUS.md holds what's *in motion right now*; this holds the ordered, actively-sequenced plan
+`BOOT.md` holds what's *in motion right now*; this holds the ordered, actively-sequenced plan
 (P0–P3 only, per DEC-0058). BACKLOG.md holds unordered near-term ideas **and** long-term/
 uncalendared direction — see its "Long-term direction" section for anything horizon-scale.
 
@@ -24,7 +24,7 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **Next scheduled reconciliation check: by S66** (~10 sessions out). If the session counter is
   at or past S66 and this line still says S66, that itself is the signal it's overdue — run the
   same pass as S56 did (diff every open/pending item here against DECISIONS.md, CHANGELOG.md, and
-  STATUS.md's "Shipped" log).
+  `BOOT.md` and `CHANGELOG.md`).
 - Last full reconciliation: **S56, 2026-07-28** (this pass).
 
 ## The vision
@@ -57,7 +57,7 @@ coding, and the **No-Rewrite Rule** (DEC-0014).
 # SHORT TERM (P0–P1) — foundational work, all ✅ DONE
 
 Nothing below is the current focus — everything in this section has shipped. Current focus (watches,
-open threads) lives in STATUS.md, not here.
+open threads) lives in `BOOT.md`, not here.
 
 ## P0 — Governance bootstrap (S16–S20) — ✅ DONE
 Prod-truth reconcile + `prod-baseline-20260704`, nine-file governance, CI/pre-commit + secret gate,
@@ -78,7 +78,7 @@ ASSESSMENT.md for detail — not re-narrated here.
       ops `STANDARD.md`): `BOOT.md`/`CONSTANTS.md`/`MANIFEST.md`/`ARCHIVE/` replace the DEC-0030
       Tier-1 set. Adopted on measurement against ops#130's own recommendation to defer — Tier-1
       accretes **~1.1K tokens per session close**, so leanness here is a moment, not a trajectory.
-      Both siblings already migrated. Work order in STATUS.md's next-session actions.
+      Both siblings already migrated. **Executed S60** — see CHANGELOG `[S60]`.
 
 ## P0.6 — Code-quality review + fixes (S24–S25, M-A S28) — ✅ DONE
 Ranked findings in `docs/CODE_REVIEW_S24.md`; all fixes landed with regression tests — H1/H2/M3/U3
@@ -110,9 +110,9 @@ here.
 
 **Still open — ordinary watches, not a new arc.** Current status (co-rejecting grep, humidity-spike
 signature DEC-0044, first-frost test of the signed-decode negative branch, DEC-0056's
-rain-rejection revisit trigger) lives in STATUS.md's "Active thread" — not duplicated here, and not
+rain-rejection revisit trigger) lives in `BOOT.md`'s standing watches — not duplicated here, and not
 evidence this P1 item is still "in progress." **`#74` calm-windDir left this list at S59**, closed
-on five consecutive clean days with a positive control (STATUS.md §Standing watches).
+on five consecutive clean days with a positive control (`BOOT.md` §Standing watches).
 
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
 bound and done via reversible live hot-swap with an instant rollback path.
