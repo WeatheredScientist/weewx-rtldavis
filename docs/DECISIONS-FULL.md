@@ -2698,3 +2698,70 @@ the Tier-1 docs at start anyway — those are the migration's inputs.
 `CHANGELOG.md` by name in most sessions anyway, the saving was illusory — the read moved rather
 than disappeared. Record that on the second occurrence and reopen this decision; do not quietly
 re-add them to the always-load set, which is how the accretion started.
+
+### Execution — S60, same day
+
+Migrated. Measured outcome, always-load set: **91,806 B (~25.5K tok) across six files →
+25,819 B (~7.2K) across four** (`BOOT.md` 8,975 · `CONSTANTS.md` 4,238 · `MANIFEST.md` 5,480 ·
+`CLAUDE.md` 7,126). A **72% cut**, at the optimistic end of this decision's ~19K estimate. `BOOT.md`
+landed at 2,493 tokens against its ~2,500 cap.
+
+Four things the plan did not anticipate, all resolved in-session:
+
+1. **The shared archiver matched a different set of files than ops#130 predicted.** It moves
+   *date-stamped* names, so it found three pre-governance root artifacts nobody had listed
+   (`DECISIONS_staging_20260704.md`, `..._Consolidation_...`, `..._ClaudeCode_Kickoff_...`) and did
+   **not** match the three `docs/handoffs/S3x-*.md` files ops#130 named for `ARCHIVE/` — those are
+   session-numbered. Checked before moving: the root three are unreferenced by any live doc; the
+   handoffs three are cited by path from `DECISIONS-FULL.md` and `CHANGELOG-ARCHIVE.md`. So the root
+   three were archived and the handoffs were left in place with `MANIFEST.md` rows. **Moving them
+   would have broken three live citations to satisfy a rule about the load path they were never in.**
+2. **`docs/STATUS.md` did not fit in `BOOT.md`,** and forcing it would have blown the cap (rule 1
+   forbids a bigger cap). Its content distributed by kind: live bench state → `BOOT.md`; open threads
+   and housekeeping → `BACKLOG.md` verbatim; the four upstream threads → a new
+   `docs/UPSTREAM-THREADS.md` (Tier 2). Resolved items collapsed to one-line pointers per rule 1.
+   The file is then **deleted, not archived** — git history preserves it and a copy would violate
+   rule 5.
+3. **The hook was verified BEFORE the delete, not after.** STANDARD §5's hazard is that a `BOOT.md`
+   matching no marker shape goes *silently* quiet. `resume_pointer_for()` was run against this repo
+   while `docs/STATUS.md` still existed (returned `BOOT.md` as source), and again after the delete.
+   Both passed. Doing this in the other order would have produced a repo that looks fine and has no
+   resume pointer — the DEC-0106 failure shape: not wrong output, no output.
+4. **A third copy of the broken validation-gate list was found in `AGENTS.md`** — still naming
+   `ruff-format`, which DEC-0027 rejects. S59b fixed `CLAUDE.md`'s copy, S43 fixed
+   `.pre-commit-config.yaml`'s. Three copies, three independent drifts, which is rule 5's thesis
+   demonstrated rather than argued. All three now point at the single list in `docs/CONVENTIONS.md`.
+   `CLAUDE.md`'s duplicated infra table went the same way — it had already gone stale on the
+   reception baseline and the driver-vs-config layer table.
+
+Not done, deliberately: `docs/ASSESSMENT.md` still describes STATUS.md as the source of truth. It is
+a **dated audit artifact**, not live guidance; rewriting a historical assessment to match today would
+destroy the record of what was true then. Flagged in its `MANIFEST.md` row instead.
+
+### A second public-repo divergence, found during execution — `ARCHIVE/` stays uncommitted
+
+STANDARD rule 3 says history is "preserved, not carried": retired material moves to `ARCHIVE/` and
+stays in the repo. **That does not work here, for the same reason §3's `ops/CONSTANTS.md` pointer
+does not: this repo is public and the others are not.**
+
+`ARCHIVE/` turned out to be gitignored already (`.gitignore` carries `archive/`, which matches
+case-insensitively on macOS), and the three files the shared archiver moved into it had **never been
+tracked**. Before treating that as a bug to fix by un-ignoring it, they were scanned: two of the
+three carry **IP-shaped and credential-shaped strings**. They are pre-governance conversation dumps
+from S16, written before any of this repo's secret hygiene existed. Committing them would be a
+DEC-0012 violation, and STANDARD §6 requires exactly this audit before any such file is committed.
+
+**Call: `ARCHIVE/` stays gitignored and local-only, and `MANIFEST.md` says so at the top of its
+`ARCHIVE/` section** — because the failure mode otherwise is a manifest that points a fresh cloner
+at three files their clone does not contain, which is the same dead-end-for-external-contributors
+problem this decision already called out once.
+
+Nothing is lost: those three were untracked working files all along, and genuinely retired *repo*
+content (`docs/STATUS.md`, every superseded revision) is preserved in **git history**, reachable
+with `git log --follow`. For a public repo, git history *is* the archive; a committed `ARCHIVE/`
+directory is a private-repo affordance.
+
+Both divergences share one root cause worth stating plainly: **the standard was written by and for
+private repos, and its two "preserve/share by pointing at a file" mechanisms — `ops/CONSTANTS.md`
+and `ARCHIVE/` — both assume every reader has access the public member's readers do not.** Reported
+to ops#130 as a spec gap, not patched into their file.

@@ -3,9 +3,71 @@
 Unordered near-term ideas and durable findings not yet scheduled, **plus long-term/uncalendared
 direction** (its own section below, moved here from ROADMAP.md's old P4 + "Longer horizon" at
 DEC-0058, S56 — keeps ROADMAP.md down to the actively-sequenced P0–P3 plan). Scheduled work lives
-in ROADMAP.md; in-flight work in docs/STATUS.md. Carried forward from the pre-governance NAS
+in ROADMAP.md; in-flight work in `BOOT.md`. Carried forward from the pre-governance NAS
 `BACKLOG.md`; the open items from the retired root `cleanup_backlog.md` were folded in here (S27,
-S23 tail).
+S23 tail). **The "Open threads" and "Needs a check" sections below moved here verbatim from the
+retired `docs/STATUS.md` at S60 (DEC-0063)** — they were never in-flight work, and `BOOT.md` is
+capped for what is.
+
+## Open threads — none of these block anything (moved from STATUS.md, S60)
+
+- **Monitor alert on the new rejection signature (S33 follow-up #1)** — extend `weewx_monitor.py`'s
+  rain-glitch email to SensorQC rejections; needs its own pattern + a rate cap so a flapping sensor
+  can't spam. Only worth doing once we see the real rejection rate.
+- **`DewpointCacher` × `SensorQC` interaction (S36, undecided).** The cacher carries `outTemp`/
+  `outHumidity`/`radiation`/`UV` forward for up to 300 s, so a value SensorQC *rejects* gets refilled
+  with the last good reading (~40 s old) rather than left null. The bad value never propagates either
+  way — so this did **not** block v2.0.4 — but a rejected reading is currently indistinguishable from an
+  absent one in the data (the rejection is still logged loudly). Decide whether that's right.
+- **Errata → dashboard contract (cross-repo, dash S69 Q3).** The owner wants corrected points visibly
+  asterisked on the water-balance chart. **Half-solved:** InfluxDB corrected points now carry a sparse
+  `rain_qc = 1` flag (DEC-0032, documented in INTERFACES.md), so the dashboard can render the marker
+  straight from the data with no parallel list. The dashboard side still has to *read* it.
+- **Unported from the dashboard:** its `.claude/agents/` routing definitions (its DEC-0093).
+
+**Resolved, kept as one-liners so nobody re-opens them** (STANDARD rule 1 — the full reasoning is in
+the DEC, do not re-derive it):
+
+- ✅ **rainRate** — ISS-side condensation artifact, hardware inspected and clean. DEC-0042, bounded
+  by DEC-0049. A third event on the next calm, saturated, cooling night is a free test; the sharp
+  prediction is that **the tip counter still will not advance**.
+- ✅ **Cross-sensor coupling filter** — parked, deliberately not built. Its premise failed on our own
+  data; **the mechanism is the open question, not the threshold**. DEC-0044.
+- ✅ **Gain 372 interim** — absorbed into the designed RX experiment; do not tune gain or
+  `receiveWindow` by feel. DEC-0017 → DEC-0048 → DEC-0059.
+- ✅ **`loopdata.py` + `ops/reception_service.py` removed** (S47) — both vestigial, files renamed
+  aside on the NAS in case of rollback. DEC-0005, CHANGELOG `[S47]`.
+
+## Needs a check / housekeeping (moved from STATUS.md, S60)
+
+- **⚠️ The freeze MECHANISM is still open (DEC-0036) — but the trigger and the fuel are both gone.**
+  We never proved exactly which write blocked, and the evidence is gone. Do **not** invent one. What we
+  now know for certain: the **trigger** (a bare `docker logs`) is blocked by a hook in both the agent and
+  the shell; the **fuel** (StdPrint, ~25 MB/day to stdout) is removed (DEC-0041); and Synology's `db` log
+  driver **cannot be size-capped** — it accepts `max-size` and ignores it (measured, and confirmed
+  against the literature). If it ever recurs, capture `/proc/1/task/*/wchan` and `/proc/1/fd/*` **before**
+  restarting anything.
+- **The `db` log driver is uncapped and always will be.** All containers still run on it. That is now an
+  accepted risk, not an oversight: the trigger is guarded, weewx's stdout is silent, and `influxdb`
+  (~0.5 MB/day) plus HLF/eh-proxy (tens of KB) are not credible wedge candidates. Switching a container
+  to `json-file` is the only way to bound its log, and it costs that container's DSM log tab. **Revisit
+  only if a container starts generating real stdout volume.**
+- **One `rtldavis process stalled` at the v2.0.7 startup (S41) — has not recurred across 2 further
+  recreates.** Most likely the USB dongle being re-acquired while the old container was still releasing
+  it. S47 added a 3 s `sleep` between `rm` and `run` and came back clean. **Not a blocker** — treat a
+  future stall as a one-off unless it shows up on consecutive restarts.
+- **NAS boot task fragility (S32):** after the next DSM update/reboot, verify the `weewx_monitor`
+  scheduler task still runs as root (symptom: `sudo: a terminal is required` spam, no pidfile).
+- **Docker Hub README auto-sync:** add repo secrets `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` to
+  activate `.github/workflows/dockerhub-description.yml` (green no-op until then). Owner action.
+- **Snow / freezing / no heating tape** — parked, owner's future thread. 2026 = learning year.
+- **Security follow-ups are tracked in the gitignored local-infra doc, not here.** This repo is
+  public; operational security state does not belong in it.
+- ✅ **No real credential has ever been committed to any of the three repos.** S40 scanned all 333
+  blobs for commented credentials (zero); S41 scanned every live config value against the full
+  history of all refs in all three repos (zero). One scare — a password apparently in
+  `weewx.conf.example` since S16 — was the example's own placeholder. False positive, caught by
+  re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
 - **Tuning infrastructure (owner idea, S34) — control panel and/or designed sweep plan.** Two
