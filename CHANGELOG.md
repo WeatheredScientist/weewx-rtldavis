@@ -5,6 +5,61 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S59] — 2026-08-01 — #74 watch closed on evidence; ops#126 citation fixed; ops#130 answered ADOPT (DEC-0063)
+
+- **Issue #74's calm-windDir watch is CLOSED.** The v2.0.9 fix is confirmed on air: **zero**
+  `windDir expired` WARNINGs across five consecutive days (07-28 … 08-01) against a prior base rate
+  of ~1/hr. Checked with a **positive control** — the same grep returns **21 hits** in the 07-27 log,
+  so the pattern still matches and the zero is real, not a false zero from the `nasctl grep`
+  multi-word gotcha. STATUS's standing-watch list and ROADMAP's P1 watch line both updated (DEC-0057
+  step 5). **No DEC for this item specifically** — closing a watch against a criterion agreed when
+  the watch was opened is not a new design call. (DEC-0063 below is this session's one DEC, and it
+  is about ops#130.)
+- **[ops#126](https://github.com/WeatheredScientist/eaglehunt-ops/issues/126) fixed** — after
+  eaglehunt-ops suffixed three re-issued decision IDs, one citation here resolved to the wrong
+  decision. `DECISIONS-FULL.md` (DEC-0052 body) now reads `locked OPS-DEC-0019b`, the
+  CLOSEOUT-TEMPLATE lock. Independently re-verified that this repo's other three `OPS-DEC-0019`
+  references (CHANGELOG-ARCHIVE, S45/S46) all mean the **first** use — the env-twin rollout — and
+  correctly stay bare. No `OPS-DEC-0020`/`0021` citations exist here.
+- **Campaign A untouched and healthy** — 10 of 32 blocks harvested, block 11 (arm A) live, 11/11
+  swaps healthy, zero aborts, completes ~08-07 00:05. Partial results deliberately not read.
+- **One unscheduled restart logged, not chased.** `weewxd CRITICAL Database OperationalError
+  exception: database is locked` at 15:08:22 on 08-01; weewx waited its built-in 2 minutes,
+  re-initialized cleanly at 15:10:22, and resumed publishing (verified 15:43). First of the live
+  campaign. Recorded because the campaign's settle rule drops samples after a *swap*, not after an
+  unscheduled restart, so block 11 carries a small unmasked transient.
+- Also corrected in passing: STATUS.md's header still said "Current session: S57" two sessions on,
+  and its handoff heading said "S57 done → S58". Both reconciled. Documented that
+  `ops/rx_experiment.sh status` is **not** a `nasctl` verb, and that `rx_experiment.log` was never
+  rotated — it still carries the aborted 07-29 run, which inflates a naive swap count by 2 blocks.
+- **[ops#130](https://github.com/WeatheredScientist/eaglehunt-ops/issues/130) answered: ADOPT the
+  session-context tiering standard (DEC-0063)** — against that issue's own recommendation to defer.
+  ops filed it saying "the case here is genuinely weak," on the basis that this repo is the leanest
+  in the forum at ~21K and migration buys "maybe 6–8K tokens." Checking the premise rather than the
+  offer: the tree is at **~25.5K, not ~21K** (ops measured a tree two session-closes stale); the
+  saving is **~19K, not 6–8K** (`CHANGELOG.md` + the `DECISIONS.md` index leaving always-load is
+  ~12.2K by itself — more than ops's quoted total, an internal inconsistency in the issue); and
+  decisively, Tier-1 measured at four consecutive merge points grows **~1.1K tokens per session
+  close**, structurally, because DEC-0052's closeout steps 2 and 3 append to STATUS and CHANGELOG
+  every time. "Leanest in the forum" is a statement about a moment, not a trajectory. Both siblings
+  have already migrated; this repo was the last of the trio.
+- **A spec gap found and NOT resolved unilaterally.** STANDARD.md §3 has the trio load
+  `ops/CONSTANTS.md` at session start, and separately says this repo may point at ops but never
+  quote it. Those clauses conflict here: **ops is private and this repo is public**, so a
+  `CLAUDE.md` telling its reader to load `ops/CONSTANTS.md` is a dead end for every external
+  contributor — the population this repo has and the other three do not. This repo's `CONSTANTS.md`
+  will be self-sufficient for anyone who can clone it (closer to coffeeradar's DEC-0017 posture),
+  with any ops reference marked an owner-only supplement. Filed back to ops rather than edited into
+  their file — read-only across the boundary.
+- **The migration itself is a work order for S60, not done here.** STANDARD §7 wants migration at a
+  session end with full state in context, which this was; it was still wrong to start, because the
+  session stood at **~157K absolute context** against AGENT-ECONOMY §7's ~200K ceiling and the
+  mechanical work is ~40K more. A half-applied migration leaves two contradictory entrypoints and a
+  hook choosing between them by fallback order. Decision taken where the state was; execution
+  written down as seven numbered steps in STATUS.md.
+- Gates: pytest **125 passed**, mypy clean on 33 files (`.mypy_cache` cleared first, per CONVENTIONS).
+
+---
 ## [S58] — 2026-08-01 — campaign A tracking clean (9/32 blocks); a site RF notch characterized, DEC-0059's diurnal claim amended
 
 - **Campaign A healthy, no intervention.** 9 of 32 blocks harvested, 9/9 swaps healthy, zero aborts;

@@ -16,31 +16,43 @@ DECISIONS.md / CHANGELOG.md and delete it here. Keep this file short — **prune
 close** (DEC-0030): shipped blocks out, superseded notes out; if CHANGELOG or a DEC already tells
 the story, this file only points at it.
 
-> **Current session: S57** (2026-07-29). **RX campaign A is LIVE in prod** (v2.0.11, arm B active
-> since 10:52:37 EDT). Phase 0 answered: `FreqError` telemetry confirmed to exist (DEC-0060 — a
-> logger-level gotcha cost the first attempt ~7h of nothing). `ops/rx_experiment.sh` deployed,
-> sha-verified, installed; owner's two DSM Task Scheduler entries fired the first tick
-> automatically. Campaign runs unattended for 8 days, self-terminating to baseline
-> (~2026-08-06 expected). `ppm`/`fc` measurement-by-value deliberately deferred, not blocking.
-> ROADMAP.md P2 reconciled (Phase 0 checked off, campaign A marked running, the rebuild-for-
-> telemetry item closed as moot). Cross-repo: [ops#112](https://github.com/WeatheredScientist/eaglehunt-ops/issues/112)
-> closed, [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114) tracks the
-> running campaign, and ops's own [ops#113](https://github.com/WeatheredScientist/eaglehunt-ops/issues/113)
-> (filed this session) was independently built and closed the same day — `.claude/transient-state`
-> is available for this repo to opt into next time. See CHANGELOG `[S57]`, DEC-0059/DEC-0060.
+> **Current session: S59** (2026-08-01). Bench session while campaign A runs — no prod change, no
+> release. **RX campaign A is healthy and untouched**: 10 of 32 blocks harvested, block 11 (arm A)
+> live since 12:08:21, 11/11 swaps healthy, zero aborts, completes ~08-07. Partial results
+> deliberately not read (DEC-0059 pre-registers 8 blocks/arm). Landed this session: the **#74
+> calm-windDir watch is CLOSED** on five consecutive clean days (07-28…08-01, positive-controlled
+> against 21 hits on 07-27), and [ops#126](https://github.com/WeatheredScientist/eaglehunt-ops/issues/126)'s
+> stale citation is fixed (`OPS-DEC-0019` → `OPS-DEC-0019b` in DECISIONS-FULL.md — the three
+> CHANGELOG-ARCHIVE references are the *first* use and stay bare). One new observation, logged not
+> chased: a single self-recovered `database is locked` restart at 15:08 on 08-01. Also **DEC-0063:
+> adopt the ops session-context tiering standard** — decided here on measurement, migration is the
+> first work order for S60. See CHANGELOG `[S59]`.
 
-_Last updated: 2026-07-29 (S57)._
+_Last updated: 2026-08-01 (S59)._
 
 ---
 
 ## Active thread
 
-> **▶ Resume here (S59). Campaign A is running clean — keep tracking, don't intervene.** As of
-> 2026-08-01 08:37: **9 of 32 blocks** harvested, **9/9 swaps healthy, zero aborts**, arm D live.
-> Completes **~08-07**. Both main effects are flat — gain 207 vs 372 **−0.1 pts (±0.36 SE)**, ex 50
-> vs ex 0 **−0.1 (±0.36)** — against a **≥2.0-pt** adoption bar (DEC-0059). A −1.2 pt gain effect
-> that looked real on day 1 dissolved by day 3; **do not read partial results**, that is what the
-> 8-blocks-per-arm design is for.
+> **▶ Resume here (S60). Two things: execute the DEC-0063 migration work order (below, do it
+> early — it needs ~40K context), then resume campaign tracking. Campaign A is running clean —
+> keep tracking, don't intervene.** As of
+> 2026-08-01 15:45: **10 of 32 blocks** harvested, block 11 (**arm A**) live since 12:08:21,
+> **11/11 swaps healthy, zero aborts**, no STOP sentinel. Completes **~08-07 00:05**. Blocks are
+> balanced so far (A 2, B 2, C 3, D 3 complete). As of S58 both main effects were flat — gain 207 vs
+> 372 **−0.1 pts (±0.36 SE)**, ex 50 vs ex 0 **−0.1 (±0.36)** — against a **≥2.0-pt** adoption bar
+> (DEC-0059). A −1.2 pt gain effect that looked real on day 1 dissolved by day 3; **do not read
+> partial results**, that is what the 8-blocks-per-arm design is for.
+>
+> **One unscheduled restart, logged not chased (new S59).** At 2026-08-01 15:08:22 weewxd hit
+> `CRITICAL Database OperationalError exception: database is locked`, waited its built-in 2 minutes,
+> re-initialized cleanly at 15:10:22, and resumed publishing (verified 15:43). **First such event of
+> the live campaign** — 07-30 and 07-31 are clean; 07-29 had 11, but that was the heavy-intervention
+> day (Phase 0 revert + abort + restore), so it is not a baseline. Nothing was done about it. The one
+> consequence worth remembering at analysis time: the campaign drops the first 2 samples after a
+> *swap*, not after an unscheduled restart, so **block 11 (arm A) carries a ~2-minute gap plus an
+> unmasked restart transient**. Arm A has 7 more blocks to dilute it. If this recurs, that is the
+> point at which it becomes a thread rather than a footnote.
 >
 > **To pick tracking back up, in order:**
 > 1. `ops/rx_experiment.sh status` — expect arm/due to match and `stopped: no`. A mismatch or a
@@ -82,10 +94,10 @@ _Last updated: 2026-07-29 (S57)._
 > **(a) DEC-0056 is LIVE end-to-end** — cap 16 in the running driver, tripwire email verified
 > (`--test-alert` received), WeatherLink playbook + revisit trigger in the DEC. R3 delivered
 > dashboard-side (their S151, DEC-0167); R4/R5 noted-not-built.
-> **(b) Watches** — co-rejection grep: **0 hits** through 11:48 07-28 (re-verified S56,
-> positive-control-verified). #74 calm-windDir: last WARNING 21:59 07-27, zero since at a prior
-> base rate of ~1/hr — one more full-day look and call it confirmed. Humidity: unfired (largest
-> step 0.7 pts in the 240 samples to 08:52 07-28). DEC-0049 phantom-rainRate: unfired.
+> **(b) Watches** — co-rejection grep: **0 hits** through 15:43 08-01 (re-verified S59,
+> positive-control-verified: 1603 `rtldavis` lines in the same log). **#74 calm-windDir is CLOSED
+> (S59)** — see below. Humidity: unfired (largest step 0.7 pts in the 240 samples to 08:52 07-28).
+> DEC-0049 phantom-rainRate: unfired.
 > **(c) Upstream replies** — NEW
 > [lheijst#23](https://github.com/lheijst/weewx-rtldavis/pull/23) (temp sign + `0xFF8`, credits
 > LloydR's #19 diagnosis) joins #22, issue #15 and david-lutz#1 on the reply watch.
@@ -271,18 +283,66 @@ _Last updated: 2026-07-29 (S57)._
   NAS at S47 — DEC-0048 fully closed.
 - **Snow / freezing / no heating tape** (parked, owner's future thread). 2026 = learning year.
 
-## Next session actions (S57 done → S58)
+## Next session actions (S59 done → S60)
 
 **This section is the repo-visible handoff.** Read it first when resuming. Session recaps live in
 "Shipped" above and CHANGELOG — not duplicated here.
 
-### ▶ Campaign A is running — the only "action" is watching
+### ▶ FIRST: execute the DEC-0063 tiering migration (work order below)
+
+**Decided at S59, deliberately not executed there** (the session stood at ~157K absolute context
+against the ~200K ceiling, and a half-applied migration leaves two contradictory entrypoints).
+Read DEC-0063 for the *why* — do not re-litigate it, and do not re-measure the premise. Spec:
+`eaglehunt-ops/STANDARD.md` §1–§4. **Do this early in a fresh session, not at the end of a long
+one.** Est. ~40K context.
+
+1. **`BOOT.md`** (cap ~2,500 tok ≈ 9 KB) — from `docs/STATUS.md` per STANDARD §4. Contents:
+   current state · active work · blockers · ordered backlog (3–5) · files-needed-at-start · style
+   notes. **§3 requires this repo's contribution conventions in the style notes** (public repo,
+   external contributors — the only repo in the forum with them). Rewritten, never appended
+   (rule 1). Siblings for shape: `~/Projects/eaglehunt-weather-dashboard/BOOT.md` (8.4 KB),
+   `~/Projects/hyperlocal-forecast/BOOT.md` (5.5 KB).
+2. **`CONSTANTS.md`** (~1,000 tok) — the `docs/CONVENTIONS.md` infra table, **placeholders only**
+   (DEC-0012: `<NAS_HOST>`/`<NAS_USER>`/`<SSH_PORT>`, real values stay in gitignored
+   `docs/LOCAL_INFRA.md`). **Per DEC-0063's addendum: self-sufficient, NOT a pointer to
+   `ops/CONSTANTS.md`** — ops is private, this repo is public, and §3's trio rule would strand
+   every external contributor. Any ops reference is marked owner-only supplement.
+3. **`MANIFEST.md`** (~1,000 tok) — one row per on-demand artifact. Rows for the current Tier-2 set
+   **plus** `CHANGELOG.md` and `docs/DECISIONS.md`, which leave the always-load set (that is ~12.2K
+   of the saving). Must carry an explicit row for
+   `docs/handoffs/S38-cross-repo-architecture.md` — it is the source of the four-line agent
+   protocol the whole forum runs on, and archiving it without a named pointer loses that.
+4. **`ARCHIVE/`** — move the three dated handoffs (`docs/handoffs/S36-…`, `S37-…`, `S38-…`) with
+   ops's shared `~/Projects/eaglehunt-ops/tools/archive_handoffs.sh` (dry-run by default; run from
+   this repo root). Never in the load path (rule 3).
+5. **`CLAUDE.md`** — collapse the Tier-1 table to "read `BOOT.md`, `CONSTANTS.md`, `MANIFEST.md`";
+   the Tier-2 table becomes `MANIFEST.md` rows. **Delete the superseded rows, do not comment them
+   out** (rule 5 — a second copy is the drift this exists to stop).
+6. **Verify before committing:** (a) `scripts/check_secrets.sh` over the staged set **with a
+   planted-payload positive control** — a silent exit 0 is not evidence (DEC-0045, and S59
+   re-confirmed the gate prints nothing on a clean pass); (b) confirm the SessionStart hook still
+   finds the resume pointer — `resume_pointer_for()` prefers `BOOT.md` and falls back to
+   `docs/STATUS.md`, and **a `BOOT.md` matching no marker shape goes silently quiet**
+   (STANDARD §5), so check the next session actually surfaces one; (c) `pytest` + `mypy`.
+7. **Report back to ops#130** — it filed this arguing the case was weak. The corrected measurements
+   (§DEC-0063) and the public-vs-private `CONSTANTS.md` spec gap are both owed to that thread.
+   **Publishing a comment needs the owner's go.**
+
+### THEN: campaign A is running — the only "action" is watching
 
 Nothing to deploy or decide right now. `ops/rx_experiment.sh` ticks and guards itself every 5 min
 via the owner's DSM Task Scheduler entries; it emails on completion or abort and self-terminates to
 the production baseline. Check `ops/rx_experiment.sh status` (arm/samples) or
 [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114) rather than re-deriving
-state here. Expected completion **~2026-08-06**.
+state here. Expected completion **~2026-08-07 00:05** (block 32 of 32; the 8-day clock started
+2026-07-30 00:05 after S57b's regenerated schedule, not 07-29).
+
+`ops/rx_experiment.sh status` is not a `nasctl` verb — for a read-only check the state is
+`rx_experiment.state` (`arm|epoch|timestamp`), the swap history is `logs/rx_experiment.log`
+(`nasctl tail`), and the samples are `logs/rx_experiment_data.log` (`ts|arm|rx|pct` at 5-min ticks,
+interleaved with `ts|arm|dup|N` at ~1-min). Note `rx_experiment.log` was **never rotated**, so it
+still carries the aborted 07-29 run at its head — the live campaign starts at `swapping NONE -> A`
+on 07-30 00:05. Counting swaps without allowing for that gives 2 phantom extra blocks.
 
 1. **When campaign A reports:** design **campaign B** (LNA physically removed, gain arms centered
    higher ~{372, 496} — do not reuse A's arms, the optimum moves up once ~20 dB of front-end gain
@@ -300,15 +360,24 @@ state here. Expected completion **~2026-08-06**.
    past its deadline. Would have caught the Phase 0 revert-window miss (~14.5h vs. planned 3h)
    automatically. Opt-in is this repo's to make, per ops#113's own boundary — not done this session.
 
-### Standing watches (unchanged from S56 — none of these block the above)
+### Standing watches (one closed at S59 — none of these block the above)
 
 1. **Watches (all read-only, nasctl):** (a) grep `weewx.log*` for `co-rejecting` (single-word
    pattern — multi-word patterns silently match nothing; positive-control any zero). **0 hits
-   through 11:48 07-28** (re-verified S56). Each hit is a frame v2.0.8 would have partially trusted;
-   an rxCheckPercent dip corroborates but is NOT required. (b) **#74 calm-windDir WARNINGs** — last
-   one 21:59 07-27, zero since at a prior ~1/hr base rate; one clean full-day check closes it.
-   (c) Run `ops/soak_check.sh` (`EXPECT_IMAGE` tracks `:v2.0.11`).
-   (d) Dependabot may open a deps PR — review, don't auto-merge (#78 mechanism).
+   through 15:43 08-01** (re-verified S59). Each hit is a frame v2.0.8 would have partially trusted;
+   an rxCheckPercent dip corroborates but is NOT required.
+   (b) Run `ops/soak_check.sh` (`EXPECT_IMAGE` tracks `:v2.0.11`).
+   (c) Dependabot may open a deps PR — review, don't auto-merge (#78 mechanism).
+
+   **✅ #74 calm-windDir — CLOSED S59, do not re-run.** The v2.0.9 fix (`_calm()` demotes the
+   TTL-expiry to DEBUG only when the *current unexpired* `windSpeed` is exactly 0.0) is confirmed on
+   air. Evidence: **zero** `windDir expired` WARNINGs across five consecutive days — 07-28, 07-29,
+   07-30, 07-31, 08-01 — against a prior base rate of ~1/hr, with a **positive control of 21 hits in
+   the 07-27 log** proving the grep still matches. Method, if it ever needs redoing: `nasctl grep
+   LoopJsonWriter <logfile>` (single token) then refine locally for `windDir expired` — the memory
+   gotcha about multi-word `nasctl grep` patterns silently returning a false zero applies here. What
+   would reopen it: a `windDir expired` WARNING while `windSpeed` is nonzero, which is a real dropout
+   and was never in scope for #74.
 
 2. **Humidity-spike watch — still unfired through 08:52 07-28** (largest step 0.7 pts in the last
    240 samples; S53's checkpoint before that: 996 samples, max 6.1 pts). Grep `humidity_raw=` in
