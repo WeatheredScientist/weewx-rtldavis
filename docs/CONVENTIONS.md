@@ -67,11 +67,35 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 
 ## Python / validation (DEC-0015)
 
-- Before considering `.py` work done: `python -m ruff check .` · `python -m ruff format` ·
-  `python -m mypy` · `python -m pytest` (as applicable). Enforced by `.pre-commit-config.yaml` + CI.
-  *(On the macOS dev box the interpreter is `python3` — there is no bare `python`; pre-commit and CI
-  supply their own. Run the secret gate standalone with `bash scripts/check_secrets.sh` — it now
-  passes cleanly with no staged files rather than erroring.)*
+- Before considering `.py` work done, run these three **from the repo venv** (as applicable).
+  Enforced by `.pre-commit-config.yaml` + CI:
+
+  ```
+  .venv/bin/python -m ruff check .
+  .venv/bin/python -m pytest
+  .venv/bin/python -m mypy --ignore-missing-imports --no-strict-optional $(git ls-files '*.py')
+  ```
+
+  **`.venv/bin/python` is the only interpreter on this box that has the tooling** (verified S59).
+  Neither of the obvious alternatives works: bare `python` is a pyenv shim (3.12.12) and `python3`
+  is Homebrew 3.14 — **both lack pytest, mypy and ruff entirely**, so following a bare
+  `python -m pytest` gets you `No module named pytest`, not a green gate. pre-commit and CI supply
+  their own environments and are unaffected.
+
+  **mypy needs the flags and the file list spelled out**: this repo has no mypy config at all (no
+  `pyproject.toml`, no `mypy.ini`, no `setup.cfg` — only `ruff.toml`), so a bare `python -m mypy`
+  exits `Missing target module, package, files, or command`. The invocation above is what
+  `.pre-commit-config.yaml` passes, and it reproduces CI locally.
+
+  **`ruff format` is NOT a gate — do not run it (DEC-0027).** It was listed here as one until S59.
+  It would reformat 30 of 33 files against the deliberate column alignment DEC-0027 exists to
+  protect. The same contradiction reached `.pre-commit-config.yaml` and was removed there at S43;
+  this line was the surviving copy.
+
+  *(Secret gate, standalone: `bash scripts/check_secrets.sh`. **It prints nothing and exits 0 on a
+  clean pass — and also exits 0 with `SECRET-SCAN: nothing to scan` when no files are staged.**
+  Those look alike and are not alike: the second scanned nothing. `git add` first, then scan, and
+  positive-control any clean result by staging a planted payload — DEC-0039/DEC-0045.)*
 - **A local `pre-commit run mypy --all-files` "Passed" is not proof CI will pass.** mypy's
   incremental cache (`.mypy_cache/`, gitignored) persists between runs and can silently mask real
   errors on files nothing else touched (S49, issue #67 follow-up: a stale cache hid 2 real errors

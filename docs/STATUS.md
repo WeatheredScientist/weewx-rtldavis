@@ -148,6 +148,12 @@ _Last updated: 2026-08-01 (S59)._
 
 ## Shipped — nothing to do here
 
+- **S59b** (docs-only, no deploy/no rollback needed — CONVENTIONS §"Python / validation" had four
+  documented commands of which three failed literally; worst was **`ruff format` listed as a gate
+  while DEC-0027 exists to reject it**, which would reformat 30 of 33 files. Interpreter guidance
+  pointed at two dead ends — only `.venv/bin/python` has the tooling. mypy needed args the doc never
+  gave. Secret-gate note sharpened: `nothing to scan` and a clean pass both exit 0): see CHANGELOG
+  `[S59b]`.
 - **S57b** (campaign A aborted after 80 min, two apparatus defects fixed + redeployed, schedule
   regenerated for a clean 07-30 start; credential redacted from a startup log line but **NOT
   deployed** — it is baked, and rebuilding mid-campaign would confound the arms): see CHANGELOG
