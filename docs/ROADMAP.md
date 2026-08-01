@@ -71,8 +71,14 @@ STATUS.md promoted to single source of truth for the session number, `cleanup_ba
 into BACKLOG (S27), docs diet (DEC-0030, S35 — the family-wide pattern: dash DEC-0081 → hyperlocal
 DEC-0095 → here), remote URL casing + stale-branch cleanup (S56). See CHANGELOG-ARCHIVE `[S23]` and
 ASSESSMENT.md for detail — not re-narrated here.
-- [ ] **Only remaining item:** Keep-a-Changelog headings + DECISIONS entry-skeleton convergence
-      (proposed S25, never picked up).
+- [ ] **Keep-a-Changelog headings + DECISIONS entry-skeleton convergence** (proposed S25, never
+      picked up).
+- [ ] **Session-context tiering migration — DEC-0063, decided S59, execute S60.** The third
+      generation of the docs-diet idea (dash DEC-0081 → hyperlocal DEC-0095 → DEC-0030 here →
+      ops `STANDARD.md`): `BOOT.md`/`CONSTANTS.md`/`MANIFEST.md`/`ARCHIVE/` replace the DEC-0030
+      Tier-1 set. Adopted on measurement against ops#130's own recommendation to defer — Tier-1
+      accretes **~1.1K tokens per session close**, so leanness here is a moment, not a trajectory.
+      Both siblings already migrated. Work order in STATUS.md's next-session actions.
 
 ## P0.6 — Code-quality review + fixes (S24–S25, M-A S28) — ✅ DONE
 Ranked findings in `docs/CODE_REVIEW_S24.md`; all fixes landed with regression tests — H1/H2/M3/U3

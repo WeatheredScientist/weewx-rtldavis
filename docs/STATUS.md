@@ -24,8 +24,9 @@ the story, this file only points at it.
 > against 21 hits on 07-27), and [ops#126](https://github.com/WeatheredScientist/eaglehunt-ops/issues/126)'s
 > stale citation is fixed (`OPS-DEC-0019` → `OPS-DEC-0019b` in DECISIONS-FULL.md — the three
 > CHANGELOG-ARCHIVE references are the *first* use and stay bare). One new observation, logged not
-> chased: a single self-recovered `database is locked` restart at 15:08 on 08-01. See CHANGELOG
-> `[S59]`. No DEC this session — closing a watch on a pre-agreed criterion is not a new design call.
+> chased: a single self-recovered `database is locked` restart at 15:08 on 08-01. Also **DEC-0063:
+> adopt the ops session-context tiering standard** — decided here on measurement, migration is the
+> first work order for S60. See CHANGELOG `[S59]`.
 
 _Last updated: 2026-08-01 (S59)._
 
@@ -33,7 +34,9 @@ _Last updated: 2026-08-01 (S59)._
 
 ## Active thread
 
-> **▶ Resume here (S60). Campaign A is running clean — keep tracking, don't intervene.** As of
+> **▶ Resume here (S60). Two things: execute the DEC-0063 migration work order (below, do it
+> early — it needs ~40K context), then resume campaign tracking. Campaign A is running clean —
+> keep tracking, don't intervene.** As of
 > 2026-08-01 15:45: **10 of 32 blocks** harvested, block 11 (**arm A**) live since 12:08:21,
 > **11/11 swaps healthy, zero aborts**, no STOP sentinel. Completes **~08-07 00:05**. Blocks are
 > balanced so far (A 2, B 2, C 3, D 3 complete). As of S58 both main effects were flat — gain 207 vs
@@ -285,7 +288,47 @@ _Last updated: 2026-08-01 (S59)._
 **This section is the repo-visible handoff.** Read it first when resuming. Session recaps live in
 "Shipped" above and CHANGELOG — not duplicated here.
 
-### ▶ Campaign A is running — the only "action" is watching
+### ▶ FIRST: execute the DEC-0063 tiering migration (work order below)
+
+**Decided at S59, deliberately not executed there** (the session stood at ~157K absolute context
+against the ~200K ceiling, and a half-applied migration leaves two contradictory entrypoints).
+Read DEC-0063 for the *why* — do not re-litigate it, and do not re-measure the premise. Spec:
+`eaglehunt-ops/STANDARD.md` §1–§4. **Do this early in a fresh session, not at the end of a long
+one.** Est. ~40K context.
+
+1. **`BOOT.md`** (cap ~2,500 tok ≈ 9 KB) — from `docs/STATUS.md` per STANDARD §4. Contents:
+   current state · active work · blockers · ordered backlog (3–5) · files-needed-at-start · style
+   notes. **§3 requires this repo's contribution conventions in the style notes** (public repo,
+   external contributors — the only repo in the forum with them). Rewritten, never appended
+   (rule 1). Siblings for shape: `~/Projects/eaglehunt-weather-dashboard/BOOT.md` (8.4 KB),
+   `~/Projects/hyperlocal-forecast/BOOT.md` (5.5 KB).
+2. **`CONSTANTS.md`** (~1,000 tok) — the `docs/CONVENTIONS.md` infra table, **placeholders only**
+   (DEC-0012: `<NAS_HOST>`/`<NAS_USER>`/`<SSH_PORT>`, real values stay in gitignored
+   `docs/LOCAL_INFRA.md`). **Per DEC-0063's addendum: self-sufficient, NOT a pointer to
+   `ops/CONSTANTS.md`** — ops is private, this repo is public, and §3's trio rule would strand
+   every external contributor. Any ops reference is marked owner-only supplement.
+3. **`MANIFEST.md`** (~1,000 tok) — one row per on-demand artifact. Rows for the current Tier-2 set
+   **plus** `CHANGELOG.md` and `docs/DECISIONS.md`, which leave the always-load set (that is ~12.2K
+   of the saving). Must carry an explicit row for
+   `docs/handoffs/S38-cross-repo-architecture.md` — it is the source of the four-line agent
+   protocol the whole forum runs on, and archiving it without a named pointer loses that.
+4. **`ARCHIVE/`** — move the three dated handoffs (`docs/handoffs/S36-…`, `S37-…`, `S38-…`) with
+   ops's shared `~/Projects/eaglehunt-ops/tools/archive_handoffs.sh` (dry-run by default; run from
+   this repo root). Never in the load path (rule 3).
+5. **`CLAUDE.md`** — collapse the Tier-1 table to "read `BOOT.md`, `CONSTANTS.md`, `MANIFEST.md`";
+   the Tier-2 table becomes `MANIFEST.md` rows. **Delete the superseded rows, do not comment them
+   out** (rule 5 — a second copy is the drift this exists to stop).
+6. **Verify before committing:** (a) `scripts/check_secrets.sh` over the staged set **with a
+   planted-payload positive control** — a silent exit 0 is not evidence (DEC-0045, and S59
+   re-confirmed the gate prints nothing on a clean pass); (b) confirm the SessionStart hook still
+   finds the resume pointer — `resume_pointer_for()` prefers `BOOT.md` and falls back to
+   `docs/STATUS.md`, and **a `BOOT.md` matching no marker shape goes silently quiet**
+   (STANDARD §5), so check the next session actually surfaces one; (c) `pytest` + `mypy`.
+7. **Report back to ops#130** — it filed this arguing the case was weak. The corrected measurements
+   (§DEC-0063) and the public-vs-private `CONSTANTS.md` spec gap are both owed to that thread.
+   **Publishing a comment needs the owner's go.**
+
+### THEN: campaign A is running — the only "action" is watching
 
 Nothing to deploy or decide right now. `ops/rx_experiment.sh` ticks and guards itself every 5 min
 via the owner's DSM Task Scheduler entries; it emails on completion or abort and self-terminates to
