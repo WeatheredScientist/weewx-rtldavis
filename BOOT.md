@@ -14,11 +14,8 @@ is a **separate repo** — don't make dashboard changes here.
 
 ## ▶ Resume here (S61)
 
-**The DEC-0063 tiering migration is DONE (S60)** — this file, `CONSTANTS.md` and `MANIFEST.md` are
-now the entire session-start read. Always-load went **91,806 B (~25.5K tok) → 25,819 B (~7.2K)**, a
-72% cut, and `docs/STATUS.md` is retired (content distributed here, to `BACKLOG.md`, and to
-`docs/UPSTREAM-THREADS.md`). Nothing about the migration is outstanding except one owner call: the
-corrected measurements and the §3 public-vs-private spec gap are owed back to ops#130 as a comment.
+✅ **DEC-0063 tiering migration DONE and closed out (S60)** — nothing outstanding, ops#130 answered.
+Story: CHANGELOG `[S60]`, DEC-0063.
 
 **Campaign A is running clean — keep tracking, don't intervene.** As of 2026-08-01 15:45: **10 of 32
 blocks** harvested, block 11 (**arm A**) live since 12:08:21, **11/11 swaps healthy, zero aborts**,
@@ -38,11 +35,10 @@ independent metric and it corroborated the one real dip. `ops/rx_experiment.sh s
 at its head — the live campaign starts at `swapping NONE -> A` on 07-30 00:05; counting swaps
 without allowing for that gives 2 phantom blocks.
 
-**One unscheduled restart, logged not chased (S59).** 2026-08-01 15:08:22, `weewxd CRITICAL Database
-OperationalError exception: database is locked`; weewx waited its built-in 2 min, re-initialized
-cleanly 15:10:22, resumed publishing (verified 15:43). First of the live campaign. Consequence: the
-campaign drops samples after a *swap*, not after an unscheduled restart, so **block 11 carries a
-~2-min gap plus an unmasked transient**. If it recurs, it becomes a thread rather than a footnote.
+**One unscheduled restart (S59), logged not chased.** `database is locked` at 15:08:22 on 08-01;
+weewx self-recovered in 2 min, verified publishing. First of the campaign. **Block 11 (arm A)
+therefore carries an unmasked transient** — the settle rule covers swaps, not restarts. If it
+recurs, it becomes a thread.
 
 ## Active work
 

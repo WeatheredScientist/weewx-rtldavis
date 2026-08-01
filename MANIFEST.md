@@ -80,4 +80,5 @@ them — they are session-numbered, not date-stamped.
 |---|---|
 | Dashboard code and its decisions | `eaglehunt-weather-dashboard` (separate repo — **don't make dashboard changes here**, DEC-0010) |
 | Real infra values, coordinates, security follow-ups | gitignored local-infra doc |
+| **Upstream draft text** (`docs/upstream/`) | **local-only, gitignored on purpose** — drafts are owner-reviewed and **never posted without an explicit go**. Present in the owner's checkout, absent from a fresh clone. The *state* of those threads is `docs/UPSTREAM-THREADS.md`, which is tracked |
 | Cross-repo coordination, shared constants, the `~/.claude/` guards | `eaglehunt-ops` (**private** — owner-only; never a prerequisite for anything here, DEC-0063) |
