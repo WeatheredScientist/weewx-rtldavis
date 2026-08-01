@@ -35,19 +35,37 @@ _Last updated: 2026-07-29 (S57)._
 
 ## Active thread
 
-> **▶ Resume here (S58). Campaign A is RE-ARMED and starts itself at 2026-07-30 00:05 — nothing to
-> do but watch.** The first attempt ran 80 minutes and aborted (DEC-0061): the health check's 90s
-> budget was ~25s short of what a restart structurally needs, and it fired **3 seconds** before the
-> record landed. Both that and a second defect — every alert the script could send was inert, an
-> unexported env var — are fixed, tested and deployed (sha `88c1aeaf…`, byte-verified). Schedule
-> regenerated for a clean 07-30 start (completes **08-07**) because the aborted run damaged three
-> Latin-square cells. State reset, STOP cleared, aborted samples rotated aside.
+> **▶ Resume here (S59). Campaign A is running clean — keep tracking, don't intervene.** As of
+> 2026-08-01 08:37: **9 of 32 blocks** harvested, **9/9 swaps healthy, zero aborts**, arm D live.
+> Completes **~08-07**. Both main effects are flat — gain 207 vs 372 **−0.1 pts (±0.36 SE)**, ex 50
+> vs ex 0 **−0.1 (±0.36)** — against a **≥2.0-pt** adoption bar (DEC-0059). A −1.2 pt gain effect
+> that looked real on day 1 dissolved by day 3; **do not read partial results**, that is what the
+> 8-blocks-per-arm design is for.
 >
-> **First thing to check next session:** `ops/rx_experiment.sh status` — expect arm `A` from
-> 00:05 07-30. If it still says `NONE` well after that, the DSM scheduler entries are not firing.
-> If a STOP sentinel is back, read `logs/rx_experiment.log` first; an abort email should now
-> actually arrive (it could not before). Full story: CHANGELOG `[S57]`/`[S57b]`, DEC-0059
-> (design/status), DEC-0060 (logger gotcha), DEC-0061 (the two defects), ROADMAP.md P2. Tracked at
+> **To pick tracking back up, in order:**
+> 1. `ops/rx_experiment.sh status` — expect arm/due to match and `stopped: no`. A mismatch or a
+>    STOP sentinel means read `logs/rx_experiment.log` first; an abort email now actually sends
+>    (it could not before S57b).
+> 2. Reception data is `logs/rx_experiment_data.log`, `ts|arm|rx|pct` — drop the first 2 samples of
+>    each block (post-restart settle) before averaging, as every analysis this session did.
+> 3. Cross-check against the archive's own `rxCheckPercent` when anything looks odd — it is an
+>    independent metric and it corroborated the one real dip event.
+>
+> **When it completes (~08-07):** design campaign B (LNA removed, gain arms centered higher
+> ~{372, 496} — do not reuse A's arms), and cut the image release carrying **DEC-0062** (the
+> credential-logging fix is live in the repo but **inert in prod** until a rebuild — ROADMAP P2
+> carries it as an explicit gated item).
+>
+> **Site RF finding, new S58 — already written up, no action:** reception dips ~2 pts at **hours 07
+> and 19**, reproducibly, and **predates the campaign**. Dew, solar noise and wind were each tested
+> against the station's own archive and **falsified**; `freqError` thermal drift is real (~2500 cold
+> → ~1000 warm) but is *not* the mechanism. Leading untested idea is a 915 MHz ISM neighbour on a
+> human schedule. Full detail in BACKLOG §Durable RF findings; **DEC-0059's "no diurnal cycle" is
+> amended** (true at 6 h, false at 1 h). Campaign validity is unaffected — the Latin square balances
+> it across arms.
+>
+> Full story: CHANGELOG `[S57]`/`[S57b]`/`[S58]`, DEC-0059 (design + amendment), DEC-0060 (logger
+> gotcha), DEC-0061 (the two defects), DEC-0062 (never log key material), ROADMAP.md P2. Tracked at
 > [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114). `ppm`/`fc`
 > measurement-by-value remains a deliberately deferred follow-up (owner call, not blocking).
 >
