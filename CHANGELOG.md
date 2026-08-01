@@ -5,6 +5,38 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S59b] — 2026-08-01 — the documented validation gates now actually run
+
+- **Three of the four commands under CONVENTIONS §"Python / validation" failed when followed
+  literally, and one of them damaged the tree.** Found while running the S59 closeout green gate —
+  the gate list had never been executed verbatim.
+- **`ruff format` was listed as a required gate, and DEC-0027 exists specifically to reject it.**
+  Running it as documented reformats **30 of 33 files**, against the deliberate column alignment
+  that decision protects. The identical contradiction reached `.pre-commit-config.yaml` and was
+  removed there at S43 — *this line was the surviving copy*, still instructing the reader to run it
+  for two years of sessions. Now marked do-not-run with the reason attached.
+- **The interpreter guidance pointed at two dead ends.** The doc said "on the macOS dev box the
+  interpreter is `python3` — there is no bare `python`." Both halves are wrong: a bare `python`
+  does exist (pyenv shim, 3.12.12), and **neither it nor `python3` (Homebrew 3.14) carries pytest,
+  mypy or ruff at all**. `python3 -m pytest` returns `No module named pytest`. `.venv/bin/python`
+  is the only interpreter on this box with the tooling; all three commands now spell it out.
+- **mypy needed arguments the doc never supplied.** This repo has no mypy config of any kind (no
+  `pyproject.toml`, no `mypy.ini`, no `setup.cfg` — only `ruff.toml`), so a bare `python -m mypy`
+  exits `Missing target module, package, files, or command`. Documented with the flags
+  `.pre-commit-config.yaml` actually passes plus an explicit file list, which reproduces CI locally.
+- **Secret-gate note sharpened on the same parenthetical.** It said the gate "passes cleanly with no
+  staged files rather than erroring" — true, and a trap: a clean pass (silent, exit 0) and
+  `SECRET-SCAN: nothing to scan` (exit 0, scanned *nothing*) are indistinguishable by exit code.
+  Now says to stage first and positive-control any clean result (DEC-0039/DEC-0045).
+- Every command verified as written before committing: `ruff check` passes, pytest **125 passed**,
+  mypy clean on 33 files with `.mypy_cache` cleared, and `ruff format --check` confirms the
+  30-of-33 figure rather than it being inferred.
+- **The lesson, which is the reusable part:** a documented command that nobody runs verbatim decays
+  exactly like a doc's prose claims do (dash DEC-0104), except it fails *loudly* the first time
+  someone follows it — or, in `ruff format`'s case, succeeds destructively. Worth running a doc's
+  own gate list literally when touching it.
+
+---
 ## [S59] — 2026-08-01 — #74 watch closed on evidence; ops#126 citation fixed; ops#130 answered ADOPT (DEC-0063)
 
 - **Issue #74's calm-windDir watch is CLOSED.** The v2.0.9 fix is confirmed on air: **zero**
