@@ -2326,7 +2326,17 @@ than the mean:
 
 - **Autocorrelation ~0 beyond 10–15 min** (lag1 0.08, lag3 0.02) — samples are effectively
   independent, so precision scales cleanly with time.
-- **No detectable diurnal cycle** — hourly means 70–75 with no systematic pattern.
+- ~~**No detectable diurnal cycle** — hourly means 70–75 with no systematic pattern.~~
+  **AMENDED 2026-08-01 (S58) — the second half of that claim was wrong.** The *range* was right
+  (hourly means do sit in a narrow band), but "no systematic pattern" was not: re-reading the same
+  pre-campaign period from the archive's own `rxCheckPercent` at hourly resolution shows a
+  **reproducible ~2-point notch at hour 07 and again at hour 19** (72.6 and 72.7, against 74.2–75.6
+  for every other hour, n≈355/hour over 07-24→07-29). It is small enough to sit inside the 70–75
+  band — which is exactly how it was missed — but it repeats daily and is therefore systematic by
+  definition. Characterization and the falsified explanations are in BACKLOG.md §Durable RF
+  findings; **it does not affect this experiment's validity** (the Latin square balances any
+  time-of-day term across all four arms), but it does mean *diurnal structure exists at hourly
+  resolution* and any future analysis binned finer than 6 h must account for it.
 
 Together these say the "1–2 week averaged window" assumed by DEC-0017 and BACKLOG is roughly **7×
 more than the variance requires**. 24h per arm resolves 1.1 pts; 48h resolves 0.8.

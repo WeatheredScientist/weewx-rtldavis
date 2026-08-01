@@ -5,6 +5,30 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S58] — 2026-08-01 — campaign A tracking clean (9/32 blocks); a site RF notch characterized, DEC-0059's diurnal claim amended
+
+- **Campaign A healthy, no intervention.** 9 of 32 blocks harvested, 9/9 swaps healthy, zero aborts;
+  prod untouched apart from the arms cycling in the mounted `weewx.conf`. **Both main effects are
+  flat**: gain 207 vs 372 = **−0.1 pts (±0.36 SE)**, ex 50 vs ex 0 = **−0.1 (±0.36)**, against
+  DEC-0059's ≥2.0-point adoption bar. The apparent −1.2 pt gain effect visible on day 1 dissolved as
+  blocks accumulated — which is precisely why the design pre-registers 8 blocks/arm instead of
+  letting anyone read day 1.
+- **Site RF notch characterized** (BACKLOG §Durable RF findings). Reception dips ~2 pts at **hour 07
+  and hour 19**, reproducibly, and **predates the campaign** — so it belongs to the site, not to any
+  arm. Corroborated by two independent metrics (the monitor's 26% sample and the archive's
+  `rxCheckPercent` min of **4.9%** in the same minute). Three candidate explanations were tested
+  against the station's own weather archive and **falsified**: dew (the dewiest hours have the
+  *best* reception), solar noise (radiation peaks midday where reception is fine), and wind (the
+  deepest notch fell on a zero-wind morning).
+- **`freqError` thermal drift measured on our own hardware** — ~2400–2600 at 65–69 °F falling to
+  ~900–1200 at 77–84 °F. Real and cleanly temperature-linked, but **not** the notch's mechanism:
+  hour 06 pairs the highest freqError with excellent reception, so the AFC is absorbing it.
+- **DEC-0059 amended**: its "no detectable diurnal cycle" holds at 6-hour resolution and fails at
+  hourly. The notch is small enough to sit inside the quoted 70–75 band, which is how it was missed,
+  but it repeats daily. No effect on campaign validity — the Latin square balances any time-of-day
+  term across all four arms.
+
+---
 ## [S57b] — 2026-07-29 — campaign A aborted after 80 min; two defects fixed (DEC-0061), schedule regenerated, re-armed
 
 - **Campaign A aborted 12:13 EDT in its third block.** The safety model worked: baseline snapshot
