@@ -5,15 +5,16 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
-## [S59] — 2026-08-01 — #74 calm-windDir watch closed on evidence; ops#126 stale citation fixed; campaign A untouched
+## [S59] — 2026-08-01 — #74 watch closed on evidence; ops#126 citation fixed; ops#130 answered ADOPT (DEC-0063)
 
 - **Issue #74's calm-windDir watch is CLOSED.** The v2.0.9 fix is confirmed on air: **zero**
   `windDir expired` WARNINGs across five consecutive days (07-28 … 08-01) against a prior base rate
   of ~1/hr. Checked with a **positive control** — the same grep returns **21 hits** in the 07-27 log,
   so the pattern still matches and the zero is real, not a false zero from the `nasctl grep`
   multi-word gotcha. STATUS's standing-watch list and ROADMAP's P1 watch line both updated (DEC-0057
-  step 5). No DEC filed: closing a watch against a criterion that was agreed when the watch was
-  opened is not a new design call.
+  step 5). **No DEC for this item specifically** — closing a watch against a criterion agreed when
+  the watch was opened is not a new design call. (DEC-0063 below is this session's one DEC, and it
+  is about ops#130.)
 - **[ops#126](https://github.com/WeatheredScientist/eaglehunt-ops/issues/126) fixed** — after
   eaglehunt-ops suffixed three re-issued decision IDs, one citation here resolved to the wrong
   decision. `DECISIONS-FULL.md` (DEC-0052 body) now reads `locked OPS-DEC-0019b`, the
@@ -31,6 +32,31 @@ under [Pre-S16].
   and its handoff heading said "S57 done → S58". Both reconciled. Documented that
   `ops/rx_experiment.sh status` is **not** a `nasctl` verb, and that `rx_experiment.log` was never
   rotated — it still carries the aborted 07-29 run, which inflates a naive swap count by 2 blocks.
+- **[ops#130](https://github.com/WeatheredScientist/eaglehunt-ops/issues/130) answered: ADOPT the
+  session-context tiering standard (DEC-0063)** — against that issue's own recommendation to defer.
+  ops filed it saying "the case here is genuinely weak," on the basis that this repo is the leanest
+  in the forum at ~21K and migration buys "maybe 6–8K tokens." Checking the premise rather than the
+  offer: the tree is at **~25.5K, not ~21K** (ops measured a tree two session-closes stale); the
+  saving is **~19K, not 6–8K** (`CHANGELOG.md` + the `DECISIONS.md` index leaving always-load is
+  ~12.2K by itself — more than ops's quoted total, an internal inconsistency in the issue); and
+  decisively, Tier-1 measured at four consecutive merge points grows **~1.1K tokens per session
+  close**, structurally, because DEC-0052's closeout steps 2 and 3 append to STATUS and CHANGELOG
+  every time. "Leanest in the forum" is a statement about a moment, not a trajectory. Both siblings
+  have already migrated; this repo was the last of the trio.
+- **A spec gap found and NOT resolved unilaterally.** STANDARD.md §3 has the trio load
+  `ops/CONSTANTS.md` at session start, and separately says this repo may point at ops but never
+  quote it. Those clauses conflict here: **ops is private and this repo is public**, so a
+  `CLAUDE.md` telling its reader to load `ops/CONSTANTS.md` is a dead end for every external
+  contributor — the population this repo has and the other three do not. This repo's `CONSTANTS.md`
+  will be self-sufficient for anyone who can clone it (closer to coffeeradar's DEC-0017 posture),
+  with any ops reference marked an owner-only supplement. Filed back to ops rather than edited into
+  their file — read-only across the boundary.
+- **The migration itself is a work order for S60, not done here.** STANDARD §7 wants migration at a
+  session end with full state in context, which this was; it was still wrong to start, because the
+  session stood at **~157K absolute context** against AGENT-ECONOMY §7's ~200K ceiling and the
+  mechanical work is ~40K more. A half-applied migration leaves two contradictory entrypoints and a
+  hook choosing between them by fallback order. Decision taken where the state was; execution
+  written down as seven numbered steps in STATUS.md.
 - Gates: pytest **125 passed**, mypy clean on 33 files (`.mypy_cache` cleared first, per CONVENTIONS).
 
 ---
