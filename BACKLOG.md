@@ -46,6 +46,34 @@ S23 tail).
 
 ## Durable RF findings (from 2026-06-01 tuning sweeps — keep; these guide P2)
 
+**Site has a reproducible twice-daily reception notch at hours 07 and 19 (S58, 2026-08-01):**
+- **The observation.** Archive `rxCheckPercent` binned by local hour, 07-24→07-29 (pre-campaign,
+  n≈355/hour): **hr 07 = 72.6%, hr 19 = 72.7%**, against **74.2–75.6%** for every other hour.
+  During the campaign the morning notch deepens to hours 07–09 at ~2–3.5 pts down, and it produced
+  the campaign's single worst minute so far (07-30 08:00, `rxCheckPercent` **min 4.9%** — the same
+  event the monitor logged as a 26% 5-minute sample, so **two independent metrics corroborate it**).
+- **It predates the campaign**, so it is a property of the site/hardware, not of any experimental arm.
+  This is what amends DEC-0059's "no detectable diurnal cycle" (true at 6 h resolution, false at 1 h).
+- **Three explanations tested and FALSIFIED — do not re-propose them without new evidence:**
+  - *Dew / wet vegetation* — backwards. The dewiest hours (temp−dewpoint spread 2.4–4.0 °F
+    overnight) carry the **best** reception (~75%).
+  - *Solar RF noise* — backwards. Radiation peaks midday (750–950 W/m²) where reception is normal;
+    the notch sits at 35–144 W/m².
+  - *Wind / foliage movement* — the **deepest** notch (07-31) occurred on a **zero-wind** morning.
+- **`freqError` thermal drift is REAL but is NOT the mechanism.** Measured on our own hardware via
+  the archive's remapped freqError columns: it tracks temperature strongly and inversely —
+  **~2400–2600 at 65–69 °F → ~900–1200 at 77–84 °F**. But hour 06 has excellent reception (~75%)
+  at the *highest* freqError, so the AFC is evidently absorbing the offset; reception tracks neither
+  the level nor the rate of change monotonically. Useful characterization of the dongle, not an
+  explanation of the notch.
+- **Leading untested hypothesis:** a 915 MHz ISM-band neighbour on a human schedule — smart-meter
+  reporting windows, garage/vehicle remotes on a commute cycle. A **07:00 and 19:00** pair that is
+  temperature-independent and stable for weeks looks behavioural rather than physical. Testing it
+  needs a spectrum capture during the window, which we have no instrument for today.
+- **Does NOT threaten the RX campaign:** the notch is time-of-day-linked and arm-independent, and
+  the Latin square gives every arm the same exposure to it. It inflates variance, it does not bias
+  the comparison.
+
 **CLI timing sweep (baseline, -ex 25/50/75/100, -maxmissed 25, combos):**
 - All clustered ~63–66%; no material improvement over baseline.
 - `-maxmissed 15` caused repeated 0/24 windows — **do not use**.
