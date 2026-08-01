@@ -71,8 +71,14 @@ STATUS.md promoted to single source of truth for the session number, `cleanup_ba
 into BACKLOG (S27), docs diet (DEC-0030, S35 — the family-wide pattern: dash DEC-0081 → hyperlocal
 DEC-0095 → here), remote URL casing + stale-branch cleanup (S56). See CHANGELOG-ARCHIVE `[S23]` and
 ASSESSMENT.md for detail — not re-narrated here.
-- [ ] **Only remaining item:** Keep-a-Changelog headings + DECISIONS entry-skeleton convergence
-      (proposed S25, never picked up).
+- [ ] **Keep-a-Changelog headings + DECISIONS entry-skeleton convergence** (proposed S25, never
+      picked up).
+- [ ] **Session-context tiering migration — DEC-0063, decided S59, execute S60.** The third
+      generation of the docs-diet idea (dash DEC-0081 → hyperlocal DEC-0095 → DEC-0030 here →
+      ops `STANDARD.md`): `BOOT.md`/`CONSTANTS.md`/`MANIFEST.md`/`ARCHIVE/` replace the DEC-0030
+      Tier-1 set. Adopted on measurement against ops#130's own recommendation to defer — Tier-1
+      accretes **~1.1K tokens per session close**, so leanness here is a moment, not a trajectory.
+      Both siblings already migrated. Work order in STATUS.md's next-session actions.
 
 ## P0.6 — Code-quality review + fixes (S24–S25, M-A S28) — ✅ DONE
 Ranked findings in `docs/CODE_REVIEW_S24.md`; all fixes landed with regression tests — H1/H2/M3/U3
@@ -102,10 +108,11 @@ here.
 - **Cap-16 tuning → v2.0.11** (S55c): DEC-0056, decided on an evidence pass (R1/R2); monitor
   tripwire verified live end-to-end.
 
-**Still open — ordinary watches, not a new arc.** Current status (co-rejecting grep, `#74`
-calm-windDir, humidity-spike signature DEC-0044, first-frost test of the signed-decode negative
-branch, DEC-0056's rain-rejection revisit trigger) lives in STATUS.md's "Active thread" — not
-duplicated here, and not evidence this P1 item is still "in progress."
+**Still open — ordinary watches, not a new arc.** Current status (co-rejecting grep, humidity-spike
+signature DEC-0044, first-frost test of the signed-decode negative branch, DEC-0056's
+rain-rejection revisit trigger) lives in STATUS.md's "Active thread" — not duplicated here, and not
+evidence this P1 item is still "in progress." **`#74` calm-windDir left this list at S59**, closed
+on five consecutive clean days with a positive control (STATUS.md §Standing watches).
 
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
 bound and done via reversible live hot-swap with an instant rollback path.
