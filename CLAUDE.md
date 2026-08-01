@@ -1,6 +1,6 @@
 # CLAUDE.md — weewx-rtldavis
 
-**This is the entrypoint.** Follow the tiered session-start read below (DEC-0030) before touching
+**This is the entrypoint.** Follow the tiered session-start read below (DEC-0063) before touching
 code. This repo is the **driver + Docker build** for a Davis 6263 / VP2+
 ISS *passively intercepted* at 915 MHz via an **RTL-SDR Blog v3** dongle — the "escape the
 WeatherLink lock" tool. It is a **public, published** WeeWX extension (Docker Hub +
@@ -11,41 +11,30 @@ Its real contract is the **data it produces** — the loop-JSON file + the Influ
 schema — not any single consumer. Keep it re-pointable so non-Davis WeeWX and eventually CumulusMX
 can use it (PRINCIPLES §1, docs/INTERFACES.md).
 
-## Documentation map — tiered session-start read (DEC-0030)
+## Documentation map — session-start read (DEC-0063)
 
-The docs outgrew "read everything in order" (~130 KB ≈ ~32K tokens per session boot, measured S35 —
-the pattern the dashboard fixed at its S57/DEC-0081 and hyperlocal at its S143/DEC-0095). The
-protocol is now two tiers. **The current docs live on `dev`** — check
-`git log origin/main..origin/dev --oneline` and read docs from `dev`'s tip if `main` lags.
+**Read exactly three files at session start. Nothing else.**
 
-**Tier 1 — read at every session start:**
+| File | Answers |
+|------|---------|
+| `BOOT.md` | **where we are right now** — current session, active work, blockers, ordered backlog, standing watches. The single source of truth for the session number and the handoff |
+| `CONSTANTS.md` | durable facts — infra, deploy layers, release/rollback, hardware, git model |
+| `MANIFEST.md` | one row per on-demand artifact: what it holds and when to load it |
 
-| Doc | Answers |
-|-----|---------|
-| `CLAUDE.md` (this) | where everything is + the rules that must never break |
-| `docs/STATUS.md` | **where we are right now** — current session + active thread + next actions (single source of truth) |
-| `docs/CONVENTIONS.md` | how we operate — paths, commands, workflow, infra constants |
-| `docs/PRINCIPLES.md` | durable intent behind the design |
-| `docs/DECISIONS.md` | **index** of settled choices — scan it; **do not re-litigate** anything listed |
-| `CHANGELOG.md` | the last few sessions (older entries: `CHANGELOG-ARCHIVE.md`) |
+Everything else — `docs/DECISIONS.md`, `CHANGELOG.md`, `docs/CONVENTIONS.md`, `docs/PRINCIPLES.md`,
+`docs/ROADMAP.md`, `BACKLOG.md`, architecture, interfaces, errata — is pulled **by name from
+`MANIFEST.md`, mid-session, when the task touches it.** Lazily loaded is not optional-to-read:
+*"working near it" still means read it*, and `MANIFEST.md` says when.
 
-**Tier 2 — read on demand, when the task touches them (never skip because of the tier —
-"working near it" means read it):**
+`ARCHIVE/` is **never** in the load path — history preserved, not carried.
 
-| Doc | Read when |
-|-----|-----------|
-| `docs/DECISIONS-FULL.md` | full ADR text — grep the DEC id whenever a listed decision is near your change |
-| `docs/ARCHITECTURE.md` | touching the ISS→RTL-SDR→driver→WeeWX→sinks chain, volume mounts, entrypoint |
-| `docs/INTERFACES.md` | touching the data contract — loop-JSON fields + InfluxDB schema |
-| `docs/ROADMAP.md` | choosing or re-prioritizing what to work on next — **P0–P3 only** (DEC-0058) |
-| `BACKLOG.md` | open ideas / durable RF findings / **long-term direction** (DEC-0058) |
-| `CHANGELOG-ARCHIVE.md` | history older than the live CHANGELOG |
-| `docs/ASSESSMENT.md` | the strategic anchor (cross-repo governance alignment) |
-| `docs/DATA_ERRATA.md` | known-bad observations + corrections (DEC-0025) |
+**The current docs live on `dev`** — check `git log origin/main..origin/dev --oneline` and read from
+`dev`'s tip if `main` lags. If a doc is missing or contradicts another, stop and flag it — don't
+guess.
 
-Also: `AGENTS.md` — cross-agent entrypoint (points here + at STATUS); `LICENSE` — GPLv3.
-
-If a doc is missing or contradicts another, stop and flag it — don't guess.
+> This supersedes DEC-0030's six-file Tier-1 table. Measured at adoption: that set had reached
+> ~25.5K tokens and was growing **~1.1K per session close**, structurally, because the closeout
+> ritual appends to STATUS and CHANGELOG every time (DEC-0063).
 
 ## Non-negotiable rules (full detail in the docs cited)
 
@@ -64,42 +53,33 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
   one receiver — so runtime testing needs a deliberate strategy (Simulator-backed container or
   reversible live hot-swap); agree it before touching prod (DEC-0011, ROADMAP).
 
-## Quick infra reference (full table in CONVENTIONS)
+## Infra reference
 
-- NAS: `<NAS_HOST>` (Synology DS918+) · `<NAS_IP>` · SSH port `<SSH_PORT>` · user `<NAS_USER>` ·
-  `scp -P <SSH_PORT> -O` · no `bc`/`tmux`/`screen` (use bash integer arithmetic + `nohup`).
-  Real values in gitignored `docs/LOCAL_INFRA.md`.
-- Docker: `/usr/local/bin/docker` (no sudo); container `weewx-rtldavis-v2`
-- **Published `:v2.0.11` (+ `:latest`) == what prod runs.** `main` == `prod-baseline-20260728b`, no
-  drift (S55c). Rollback: `:v2.0.10` is still on the NAS.
-- **The driver is BAKED, never mounted** (DEC-0031) — `weewx-data/bin/user/rtldavis.py` is NOT what
-  runs. A driver fix needs an image rebuild; an `scp`/hot-swap there is a silent no-op.
-- Project root on NAS: `/volume1/docker/weewx-rtldavis/` · live config:
-  `.../weewx-data/weewx.conf` · container venv user files:
-  `/opt/weewx-venv/lib/python3.14/site-packages/user/`
-- Hardware: Davis 6263 VP2+ ISS · 6410 hall anemometer · RTL-SDR Blog v3 + inline LNA (bias-tee) ·
-  915 MHz vertical · ~150 ft through walls · reception baseline ~67–70% (noise-floor limited)
-- Attribution: **WeatheredScientist**. Station coordinates in gitignored `docs/LOCAL_INFRA.md`.
+**In `CONSTANTS.md`** — NAS, Docker, deploy layers, release/rollback, hardware, git model. Stated
+once, there, and nowhere else (STANDARD rule 5: a second copy is a defect, not redundancy — it is
+the drift this exists to stop). *A quick-reference duplicate lived here until S60 and had already
+gone stale on two values: the reception baseline and the driver-vs-config layer table.*
 
 ## Session ritual
 
-- **Start:** read the Tier 1 set (STATUS.md first, **from `dev`'s tip if the checkout lags**);
-  `git fetch && git status`; read STATUS.md "Active thread" + "Next session actions". A clean-pickup
-  check: `git status` clean and `pytest` green before new work. Then pick up cross-repo assignments
-  (ops-DEC-0005; Claude sessions only — one command, the rest of eaglehunt-ops stays
-  not-a-session-start-read): `gh issue list -R WeatheredScientist/eaglehunt-ops --label repo:weewx --state open`
+- **Start:** read `BOOT.md` + `CONSTANTS.md` + `MANIFEST.md` (**from `dev`'s tip if the checkout
+  lags**); `git fetch && git status`. A clean-pickup check: `git status` clean and `pytest` green
+  before new work. Then pick up cross-repo assignments (ops-DEC-0005; Claude sessions only — one
+  command, the rest of eaglehunt-ops stays not-a-session-start-read):
+  `gh issue list -R WeatheredScientist/eaglehunt-ops --label repo:weewx --state open`
 - **End (closeout skeleton — DEC-0052, adapted from eaglehunt-ops OPS-DEC-0016):**
-  1. **Green gate** — `python -m pytest` (+ `python -m mypy` as applicable — CONVENTIONS); if
-     skipped, state why.
-  2. **STATUS.md resume pointer** — update the `▶ Resume here` line (session #, active thread,
-     next actions — it's the source of truth). Don't strand the handoff in private memory; it
-     lives in STATUS.md so it's visible on GitHub.
-  3. **CHANGELOG.md entry** — one line for what landed.
-     **Docs-diet ritual (DEC-0030), layered here:** prune STATUS to bench state (shipped →
-     CHANGELOG pointer, settled → DEC pointer, superseded → delete); roll CHANGELOG entries beyond
-     ~3 sessions to `CHANGELOG-ARCHIVE.md` verbatim. **Move text, never delete or rewrite
-     history** — and because this repo is public, run `scripts/check_secrets.sh` over anything a
-     doc move rehomes.
+  1. **Green gate** — run the commands **exactly as `docs/CONVENTIONS.md` spells them** (they need
+     the repo venv and, for mypy, explicit arguments; three of the four previously documented here
+     did not work as written — S59b). If skipped, state why.
+  2. **`BOOT.md` rewrite** — update the `▶ Resume here` block (session #, active work, next
+     actions). **Rewritten in place, never appended** (STANDARD rule 1): resolved items are
+     deleted, a conclusion survives as one line. Over the ~2,500-token cap means content belongs in
+     `ARCHIVE/` or as a `MANIFEST.md` row — *not* a bigger cap. Don't strand the handoff in private
+     memory; it lives here so it's visible on GitHub.
+  3. **CHANGELOG.md entry** — one line for what landed. Roll entries beyond ~3 sessions to
+     `CHANGELOG-ARCHIVE.md` verbatim. **Move text, never delete or rewrite history** — and because
+     this repo is public, run `scripts/check_secrets.sh` over anything a doc move rehomes.
+     Update `MANIFEST.md` if the session added or retired an artifact.
   4. **Decision-log row** — if a design call was made this session, full body in
      `DECISIONS-FULL.md` + index row in `DECISIONS.md`, same session, not deferred.
   5. **ROADMAP.md reconciliation** (DEC-0057) — if a DEC logged in step 4 ships, closes, or
@@ -113,8 +93,8 @@ If a doc is missing or contradicts another, stop and flag it — don't guess.
   7. **Commit + push**, per the branch model — subject to the pause-for-approval rule above
      (Non-negotiable rules).
 - Sessions use **this repo's own independent counter** — a session number means something only within
-  this repo (cross-repo refs are prefixed, e.g. `weewx S23` vs `dash S40`). **`docs/STATUS.md` is the
+  this repo (cross-repo refs are prefixed, e.g. `weewx S23` vs `dash S40`). **`BOOT.md` is the
   single source of truth for the current session number** — take it from there (+1 for a new session),
-  not from CHANGELOG or memory; every other doc points at STATUS. DEC-0023 supersedes the old
+  not from CHANGELOG or memory; every other doc points at it. DEC-0023 supersedes the old
   shared-counter idea in DEC-0013. The governed era runs **S16 → S17 → S18 → S19 → S20 → S21 → S22 →
   S23 → …**; pre-S16 history is reconstructed/approximate.

@@ -5,6 +5,52 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S60] — 2026-08-01 — DEC-0063 executed: session-start context cut 72% (~25.5K → ~7.2K tokens)
+
+- **Migrated to the ops session-context tiering standard.** `BOOT.md` + `CONSTANTS.md` +
+  `MANIFEST.md` are now the entire session-start read; `ARCHIVE/` is never in the load path.
+  Measured: always-load went **91,806 B (~25.5K tok) across six files → 25,819 B (~7.2K) across
+  four** — a **72% cut**, at the optimistic end of DEC-0063's ~19K estimate. `BOOT.md` landed at
+  **2,493 tokens against its ~2,500 cap**.
+- **`docs/STATUS.md` is retired.** It did not fit in `BOOT.md` and forcing it would have blown the
+  cap, so its content distributed by kind: live bench state → `BOOT.md`; open threads and
+  housekeeping → `BACKLOG.md` verbatim; the four upstream threads → a new
+  `docs/UPSTREAM-THREADS.md`. Resolved items collapsed to one-line pointers. Deleted rather than
+  archived — git history preserves it, and a second copy is what rule 5 exists to prevent.
+- **The hook was verified before the delete, not after.** STANDARD §5's hazard is that a `BOOT.md`
+  matching no marker shape goes *silently* quiet — the DEC-0106 shape, not wrong output but no
+  output. `resume_pointer_for()` was run while `docs/STATUS.md` still existed (returned source
+  `BOOT.md`), and again afterward. Both passed.
+- **The shared archiver matched a different set of files than ops#130 predicted.** It matches
+  *date-stamped* names, so it found three unlisted pre-governance root artifacts and did **not**
+  match the three `docs/handoffs/S3x-*.md` files ops#130 named — those are session-numbered. The
+  root three were unreferenced and got archived; the handoffs are cited by path from two live docs
+  and stayed put with `MANIFEST.md` rows. Moving them would have broken three live citations to
+  satisfy a rule about a load path they were never in.
+- **A third copy of the broken validation-gate list turned up in `AGENTS.md`**, still naming
+  `ruff-format` — the command DEC-0027 exists to reject. S59b fixed `CLAUDE.md`'s copy; S43 fixed
+  `.pre-commit-config.yaml`'s. Three copies, three independent drifts. All now point at the single
+  list in `docs/CONVENTIONS.md`. `CLAUDE.md`'s duplicated infra table went the same way — it had
+  already gone stale on the reception baseline and on the driver-vs-config layer table.
+- **A second public-repo divergence: `ARCHIVE/` stays uncommitted.** STANDARD rule 3 has retired
+  material live in the repo under `ARCHIVE/`. Here it can't: the directory was already gitignored,
+  its three files had **never been tracked**, and a scan found **IP- and credential-shaped strings
+  in two of them** — pre-governance conversation dumps written before this repo had any secret
+  hygiene. Committing them would violate DEC-0012. `MANIFEST.md` now says this at the top of its
+  `ARCHIVE/` section, because the alternative is a manifest pointing a fresh cloner at files their
+  clone does not contain — the same dead-end-for-external-contributors problem DEC-0063 already
+  called out once. **For a public repo, git history is the archive.** Nothing was lost; retired
+  repo content is reachable with `git log --follow`.
+- **Both divergences share one root cause**, worth stating for ops: the standard's two
+  "preserve-or-share by pointing at a file" mechanisms — `ops/CONSTANTS.md` and `ARCHIVE/` — each
+  assume every reader has access that the public member's readers do not.
+- **`docs/ASSESSMENT.md` deliberately left alone.** It still describes STATUS.md as the source of
+  truth, and it is a *dated audit artifact* — rewriting it to match today would destroy the record
+  of what was true then. Flagged in its `MANIFEST.md` row instead.
+- Gates: pytest **125 passed**, mypy clean on 33 files, secret gate positive-controlled. Hook
+  resume-pointer verified live.
+
+---
 ## [S59b] — 2026-08-01 — the documented validation gates now actually run
 
 - **Three of the four commands under CONVENTIONS §"Python / validation" failed when followed
