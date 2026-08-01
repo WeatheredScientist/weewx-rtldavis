@@ -2603,3 +2603,98 @@ under the arms and confound the very comparison the design exists to make. **The
 next image release after the campaign completes (~2026-08-07).** The exposure it closes is a
 partial-prefix re-leak, and the full-key exposure it does *not* close (S41) has rotation as its
 only real remedy — so nothing is gained by rushing it into a running experiment.
+
+---
+
+## DEC-0063 — Adopt the eaglehunt-ops session-context tiering standard; migrate at the next session
+
+**Status:** Accepted · **Date:** 2026-08-01 (S59) · **Supersedes:** DEC-0030's Tier-1 table (the
+tiered *idea* survives; the specific six-file always-load set does not) · **Executes:**
+[eaglehunt-ops#130](https://github.com/WeatheredScientist/eaglehunt-ops/issues/130) ·
+**Spec:** `eaglehunt-ops/STANDARD.md` (OPS-DEC-0078)
+
+ops#130 offered the tiering standard to this repo and — unusually for a cross-repo ask — argued
+*against* it: "the case here is genuinely weak, and deferring is a defensible answer," on the
+grounds that this repo is the leanest in the forum at ~21K and migration would buy "maybe 6–8K
+tokens." Adoption is this repo's call under OPS-DEC-0001, so the honest thing was to check the
+premise rather than accept either the offer or the disclaimer.
+
+**Call: adopt.** The premise did not survive measurement.
+
+### What the measurement changed
+
+Two of ops#130's numbers are wrong in the direction that matters, both measured here on 2026-08-01:
+
+1. **The tree is not at ~21K.** It is at **~25.5K** (91,806 B across the six Tier-1 files). ops
+   measured a tree that was already two session-closes behind.
+2. **The saving is not 6–8K.** `CHANGELOG.md` (~7.6K) and the `DECISIONS.md` index (~4.6K) leaving
+   the always-load set is **~12.2K on its own** — already more than the quoted total — and
+   `STATUS.md` → `BOOT.md` at cap is another **~5.7K**. Against ~2K of new always-load
+   (`CONSTANTS.md` + `MANIFEST.md`), the realistic landing zone is **~5–6K, not ~19K**. ops#130's
+   own sentence is internally inconsistent: it names those two files as "most of" a total they
+   individually exceed.
+
+**The decisive number is neither — it is the rate.** Tier-1 measured at four consecutive merge
+points:
+
+| Ref | Session | Tier-1 |
+|---|---|---|
+| `376285d` | S57 | 75,987 B (~21.1K) |
+| `8755028` | S57 | 76,617 B (~21.3K) |
+| `7fece1f` | S57b | 83,874 B (~23.3K) |
+| `3b86fb6` | S58 | 87,235 B (~24.2K) |
+| `HEAD` | S59 | 91,806 B (~25.5K) |
+
+That is **~+1.1K tokens per session close**, and it is structural: STATUS.md and CHANGELOG.md both
+grow at every closeout by ritual (DEC-0052 steps 2 and 3). "Leanest in the forum" is a statement
+about a moment, not a trajectory — at this rate this repo passes 35K within ten sessions. **A
+defensible deferral has a half-life**, and that is the argument ops#130 could not make because it
+measured once.
+
+### The other two reasons
+
+- **Both siblings have already migrated.** The dashboard and hyperlocal-forecast each carry
+  `BOOT.md` + `MANIFEST.md`; ops carries all three. This repo is the last of the trio, and
+  cross-repo consistency is a standing goal, not a nicety — the drift this repo has repeatedly paid
+  for (DEC-0040, DEC-0050) is what divergence costs.
+- **`STATUS.md` at 29.6 KB is ~3× the `BOOT.md` cap** and wants the trim on its own merits,
+  independent of any standard. This session read all of it to act on two lines of it.
+
+### The one thing this repo must NOT inherit — an addendum to §3
+
+STANDARD.md §3 has the trio "load `ops/CONSTANTS.md` at session start," and separately notes this
+repo is public and "may point at ops but must never quote it." **Those two clauses are in tension
+here and the standard does not resolve it: `eaglehunt-ops` is PRIVATE and this repo is PUBLIC.** A
+`CLAUDE.md` that tells its reader to load `ops/CONSTANTS.md` is a dead end for every external
+contributor — which is the population this repo has and the other three do not. It also sits badly
+with §10's "any repo can be resumed cold from `BOOT.md` alone."
+
+**Resolution adopted here:** this repo's `CONSTANTS.md` is **self-sufficient for anyone who can
+clone it**. It carries the public constants outright (placeholders per DEC-0012 —
+`<NAS_HOST>`/`<NAS_USER>`/`<SSH_PORT>` as today), and any pointer to `ops/CONSTANTS.md` is marked
+explicitly as an owner-only supplement, never as a prerequisite. This is closer to coffeeradar's
+DEC-0017 posture ("if a doc points you at another project to find out what a rule is, that is a
+bug") than to the trio's, and it is deliberate: the reason coffeeradar takes the shape and not the
+pointer is *self-containedness*, and a public repo needs that for the same reason a self-contained
+one does. Filed back to ops as a spec gap, not resolved unilaterally in their file — this repo does
+not write across the boundary.
+
+### Why the migration is not in this session
+
+STANDARD.md §7 says migrate at a natural session end, when full state is in context — which is
+exactly now. It was still the wrong call: this session stood at **~157K absolute context** when the
+decision was made, against `AGENT-ECONOMY.md` §7's ~200K close-out ceiling (OPS-DEC-0068), and the
+mechanical work is ~40K more. Stranding a governance migration half-applied — `BOOT.md` written,
+`CLAUDE.md` still pointing at the old tier table — is materially worse than not starting, because
+the repo would then have two contradictory entrypoints and a hook (`resume_pointer_for()`) choosing
+between them by fallback order.
+
+So the **decision** is taken here, where the state is, and the **execution** is a work order in
+STATUS.md's next-session actions. That split is the point: §7's real requirement is that the
+*judgment* not be made cold, and it wasn't. A fresh session executing a written work order re-reads
+the Tier-1 docs at start anyway — those are the migration's inputs.
+
+**Reversal clause:** if the migration lands and a session finds itself pulling `DECISIONS.md` and
+`CHANGELOG.md` by name in most sessions anyway, the saving was illusory — the read moved rather
+than disappeared. Record that on the second occurrence and reopen this decision; do not quietly
+re-add them to the always-load set, which is how the accretion started.
