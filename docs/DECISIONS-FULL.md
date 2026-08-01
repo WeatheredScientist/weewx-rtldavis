@@ -1905,7 +1905,7 @@ ops#22 found all three trio repos (+ coffeeradar) had independently invented the
 ritual despite common tiered-read/DECISIONS-index/STATUS.md-as-source-of-truth ancestry. This repo's
 was the loosest of the four: split across two separate CLAUDE.md paragraphs ("Session ritual — End"
 and a separate "Docs-diet ritual at close"), no numbered list. eaglehunt-ops published a generic
-6-step closeout skeleton (OPS-DEC-0016, locked OPS-DEC-0019 once three of four repos had adopted)
+6-step closeout skeleton (OPS-DEC-0016, locked OPS-DEC-0019b once three of four repos had adopted)
 and filed an adoption ask in each repo's own tracker (this repo's: weewx-rtldavis#56) — adopt, adapt,
 or decline is each repo's own call, per OPS-DEC-0001's charter that ops is not a master repo.
 

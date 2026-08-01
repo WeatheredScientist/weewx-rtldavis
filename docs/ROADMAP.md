@@ -102,10 +102,11 @@ here.
 - **Cap-16 tuning → v2.0.11** (S55c): DEC-0056, decided on an evidence pass (R1/R2); monitor
   tripwire verified live end-to-end.
 
-**Still open — ordinary watches, not a new arc.** Current status (co-rejecting grep, `#74`
-calm-windDir, humidity-spike signature DEC-0044, first-frost test of the signed-decode negative
-branch, DEC-0056's rain-rejection revisit trigger) lives in STATUS.md's "Active thread" — not
-duplicated here, and not evidence this P1 item is still "in progress."
+**Still open — ordinary watches, not a new arc.** Current status (co-rejecting grep, humidity-spike
+signature DEC-0044, first-frost test of the signed-decode negative branch, DEC-0056's
+rain-rejection revisit trigger) lives in STATUS.md's "Active thread" — not duplicated here, and not
+evidence this P1 item is still "in progress." **`#74` calm-windDir left this list at S59**, closed
+on five consecutive clean days with a positive control (STATUS.md §Standing watches).
 
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
 bound and done via reversible live hot-swap with an instant rollback path.
