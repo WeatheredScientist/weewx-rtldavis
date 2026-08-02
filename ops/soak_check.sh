@@ -33,6 +33,9 @@ esac
 WINDOW="${1:-0}"          # seconds; 0 = since container start
 CONTAINER=weewx-rtldavis-v2
 EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.12}"
+# The DEC-0031 canary. Bump with DRIVER_VERSION in rtldavis.py on every driver
+# release -- a release must be distinguishable in the running log (DEC-0046).
+EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.4}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }
@@ -73,7 +76,7 @@ ln=\$(grep -n \"^\$(date -d \"@\$t0\" '+%Y-%m-%d %H' 2>/dev/null)\" \"\$L\" | he
 win=\$(tail -n +\$ln \"\$L\")
 
 echo \"banner=\$(printf '%s' \"\$win\" | grep -c 'weewxd .*Initializing weewxd version')\"
-echo \"drv_ok=\$(printf '%s' \"\$win\" | grep -c 'driver version is 0.20+ws.1')\"
+echo \"drv_ver=\$(printf '%s' \"\$win\" | grep -o 'driver version is [^ ]*' | tail -1 | sed 's/.* //')\"
 echo \"qc_ok=\$(printf '%s' \"\$win\" | grep -c 'sensor_qc True')\"
 echo \"hraw_on=\$(printf '%s' \"\$win\" | grep -c 'log_humidity_raw True')\"
 echo \"hraw_n=\$(printf '%s' \"\$win\" | grep -c 'humidity_raw=')\"
@@ -140,7 +143,19 @@ sl=$(get stdout_lines)
 [ "$(get banner)" != "0" ] && ok "weewxd startup banner in weewx.log" "(DEC-0043)" || note "no startup banner in window" "(only expected right after a restart)"
 
 # 4. Driver identity (DEC-0031 — the stock-driver trap)
-[ "$(get drv_ok)" != "0" ] && ok "patched driver 0.20+ws.1" "(DEC-0031)" || note "driver banner not in window" "(only logged at startup)"
+# Report the version the driver ACTUALLY announces, rather than grepping for an
+# expected one. The old form grepped a hardcoded '0.20+ws.1' and fell through to
+# a soft note on mismatch -- so from v2.0.10 onward it silently verified nothing,
+# and "wrong version" was indistinguishable from "banner not in this window"
+# (S62). Three distinct states now, and a mismatch is a FAILURE.
+_dv="$(get drv_ver)"
+if [ -z "$_dv" ]; then
+  note "driver banner not in window" "(only logged at startup — version UNVERIFIED)"
+elif [ "$_dv" = "$EXPECT_DRIVER" ]; then
+  ok "patched driver $EXPECT_DRIVER" "(DEC-0031 canary)"
+else
+  bad "DRIVER VERSION MISMATCH" "running $_dv, want $EXPECT_DRIVER — is the baked driver the one you built? (DEC-0031)"
+fi
 [ "$(get qc_ok)" != "0" ] && ok "sensor_qc enabled" || note "sensor_qc not seen in window" ""
 [ "$(get hraw_on)" != "0" ] && ok "log_humidity_raw ACTIVE" "(DEC-0044 instrument)" || note "log_humidity_raw not seen" ""
 
