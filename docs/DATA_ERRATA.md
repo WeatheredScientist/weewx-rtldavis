@@ -334,6 +334,9 @@ which the RTL-SDR still enumerated for `rtl_biast` (device found, R820T tuner fo
 returning success) while `rtldavis` could no longer claim it for streaming. The stall-recovery loop had
 also killed and respawned `rtldavis` ~18 times to no effect. What resolved it was the container
 recreate — a strictly larger hammer than anything the watchdog can swing.
+**Addressed in [DEC-0065](DECISIONS.md)**: the watchdog now verifies its own remedy, stops after
+3 ineffective attempts, and escalates to a human rather than acquiring a bigger hammer. Auto-recreate
+was deliberately *not* built — see that decision for why n=1 does not meet the "proven fix" bar.
 
 ### Correction status
 
@@ -361,4 +364,5 @@ process runs and yields nothing; `not running` means it dies on start — and te
 finally pointed at the container rather than the hardware. But the driver **swallowed the one piece of
 evidence that would have shortened this**: `user.rtldavis ERROR err: <generator object
 ProcManager.get_stderr at 0x...>` logs the *repr of a generator* instead of iterating it, discarding
-rtldavis's actual stderr at the exact moment it was needed. See the S62 follow-up.
+rtldavis's actual stderr at the exact moment it was needed. **Fixed S62** (`drain_stderr()`); the
+fix is baked into the image, so it lands with the v2.0.12 rebuild, not before.
