@@ -122,11 +122,13 @@ def _schedule_rows():
 
 
 def test_schedule_is_a_balanced_latin_square():
-    """Each arm must visit each 6h slot exactly twice — that balance IS the
-    control for time-of-day and diurnal drift. A typo here silently reintroduces
-    the confound the whole design exists to remove, and nothing at runtime would
-    notice."""
-    rows = [r for r in _schedule_rows() if r[1] != "BASELINE"]
+    """Each square arm must visit each 6h slot exactly twice — that balance IS
+    the control for time-of-day and diurnal drift. A typo here silently
+    reintroduces the confound the whole design exists to remove, and nothing at
+    runtime would notice. Pilot (P*) and hold (H) rows are campaign B's
+    calibration prefix, not square blocks — they are excluded here and asserted
+    by their own tests below."""
+    rows = [r for r in _schedule_rows() if r[1] in {"A", "B", "C", "D"}]
     assert len(rows) == 32, f"expected 32 blocks, got {len(rows)}"
 
     seen = {}
@@ -147,6 +149,76 @@ def test_schedule_self_terminates_to_baseline():
     """If everyone forgets this is running it must end on prod config, not an
     experimental arm."""
     assert _schedule_rows()[-1][1] == "BASELINE"
+
+
+# --- campaign B's calibration prefix (DEC-0064) -------------------------------
+
+def _arm_gain(arm: str) -> int:
+    out = subprocess.run(
+        ["bash", "-c",
+         f'source <(sed "/^# ── Modes/,\\$d" {SCRIPT}); arm_cmd {arm}'],
+        capture_output=True, text=True)
+    assert out.returncode == 0, f"arm {arm} has no command"
+    return int(re.search(r"-gain (\d+)", out.stdout).group(1))
+
+
+def test_pilot_runs_high_to_low_before_the_morning_notch():
+    """The pilot's five gain blocks must (a) run strictly HIGH -> LOW, so an
+    abort on a weak low arm still leaves the high arms harvested; (b) sit on a
+    45-min cadence; and (c) finish before 06:00, clear of the site's hour-07
+    reception notch (BACKLOG §Durable RF findings) — pilot numbers are bounding
+    input and must not be depressed by a known site artifact."""
+    rows = _schedule_rows()
+    pilot = [r for r in rows if r[1].startswith("P")]
+    assert len(pilot) == 5, f"expected 5 pilot rows, got {len(pilot)}"
+    assert rows[:5] == pilot, "pilot rows must open the schedule"
+
+    gains = [_arm_gain(arm) for _, arm in pilot]
+    assert gains == sorted(gains, reverse=True), \
+        f"pilot gains must descend (cliff-detection ordering): {gains}"
+
+    days = {when.split("T")[0] for when, _ in pilot}
+    assert len(days) == 1, f"pilot must fit inside one night: {days}"
+    times = [when.split("T")[1] for when, _ in pilot]
+    assert all(t < "06:00" for t in times), \
+        f"pilot must finish before the hour-07 notch: {times}"
+
+    def _minutes(hhmm):
+        h, m = hhmm.split(":")
+        return int(h) * 60 + int(m)
+    gaps = [_minutes(b) - _minutes(a) for a, b in zip(times, times[1:])]
+    assert all(g == 45 for g in gaps), f"pilot cadence must be 45 min: {gaps}"
+
+
+def test_hold_follows_pilot_and_matches_control_settings():
+    """The H hold is the daylong no-LNA baseline-verification window. It must
+    (a) directly follow the last pilot block, (b) carry the control arm A's
+    exact settings under its own label — a distinct label so the hold harvests
+    under its own tag and can never contaminate arm A's square samples, and
+    (c) hand over to the square's first block at the NEXT day's 00:05 (the S57
+    clean-day-boundary lesson)."""
+    rows = _schedule_rows()
+    holds = [(i, r) for i, r in enumerate(rows) if r[1] == "H"]
+    assert len(holds) == 1, f"expected exactly one hold row, got {holds}"
+    idx, (when, _) = holds[0]
+
+    assert rows[idx - 1][1].startswith("P"), "hold must directly follow the pilot"
+
+    def _cmd(arm):
+        out = subprocess.run(
+            ["bash", "-c",
+             f'source <(sed "/^# ── Modes/,\\$d" {SCRIPT}); arm_cmd {arm}'],
+            capture_output=True, text=True)
+        return out.stdout
+    assert _cmd("H") == _cmd("A"), \
+        "H must be arm A's settings under a distinct label"
+
+    first_square = rows[idx + 1]
+    assert first_square[1] in {"A", "B", "C", "D"}
+    assert first_square[0].split("T")[1] == "00:05", \
+        "square must start on a clean day boundary"
+    assert first_square[0].split("T")[0] > when.split("T")[0], \
+        "square must start the day after the pilot night"
 
 
 def test_schedule_is_chronological():
