@@ -136,15 +136,17 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       a clean day boundary because the aborted run damaged three Latin-square cells. Settles
       DEC-0017 (**absorbed**). Tracked at
       [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
-- [ ] **QUEUED BEHIND CAMPAIGN A — cut an image release carrying DEC-0062** (not RF work; parked
-      here because the campaign is what gates it). `pressure_service.py` no longer logs credential
-      material, but it is **BAKED** (`Dockerfile:117`) — fixed in the repo, inert in prod until an
-      image rebuild. A rebuild restarts prod, and restarting under a running factorial would
-      confound its arms, so it waits for ~08-07. Fold in anything else baked that has accumulated
-      by then, and carry DEC-0046 into the release: verify in the **running system**, never in the
-      artifact.
-- [ ] **Run campaign B — LNA physically removed**, gain arms centered higher (~{372, 496}); the
-      optimum moves up once ~20 dB of front-end gain is gone. Schedule written after A reports.
+- [ ] **v2.0.12 release carrying DEC-0062 + `BIAS_TEE` env — PREPPED (S61, DEC-0064), ships
+      Thu 08-06.** `entrypoint.sh` now reads `BIAS_TEE` (default 1 — published image unchanged);
+      the release lands *between* campaigns so B runs on one image with no mid-campaign rebuild
+      confound. Build + push Thursday; deploy on the swap night with `-e BIAS_TEE=0`. Carry
+      DEC-0046 into the release: verify in the **running system**, never in the artifact.
+- [ ] **Campaign B — LNA physically removed — DESIGNED AND DRY-RUN (S61, DEC-0064).** Swap night
+      Fri 08-07 00:05 (owner-gated; runbook `docs/CAMPAIGN-B-RUNBOOK.md`), overnight pilot
+      00:35–04:20 (gain 496→328, arm-selection input only), H hold Friday, square 08-08→08-16:
+      gain {372, 496} × ex {0, 50}, abort floor 50%. Apparatus rewritten, 13 tests green, full
+      DRY_RUN pass recorded. June-plateau LNA state resolved (owner): LNA was IN — no honest
+      no-LNA telemetry exists; the pilot is the first real measurement.
 - [x] ~~24 h **receiveWindow sweep**; reconcile image tag ↔ Dockerfile~~ — **dissolved by DEC-0059.**
       `-ex N` ≡ `receiveWindow 300+N` (upstream sums them), so the window is a mounted-config knob,
       no rebuild, and it is simply the second factor of the campaigns above. The `rw*` image tags

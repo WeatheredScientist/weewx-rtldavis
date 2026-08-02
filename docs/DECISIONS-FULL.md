@@ -2765,3 +2765,115 @@ Both divergences share one root cause worth stating plainly: **the standard was 
 private repos, and its two "preserve/share by pointing at a file" mechanisms — `ops/CONSTANTS.md`
 and `ARCHIVE/` — both assume every reader has access the public member's readers do not.** Reported
 to ops#130 as a spec gap, not patched into their file.
+
+---
+
+## DEC-0064 — Campaign B: the no-LNA RX campaign, with an overnight pilot and an owner-gated swap night
+
+**Status:** Accepted (design) · **Date:** 2026-08-01 (S61) · **Executes** the second half of
+DEC-0059's two-campaign design · **applies** DEC-0046 (bias tee is image-layer) ·
+**carries** DEC-0062's deferred deploy · owner-directed on timing, gating, and the pilot
+
+### What this settles
+
+Campaign A (LNA in circuit) self-terminates 2026-08-07T00:05. This decision pre-registers
+everything that follows so the swap night is execution, not derivation: the LNA comes out, the
+bias tee goes off, an overnight pilot bounds the no-LNA gain curve, and campaign B (the no-LNA
+Latin square) runs 08-08T00:05 → 08-16T00:05. Checklist: `docs/CAMPAIGN-B-RUNBOOK.md`.
+
+### The forensics that reframed the baseline
+
+The working assumption — "the pre-LNA baseline is 67.5%" (S29's changelog) — did not survive
+contact with the archive. A one-time local copy of the archive DB (cold backup, integrity-checked)
+shows exactly two `rxCheckPercent` plateaus, both dead flat, with the transition hidden inside the
+metric-dark gap (the pct_good deadlock, dead 06-18 → 07-05):
+
+| Era | Config | Mean | sd (5-min bins) | n |
+|---|---|---|---|---|
+| 2026-06-02 → 06-18 | gain 207 | **67.45** | 3.22 | 4,321 |
+| 2026-07-05 → 07-27 | gain 372, LNA in | **74.83** | 4.13 | 5,948 |
+
+The record contradicted itself about the June plateau's LNA state: S29 calls it "the pre-LNA
+baseline," but DEC-0017 says the gain-207 lock came from the 06-01 sweeps *with* the preamp, and
+that the owner was evaluating *without* the preamp as of 07-04 — placing the no-LNA period inside
+the dark gap, where no honest telemetry exists. The bias tee entered the image at v2.0.2
+(~05-31); session transcripts carry no removal/install dates (that era predates this repo's
+governance). **Resolved by owner memory (S61): the LNA was IN during June.** S29's "pre-LNA
+baseline" label was wrong; DEC-0017's narrative was right. Two consequences:
+
+1. **No honest no-LNA telemetry exists anywhere** — the pilot is the first real measurement,
+   and Friday's first samples are discovery, not verification against a known band.
+2. **Both plateaus are LNA-in, so their contrast is a same-hardware gain comparison:**
+   207 → 372 gained **~7.4 pts** (67.45 → 74.83). Cross-era and uncontrolled (different weeks,
+   the 06-16/17 anemometer swap sits inside the June window with no visible step), so it is
+   corroborating directional evidence, not designed-experiment grade — but it retroactively
+   answers DEC-0017's original 207-vs-372 question in 372's favor, independently of campaign
+   A's forthcoming controlled answer.
+
+### The design
+
+**Overnight pilot (08-07 00:35–04:20), pre-registered as arm-selection input only.** Five
+gain-only arms, 45 min each, strictly HIGH → LOW: 496, 449, 402, 372, 328 (all real R820T steps).
+45 min = 9 five-min samples ≈ SE 1.6 pts/arm at the June-plateau sd — enough to see the curve's
+shape, not enough to adopt anything. It is sequential and hour-confounded, the exact flaw
+DEC-0048 exists to avoid in the campaign proper; its legitimacy is that of a pilot study: it
+steers arm selection and shakes down the full apparatus (new image, bias tee off, swap → verify →
+harvest cycle) on the same tick machinery the campaign uses, the night before the campaign
+commits 8 days. High→low ordering makes the abort tripwire a feature: a weak low arm finding the
+reception cliff halts with the high arms already harvested — an overnight abort IS a pilot
+result. The window (00:35–04:20) sits inside the site's best-reception hours and clears the
+hour-07 notch (BACKLOG §Durable RF findings), so pilot numbers read slightly optimistic vs 24 h
+means; fine for bounding, stated so nobody mistakes them for campaign estimates.
+
+**The H hold (08-07 04:20 → 08-08 00:05).** Arm A's exact settings under a distinct label. Two
+jobs: the daylong no-LNA baseline-verification window (including how the 07/19 notch presents
+without the LNA), and clean bookkeeping — the hold harvests under its own tag, and the
+H→A swap at 08-08T00:05 is a real labeled swap, so the square's arm-A samples start clean
+instead of inheriting a 20-hour pseudo-block (the phantom-block lesson from A's un-rotated log,
+applied forward).
+
+**The square (08-08T00:05 → 08-16T00:05).** Same Latin-square structure as A: 2×2 factorial,
+6 h blocks, 32 blocks, 8/arm. Gain arms **{372, 496}**, not A's {372, 207}: with ~20 dB of
+front-end gain removed the optimum moves up, and both of A's points would sit too low
+(DEC-0059 said this at design time). 372 is the **cross-campaign anchor** — the same value ran
+in campaign A, so the LNA contrast is measured at identical settings. 496 is the R820T maximum,
+subject to Friday's pilot readout (GATE 2: a peak at/below 402 shifts the high arm; literals +
+tests + redeploy is a 15-minute daytime task). The ex axis {0, 50} and `-fc 0 -ppm 0` are
+**unchanged from A on purpose**: changing any other knob between campaigns would confound the
+LNA contrast. Adoption bar unchanged (DEC-0059): ≥2.0 pts over the incumbent without a
+duplicate-frame regression; incumbent wins ties.
+
+**Abort floor 50% (was 55%).** The no-LNA baseline is unmeasured until the pilot; 50% sits
+~5 SE below even a pessimistic 62% on a 30-min mean — forgiving on purpose, still far outside
+noise. Data-loss exposure is unchanged from DEC-0059's analysis: an archive record nulls only
+on a fully-dead minute.
+
+**The swap night is owner-gated (owner's direction).** Nothing kills the container or touches
+the bias tee until the owner's GO in chat, given only when physically at the dongle — the
+antenna-disconnected window is the 20–40 s SMA swap, not minutes. Sequence: A terminates →
+archive A's artifacts (`.campaignA` suffix) → deploy the B apparatus → **GO** → v2.0.12 with
+`BIAS_TEE=0` (the night's one Class C command; kill→rm→run from `docker inspect`, never
+compose) → physical swap → verify (bias-tee-off log line, DEC-0062 redaction, fresh archive
+record) → `install` → pilot fires 00:35. Every failure path in the apparatus still restores
+baseline and emails; the runbook adds the human-facing rollback (v2.0.11 retag) and the
+"A didn't terminate" path (abort + postpone 24 h, never improvise at midnight).
+
+**v2.0.12 carries the bias tee as configuration, not as a hardcoded flip.** `entrypoint.sh`
+reads `BIAS_TEE` (default 1): the published image keeps powering LNAs for every existing user
+of this public image, and our deployment turns it off with one env var. The off branch drives
+`rtl_biast -b 0` explicitly rather than trusting the power-on default. The image also finally
+ships DEC-0062's `pressure_service.py` redaction (deferred from S57b precisely to avoid a
+mid-campaign-A rebuild) — and because the release lands *between* campaigns, campaign B runs
+uniformly on one image with zero mid-campaign confound.
+
+**Campaign A stays unread and unadopted through the gap.** Its winner is moot for prod the
+moment the LNA comes out; its value is the LNA-in characterization and the honest multi-day
+drift error bar on the eventual LNA-in vs LNA-out comparison (DEC-0059 declined bracketing on
+exactly this plan). Analysis happens in parallel; nothing deploys from it.
+
+### What would change this
+
+A's completion slipping (schedule regenerates dev-side, 24 h postponement path in the runbook);
+the pilot finding the gain curve peaked at/below 402 (GATE 2 shifts the high arm before the
+square starts); the owner's answer on the June plateau (moves the expected-numbers table and
+the acceptance band, nothing structural).
