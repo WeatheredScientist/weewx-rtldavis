@@ -16,7 +16,7 @@ It exists for three reasons:
 2. **Honesty.** Until S37 the driver logged `driver version is 0.20` — the stock upstream version —
    while carrying a rain filter, a sensor plausibility filter and five bug fixes that do not exist
    upstream. Anyone debugging from our logs (including us, and including anyone we try to help on an
-   upstream issue) was being misled. It now logs `0.20+ws.3`.
+   upstream issue) was being misled. It now logs `0.20+ws.4`.
 3. **It is the checklist for shrinking the fork.** Every row below is either something to upstream or
    something to justify keeping. A fork with no inventory only grows.
 
@@ -51,7 +51,7 @@ suffix: upstream's base version, `+ws`, our revision.
 
 | File | Upstream version | Ours |
 |------|------------------|------|
-| `rtldavis.py` | `0.20` | `0.20+ws.3` |
+| `rtldavis.py` | `0.20` | `0.20+ws.4` |
 | `influx.py` | `0.20` | `0.20+ws.1` |
 
 The suffix sorts after the base version and is unambiguous about its parent. `rtldavis.py` also logs
