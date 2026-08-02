@@ -20,6 +20,25 @@ PIDFILE  = os.environ.get('MONITOR_PIDFILE', f'{BASE_DIR}/logs/weewx_monitor.pid
 POLL     = 30
 RESET_CD = 300
 REPEAT   = 7200
+
+# --- Watchdog escalation (S62, ERR-0005) ---
+# The 2026-08-02 outage fired nine USB resets across 75 minutes, none of which
+# helped, and the tenth preceded a strictly worse failure mode (the dongle still
+# enumerated for rtl_biast while rtldavis could no longer claim it). Every one of
+# those nine sent an identical "RTL-SDR reset" email, so the ninth read exactly
+# like the first and the one alarm that mattered was buried. Detection was never
+# the problem -- RECEPTION ALERT fired at 00:13, eight minutes in. What was
+# missing was any notion of whether the remedy WORKED.
+RESET_VERIFY_S  = 180   # seconds after a reset before judging it effective
+RESET_MAX_TRIES = 3     # consecutive ineffective resets before we stop and escalate
+CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
+DOCKER_BIN = os.environ.get('DOCKER_BIN', '/usr/local/bin/docker')
+
+# Env names whose VALUES must never reach an email or a log (DEC-0062). The
+# recreate command below is built from `docker inspect`, and this repo is public
+# -- another user's container may well carry an API key in its env.
+ENV_SECRET_RE = re.compile(
+    r'(KEY|TOKEN|SECRET|PASS|PW|CRED|AUTH|SALT|SIGN)', re.IGNORECASE)
 STATION_NAME = os.environ.get('STATION_NAME', 'My PWS')  # Set in monitor.env or edit here
 
 GMAIL_USER = os.environ.get('ALERT_FROM', '')
@@ -201,7 +220,7 @@ def send_rain_glitch_alert(ts, detail, phantom_in, raw_line, test=False):
         body += f"\nLog line:\n{raw_line}"
     send_email(f"{STATION_NAME}: {tag}rain-counter glitch rejected", body)
 
-def do_reset():
+def do_reset(notify=True):
     try:
         log("RESET: running usb_reset.sh via sudo")
         import subprocess
@@ -215,23 +234,186 @@ def do_reset():
             except OSError:
                 vendor = 'unknown'
             log(f"RESET: done, idVendor={vendor}")
-            send_email(f"{STATION_NAME}: RTL-SDR reset", f"Dongle reset at {datetime.now()}. Vendor: {vendor}")
+            # notify=False for repeat resets within one outage: nine identical
+            # "RTL-SDR reset" emails is how the real alarm got buried (ERR-0005).
+            if notify:
+                send_email(f"{STATION_NAME}: RTL-SDR reset", f"Dongle reset at {datetime.now()}. Vendor: {vendor}")
         else:
             log(f"RESET error: {result.stderr}")
             send_email(f"{STATION_NAME}: RTL-SDR reset FAILED", f"usb_reset.sh failed: {result.stderr}")
     except Exception as e:
         log(f"RESET error: {e}")
 
-def reset_dongle(last_reset):
+# Watchdog escalation state (S62). Kept in one dict rather than threaded through
+# main()'s locals: the reset path spans both the line scanner and the poll loop,
+# and widening close_reception_window()'s return tuple to carry it would disturb
+# code this change has no business touching (DEC-0014).
+WD = {
+    'last_reset': 0.0,
+    'tries': 0,          # consecutive INEFFECTIVE resets
+    'check_at': 0.0,     # when to judge the pending reset (0 = none pending)
+    'escalated': False,  # escalation already sent for this outage
+}
+
+
+def build_recreate_cmd(container=None):
+    """Build the container-recreate command from the LIVE container's config.
+
+    Deliberately derived from `docker inspect` and never from the NAS
+    docker-compose.yml, which is stale and decorative (CONSTANTS.md). Returns
+    None if anything is uncertain -- a half-right recreate line is worse than
+    none, because `rm` is not reversible.
+
+    Env VALUES matching ENV_SECRET_RE are redacted: this monitor ships in a
+    public repo and another user's container may carry credentials (DEC-0062).
+    """
+    import json
+    import subprocess
+    container = container or CONTAINER
+    try:
+        out = subprocess.run([DOCKER_BIN, 'inspect', container],
+                             capture_output=True, text=True, timeout=20)
+        if out.returncode != 0:
+            return None
+        c = json.loads(out.stdout)[0]
+        hc, cf = c['HostConfig'], c['Config']
+        parts = [f"{DOCKER_BIN} kill {container}",
+                 f"{DOCKER_BIN} rm {container}",
+                 "sleep 3"]
+        run = [DOCKER_BIN, 'run', '-d', '--name', container]
+        pol = (hc.get('RestartPolicy') or {}).get('Name')
+        if pol and pol != 'no':
+            run += ['--restart', pol]
+        if hc.get('Privileged'):
+            run += ['--privileged']
+        for d in (hc.get('Devices') or []):
+            run += ['--device',
+                    f"{d['PathOnHost']}:{d['PathInContainer']}:{d['CgroupPermissions']}"]
+        net = hc.get('NetworkMode')
+        if net and net not in ('default', 'bridge'):
+            run += ['--network', net]
+        for e in (cf.get('Env') or []):
+            name = e.split('=', 1)[0]
+            if name == 'PATH':
+                continue          # image default; passing it back is noise
+            val = e.split('=', 1)[1] if '=' in e else ''
+            run += ['-e', f"{name}=<REDACTED>" if ENV_SECRET_RE.search(name)
+                    else f"{name}={val}"]
+        for b in (hc.get('Binds') or []):
+            run += ['-v', b]
+        run += [cf['Image']]
+        run += (cf.get('Cmd') or [])
+        parts.append(' '.join(run))
+        return '\n'.join(parts)
+    except Exception as e:
+        log(f"RECREATE-CMD build failed: {e}")
+        return None
+
+
+def send_unrecoverable_alert(reason, detail=''):
+    """The escalation the 2026-08-02 outage never produced.
+
+    Nine identical "RTL-SDR reset" emails told the owner nothing was different
+    about the ninth. This fires ONCE per outage, says plainly that automatic
+    recovery has failed, and carries the command that actually worked.
+    """
+    cmd = build_recreate_cmd()
+    body = (f"Automatic recovery has FAILED. Manual intervention needed.\n\n"
+            f"Reason: {reason}\n")
+    if detail:
+        body += f"{detail}\n"
+    body += (f"\nTried: {WD['tries']} USB reset(s), none effective.\n"
+             f"Time: {datetime.now()}\n\n")
+    if cmd:
+        body += ("The remedy that resolved the 2026-08-02 outage (ERR-0005) was a full\n"
+                 "container recreate -- NOT a restart; a kill+start was tried during that\n"
+                 "incident and did not help. Command below is built from the LIVE container\n"
+                 "config via `docker inspect`. Review it before running.\n"
+                 "Any <REDACTED> env value must be filled in by hand.\n\n"
+                 f"{cmd}\n")
+    else:
+        body += ("Could not build the recreate command (`docker inspect` failed).\n"
+                 "Derive it by hand from the live container -- do NOT use the NAS\n"
+                 "docker-compose.yml, it is stale and decorative.\n")
+    log(f"ESCALATION: {reason} (after {WD['tries']} ineffective resets)")
+    send_email(f"{STATION_NAME}: RTL-SDR UNRECOVERABLE - manual intervention needed", body)
+
+
+def reset_dongle(last_reset, notify=True):
     now = time.time()
     if now - last_reset < RESET_CD:
         log(f"SKIP reset: cooldown ({int(now-last_reset)}s)")
         return last_reset
     log("RESET: triggering syno_vbus_reset")
     import threading
-    t = threading.Thread(target=do_reset, daemon=True)
+    t = threading.Thread(target=do_reset, kwargs={'notify': notify}, daemon=True)
     t.start()
     return time.time()
+
+
+def watchdog_stall(wu_bad_windows):
+    """Handle a 'rtldavis process stalled' line, with escalation.
+
+    Unbounded retry is what ERR-0005 measured failing: 9 resets, 0 successes,
+    and harm on the 10th. After RESET_MAX_TRIES ineffective resets we stop
+    resetting entirely and hand it to a human.
+    """
+    if WD['tries'] >= RESET_MAX_TRIES:
+        if not WD['escalated']:
+            WD['escalated'] = True
+            send_unrecoverable_alert(
+                f"{WD['tries']} consecutive USB resets did not restore reception",
+                f"Consecutive bad reception windows: {wu_bad_windows}")
+        else:
+            log(f"STALL: escalated already; not resetting (tries={WD['tries']})")
+        return
+    prev = WD['last_reset']
+    # Only the FIRST reset of an outage emails; the rest are log-only. Nine
+    # identical notices is how the real alarm got buried (ERR-0005).
+    WD['last_reset'] = reset_dongle(prev, notify=(WD['tries'] == 0))
+    if WD['last_reset'] != prev:
+        WD['check_at'] = WD['last_reset'] + RESET_VERIFY_S
+
+
+def watchdog_not_running(wu_bad_windows):
+    """Handle 'rtldavis process is not running' -- a DIFFERENT fault.
+
+    'stalled' means the process runs and yields nothing. 'not running' means it
+    dies on startup, which a USB unbind/rebind demonstrably does not fix and, on
+    the ERR-0005 evidence, may well have caused. So: never reset here, escalate
+    straight away.
+    """
+    if WD['escalated']:
+        return
+    WD['escalated'] = True
+    send_unrecoverable_alert(
+        "rtldavis exits immediately on startup (process is not running)",
+        "A USB reset does NOT fix this mode and may have caused it (ERR-0005).\n"
+        f"Consecutive bad reception windows: {wu_bad_windows}")
+
+
+def watchdog_poll(wu_bad_windows, now):
+    """Judge whether the pending reset worked. Called once per poll."""
+    if not WD['check_at'] or now < WD['check_at']:
+        return
+    WD['check_at'] = 0.0
+    if wu_bad_windows == 0:
+        log("RESET verified effective; watchdog counters cleared")
+        WD['tries'] = 0
+        WD['escalated'] = False
+    else:
+        WD['tries'] += 1
+        log(f"RESET ineffective ({WD['tries']}/{RESET_MAX_TRIES}); "
+            f"bad windows still {wu_bad_windows}")
+
+
+def watchdog_recovered():
+    """Reception came back on its own -- clear the escalation latch."""
+    if WD['tries'] or WD['escalated']:
+        log("Watchdog: reception recovered, counters cleared")
+    WD['tries'] = 0
+    WD['escalated'] = False
+    WD['check_at'] = 0.0
 
 def wu_pct(count):
     """Reception % = records received / records the ISS physically transmitted
@@ -462,7 +644,6 @@ def main():
     alert_sent  = {s: 0.0 for s in THRESHOLDS}
     last_repeat = {s: 0.0 for s in THRESHOLDS}
     in_outage   = {s: False for s in THRESHOLDS}
-    last_reset  = 0.0
     last_glitch_alert = 0.0
 
     # Reception tracking state
@@ -510,7 +691,12 @@ def main():
             for line in lines:
                 if 'rtldavis process stalled' in line:
                     log("STALL detected")
-                    last_reset = reset_dongle(last_reset)
+                    watchdog_stall(wu_bad_windows)
+                elif 'rtldavis process is not running' in line:
+                    # A DIFFERENT fault from a stall -- the binary dies on
+                    # startup. Never reset here (S62, ERR-0005).
+                    log("DRIVER NOT RUNNING detected")
+                    watchdog_not_running(wu_bad_windows)
                 g = parse_rain_glitch(line)
                 if g and now - last_glitch_alert > RAIN_GLITCH_CD:
                     ts, detail, phantom_in = g
@@ -542,6 +728,11 @@ def main():
                 wu_hourly_buckets, now)
             wu_window_start = wu_window_start + WU_RF_WINDOW
             wu_window_epochs = set()
+            # S62: judge the pending reset now that a fresh window has closed,
+            # and drop the escalation latch if reception came back on its own.
+            watchdog_poll(wu_bad_windows, now)
+            if wu_bad_windows == 0 and (WD['tries'] or WD['escalated']):
+                watchdog_recovered()
 
         # --- Reception: log 5-min summary ---
         if wu_first_seen and (now - wu_period_start) >= WU_RF_LOG_INTERVAL:
