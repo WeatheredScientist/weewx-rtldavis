@@ -2970,11 +2970,19 @@ behind a dry-run-tested run-line derivation, a hard attempt cap, and a refusal t
 it entirely rather than merely bound it. And a no-LNA regime that trips `WU_RF_MIN_PCT` routinely
 would move that threshold — not this escalation logic.
 
-### Related, unresolved
+### Related — checked and cleared, same session
 
-ERR-0005 also logged a **campaign-A abort near-miss**: the apparatus declared "did not produce
-records" at 00:08:21 while loop data flowed at 71% and a RapidFire record published at 00:08:22.
-The health check tests for an *archive* record, so this is not necessarily a defect — but
-`ops/rx_experiment.sh` already carries a comment about this exact failure class (a prior version
-aborted a live campaign 3 seconds early; measured weewxd-init-to-first-record = 104 s). That
-check runs unattended for 8 days once campaign B starts. **Resolve before B, not after.**
+ERR-0005 first logged what looked like a **campaign-A abort near-miss**: the apparatus declared
+"did not produce records" at 00:08:21 while loop data flowed at 71% and a RapidFire record
+published at 00:08:22. Since that check runs unattended for 8 days once campaign B starts, it was
+resolved before B rather than after.
+
+**It was not a near-miss — the abort was correct.** `health_ok()` waits for a new *archive* record
+(`Added record` in `weewx.log`). The last one before the abort was **00:04:20**; the next was
+**01:24:24**, eighty minutes later. `HEALTH_TRIES=36` (~180 s) ran its full budget against a
+genuine absence. RapidFire loop publications are not archive records: the ~56 s reception island
+was too short and too late to close a 60 s archive interval and clear the write lag. DEC-0061's
+budget arithmetic holds and needs no change.
+
+The lesson is about *reading* the evidence, not the apparatus: loop-level publications and archive
+records are different things, and conflating them made a correct abort look like a defect.
