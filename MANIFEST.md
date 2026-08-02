@@ -27,7 +27,8 @@ Nothing here is read at session start — pull by name, mid-session, when the ta
 | `docs/INTERFACES.md` | **the data contract** — loop-JSON fields + InfluxDB schema | changing anything a consumer reads; this is the repo's real deliverable |
 | `docs/DATA_ERRATA.md` | known-bad observations + corrections (`ERR-####`, DEC-0025) | investigating a suspect historical reading, or making a retrospective correction |
 | `CHANGES-FROM-UPSTREAM.md` | honest statement of the fork's divergence (DEC-0034) | changing driver behavior vs. upstream; preparing an upstream PR |
-| `ops/rx_experiment.sh` | the RX campaign apparatus — schedule, swap, health check, abort | campaign tracking or designing campaign B |
+| `ops/rx_experiment.sh` | the RX campaign apparatus — schedule, swap, health check, abort. Currently loaded: **campaign B** (pilot + hold + square, DEC-0064) | campaign tracking or campaign design |
+| `docs/CAMPAIGN-B-RUNBOOK.md` | the swap-night checklist — owner gates, timeline, rollback paths, expected numbers | the 08-07 swap night, or any campaign-B question |
 | `ops/soak_check.sh` | acceptance-criteria verdict (`EXPECT_IMAGE` tracks the deployed tag) | after any deploy; any time a fresh verdict is wanted |
 | `scripts/check_secrets.sh` | the secret gate (+ `scripts/test_check_secrets.sh`) | before every commit — **with a planted-payload positive control** |
 
