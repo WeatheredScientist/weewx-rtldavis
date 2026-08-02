@@ -764,6 +764,19 @@ class ProcManager():
                 yield lines
                 lines = []
 
+    def drain_stderr(self, max_lines=50):
+        # Post-mortem drain, for use AFTER the process has exited (S62).
+        # get_stderr() above is gated on running(), so once the process is
+        # dead it exits on the first condition check and yields nothing --
+        # discarding the process's dying words at exactly the moment they
+        # matter. That cost us the root cause during the 2026-08-02 outage
+        # (ERR-0005). Shaped like get_stdout(): drain the queue, no gate.
+        # Bounded so a dying process cannot dump an unbounded log.
+        lines = []
+        while not self.stderr_queue.empty() and len(lines) < max_lines:
+            lines.append(self.stderr_queue.get().decode('utf-8').strip())
+        return lines
+
 
 class Packet:
 
@@ -1407,7 +1420,16 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # so `lines` is falsy here. Kept as a defensive log.
                         loginf("missed (unparsed): %s" % lines)
         else:
-            logerr("err: %s" % self._mgr.get_stderr())
+            # S62: was `logerr("err: %s" % self._mgr.get_stderr())`, which
+            # formatted the GENERATOR's repr -- the log line read
+            # "<generator object ProcManager.get_stderr at 0x...>" and the
+            # real stderr was never read. Iterating it would not have helped
+            # either; see drain_stderr(). ERR-0005.
+            _err = self._mgr.drain_stderr()
+            if _err:
+                logerr("rtldavis exited; last stderr: %s" % " | ".join(_err))
+            else:
+                logerr("rtldavis exited with no stderr captured")
             raise weewx.WeeWxIOError("rtldavis process is not running")
 
     # NOTE (S24 L5): parse_raw, parse_text, and ch_to_xmit are declared
