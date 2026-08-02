@@ -320,13 +320,19 @@ nothing was buffered and nothing was lost in the restarts; the data was never ca
 
 ### Two findings this incident earns
 
-**1. The abort may have been a near-miss of a known class.** The apparatus declared "did not produce
-records" at 00:08:21 — while loop data was flowing at 71% and a RapidFire record published at 00:08:22.
-The health check tests for an *archive* record, and one plausibly had not landed inside the settle
-window yet, so this is not necessarily a defect. But `ops/rx_experiment.sh` already carries a comment
-about exactly this failure (a prior version "aborted a live campaign 3 seconds early"; measured
-weewxd-init-to-first-record = 104 s). Worth re-checking the settle margin before campaign B runs
-unattended for 8 days. **Unresolved — do not assume either way.**
+**1. The abort was CORRECT — checked and cleared (S62).** It first looked like a near-miss of the
+DEC-0061 class: the apparatus declared "did not produce records" at 00:08:21 while loop data was
+flowing at 71% and a RapidFire record published at 00:08:22. It was not. The health check waits for a
+new **archive** record (`Added record` in `weewx.log`), and the log is unambiguous:
+
+| Last archive record before the abort | Next archive record |
+|---|---|
+| **00:04:20** | **01:24:24** (80 minutes later) |
+
+`HEALTH_TRIES=36` (~180 s) ran its full budget against a genuine absence. RapidFire loop publications
+are **not** archive records — the ~56 s reception island was both too short and too late to close a
+60 s archive interval and clear the write lag. The DEC-0061 budget arithmetic holds. **The check is
+sound and will not spuriously abort campaign B.**
 
 **2. The auto-remediation made things worse.** Nine USB unbind/rebind resets accomplished nothing
 across 75 minutes, and reset #10 at 01:27:17 preceded, by 46 seconds, a *new and worse* failure mode in
