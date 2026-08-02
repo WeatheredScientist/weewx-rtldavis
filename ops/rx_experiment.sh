@@ -65,44 +65,85 @@ CONTAINER=weewx-rtldavis-v2
 
 DRY_RUN="${DRY_RUN:-0}"
 
-# Abort tripwire. Baseline is 73.3% mean, sd 4.67 on 5-min samples (S56 measured,
-# 447 samples). A 30-min mean has SE ~1.9 pts, so 55% sits ~9.6 SE below baseline:
-# it cannot fire on noise, only on a genuine collapse.
-ABORT_PCT=55
+# Abort tripwire — CAMPAIGN B (no LNA). The no-LNA baseline is genuinely unknown:
+# the June plateau (rxCheckPercent 67.45, sd 3.22 on 5-min bins, n=4321) is the
+# nearest anchor, but the record is ambiguous about its LNA state (DEC-0064), and
+# the overnight pilot on 08-07 is the first honest no-LNA measurement. So the
+# floor is deliberately forgiving: 50% sits ~5 SE below even a pessimistic 62%
+# baseline on a 30-min mean. The pilot runs its gain arms HIGH -> LOW on purpose:
+# if a low arm finds the cliff and trips this, the high arms are already
+# harvested, prod restores to baseline, and the sticky STOP waits for morning —
+# an overnight abort IS a pilot result, not a failure.
+ABORT_PCT=50
 ABORT_SAMPLES=6          # 6 x 5-min samples = 30 min
 SETTLE_SECS=600          # ignore the first 10 min after a swap (restart transient)
 
 # ── The arms ──────────────────────────────────────────────────────────────────
-# CAMPAIGN A — LNA IN CIRCUIT (antenna -> LNA -> coax -> dongle, bias-tee fed).
-# 2x2 factorial: gain {372, 207} x ex {0, 50}.
-#   gain 372 = incumbent. 207 = DEC-0017's with-preamp optimum, never re-tested.
-#   ex 0 = receiveWindow 300 (upstream default). ex 50 == receiveWindow 350,
-#   because upstream sums them: int64((receiveWindow + ex) * 1000000). Verified
-#   in lheijst/rtldavis master; corroborated by our own data (-ex 100 and rw400
-#   measured the same ~63%, which is what equivalence predicts).
-# Every arm is spelled uniformly, including -ex 0, so verification is one shape.
+# CAMPAIGN B — LNA PHYSICALLY REMOVED (antenna -> coax -> dongle, bias tee OFF
+# via the v2.0.12 image's BIAS_TEE=0). DEC-0064; campaign A was DEC-0059/0061.
+#
+# Three arm families, all spelled as complete literals (safety property #1):
+#
+#   P*  — the OVERNIGHT PILOT (08-07 00:35-04:20): gain-only, HIGH -> LOW, 45 min
+#         each. Bounds the no-LNA gain curve and shakes down the whole apparatus
+#         before the 8-day campaign commits. Pre-registered as ARM-SELECTION
+#         INPUT ONLY — sequential and hour-confounded, never adoption evidence.
+#   H   — the FRIDAY HOLD: identical settings to arm A but a distinct label, so
+#         the daylong baseline-verification window harvests under its own tag
+#         and can never contaminate arm A's campaign samples (the S60
+#         phantom-block lesson, applied forward).
+#   A-D — the campaign square. 2x2 factorial: gain {372, 496} x ex {0, 50}.
+#         372 = incumbent and the CROSS-CAMPAIGN ANCHOR (same value ran in
+#         campaign A, so the LNA contrast is measured at identical settings).
+#         496 = R820T max (49.6 dB): with ~20 dB of front-end gain gone the
+#         optimum moves up (do not reuse A's 207 — both its points would sit too
+#         low). ex semantics unchanged from A: ex N == receiveWindow 300+N,
+#         upstream sums them (verified lheijst/rtldavis master, DEC-0059).
+#         -fc 0 -ppm 0 everywhere: changing them between campaigns would
+#         confound the LNA contrast (DEC-0064).
 arm_cmd() {
   case "$1" in
-    A) echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0"  ;;
-    B) echo "    cmd = /usr/local/bin/rtldavis -gain 207 -v -fc 0 -ppm 0 -ex 0"  ;;
-    C) echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 50" ;;
-    D) echo "    cmd = /usr/local/bin/rtldavis -gain 207 -v -fc 0 -ppm 0 -ex 50" ;;
+    P496) echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 0" ;;
+    P449) echo "    cmd = /usr/local/bin/rtldavis -gain 449 -v -fc 0 -ppm 0 -ex 0" ;;
+    P402) echo "    cmd = /usr/local/bin/rtldavis -gain 402 -v -fc 0 -ppm 0 -ex 0" ;;
+    P372) echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0" ;;
+    P328) echo "    cmd = /usr/local/bin/rtldavis -gain 328 -v -fc 0 -ppm 0 -ex 0" ;;
+    H)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0" ;;
+    A)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0"  ;;
+    B)    echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 0"  ;;
+    C)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 50" ;;
+    D)    echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 50" ;;
     *) return 1 ;;
   esac
 }
 
 # ── The schedule (THE PRE-REGISTRATION) ───────────────────────────────────────
-# Latin square: each arm visits each 6h slot exactly twice over 8 days, so
-# time-of-day and diurnal drift cancel instead of confounding.
+# Three phases in one table; the tick machinery treats them identically.
+#
+# PHASE 1 — overnight pilot, Friday 08-07 00:35-04:20. Five 45-min gain blocks,
+# HIGH -> LOW (see the arms comment for why), landing entirely inside the
+# 00-06 best-reception hours and finishing before the site's hour-07 notch
+# (BACKLOG §Durable RF findings). First row 00:35 leaves ~25 min after campaign
+# A's 00:05 self-termination for: archiving A's artifacts, deploying the
+# v2.0.12 image (bias tee off) on the owner's in-chat GO, the 20-40s physical
+# LNA removal, health check, and `install`. due_arm() self-heals a late start —
+# a slip shortens pilot block 1 rather than skipping it.
+#
+# PHASE 2 — the H hold, 04:20 Friday through Saturday 00:05. Baseline settings
+# under a distinct label: the daylong no-LNA baseline-verification window,
+# including how the hour-07/19 notch presents without the LNA.
+#
+# PHASE 3 — the campaign square, 08-08 00:05 -> 08-16 00:05. Latin square: each
+# arm visits each 6h slot exactly twice over 8 days, so time-of-day and diurnal
+# drift cancel instead of confounding.
 #   Day 1: A B C D    Day 3: C D A B    Day 5: A B C D    Day 7: C D A B
 #   Day 2: B C D A    Day 4: D A B C    Day 6: B C D A    Day 8: D A B C
 # Slots are :05 past 00/06/12/18 local, so the monitor's 6h reception summary
 # (which fires on the hour) has already closed the preceding block cleanly.
-# REGENERATED S57 for a 2026-07-30 start. The first attempt (2026-07-29 start)
-# was installed mid-day and aborted in its third block, so day 1 lost A@00:05
-# entirely, got a partial B@06:05, and lost C@12:05 — three damaged cells, which
-# is exactly the imbalance the square exists to prevent. Restarting on a clean
-# day boundary is cheaper than analyzing a confounded run.
+# Starting on a clean day boundary is the S57 lesson (the 07-29 mid-day start
+# damaged three cells). The H->A swap at 08-08T00:05 is a real swap (different
+# label, same settings): it restarts the container and harvests the hold under
+# its own tag, so the square's arm-A samples start clean.
 #
 # NOTE: there is no `schedule --generate` mode — the comment that used to sit
 # here promised one and the code never had it. The table is generated dev-side
@@ -110,42 +151,49 @@ arm_cmd() {
 #   rows = ["A B C D","B C D A","C D A B","D A B C"] * 2
 #   slots = ["00:05","06:05","12:05","18:05"]        # start + i days, zip(slots,row)
 #   then one final "<start + 8 days>T00:05|BASELINE" self-terminator row.
-# tests/test_rx_experiment.py machine-checks the balance, order and terminator.
+# tests/test_rx_experiment.py machine-checks the balance, order, pilot
+# structure, hold placement and terminator.
 # LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
 SCHEDULE="
-2026-07-30T00:05|A
-2026-07-30T06:05|B
-2026-07-30T12:05|C
-2026-07-30T18:05|D
-2026-07-31T00:05|B
-2026-07-31T06:05|C
-2026-07-31T12:05|D
-2026-07-31T18:05|A
-2026-08-01T00:05|C
-2026-08-01T06:05|D
-2026-08-01T12:05|A
-2026-08-01T18:05|B
-2026-08-02T00:05|D
-2026-08-02T06:05|A
-2026-08-02T12:05|B
-2026-08-02T18:05|C
-2026-08-03T00:05|A
-2026-08-03T06:05|B
-2026-08-03T12:05|C
-2026-08-03T18:05|D
-2026-08-04T00:05|B
-2026-08-04T06:05|C
-2026-08-04T12:05|D
-2026-08-04T18:05|A
-2026-08-05T00:05|C
-2026-08-05T06:05|D
-2026-08-05T12:05|A
-2026-08-05T18:05|B
-2026-08-06T00:05|D
-2026-08-06T06:05|A
-2026-08-06T12:05|B
-2026-08-06T18:05|C
-2026-08-07T00:05|BASELINE
+2026-08-07T00:35|P496
+2026-08-07T01:20|P449
+2026-08-07T02:05|P402
+2026-08-07T02:50|P372
+2026-08-07T03:35|P328
+2026-08-07T04:20|H
+2026-08-08T00:05|A
+2026-08-08T06:05|B
+2026-08-08T12:05|C
+2026-08-08T18:05|D
+2026-08-09T00:05|B
+2026-08-09T06:05|C
+2026-08-09T12:05|D
+2026-08-09T18:05|A
+2026-08-10T00:05|C
+2026-08-10T06:05|D
+2026-08-10T12:05|A
+2026-08-10T18:05|B
+2026-08-11T00:05|D
+2026-08-11T06:05|A
+2026-08-11T12:05|B
+2026-08-11T18:05|C
+2026-08-12T00:05|A
+2026-08-12T06:05|B
+2026-08-12T12:05|C
+2026-08-12T18:05|D
+2026-08-13T00:05|B
+2026-08-13T06:05|C
+2026-08-13T12:05|D
+2026-08-13T18:05|A
+2026-08-14T00:05|C
+2026-08-14T06:05|D
+2026-08-14T12:05|A
+2026-08-14T18:05|B
+2026-08-15T00:05|D
+2026-08-15T06:05|A
+2026-08-15T12:05|B
+2026-08-15T18:05|C
+2026-08-16T00:05|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -332,7 +380,9 @@ schedule)
     fi
   done <<< "$(echo "$SCHEDULE" | grep -v '^$')"
   echo
-  echo "Arms: A=gain372/ex0 (control)  B=gain207/ex0  C=gain372/ex50  D=gain207/ex50"
+  echo "Pilot (08-07, 45 min each, HIGH->LOW): P496 P449 P402 P372 P328 — arm-selection input only"
+  echo "H = Friday hold, baseline settings under their own harvest tag"
+  echo "Square: A=gain372/ex0 (control/anchor)  B=gain496/ex0  C=gain372/ex50  D=gain496/ex50"
   echo "32 blocks, 8 blocks per arm, 48h accumulated per arm."
   ;;
 
