@@ -2877,3 +2877,104 @@ A's completion slipping (schedule regenerates dev-side, 24 h postponement path i
 the pilot finding the gain curve peaked at/below 402 (GATE 2 shifts the high arm before the
 square starts); the owner's answer on the June plateau (moves the expected-numbers table and
 the acceptance band, nothing structural).
+
+---
+
+## DEC-0065 — The watchdog escalates and hands off; it does not acquire a bigger hammer
+
+**Status:** Accepted · **Date:** 2026-08-02 (S62) · **Caused by** ERR-0005 · **amends** the
+auto-remediation half of `weewx_monitor.py` · owner-approved, including an explicit decision
+*against* the automatic container recreate the owner initially asked for
+
+### What this settles
+
+How the USB watchdog behaves when its remedy does not work. Before this it had exactly one
+response, applied without limit and without evaluation. It now tries a bounded number of times,
+checks whether each attempt worked, and escalates to a human when they don't.
+
+### What the incident measured
+
+ERR-0005 is the first time this loop was observed under a fault it could not fix:
+
+| Observation | Value |
+|---|---|
+| USB resets fired | **9**, across 75 minutes |
+| Resets that restored reception | **0** |
+| Emails sent during the outage | **17** in 80 minutes |
+| Emails distinguishing the 9th reset from the 1st | **0** |
+| Time from outage start to correct detection | **8 minutes** (RECEPTION ALERT, 00:13) |
+
+Reset #10 at 01:27:17 preceded, by 46 seconds, a strictly worse failure mode: the dongle still
+enumerated for `rtl_biast` (device found, R820T tuner found, bias-tee command returning success)
+while `rtldavis` could no longer claim it for streaming. The stall-recovery loop had separately
+killed and respawned `rtldavis` ~18 times to no effect.
+
+**Detection was never the deficiency and is not changed here.** The monitor caught the outage in
+eight minutes and said so. What failed was everything downstream of that.
+
+### The decision
+
+**1. A remedy that is never evaluated is a ritual, not a remedy.** `watchdog_poll()` now judges
+each reset by whether reception recovered within `RESET_VERIFY_S`. The old watchdog had no
+concept of its own effectiveness, which is why 9 failures looked identical to 9 attempts.
+
+**2. Bounded, then escalate.** Three ineffective resets and it stops resetting entirely and
+sends one unmistakable alert. `RESET_VERIFY_S` (180 s) is deliberately **shorter** than
+`RESET_CD` (300 s), so every attempt is judged before another is permitted — the counter can
+never advance on an attempt whose verdict is still pending. Escalation lands ~18 minutes after
+the first reset; for ERR-0005 that is an alert at ~00:29 instead of reset #10 at 01:27, and
+resets #4–#10 never fire, so the worse failure mode never happens.
+
+**3. "not running" is a different fault from "stalled".** A stall means the process runs and
+yields nothing; "not running" means it dies on startup. A USB unbind/rebind does not fix the
+latter and, on this evidence, plausibly caused it. `watchdog_not_running()` therefore never
+resets — it escalates immediately.
+
+**4. Alert economy is part of alerting.** Only the first reset of an outage emails. Nine
+identical "RTL-SDR reset" notices is how the one alarm that mattered got buried; a channel that
+cries wolf is not a channel.
+
+### Why NOT the automatic container recreate
+
+The owner's stated goal was to "autoinitiate proven fixes." Applying that bar honestly, the
+container recreate does not qualify:
+
+- **n = 1.** It worked once.
+- **We cannot explain it.** The campaign apparatus's own `restore_baseline` did
+  `kill; sleep 3; start` at 00:08:33 and reception stayed dead for 75 minutes; `kill; rm; run`
+  at 01:48:41 restored it. Nobody has established why those differ. A stale device-cgroup entry,
+  an orphaned USB claim, or simple coincidence with a fault that had cleared by 01:48 all remain
+  live explanations.
+- **`rm` is not reversible.** Automating it means reconstructing a `--privileged` container's
+  full run line correctly, unattended, or production is simply gone.
+
+Automating a remedy we cannot explain is how the nine-futile-resets pattern gets recreated at a
+larger blast radius. Instead, `build_recreate_cmd()` derives the command from the **live**
+container via `docker inspect` — never the NAS `docker-compose.yml`, which is stale and
+decorative — and puts it in the escalation email. One paste instead of 105 minutes, without
+handing an unexplained hammer to an unattended process. It returns `None` rather than a
+half-right line, and redacts env values whose names look credential-shaped: this monitor ships
+in a **public** repo and another user's container may carry real keys (DEC-0062).
+
+### Deliberately unchanged
+
+The vbus reset stays as the first-line remedy — it is bounded now, not demoted. `WU_RF_MIN_PCT`
+stays at 60 even though it fired on the 03:15 dew dip in the no-LNA regime; retuning it is a
+separate decision that wants campaign B's data, not this one's. Detection logic is untouched.
+
+### What would change this
+
+Establishing **why** the recreate works would make a phase-2 auto-recreate defensible — gated
+behind a dry-run-tested run-line derivation, a hard attempt cap, and a refusal to act when
+`docker inspect` fails. Evidence that the vbus reset has *never* resolved a stall would demote
+it entirely rather than merely bound it. And a no-LNA regime that trips `WU_RF_MIN_PCT` routinely
+would move that threshold — not this escalation logic.
+
+### Related, unresolved
+
+ERR-0005 also logged a **campaign-A abort near-miss**: the apparatus declared "did not produce
+records" at 00:08:21 while loop data flowed at 71% and a RapidFire record published at 00:08:22.
+The health check tests for an *archive* record, so this is not necessarily a defect — but
+`ops/rx_experiment.sh` already carries a comment about this exact failure class (a prior version
+aborted a live campaign 3 seconds early; measured weewxd-init-to-first-record = 104 s). That
+check runs unattended for 8 days once campaign B starts. **Resolve before B, not after.**
