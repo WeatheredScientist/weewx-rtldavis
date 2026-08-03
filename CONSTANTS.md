@@ -53,7 +53,7 @@ about a *different* file proves nothing about this one.
 | Published image | `:v2.0.11` + `:latest` — matches prod, no drift |
 | Rollback | `:v2.0.10`, still on the NAS and Docker Hub |
 | Prod baseline tag | `prod-baseline-20260728b` (`main` == this) |
-| Driver banner | `0.20+ws.3` |
+| Driver banner | `0.20+ws.4` |
 | Release mechanics | no git on the NAS; the `docker-compose.yml` there is stale/decorative — always `docker inspect` the live container. `kill` → `rm` → `sleep 3` → `run`, never `compose up` |
 
 ## Hardware / site
