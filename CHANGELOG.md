@@ -5,6 +5,44 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S63] — 2026-08-03 — The recurring "reception dropouts" are process freezes, and the driver already knew
+
+Diagnostic session, no production change. Nothing was deployed; campaign B stays held.
+
+- **DEC-0067 — they are not reception dropouts.** `get_stderr()` is bounded at 10 s, so a *running*
+  main thread that hears no RF raises `rtldavis process stalled` at 150 s. Across the silent
+  208–218 s gaps it **never fired** — the main thread was not executing. **The receiver was fine;
+  the weewx process freezes**, ~3.5 min, roughly once a day. The discriminator was already deployed
+  and already correct; what was missing was reading its *silence* as data.
+- **Measured, not asserted:** genuine RF loss is confined **entirely to ERR-0005** — 21 driver
+  detections on 08-02, **0** on 07-30, 07-31, 08-01 and 08-03. So ERR-0005 is a single incident, not
+  the head of a pattern. Its own root cause is still unestablished.
+- **The standing watch is answered and closed.** A freeze on **07-30 with the LNA still installed**
+  proves the dropouts are **not** new to the no-LNA regime. Removing the LNA did not cause them.
+- **The instrument was the problem, not the weather.** The monitor counts *published output*, so a
+  frozen process and a deaf receiver both read `WINDOW: 0/21 (0%)`. Every "unexplained dropout" was
+  scored by a metric that cannot make the distinction the watch existed to make.
+- **A freeze also misdates what it recovers.** Packets are stamped at *parse* time, so a backlog
+  collapses onto the resume instant: the frozen minutes have no records at all and the next record
+  absorbs ~3.5 min of packets — distorting the very counters campaign B measures, down then up.
+- **Campaign B's gate is reframed, not lifted.** The recurring class is explained in kind and
+  bounded (~0.4 % of wall-clock); the launch condition becomes mechanical — detect and exclude
+  freeze windows — instead of "wait until the instrument is trusted".
+- **`database is locked` is recurrent and pre-dates the LNA** (08-01 15:08, 08-02 19:45). The 10-min
+  outage decomposes as ~106 s hung threads + **120 s of weewx's own hardcoded wait** + ~5 min
+  restart; the identical lock on 08-01 cost 4 min because threads exited in 0.26 s. **The archive DB
+  is not in WAL mode** — the first thing to try.
+- **Ruled out with evidence:** NAS-wide stall (influxdb's timer fired mid-freeze, sub-ms on
+  schedule), the S37 stdout wedge (live config has **no console handler**), CPU-quota throttling
+  (DSM 4.4 exposes no `cfs_quota_us`), `pressure_service` (82 fetches, worst 8.99 s), the monitor's
+  6-hourly read, and the HH:04 gap cluster (campaign-A swaps).
+- **Still open: why it freezes.** All threads stop together and nothing is logged — consistent with
+  a thread blocking on the bind-mounted log volume while holding the logging lock (box runs at
+  **18.6 % cumulative iowait**). Unproven; the `D`-vs-`S` capture did not land before session end.
+- Also corrected S62's stale handoff: the branch had merged and the watchdog had been deployed
+  between sessions, so BOOT.md was telling S63 to redo both.
+
+---
 ## [S62] — 2026-08-02 — A 105-minute receiver outage (ERR-0005), the follow-ups it earned, and campaign B moved up 4 days
 
 Incident session. Prod went deaf at 00:05 and came back at 01:50; the rest of the day was spent on
