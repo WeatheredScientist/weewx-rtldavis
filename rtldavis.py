@@ -40,7 +40,7 @@
 #
 #   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
 #   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
-#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.3'
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.4'
 #   so the difference is visible in the logs. Bugs here are ours, not upstream's.
 #
 #   Changes, with the date each was recorded in git. Entries dated 2026-07-04
@@ -83,6 +83,13 @@
 #               over 60 s, so a genuine delta > 16 is physically impossible at
 #               observed gaps (~4 s/tip ceiling). Halves the residual phantom
 #               a corrupt in-bounds counter reading can book (0.30 -> 0.16 in).
+#   2026-08-02  post-mortem stderr drain (ERR-0005): the "process is not
+#               running" branch formatted a GENERATOR's repr, logging
+#               "<generator object ProcManager.get_stderr at 0x...>" instead of
+#               the error. Iterating it would not have helped either -- that
+#               generator is gated on running(), so once the process is dead it
+#               yields nothing. New drain_stderr() reads the queue with no gate.
+#               Cost us the root cause during a 105-minute outage. (ws.3 -> ws.4)
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   These fixes are offered upstream; this fork exists to ship them in the meantime.
@@ -174,7 +181,7 @@ DRIVER_NAME = 'Rtldavis'
 # version identifier: upstream base 0.20, WeatheredScientist revision 1. Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.3'
+DRIVER_VERSION = '0.20+ws.4'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
@@ -763,6 +770,19 @@ class ProcManager():
             except queue.Empty:
                 yield lines
                 lines = []
+
+    def drain_stderr(self, max_lines=50):
+        # Post-mortem drain, for use AFTER the process has exited (S62).
+        # get_stderr() above is gated on running(), so once the process is
+        # dead it exits on the first condition check and yields nothing --
+        # discarding the process's dying words at exactly the moment they
+        # matter. That cost us the root cause during the 2026-08-02 outage
+        # (ERR-0005). Shaped like get_stdout(): drain the queue, no gate.
+        # Bounded so a dying process cannot dump an unbounded log.
+        lines = []
+        while not self.stderr_queue.empty() and len(lines) < max_lines:
+            lines.append(self.stderr_queue.get().decode('utf-8').strip())
+        return lines
 
 
 class Packet:
@@ -1407,7 +1427,16 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # so `lines` is falsy here. Kept as a defensive log.
                         loginf("missed (unparsed): %s" % lines)
         else:
-            logerr("err: %s" % self._mgr.get_stderr())
+            # S62: was `logerr("err: %s" % self._mgr.get_stderr())`, which
+            # formatted the GENERATOR's repr -- the log line read
+            # "<generator object ProcManager.get_stderr at 0x...>" and the
+            # real stderr was never read. Iterating it would not have helped
+            # either; see drain_stderr(). ERR-0005.
+            _err = self._mgr.drain_stderr()
+            if _err:
+                logerr("rtldavis exited; last stderr: %s" % " | ".join(_err))
+            else:
+                logerr("rtldavis exited with no stderr captured")
             raise weewx.WeeWxIOError("rtldavis process is not running")
 
     # NOTE (S24 L5): parse_raw, parse_text, and ch_to_xmit are declared
