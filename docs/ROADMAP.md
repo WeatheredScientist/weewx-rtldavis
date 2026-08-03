@@ -25,7 +25,9 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
   at or past S66 and this line still says S66, that itself is the signal it's overdue — run the
   same pass as S56 did (diff every open/pending item here against DECISIONS.md, CHANGELOG.md, and
   `BOOT.md` and `CHANGELOG.md`).
-- Last full reconciliation: **S56, 2026-07-28** (this pass).
+- Last full reconciliation: **S56, 2026-07-28**. Targeted DEC-0057 pass at **S63, 2026-08-03**
+  (DEC-0067 — the watchdog and outage-explanation items closed, campaign B's gates restated, the
+  freeze split out from the DB lock). The next *full* pass is still due by S66.
 
 ## The vision
 
@@ -153,27 +155,50 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       experiment run across intermittent unexplained deafness yields data that *looks* like results,
       and B's 32 swaps each expose it to the abort that already killed campaign A. Apparatus, tests,
       runbook and image are all ready; only the timing is open. **Schedule dates are now in the past
-      — regenerate before any `install`.** Gates: explain the outages, fix the DB-lock/thread-hang
-      defect, deploy the watchdog.
+      — regenerate before any `install`.**
+      **Gates restated after DEC-0067 (S63).** "Explain the outages" is substantially met: the
+      recurring class is **process freezes, not RF loss**, bounded (~1/day, ~3.5 min) and
+      pre-dating the LNA removal, while ERR-0005 is a **single incident** (21 driver detections
+      that day, 0 on every other). The watchdog gate is **done**. What replaces them is narrower
+      and mechanical: **make the metric freeze-aware** — the monitor counts *published output*, so
+      a freeze and a deaf receiver both read `WINDOW: 0/21`, and a ~3.5 min freeze moves a 6 h
+      arm block's mean ~0.8 pts against a 2 pt adoption threshold (then *inflates* the record
+      after it, via parse-time stamping). Detect and exclude freeze windows using DEC-0067's log
+      rule. The DB-lock fix stays a gate.
       **First honest no-LNA telemetry already accruing** — ~14 h at gain 372 gave mean 72.6% with
       no hour-07 notch, against campaign A's pooled 72.4%. Treat that as suggestive only: A's
       figure pools all four arms including gain 207, so it is biased low, and the clean comparison
       is B's 372 anchor against A's — which is exactly why 372 is in both campaigns.
-- [ ] **Deploy the escalating watchdog (DEC-0065) to the NAS** — `weewx_monitor.py` is a **mounted**
-      artifact, not baked: `scp` from the merged `dev` tip + an owner-run restart, independent of
-      the v2.0.12 image. Should land **before** campaign B runs 8 days unattended, since the old
-      loop's failure mode (9 ineffective resets, harm on the 10th) is what turned ERR-0005 from an
-      outage into a worse outage.
-- [ ] **P0 — explain the two unexplained 08-02 outages.** ERR-0005 (105 min) and the 13:47 dropout
-      (3 min). Both: driver alive and healthy, zero packets on all channels, no stall and no DB
-      error. One was cleared by a container recreate that a `kill`+`start` 20 min earlier had not
-      fixed — nobody knows why. **This gates campaign B** (DEC-0066).
-- [ ] **P0 — the `database is locked` thread and the uploader-thread hang.** A standalone 10-min
-      outage at 19:45 on 08-02 with no restart churn preceding it (S62 first misread it as
-      downstream noise). The lock itself is momentary; what made it a 10-minute outage is that
-      **OgoxeUploader, Influx and OWM all refused to shut down**, holding the teardown ~100 s with
-      the driver killed. Any future DB hiccup does the same. Archive DB readers: the monitor
-      (read-only, 6-hourly), the dashboard, `weectl`.
+- [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE**, verified live at the
+      S63 open: the NAS `weewx_monitor.py` matches the repo tip byte-for-byte, with zero resets or
+      escalations since. It was deployed between sessions, outside a session, which is why S62's
+      handoff still listed it as pending.
+- [x] ~~**P0 — explain the two unexplained 08-02 outages**~~ — **substantially answered by DEC-0067
+      (S63).** They were two different phenomena filed under one name. The driver's own 150 s
+      watchdog is the discriminator and had been reporting correctly all along: it fires only when
+      the main thread is executing, so a >150 s output gap **with** `rtldavis process stalled` is
+      RF loss and a **silent** one is a process freeze. ERR-0005 fired it 21 times → genuine RF
+      outage, and **0 detections on every other day measured** → a single incident, not a pattern.
+      The 13:47 dropout fired nothing → **the receiver was fine and the process was frozen.**
+      **Still open, tracked below: why it freezes.** ERR-0005's own root cause also remains
+      unestablished, but it no longer gates campaign B on its own.
+- [ ] **P0 — why does the weewx process freeze? (DEC-0067)** ~3.5 min, roughly once a day; seen
+      07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59. All threads stop together and nothing is
+      logged — consistent with a thread blocking on the bind-mounted log volume while holding the
+      shared logging lock, on a box at **18.6 % cumulative iowait**. **Unproven.** The
+      discriminating capture is thread state `D` (uninterruptible I/O) vs `S` during a freeze:
+      poll `weewx.log`'s size, then read `/proc/<tid>/stat` for the thread IDs in
+      `/sys/fs/cgroup/cpuacct/docker/<CID>/tasks`. Read-only; no NAS deploy needed. Ruled out
+      already: NAS-wide stall, the S37 stdout wedge, CPU-quota throttling, `pressure_service`.
+      Upstream hit this and worked around it without diagnosing it (`get_stderr()`'s 10 s cap).
+- [ ] **P0 — the `database is locked` defect.** Recurrent and **pre-dates the LNA removal**
+      (08-01 15:08, 08-02 19:45; earlier S59) — and **independent of the freezes above**. DEC-0067
+      decomposed the 10-min outage: ~106 s of hung uploader threads + **120 s of weewx's own
+      hardcoded wait** + ~5 min restart, so the thread hang is only ~18 % of it — the identical
+      lock on 08-01 cost 4 min because the threads exited in 0.26 s. **Lead fix: the archive DB is
+      not in WAL mode** (no `-wal` file while actively written), which is the standard cause of
+      exactly this contention; bound the uploader-thread joins second. Archive DB readers: the
+      monitor (read-only, 6-hourly), the dashboard, `weectl`.
 - [x] ~~24 h **receiveWindow sweep**; reconcile image tag ↔ Dockerfile~~ — **dissolved by DEC-0059.**
       `-ex N` ≡ `receiveWindow 300+N` (upstream sums them), so the window is a mounted-config knob,
       no rebuild, and it is simply the second factor of the campaigns above. The `rw*` image tags
