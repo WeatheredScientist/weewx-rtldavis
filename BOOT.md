@@ -14,49 +14,52 @@ is a **separate repo** — don't make dashboard changes here.
 
 ## ▶ Resume here (S63)
 
-**S62 was an incident session. Campaign B was prepared, then deliberately HELD (DEC-0066).**
-Prod went deaf three times on 08-02 — 105 min (**ERR-0005**), 3 min, and 10 min. Two of the three
-are still **unexplained**. Diagnosis removed the LNA, so the swap night's physical step is done and
-the schedule is shifted in-repo, but **do not launch until the instrument is trusted.**
+**S63 found that "prod went deaf" was wrong for the recurring case (DEC-0067).** The receiver was
+fine; the **weewx process freezes** for ~3.5 min about once a day, and the monitor's metric — which
+counts *published output* — cannot tell that apart from deafness. The driver's own 150 s watchdog is
+the discriminator, and it had been reporting correctly all along: **21 firings during ERR-0005, zero
+on every other day.** So ERR-0005 is a genuine RF outage and a **single incident**; the recurring
+"dropouts" are software freezes that **pre-date the LNA removal** (one on 07-30, LNA in).
 
-### ⚠️ S62's handoff was stale — corrected below, verified fresh at S63 open (2026-08-03)
+**Campaign B stays HELD (DEC-0066)** — but its launch condition is now mechanical (detect and
+exclude freeze windows) rather than "wait until the instrument is trusted". Prod is healthy; the
+LNA is out and the schedule is shifted in-repo.
 
-`s62-incident-followups` merged and the watchdog got deployed **between S62's close and S63's
-open, outside a session** — so BOOT.md never got corrected. Don't trust "NOT landed" / "NOT
-deployed" for those two below; everything in this table was just re-verified, not carried over.
+### Current state — every row re-verified at S63 open, not carried over
+
+*(S62's handoff was stale — its branch merged and its watchdog deployed between sessions. Fixed.)*
 
 | Thing | State |
 |---|---|
-| `s62-incident-followups` | **merged** (PR #118, `bdc4f9f`). Stale local/origin branch still exists, harmless, delete when convenient |
-| `:v2.0.12` image | the S62 local build is **gone** — no image on this Mac, no NAS build dir. Rebuild from the now-merged tip when B actually launches |
-| Campaign B apparatus | schedule shifted in-repo; **still NOT deployed to the NAS** (verified: NAS `rx_experiment.sh` mtime Jul 29, unchanged — still campaign A's script) |
-| Watchdog (DEC-0065) | **deployed and live** — NAS `weewx_monitor.py` (mtime Aug 2 20:53) matches repo tip byte-for-byte; log shows healthy polling through 08-03 07:39, zero resets/escalations since |
-| Prod right now | **v2.0.11**, LNA **out**, gain 372, ~70–80% and clean per this morning's log, container up since 08-02 05:48 |
-| Campaign A | **STOPped, sentinel in place, not resuming.** Do not clear it |
-| Campaign B | **HELD (DEC-0066).** Schedule dates are still a placeholder (08-10 → 08-19); `install` refuses a stale one |
+| `s62-incident-followups` | **merged** (PR #118, `bdc4f9f`). Stale branch still exists, harmless |
+| `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip when B launches |
+| Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's, mtime Jul 29) |
+| Watchdog (DEC-0065) | **deployed and live** — NAS copy matches repo tip byte-for-byte, zero resets since |
+| Prod right now | **v2.0.11**, LNA **out**, gain 372, ~70–80%, up since 08-02 05:48 |
+| Campaign A | **STOPped, sentinel in place.** Do not clear it |
+| Campaign B | **HELD (DEC-0066).** Schedule dates are a placeholder (08-10 → 08-19) |
 
-### The schedule dates are a PLACEHOLDER — and a guard now enforces it
-
-Dates currently read **08-10 → 08-19**. That is arbitrary: it exists only so nothing sits in the
-past. **Re-shift the whole `SCHEDULE=` block to real dates when a launch is actually agreed** — a
-pure constant offset, same method as S62 (39 substitutions; the structure tests confirm the square
-survives).
-
-You do not have to remember this. `install` now **refuses** a schedule whose first row has passed
-and prints how to fix it (`schedule_started()`, S62/DEC-0066). That guard exists because
-`due_arm()` picks the *latest* row already passed, so a stale schedule fails silently: it joins
-mid-square with no pilot, or past the last row records the campaign complete without running it.
-Both look like success. A `BOOT.md` warning would not have caught it — prose does not execute
-(DEC-0040).
+**The schedule dates are a placeholder** — arbitrary, existing only so nothing sits in the past.
+Re-shift the whole `SCHEDULE=` block by a constant offset when a launch is agreed (S62's method: 39
+substitutions; the structure tests confirm the square survives). You do not have to remember this:
+`install` **refuses** a schedule whose first row has passed (`schedule_started()`, DEC-0066), because
+`due_arm()` picks the *latest* row already passed — so a stale schedule fails silently, joining
+mid-square with no pilot or recording the campaign complete without running it. Both look like
+success, and prose would not have caught it (DEC-0040).
 
 ### Before B can launch (DEC-0066)
 
-1. **Explain the two unexplained outages**, or bound them. A reception experiment run across
-   intermittent unexplained deafness produces *data that looks like results*.
-2. **Fix the DB-lock / uploader-thread defect** — see Blockers. It is what turned a momentary lock
-   into a 10-minute outage.
-3. ~~Deploy the watchdog~~ — **done**, verified live at S63 open.
-4. Then: promote + tag → rebuild `:v2.0.12` from the **merged tip** (`bdc4f9f`) → push `:v2.0.12`
+1. ~~Explain the two unexplained outages~~ — **substantially done (DEC-0067).** The recurring class
+   is explained in kind (process freeze, RF unaffected), bounded (~1/day, ~3.5 min, ~0.4 % of
+   wall-clock) and pre-dates the LNA. ERR-0005 is unexplained but is a **single incident**.
+2. **Make the campaign metric freeze-aware** — *this is now the real gate.* A ~3.5 min freeze inside
+   a 6 h arm block moves that block's mean ~0.8 pts against a **2 pt** adoption threshold, and a
+   freeze also *inflates* the record that follows it (parse-time stamping). Detect freeze windows
+   via the DEC-0067 log rule and exclude them. Not yet designed — discuss before coding.
+3. **Fix the DB-lock defect** — independent of the freezes. Try **WAL mode** on the archive DB
+   first; bound the uploader-thread joins second.
+4. ~~Deploy the watchdog~~ — **done**, verified live at S63 open.
+5. Then: promote + tag → rebuild `:v2.0.12` from the **merged tip** (`bdc4f9f`) → push `:v2.0.12`
    (`:latest` only after our own station proves it) → regenerate the schedule → the Class C deploy
    steps → `install`.
 
@@ -74,28 +77,37 @@ winner stays sealed until after B.
 20 minutes earlier had not. Nobody knows why. That gap is why DEC-0065 declined to automate the
 recreate.
 
-**Model note (closeout step 6):** S62 ran on **Opus 5**. S63 opened on **Sonnet 5** — already
-correct for execution work. The two remaining Before-B items (outage root-cause, DB-lock/thread-hang
-fix) are unfamiliar debugging, not execution — flag for escalation if picked up this session.
+**Model note (closeout step 6):** S62 ran on **Opus 5**. S63 opened on Sonnet, then the owner
+escalated to **Opus 5** for the outage diagnosis — correct call, it was unfamiliar debugging. That
+was a bare `/model`, so it **persists as the new-session default**: restore the Sonnet floor before
+the next execution-shaped session.
 
 ## Blockers
 
-1. **Two unexplained reception outages (08-02).** ERR-0005 (105 min) and a 3-min dropout at 13:47.
-   Both: driver alive and healthy, zero packets, self-recovered or fixed by a container recreate.
-   No established cause. **This blocks campaign B** (DEC-0066).
-2. **`database is locked` is now a THREAD, not a one-off.** It caused a standalone 10-minute outage
-   at 19:45 with no restart churn preceding it — S62 initially misread it as downstream noise and
-   was wrong. Worse than the lock itself: **three uploader threads (OgoxeUploader, Influx, OWM)
-   refused to shut down**, holding the teardown open ~100 s while the driver sat killed. That
-   converts any momentary DB error into a multi-minute outage. Prior sightings: S59, twice during
-   ERR-0005, then 19:45 standalone. The archive DB is read by the monitor (read-only, 6-hourly),
-   the dashboard, and `weectl` — contention is tractable to investigate.
+1. **The weewx process freezes ~3.5 min, roughly once a day. Cause unknown (DEC-0067).** Replaces
+   the old "two unexplained outages" blocker, which conflated two things. Freezes seen 07-30 08:04,
+   08-02 13:46, 08-03 02:59 — **07-30 was LNA-in, so they pre-date the LNA removal.** All threads
+   stop at once and nothing is logged; leading hypothesis is a thread blocking on the bind-mounted
+   log volume while holding the logging lock (box runs at 18.6 % cumulative iowait). **Unproven** —
+   the discriminating capture is thread state `D` vs `S` during a freeze.
+2. **ERR-0005 is still unexplained** — but is demonstrably a **single incident**, not the head of a
+   pattern (21 driver detections that day, 0 on every other). Do not let it block B on its own.
+3. **`database is locked` is recurrent and pre-dates the LNA removal** (08-01 15:08, 08-02 19:45;
+   earlier S59). Independent of the freezes. The 10-min outage decomposes as ~106 s hung threads +
+   **120 s of weewx's own hardcoded wait** + ~5 min restart — the hang is only ~18 % of it, and the
+   identical lock on 08-01 cost 4 min because threads exited in 0.26 s. **The archive DB is not in
+   WAL mode** — the standard cause of this contention, and the first thing to try.
 - **`ppm`/`fc` still unmeasured** and deliberately unchanged for B (would confound the LNA contrast).
 
 ## Ordered backlog
 
-1. **Investigate the two unexplained outages** — the gate on campaign B (DEC-0066). Then the
-   DB-lock/thread-hang defect. Then launch B.
+1. **Find out why the process freezes (DEC-0067).** Capture thread state during one: `D` =
+   blocked on I/O (leading hypothesis), `S` = lock or socket. A read-only watcher polling
+   `weewx.log`'s size and dumping `/proc/<tid>/stat` is enough and needs no NAS deploy — S63 built
+   one at `scratchpad/stallwatch.sh` but the session ended before it caught a freeze; it is **not**
+   in the repo, rebuild or re-run it. Container thread PIDs come from
+   `/sys/fs/cgroup/cpuacct/docker/<CID>/tasks`. Then: make the metric freeze-aware, fix the DB lock,
+   launch B.
 2. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at
    `interval = 15` + `backfill = 1` flag, ERR-0003's path. Back up the DB first.
 3. Post-campaign: LNA-in vs LNA-out grand comparison (A × B), final prod config decision, whether
@@ -108,10 +120,11 @@ fix) are unfamiliar debugging, not execution — flag for escalation if picked u
 
 ## Standing watches — read-only, none block the above
 
-- **Unexplained reception dropouts** — promoted to Blocker 1, but keep watching the shape. 08-02
-  gave 14 zero windows in 1106 (1.3%). On the same 5-window metric campaign A shows no zeros and a
-  min of 26, so it is **not yet proven** these are new to the no-LNA regime — the metrics differ in
-  resolution. Do not conclude the LNA's removal caused them.
+✅ **"Unexplained reception dropouts" CLOSED (S63/DEC-0067)** — answered, not just observed longer:
+  process freezes, not reception loss, and pre-dating the LNA removal. Replaced by Blocker 1. Do not
+  re-open it on a `WINDOW: 0/21` reading — that metric cannot tell a freeze from deafness, which was
+  the whole problem. Use the DEC-0067 rule: a >150 s output gap **with** `rtldavis process stalled`
+  is RF; a silent one is a freeze.
 - **Co-rejection grep** (DEC-0054): **0 hits through 08-01 18:30**. Single-token pattern
   `co-rejecting` — *multi-word `nasctl grep` patterns silently match nothing*; positive-control any
   zero.
@@ -162,6 +175,6 @@ fix) are unfamiliar debugging, not execution — flag for escalation if picked u
   (`weewx S61` vs `dash S151`). **This file is the single source of truth for the current session
   number and the handoff.**
 
-_Last updated: 2026-08-03 (S63 open) — corrected S62's stale "not landed"/"not deployed" claims after
-verifying against git and the NAS directly; nothing else changed. Session numbering: this repo's own
-counter; governed era runs S16 → …_
+_Last updated: 2026-08-03 (S63) — corrected S62's stale handoff, then rewrote Blockers and the
+standing watches around DEC-0067 (the recurring dropouts are process freezes, not RF loss). Session
+numbering: this repo's own counter; governed era runs S16 → …_

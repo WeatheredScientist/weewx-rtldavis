@@ -372,3 +372,28 @@ evidence that would have shortened this**: `user.rtldavis ERROR err: <generator 
 ProcManager.get_stderr at 0x...>` logs the *repr of a generator* instead of iterating it, discarding
 rtldavis's actual stderr at the exact moment it was needed. **Fixed S62** (`drain_stderr()`); the
 fix is baked into the image, so it lands with the v2.0.12 rebuild, not before.
+
+### Addendum (S63, 2026-08-03) — ERR-0005 is confirmed a GENUINE RF loss, and is a single incident
+
+[DEC-0067](DECISIONS.md) established a log-level discriminator between a real receiver outage and a
+freeze of the weewx process: `genLoopPackets()` raises `rtldavis process stalled` at 150 s **only if
+the main thread is executing**. Applied to ERR-0005 it fires **21 times on 2026-08-02** — so the main
+thread was running throughout and genuinely heard nothing. **This erratum is correctly filed as an RF
+outage.**
+
+Applied to every other day measured (07-30, 07-31, 08-01, 08-03): **zero** detections. ERR-0005 is
+therefore a *single incident*, not the first of a series — which is a materially different thing to
+carry forward than "the receiver is intermittently unreliable". Its root cause is still
+unestablished.
+
+**The 3-minute event at 13:47 the same day is NOT of this kind** and should not be read as a smaller
+ERR-0005. Its 209 s gap raised no stall exception, so the receiver was fine and the *process* was
+frozen. That class is recurring (~1/day), pre-dates the LNA removal, and is not an RF fault at all.
+
+**Data-integrity note for anyone analyzing a freeze window.** Packets are stamped at *parse* time,
+not receive time, so packets buffered during a freeze all collapse onto the resume instant. The
+minutes inside a freeze have **no records at all**, and the first record after it absorbs the whole
+backlog — its packet counts and `rxCheckPercent` are inflated. Both artifacts are software, not
+weather, and neither is corrected in the archive. Treat freeze-adjacent records as suspect rather
+than nulling them: the underlying observations are real, only their timestamps are wrong. Known
+freezes so far: **2026-07-30 08:04 (218 s), 2026-08-02 13:46 (209 s), 2026-08-03 02:59 (208 s)**.
