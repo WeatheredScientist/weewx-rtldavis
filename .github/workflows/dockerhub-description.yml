@@ -34,11 +34,11 @@ jobs:
 
       - name: Check out repository
         if: steps.creds.outputs.present == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Push README to Docker Hub
         if: steps.creds.outputs.present == 'true'
-        uses: peter-evans/dockerhub-description@v4
+        uses: peter-evans/dockerhub-description@v5
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
