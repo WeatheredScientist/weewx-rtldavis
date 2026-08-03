@@ -29,14 +29,21 @@ the schedule is shifted in-repo, but **do not launch until the instrument is tru
 | Watchdog (DEC-0065) | committed; **NOT deployed** — `weewx_monitor.py` is mounted, needs `scp` + owner restart |
 | Prod right now | **v2.0.11**, LNA **out**, gain 372, recovered to ~69–73%, container up since 01:48 |
 | Campaign A | **STOPped, sentinel in place, not resuming.** Do not clear it |
-| Campaign B | **HELD (DEC-0066).** Schedule dates in `ops/rx_experiment.sh` are now in the PAST — regenerate before launching |
+| Campaign B | **HELD (DEC-0066).** Schedule dates are a placeholder (08-10 → 08-19); `install` refuses a stale one |
 
-### ⚠️ The schedule is stale by design
+### The schedule dates are a PLACEHOLDER — and a guard now enforces it
 
-The −4 day shift set the pilot at 08-03 00:35, which passes unlaunched. `due_arm()` picks the
-latest row whose time has passed, so **installing the apparatus as-is would jump straight into the
-middle of the square.** Re-shift the whole `SCHEDULE=` block to future dates before any `install` —
-a pure constant offset, same method as S62 (39 substitutions, structure tests confirm the square).
+Dates currently read **08-10 → 08-19**. That is arbitrary: it exists only so nothing sits in the
+past. **Re-shift the whole `SCHEDULE=` block to real dates when a launch is actually agreed** — a
+pure constant offset, same method as S62 (39 substitutions; the structure tests confirm the square
+survives).
+
+You do not have to remember this. `install` now **refuses** a schedule whose first row has passed
+and prints how to fix it (`schedule_started()`, S62/DEC-0066). That guard exists because
+`due_arm()` picks the *latest* row already passed, so a stale schedule fails silently: it joins
+mid-square with no pilot, or past the last row records the campaign complete without running it.
+Both look like success. A `BOOT.md` warning would not have caught it — prose does not execute
+(DEC-0040).
 
 ### Before B can launch (DEC-0066)
 

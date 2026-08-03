@@ -19,6 +19,7 @@ dispatch, so what is under test is the deployed file, not a copy of its logic.
 Run:  python -m pytest tests/test_rx_experiment.py
 """
 import hashlib
+import os
 import re
 import subprocess
 import textwrap
@@ -298,4 +299,61 @@ def test_health_check_budget_covers_a_full_archive_interval():
     assert tries * sleep_s >= worst_case, (
         f"health budget {tries * sleep_s}s cannot cover the {worst_case}s worst case "
         f"(boot {boot_s} + archive interval {archive_interval_s} + write lag {write_lag_s})"
+    )
+
+
+# ── Stale-schedule guard (S62, DEC-0066) ──────────────────────────────────────
+# Campaign B was prepared with dates that went stale when the launch was held.
+# due_arm() selects the LATEST row already passed, so a stale schedule does not
+# fail loudly -- it silently starts mid-square, or past the last row reports the
+# campaign complete without running it. Both look like success, which is exactly
+# why this is a guard in the script and not a warning in a doc (DEC-0040).
+
+def _call_schedule_started(now: str):
+    prog = (
+        f'source <(sed "/^# ── Modes/,\\$d" {SCRIPT}); '
+        f'schedule_started "{now}"'
+    )
+    return subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+
+
+def _first_row_time() -> str:
+    return _schedule_rows()[0][0]
+
+
+def test_schedule_not_started_when_first_row_is_future():
+    """The normal case: a schedule whose first row is ahead of now installs."""
+    first = _first_row_time()
+    before = first[:-1] + str(int(first[-1]) - 1) if first[-1] != "0" else "2000-01-01T00:00"
+    assert _call_schedule_started(before).returncode == 1
+
+
+def test_schedule_started_when_first_row_has_passed():
+    """The trap: first row in the past means we would join mid-flight."""
+    assert _call_schedule_started("2099-01-01T00:00").returncode == 0
+
+
+def test_install_refuses_a_started_schedule(tmp_path):
+    """End-to-end: `install` must refuse rather than silently join mid-square."""
+    env = dict(os.environ, BASE_DIR=str(tmp_path))
+    prog = f'BASE_DIR={tmp_path} bash {SCRIPT} install'
+    # Force "now" past the whole schedule by faking date(1) ahead of the script.
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "date").write_text('#!/bin/sh\necho "2099-01-01T00:00"\n')
+    (fake / "date").chmod(0o755)
+    env["PATH"] = f"{fake}:{env['PATH']}"
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True, env=env)
+    assert r.returncode == 1
+    assert "REFUSING to install" in (r.stdout + r.stderr)
+
+
+def test_current_schedule_is_installable_today():
+    """Guards the guard: the shipped schedule must not already be stale, or the
+    next launch hits the refusal instead of running."""
+    import datetime
+    now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M")
+    assert _call_schedule_started(now).returncode == 1, (
+        f"shipped SCHEDULE first row {_first_row_time()} is not in the future "
+        f"(now {now}) -- regenerate it"
     )
