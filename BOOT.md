@@ -12,79 +12,107 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S62)
+## ▶ Resume here (S63)
 
-**Campaign B is GO — designed, dry-run, staged (S61, DEC-0064).** The whole mission runs from
-**`docs/CAMPAIGN-B-RUNBOOK.md` — follow it verbatim**, it is the checklist with the owner gates,
-timeline, rollback paths and expected numbers. Landed in PR (S61): apparatus rewritten (pilot + H
-hold + square, abort floor 50%), 13 tests, full DRY_RUN pass, v2.0.12 prepped (`BIAS_TEE` env +
-DEC-0062 redaction), DEC-0064, runbook.
+**S62 was an incident session. Campaign B was prepared, then deliberately HELD (DEC-0066).**
+Prod went deaf three times on 08-02 — 105 min (**ERR-0005**), 3 min, and 10 min. Two of the three
+are still **unexplained**. Diagnosis removed the LNA, so the swap night's physical step is done and
+the schedule is shifted in-repo, but **do not launch until the instrument is trusted.**
 
-**The week's fixed points:**
+### ⚠️ Read this before touching anything: S62 ended with work IN FLIGHT
 
-1. **Thu 08-06 (daytime): pre-flight.** Build v2.0.12 on the dev machine, push `:v2.0.12` +
-   `:latest` to Docker Hub, owner merges the release PR. Runbook §Pre-flight has the checklist.
-2. **Fri 08-07 00:05: swap night.** Campaign A self-terminates → archive its artifacts → deploy
-   the B apparatus → **owner GO in chat (GATE 1, owner at the dongle)** → v2.0.12 with
-   `-e BIAS_TEE=0` (the night's one Class C command) → 20–40 s SMA swap → verify → `install` →
-   pilot fires 00:35 (gain 496→328, 45 min/arm, arm-selection input only).
-3. **Fri daytime: pilot readout (GATE 2).** Confirm/adjust the square's high arm with the owner;
-   if arms change: literals + tests + re-scp before ~23:00.
-4. **Sat 08-08 00:05 → Sun 08-16 00:05: campaign B runs.** Watch only; do not read partial
-   results (the S58 lesson: a −1.2 pt day-1 "effect" dissolved by day 3). Adoption bar ≥2.0 pts,
-   no duplicate-frame regression, incumbent wins ties (DEC-0059).
+| Thing | State |
+|---|---|
+| `s62-incident-followups` | **+8 commits, NOT landed.** All gates green. Land → merge → promote |
+| `:v2.0.12` image | built locally as `weewx-rtldavis:verify-only` only — **NOT pushed**, and the release build must come from the **merged tip**, not the branch |
+| Campaign B apparatus | schedule shifted in-repo; **NOT deployed to the NAS** (still campaign A's script there) |
+| Watchdog (DEC-0065) | committed; **NOT deployed** — `weewx_monitor.py` is mounted, needs `scp` + owner restart |
+| Prod right now | **v2.0.11**, LNA **out**, gain 372, recovered to ~69–73%, container up since 01:48 |
+| Campaign A | **STOPped, sentinel in place, not resuming.** Do not clear it |
+| Campaign B | **HELD (DEC-0066).** Schedule dates in `ops/rx_experiment.sh` are now in the PAST — regenerate before launching |
 
-**Campaign A: watch only until 00:05 Friday.** As of S61 close (18:07 08-01): block 12 (arm B)
-live, 12/12 swaps healthy, zero aborts, no STOP. State `rx_experiment.state`; swaps
-`logs/rx_experiment.log` (never rotated — the live campaign starts at `swapping NONE -> A` on
-07-30 00:05; earlier lines are the aborted 07-29 run); samples `logs/rx_experiment_data.log`
-(drop first 2/block). **A's results stay unread and unadopted through the gap** — its winner is
-moot once the LNA is out; its value is the LNA-in characterization + the drift error bar.
+### ⚠️ The schedule is stale by design
 
-**Key S61 finding — there is NO honest no-LNA telemetry anywhere.** Owner confirmed the June
-plateau (67.45, sd 3.22, gain 207) was LNA-IN; S29's "pre-LNA baseline" label was wrong, and the
-no-LNA era sits in the metric-dark gap. Friday's pilot is the first real measurement — treat its
-first samples as discovery. Bonus: both plateaus LNA-in ⇒ 207→372 = **+7.4 pts** same-hardware,
-corroborating DEC-0017 directionally (uncontrolled).
+The −4 day shift set the pilot at 08-03 00:35, which passes unlaunched. `due_arm()` picks the
+latest row whose time has passed, so **installing the apparatus as-is would jump straight into the
+middle of the square.** Re-shift the whole `SCHEDULE=` block to future dates before any `install` —
+a pure constant offset, same method as S62 (39 substitutions, structure tests confirm the square).
 
-**Model floor note:** S61 escalated to Fable via a bare `/model` (desktop — always persists).
-Design is done; Thursday/Friday are execution. Restore Sonnet before the next session, or note
-the running model at its start (OPS-DEC-0062 discipline).
+### Before B can launch (DEC-0066)
+
+1. **Explain the two unexplained outages**, or bound them. A reception experiment run across
+   intermittent unexplained deafness produces *data that looks like results*.
+2. **Fix the DB-lock / uploader-thread defect** — see Blockers. It is what turned a momentary lock
+   into a 10-minute outage.
+3. **Deploy the watchdog** (`scp weewx_monitor.py` + owner-run restart).
+4. Then: `land` → merge → promote + tag → rebuild `:v2.0.12` from the **merged tip** → push
+   `:v2.0.12` (`:latest` only after our own station proves it) → regenerate the schedule → the
+   Class C deploy steps → `install`.
+
+`docs/CAMPAIGN-B-RUNBOOK.md` still governs the mechanics; only the timing is open.
+
+### What we learned about the LNA — hold it loosely
+
+~14 h at gain 372 with the LNA out: mean **72.6%**, **no hour-07 notch** (S58 measured a ~2 pt notch
+LNA-in). Campaign A pooled: 72.4%, n=922. Looks like parity — **but A's figure pools all four arms
+including gain 207, so it is biased LOW.** The clean comparison is B's 372 anchor against A's 372,
+which is exactly why 372 is in both campaigns. **Do not conclude futility from this.** A's arm
+winner stays sealed until after B.
+
+**Root cause of ERR-0005 is still unestablished.** A container recreate fixed it; a `kill`+`start`
+20 minutes earlier had not. Nobody knows why. That gap is why DEC-0065 declined to automate the
+recreate.
+
+**Model note (closeout step 6):** S62 ran on **Opus 5** — appropriate for a live prod incident, and
+the owner was told at session start. Desktop switches **persist** (OPS-DEC-0062), so S63 inherits it
+unless changed. Steps 1–4 above are execution, not judgment: **drop to Sonnet before doing them.**
 
 ## Blockers
 
-- None. DEC-0062's deploy rides v2.0.12 on Thursday (no longer stranded — the between-campaigns
-  window is the whole point). One unscheduled `database is locked` restart (S59, self-recovered)
-  remains a logged one-off; recurrence makes it a thread.
+1. **Two unexplained reception outages (08-02).** ERR-0005 (105 min) and a 3-min dropout at 13:47.
+   Both: driver alive and healthy, zero packets, self-recovered or fixed by a container recreate.
+   No established cause. **This blocks campaign B** (DEC-0066).
+2. **`database is locked` is now a THREAD, not a one-off.** It caused a standalone 10-minute outage
+   at 19:45 with no restart churn preceding it — S62 initially misread it as downstream noise and
+   was wrong. Worse than the lock itself: **three uploader threads (OgoxeUploader, Influx, OWM)
+   refused to shut down**, holding the teardown open ~100 s while the driver sat killed. That
+   converts any momentary DB error into a multi-minute outage. Prior sightings: S59, twice during
+   ERR-0005, then 19:45 standalone. The archive DB is read by the monitor (read-only, 6-hourly),
+   the dashboard, and `weectl` — contention is tractable to investigate.
+- **`ppm`/`fc` still unmeasured** and deliberately unchanged for B (would confound the LNA contrast).
 
 ## Ordered backlog
 
-1. Campaign B execution (the four fixed points above).
-2. Post-campaign: LNA-in vs LNA-out grand comparison (A's analysis × B's analysis), final prod
-   config decision, and whether the LNA goes back in.
-3. **`ppm`/`fc` measurement-by-value** — deferred, not forgotten (DEC-0060 recipe is minutes-long).
-   Deliberately NOT changed for campaign B (would confound the LNA contrast).
-4. **Consider `.claude/transient-state`** (ops#113) — tracked revert-by file a SessionStart hook
-   surfaces as OVERDUE. Opt-in is this repo's call.
-5. Keep-a-Changelog headings + DECISIONS entry-skeleton convergence (proposed S25, never picked up).
+1. **Investigate the two unexplained outages** — the gate on campaign B (DEC-0066). Then the
+   DB-lock/thread-hang defect. Then launch B.
+2. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at
+   `interval = 15` + `backfill = 1` flag, ERR-0003's path. Back up the DB first.
+3. Post-campaign: LNA-in vs LNA-out grand comparison (A × B), final prod config decision, whether
+   the LNA goes back in — and whether it was ever worth anything.
+4. **`ppm`/`fc` measurement-by-value** — deferred, not forgotten (DEC-0060 recipe is minutes-long).
+5. **`WU_RF_MIN_PCT = 60` may need retuning for the no-LNA regime** — it fired on a dew dip at
+   03:15. Wants B's data, not a guess.
+6. **Consider `.claude/transient-state`** (ops#113). Opt-in is this repo's call.
+7. Keep-a-Changelog headings + DECISIONS entry-skeleton convergence (proposed S25, never picked up).
 
 ## Standing watches — read-only, none block the above
 
-- **Co-rejection grep** (DEC-0054): **0 hits through 18:30 08-01**. Single-token pattern
-  `co-rejecting` on `/volume1/docker/weewx-rtldavis/logs/weewx.log` — *multi-word `nasctl grep`
-  patterns silently match nothing*; positive-control any zero.
-- **Humidity-spike watch** — unfired. Needs the 16–37 pt DEC-0044 single-step signature. **Method
-  and arithmetic are in DEC-0044 — do not re-derive.**
-- **DEC-0049 phantom-rainRate** — unfired. Next calm, saturated, cooling night is a free test;
-  sharp prediction: the tip counter still will not advance.
-- **First frost** — the signed decode's negative branch gets its first live air test. A
-  `co-rejecting` storm on a cold snap = DEC-0055 regression; investigate first.
+- **Unexplained reception dropouts** — promoted to Blocker 1, but keep watching the shape. 08-02
+  gave 14 zero windows in 1106 (1.3%). On the same 5-window metric campaign A shows no zeros and a
+  min of 26, so it is **not yet proven** these are new to the no-LNA regime — the metrics differ in
+  resolution. Do not conclude the LNA's removal caused them.
+- **Co-rejection grep** (DEC-0054): **0 hits through 08-01 18:30**. Single-token pattern
+  `co-rejecting` — *multi-word `nasctl grep` patterns silently match nothing*; positive-control any
+  zero.
+- **Humidity-spike watch** — unfired. **Method and arithmetic are in DEC-0044 — do not re-derive.**
+- **DEC-0049 phantom-rainRate** — unfired. Next calm, saturated, cooling night is a free test.
+- **First frost** — the signed decode's negative branch gets its first live air test.
 - **DEC-0056 revisit trigger** — a rain-rejection email on a genuinely *wet* day.
 - **Upstream replies** — four open threads (lheijst #22/#23, issue #15, david-lutz#1). See MANIFEST.
 - **Dependabot** may open a deps PR — review, don't auto-merge.
 
-✅ **#74 calm-windDir is CLOSED (S59)** — do not re-run. Reopens only on a `windDir expired`
-WARNING while `windSpeed` is nonzero.
+✅ **#74 calm-windDir is CLOSED (S59)** — do not re-run.
+✅ **Campaign-A abort near-miss is CLOSED (S62)** — the abort was correct; DEC-0061's budget holds.
 
 ## Standing rules that bite most often
 
@@ -123,4 +151,4 @@ WARNING while `windSpeed` is nonzero.
   (`weewx S61` vs `dash S151`). **This file is the single source of truth for the current session
   number and the handoff.**
 
-_Last updated: 2026-08-01 (S61). Session numbering: this repo's own counter; governed era runs S16 → …_
+_Last updated: 2026-08-02 (S62). Session numbering: this repo's own counter; governed era runs S16 → …_

@@ -5,6 +5,64 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S62] — 2026-08-02 — A 105-minute receiver outage (ERR-0005), the follow-ups it earned, and campaign B moved up 4 days
+
+Incident session. Prod went deaf at 00:05 and came back at 01:50; the rest of the day was spent on
+what that exposed.
+
+- **ERR-0005 — the outage.** Not one gap but **two**, separated by brief islands of reception:
+  00:05:05→00:07:26, an ~56 s island at **71%**, then **00:08:22→01:23:56** (1 h 15 m), a ~36 s
+  island, then 01:24:32→01:50:13. ~102 one-minute archive records missing. No correction applied —
+  an honest gap, nothing to null. **WeatherLink Live backfill approved, not yet applied** (~7
+  records at `interval = 15`, ERR-0003's path).
+- **What actually fixed it: a full container recreate.** The LNA was already physically out and
+  reception stayed at zero; `kill`→`rm`→`run` at 01:48 restored it. Nine USB resets and ~18 driver
+  respawns had done nothing. **Root cause of the original fault remains unestablished** — 12 h of
+  clean running since says the recreate cleared it, not what it was.
+- **The watchdog made it worse, and now escalates instead (DEC-0065).** Measured: 9 resets, 0
+  effective, 17 emails in 80 minutes, and not one distinguishing the 9th attempt from the 1st;
+  reset #10 preceded a strictly worse failure mode by 46 s. **Detection was never the deficiency**
+  — RECEPTION ALERT fired correctly 8 minutes in. Now: each reset is judged by whether reception
+  recovered, 3 ineffective ones stop the loop and escalate **once** with a `docker inspect`-derived
+  recreate command (secret env values redacted), and `rtldavis process is not running` never
+  triggers a reset at all. Escalation lands ~18 min in — for ERR-0005, ~00:29 instead of 01:27.
+  **Auto-recreate deliberately not built:** n=1 and unexplained, against the owner's own
+  "proven fix" bar. 14 tests, including a replay of the incident's shape.
+- **The driver threw away the evidence.** `logerr("err: %s" % self._mgr.get_stderr())` formatted a
+  *generator's repr* — and iterating it would not have helped, since that generator is gated on
+  `running()` and yields nothing once the process is dead. New `drain_stderr()`; 6 tests pin both
+  layers. Driver → **`0.20+ws.4`**.
+- **The DEC-0031 canary had silently stopped checking.** `ops/soak_check.sh` grepped a hardcoded
+  `0.20+ws.1` and degraded to a soft `note` on mismatch, so from **v2.0.10 onward** it verified
+  nothing and "wrong version" was indistinguishable from "banner not in window". Now reports the
+  version actually announced, three distinct states, mismatch is a **FAIL**.
+- **Abort near-miss investigated and cleared.** The campaign-A abort at 00:08:21 looked like a
+  DEC-0061 repeat (loop data flowing at 71%) but was **correct**: `health_ok()` waits for an
+  *archive* record, last was 00:04:20 and next 01:24:24. RapidFire publications are not archive
+  records. Campaign B is not gated on it.
+- **Campaign B prepared to launch 08-03, then HELD (DEC-0066).** Schedule shifted −4 days (pure
+  constant offset; Latin square preserved by construction), v2.0.12 built and all four `BIAS_TEE`
+  branches verified, apparatus green. Held after **two further outages the same day**: a 3-minute
+  dropout at 13:47 (**unexplained** — no engine shutdown, no DB error, driver never faulted) and a
+  10-minute outage at 19:45. The decisive argument is not abort risk but **instrument trust**: B
+  measures reception, and a receiver intermittently losing 50–100% of packets for unexplained
+  reasons yields noise shaped like a result. **Design unchanged; only timing.** ⚠️ The schedule
+  literals now sit in the **past** — regenerate before any `install`, or `due_arm()` jumps straight
+  into the middle of the square.
+- **`database is locked` is a thread now, not a one-off.** It caused the 19:45 outage on its own,
+  with no restart churn in front of it — this session first called those errors "downstream noise"
+  and was **wrong**. The lock is momentary; what made it a 10-minute outage is that
+  **OgoxeUploader, Influx and OWM all refused to shut down**, holding the teardown ~100 s with the
+  driver killed. Any future DB hiccup does the same.
+- **First honest no-LNA telemetry accruing:** n=1106 windows at gain 372, mean **72.0%**, **no
+  hour-07 notch** (S58 measured ~2 pts LNA-in). Campaign A pooled 72.4% — but A pools the gain-207
+  arms and is biased low, so this is **not** parity and **not** adoption evidence.
+- **Versioning documented** after the owner asked what `ws` stands for — an expansion that appeared
+  **nowhere in the repo**. New README §Versioning: image version vs driver version, `ws` =
+  WeatheredScientist, per-file counters, and why we never renumber into upstream's space. Also
+  fixed a README that still advertised **v2.0.9** as current, three releases stale.
+
+---
 ## [S61] — 2026-08-01 — Campaign B designed end to end (DEC-0064): owner-gated swap night, overnight pilot, no-LNA square
 
 Design session (owner-escalated). Nothing deployed; everything staged for the 08-06/08-07 window.

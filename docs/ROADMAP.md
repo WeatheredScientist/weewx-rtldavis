@@ -128,25 +128,52 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
 - [x] **Phase 0: `FreqError` telemetry CONFIRMED TO EXIST** (S57) — found within 13s of a restart
       once a logger-level gotcha was fixed (DEC-0060). `ppm`/`fc` measurement-by-value is a
       deliberately deferred follow-up, not done this campaign (arms run unmeasured `0`/`0`).
-- [ ] **Campaign A — LNA in circuit — ARMED, starts 2026-07-30 00:05.** 2×2 factorial gain
-      {372, 207} × ex {0, 50}, Latin square, 6 h blocks, 8 days; self-terminating completion
-      **~2026-08-07**. The 07-29 attempt ran 80 min and aborted on two apparatus defects
-      (DEC-0061 — a health-check budget ~25s short of what a restart structurally needs, and an
-      alert path that was inert); both fixed and redeployed, and the schedule was regenerated from
-      a clean day boundary because the aborted run damaged three Latin-square cells. Settles
-      DEC-0017 (**absorbed**). Tracked at
+- [x] **Campaign A — LNA in circuit — ENDED EARLY 2026-08-02, 12 of 32 blocks.** Ran clean
+      07-30 00:05 → 08-02 00:05 (12/12 swaps healthy, zero aborts), then aborted on the B→D swap
+      when the receiver went silent for reasons unrelated to the arm — a 105-minute total RF
+      outage (**ERR-0005**). The abort was **correct**: `health_ok()` waits for an archive record
+      and none existed in the window (last 00:04:20, next 01:24:24), so DEC-0061's budget
+      arithmetic is upheld, not implicated. STOP sentinel left in place deliberately; A is not
+      resuming. Its surviving value is what DEC-0064 always said it was — the LNA-in
+      characterization (922 samples, mean 72.4) and the multi-day drift error bar. **Arm winner
+      stays sealed until after B.** Settles DEC-0017 (**absorbed**). Tracked at
       [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
-- [ ] **v2.0.12 release carrying DEC-0062 + `BIAS_TEE` env — PREPPED (S61, DEC-0064), ships
-      Thu 08-06.** `entrypoint.sh` now reads `BIAS_TEE` (default 1 — published image unchanged);
-      the release lands *between* campaigns so B runs on one image with no mid-campaign rebuild
-      confound. Build + push Thursday; deploy on the swap night with `-e BIAS_TEE=0`. Carry
-      DEC-0046 into the release: verify in the **running system**, never in the artifact.
-- [ ] **Campaign B — LNA physically removed — DESIGNED AND DRY-RUN (S61, DEC-0064).** Swap night
-      Fri 08-07 00:05 (owner-gated; runbook `docs/CAMPAIGN-B-RUNBOOK.md`), overnight pilot
-      00:35–04:20 (gain 496→328, arm-selection input only), H hold Friday, square 08-08→08-16:
-      gain {372, 496} × ex {0, 50}, abort floor 50%. Apparatus rewritten, 13 tests green, full
-      DRY_RUN pass recorded. June-plateau LNA state resolved (owner): LNA was IN — no honest
-      no-LNA telemetry exists; the pilot is the first real measurement.
+- [ ] **v2.0.12 release carrying DEC-0062 + `BIAS_TEE` env — BUILDING 2026-08-02 (moved up from
+      Thu 08-06).** `entrypoint.sh` reads `BIAS_TEE` (default 1 — published image unchanged; all
+      four branches verified S62). Also carries S62's driver stderr fix (**`0.20+ws.4`**, ERR-0005)
+      and the README version banner, which was three releases stale. Push `:v2.0.12`, deploy with
+      `-e BIAS_TEE=0`, then move `:latest` only after our own station proves it. Carry DEC-0046
+      into the release: verify in the **running system**, never in the artifact — and the DEC-0031
+      canary in `ops/soak_check.sh` now actually fails on a version mismatch (S62), which is what
+      makes that verification real.
+- [ ] **Campaign B — LNA physically removed — PREPARED, then HELD (DEC-0066).** The LNA came out at
+      ~01:33 on 08-02 during the ERR-0005 diagnosis, so the swap night's physical step is done, and
+      the schedule was shifted −4 days to launch 08-03. **Held instead:** prod went deaf three times
+      that day (105 min, 3 min, 10 min) and two remain unexplained. An 8-day unattended reception
+      experiment run across intermittent unexplained deafness yields data that *looks* like results,
+      and B's 32 swaps each expose it to the abort that already killed campaign A. Apparatus, tests,
+      runbook and image are all ready; only the timing is open. **Schedule dates are now in the past
+      — regenerate before any `install`.** Gates: explain the outages, fix the DB-lock/thread-hang
+      defect, deploy the watchdog.
+      **First honest no-LNA telemetry already accruing** — ~14 h at gain 372 gave mean 72.6% with
+      no hour-07 notch, against campaign A's pooled 72.4%. Treat that as suggestive only: A's
+      figure pools all four arms including gain 207, so it is biased low, and the clean comparison
+      is B's 372 anchor against A's — which is exactly why 372 is in both campaigns.
+- [ ] **Deploy the escalating watchdog (DEC-0065) to the NAS** — `weewx_monitor.py` is a **mounted**
+      artifact, not baked: `scp` from the merged `dev` tip + an owner-run restart, independent of
+      the v2.0.12 image. Should land **before** campaign B runs 8 days unattended, since the old
+      loop's failure mode (9 ineffective resets, harm on the 10th) is what turned ERR-0005 from an
+      outage into a worse outage.
+- [ ] **P0 — explain the two unexplained 08-02 outages.** ERR-0005 (105 min) and the 13:47 dropout
+      (3 min). Both: driver alive and healthy, zero packets on all channels, no stall and no DB
+      error. One was cleared by a container recreate that a `kill`+`start` 20 min earlier had not
+      fixed — nobody knows why. **This gates campaign B** (DEC-0066).
+- [ ] **P0 — the `database is locked` thread and the uploader-thread hang.** A standalone 10-min
+      outage at 19:45 on 08-02 with no restart churn preceding it (S62 first misread it as
+      downstream noise). The lock itself is momentary; what made it a 10-minute outage is that
+      **OgoxeUploader, Influx and OWM all refused to shut down**, holding the teardown ~100 s with
+      the driver killed. Any future DB hiccup does the same. Archive DB readers: the monitor
+      (read-only, 6-hourly), the dashboard, `weectl`.
 - [x] ~~24 h **receiveWindow sweep**; reconcile image tag ↔ Dockerfile~~ — **dissolved by DEC-0059.**
       `-ex N` ≡ `receiveWindow 300+N` (upstream sums them), so the window is a mounted-config knob,
       no rebuild, and it is simply the second factor of the campaigns above. The `rw*` image tags
