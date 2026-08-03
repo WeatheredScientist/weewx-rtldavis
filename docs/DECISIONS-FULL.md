@@ -2986,3 +2986,69 @@ budget arithmetic holds and needs no change.
 
 The lesson is about *reading* the evidence, not the apparatus: loop-level publications and archive
 records are different things, and conflating them made a correct abort look like a defect.
+
+---
+
+## DEC-0066 — Campaign B is HELD until the instrument is trusted
+
+**Status:** Accepted · **Date:** 2026-08-02 (S62) · **Defers** DEC-0064's execution (design
+unchanged) · **caused by** ERR-0005 and two further outages the same day · owner's call, on a
+recommendation that reversed twice during the evening as evidence arrived
+
+### What this settles
+
+Campaign B was prepared to launch the night of 08-02 — LNA already out, schedule shifted −4 days,
+image built and verified, apparatus and tests green. It is **held, not cancelled.** Nothing about
+DEC-0064's design changes; only the timing, and the bar that must be met first.
+
+### The evidence
+
+Three outages on 2026-08-02, on a station that had run clean for weeks:
+
+| Window | Duration | Cause |
+|---|---|---|
+| 00:05–01:50 | 105 min | **unexplained** (ERR-0005). Driver alive, zero packets, 9 USB resets ineffective; fixed by a full container recreate |
+| 13:47–13:49 | 3 min | **unexplained.** No engine shutdown, no DB error, driver never faulted. Self-recovered |
+| 19:45–19:56 | 10 min | `database is locked`, aggravated by three uploader threads refusing to shut down |
+
+### Why hold — and which argument actually carries it
+
+Two arguments were raised. Only the second is load-bearing.
+
+**The weaker one: abort risk.** Campaign A died on 08-02 because an outage coincided with an arm
+swap — `health_ok()` waits ~180 s for an archive record, and there was none. Campaign B performs
+**32 unattended swaps over 8 days**. Two unexplained outages in a day implies a real chance of
+recurrence during one of them. But an abort is a *safe* failure: the apparatus restores baseline
+and emails. Losing a campaign to an abort costs time, not correctness.
+
+**The stronger one: the instrument is not trusted.** Campaign B measures reception percentage. A
+receiver that intermittently loses 50–100% of its packets for reasons nobody has explained does not
+produce a null result — it produces **noise that is shaped like a result**. Arms would differ, means
+would compute, and a difference could be entirely an artifact of when the deafness happened to fall.
+That is strictly worse than an abort, because an abort announces itself and a contaminated dataset
+does not. Campaign A's data survives only because it ran clean for three days before it died.
+
+An experiment whose instrument is behaving unpredictably should not be run on the grounds that the
+apparatus around it is well built. The apparatus was never the doubt.
+
+### The cost of holding, stated honestly
+
+The schedule slips again (it had already moved up 4 days). The `SCHEDULE=` literals now sit in the
+past, so a future launch must regenerate them — an `install` against stale dates would jump straight
+into the middle of the square, which is a trap worth naming loudly in `BOOT.md`.
+
+Against that: prod stays LNA-out either way, so the accidental **H-hold data keeps accruing** — and
+per unit time it is currently worth more than a campaign that aborts on day three. As of the S62
+close: n=1106 windows, mean **72.0%**, versus campaign A's pooled LNA-in 72.4%. Still not a clean
+comparison (A pools the gain-207 arms and is biased low), and still not adoption evidence.
+
+### What would change this
+
+Any of: an established cause for the two unexplained outages; a bound on them tight enough that
+their contribution to an 8-day mean is provably negligible; or several days of clean LNA-out running
+that makes 08-02 look like a single bad day rather than a new regime. The DB-lock/thread-hang defect
+should be fixed regardless — it is independent of the RF question and converts any future momentary
+error into a multi-minute outage.
+
+**Do not treat "the apparatus is ready" as the launch condition.** It has been ready since S61. The
+condition is that the receiver's behavior is understood.
