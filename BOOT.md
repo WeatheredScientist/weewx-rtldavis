@@ -19,17 +19,21 @@ Prod went deaf three times on 08-02 — 105 min (**ERR-0005**), 3 min, and 10 mi
 are still **unexplained**. Diagnosis removed the LNA, so the swap night's physical step is done and
 the schedule is shifted in-repo, but **do not launch until the instrument is trusted.**
 
-### ⚠️ Read this before touching anything: S62 ended with work IN FLIGHT
+### ⚠️ S62's handoff was stale — corrected below, verified fresh at S63 open (2026-08-03)
+
+`s62-incident-followups` merged and the watchdog got deployed **between S62's close and S63's
+open, outside a session** — so BOOT.md never got corrected. Don't trust "NOT landed" / "NOT
+deployed" for those two below; everything in this table was just re-verified, not carried over.
 
 | Thing | State |
 |---|---|
-| `s62-incident-followups` | **+8 commits, NOT landed.** All gates green. Land → merge → promote |
-| `:v2.0.12` image | built locally as `weewx-rtldavis:verify-only` only — **NOT pushed**, and the release build must come from the **merged tip**, not the branch |
-| Campaign B apparatus | schedule shifted in-repo; **NOT deployed to the NAS** (still campaign A's script there) |
-| Watchdog (DEC-0065) | committed; **NOT deployed** — `weewx_monitor.py` is mounted, needs `scp` + owner restart |
-| Prod right now | **v2.0.11**, LNA **out**, gain 372, recovered to ~69–73%, container up since 01:48 |
+| `s62-incident-followups` | **merged** (PR #118, `bdc4f9f`). Stale local/origin branch still exists, harmless, delete when convenient |
+| `:v2.0.12` image | the S62 local build is **gone** — no image on this Mac, no NAS build dir. Rebuild from the now-merged tip when B actually launches |
+| Campaign B apparatus | schedule shifted in-repo; **still NOT deployed to the NAS** (verified: NAS `rx_experiment.sh` mtime Jul 29, unchanged — still campaign A's script) |
+| Watchdog (DEC-0065) | **deployed and live** — NAS `weewx_monitor.py` (mtime Aug 2 20:53) matches repo tip byte-for-byte; log shows healthy polling through 08-03 07:39, zero resets/escalations since |
+| Prod right now | **v2.0.11**, LNA **out**, gain 372, ~70–80% and clean per this morning's log, container up since 08-02 05:48 |
 | Campaign A | **STOPped, sentinel in place, not resuming.** Do not clear it |
-| Campaign B | **HELD (DEC-0066).** Schedule dates are a placeholder (08-10 → 08-19); `install` refuses a stale one |
+| Campaign B | **HELD (DEC-0066).** Schedule dates are still a placeholder (08-10 → 08-19); `install` refuses a stale one |
 
 ### The schedule dates are a PLACEHOLDER — and a guard now enforces it
 
@@ -51,10 +55,10 @@ Both look like success. A `BOOT.md` warning would not have caught it — prose d
    intermittent unexplained deafness produces *data that looks like results*.
 2. **Fix the DB-lock / uploader-thread defect** — see Blockers. It is what turned a momentary lock
    into a 10-minute outage.
-3. **Deploy the watchdog** (`scp weewx_monitor.py` + owner-run restart).
-4. Then: `land` → merge → promote + tag → rebuild `:v2.0.12` from the **merged tip** → push
-   `:v2.0.12` (`:latest` only after our own station proves it) → regenerate the schedule → the
-   Class C deploy steps → `install`.
+3. ~~Deploy the watchdog~~ — **done**, verified live at S63 open.
+4. Then: promote + tag → rebuild `:v2.0.12` from the **merged tip** (`bdc4f9f`) → push `:v2.0.12`
+   (`:latest` only after our own station proves it) → regenerate the schedule → the Class C deploy
+   steps → `install`.
 
 `docs/CAMPAIGN-B-RUNBOOK.md` still governs the mechanics; only the timing is open.
 
@@ -70,9 +74,9 @@ winner stays sealed until after B.
 20 minutes earlier had not. Nobody knows why. That gap is why DEC-0065 declined to automate the
 recreate.
 
-**Model note (closeout step 6):** S62 ran on **Opus 5** — appropriate for a live prod incident, and
-the owner was told at session start. Desktop switches **persist** (OPS-DEC-0062), so S63 inherits it
-unless changed. Steps 1–4 above are execution, not judgment: **drop to Sonnet before doing them.**
+**Model note (closeout step 6):** S62 ran on **Opus 5**. S63 opened on **Sonnet 5** — already
+correct for execution work. The two remaining Before-B items (outage root-cause, DB-lock/thread-hang
+fix) are unfamiliar debugging, not execution — flag for escalation if picked up this session.
 
 ## Blockers
 
@@ -158,4 +162,6 @@ unless changed. Steps 1–4 above are execution, not judgment: **drop to Sonnet 
   (`weewx S61` vs `dash S151`). **This file is the single source of truth for the current session
   number and the handoff.**
 
-_Last updated: 2026-08-02 (S62). Session numbering: this repo's own counter; governed era runs S16 → …_
+_Last updated: 2026-08-03 (S63 open) — corrected S62's stale "not landed"/"not deployed" claims after
+verifying against git and the NAS directly; nothing else changed. Session numbering: this repo's own
+counter; governed era runs S16 → …_
