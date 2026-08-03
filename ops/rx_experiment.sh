@@ -155,45 +155,45 @@ arm_cmd() {
 # structure, hold placement and terminator.
 # LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
 SCHEDULE="
-2026-08-03T00:35|P496
-2026-08-03T01:20|P449
-2026-08-03T02:05|P402
-2026-08-03T02:50|P372
-2026-08-03T03:35|P328
-2026-08-03T04:20|H
-2026-08-04T00:05|A
-2026-08-04T06:05|B
-2026-08-04T12:05|C
-2026-08-04T18:05|D
-2026-08-05T00:05|B
-2026-08-05T06:05|C
-2026-08-05T12:05|D
-2026-08-05T18:05|A
-2026-08-06T00:05|C
-2026-08-06T06:05|D
-2026-08-06T12:05|A
-2026-08-06T18:05|B
-2026-08-07T00:05|D
-2026-08-07T06:05|A
-2026-08-07T12:05|B
-2026-08-07T18:05|C
-2026-08-08T00:05|A
-2026-08-08T06:05|B
-2026-08-08T12:05|C
-2026-08-08T18:05|D
-2026-08-09T00:05|B
-2026-08-09T06:05|C
-2026-08-09T12:05|D
-2026-08-09T18:05|A
-2026-08-10T00:05|C
-2026-08-10T06:05|D
-2026-08-10T12:05|A
-2026-08-10T18:05|B
-2026-08-11T00:05|D
-2026-08-11T06:05|A
-2026-08-11T12:05|B
-2026-08-11T18:05|C
-2026-08-12T00:05|BASELINE
+2026-08-10T00:35|P496
+2026-08-10T01:20|P449
+2026-08-10T02:05|P402
+2026-08-10T02:50|P372
+2026-08-10T03:35|P328
+2026-08-10T04:20|H
+2026-08-11T00:05|A
+2026-08-11T06:05|B
+2026-08-11T12:05|C
+2026-08-11T18:05|D
+2026-08-12T00:05|B
+2026-08-12T06:05|C
+2026-08-12T12:05|D
+2026-08-12T18:05|A
+2026-08-13T00:05|C
+2026-08-13T06:05|D
+2026-08-13T12:05|A
+2026-08-13T18:05|B
+2026-08-14T00:05|D
+2026-08-14T06:05|A
+2026-08-14T12:05|B
+2026-08-14T18:05|C
+2026-08-15T00:05|A
+2026-08-15T06:05|B
+2026-08-15T12:05|C
+2026-08-15T18:05|D
+2026-08-16T00:05|B
+2026-08-16T06:05|C
+2026-08-16T12:05|D
+2026-08-16T18:05|A
+2026-08-17T00:05|C
+2026-08-17T06:05|D
+2026-08-17T12:05|A
+2026-08-17T18:05|B
+2026-08-18T00:05|D
+2026-08-18T06:05|A
+2026-08-18T12:05|B
+2026-08-18T18:05|C
+2026-08-19T00:05|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -245,6 +245,27 @@ write_state()     { echo "$1|$(date '+%s')|$(date '+%Y-%m-%d %H:%M:%S')" > "$STA
 
 # Which arm should be live right now? Latest schedule row whose time <= now.
 # Self-healing: a missed scheduler run swaps late rather than skipping a block.
+# True (0) when the schedule's FIRST row has already passed -- i.e. installing
+# now would join a campaign already in flight. S62/DEC-0066.
+#
+# due_arm() below picks the LATEST row whose time has passed, so a stale schedule
+# does not fail loudly: it silently starts mid-square (no pilot, wrong block
+# sequence), or, past the last row, returns BASELINE and records the campaign
+# complete without ever running it. Both look like success.
+#
+# This exists because campaign B was prepared with dates that then went stale
+# when the launch was held. A warning in BOOT.md would not have stopped it --
+# prose does not execute (DEC-0040). Takes `now` as an optional argument purely
+# so tests can pin a clock.
+schedule_started() {
+  local first now
+  first="$(echo "$SCHEDULE" | grep -v '^$' | head -1 | cut -d'|' -f1)"
+  now="${1:-$(date '+%Y-%m-%dT%H:%M')}"
+  [ -z "$first" ] && return 1
+  [[ "$first" > "$now" ]] && return 1
+  return 0
+}
+
 due_arm() {
   local now; now="$(date '+%Y-%m-%dT%H:%M')"
   local want="NONE" line t a
@@ -388,6 +409,16 @@ schedule)
 
 install)
   [ -f "$BASELINE_SNAP" ] && { echo "Baseline snapshot already exists: $BASELINE_SNAP"; exit 1; }
+  if schedule_started; then
+    echo "REFUSING to install: the schedule has already started." >&2
+    echo "  first row: $(echo "$SCHEDULE" | grep -v '^$' | head -1 | cut -d'|' -f1)" >&2
+    echo "  now:       $(date '+%Y-%m-%dT%H:%M')" >&2
+    echo "Installing now would join the campaign mid-flight -- due_arm() selects the" >&2
+    echo "LATEST row already passed, so you would skip the pilot and start on the wrong" >&2
+    echo "block, or (past the last row) record the campaign complete without running it." >&2
+    echo "Regenerate the SCHEDULE= block with future dates first (DEC-0066)." >&2
+    exit 1
+  fi
   say_dry "snapshot $CONF -> $BASELINE_SNAP and write state" && exit 0
   cp "$CONF" "$BASELINE_SNAP" || exit 1
   echo "NONE|0|1970-01-01 00:00:00" > "$STATE"
