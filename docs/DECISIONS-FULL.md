@@ -3052,3 +3052,127 @@ error into a multi-minute outage.
 
 **Do not treat "the apparatus is ready" as the launch condition.** It has been ready since S61. The
 condition is that the receiver's behavior is understood.
+
+## DEC-0067 — The recurring dropouts are process freezes, not RF loss, and the driver's own watchdog proves it
+
+**Status:** Accepted · **Date:** 2026-08-03 (S63) · **Reclassifies** the evidence behind DEC-0066 ·
+**partially answers** DEC-0066's "explain the two unexplained outages" gate · **corrects** ERR-0005's
+framing of the 13:47 event · does **not** change DEC-0064's design
+
+### What this settles
+
+The "unexplained reception dropouts" that held campaign B are **not reception dropouts**. They are
+freezes of the weewx process. The receiver was working the whole time. Two different phenomena had
+been filed under one name.
+
+### The proof — the driver's 150 s watchdog is a discriminator, and it was there all along
+
+`genLoopPackets()` (`rtldavis.py`) is a loop:
+
+```
+while self._mgr.running():
+    if int(time.time()) - time_last_received > 150:
+        raise weewx.WeeWxIOError("rtldavis process stalled")
+    for lines in self._mgr.get_stderr():   # returns after at most 10 s
+        ...
+        time_last_received = int(time.time())   # only on an actual packet
+```
+
+`get_stderr()` is bounded at 10 s by construction. So a **running** main thread that hears no RF
+returns to the top of the `while` within 10 s and raises at the 150 s mark. That is not a theory —
+it is what happened 21 times during ERR-0005.
+
+Therefore, for any output gap longer than 150 s:
+
+| Gap ends with `rtldavis process stalled` | Meaning |
+|---|---|
+| **yes** | the main thread was executing and genuinely heard nothing → **RF loss** |
+| **no** | the main thread was **not executing** → **process freeze**; RF is irrelevant |
+
+The silent gaps of 208–218 s never raised it. The main thread was not running.
+
+### The measurement
+
+| Day | Driver-detected RF stalls | Silent process freezes |
+|---|---|---|
+| 2026-07-30 | 0 | 1 (08:04, 218 s) — **LNA still in** |
+| 2026-07-31 | 0 | 0 |
+| 2026-08-01 | 0 | 0 (but one `database is locked` restart, 15:08) |
+| 2026-08-02 | **21** — all inside ERR-0005 | 1 (13:46, 209 s) |
+| 2026-08-03 | 0 | 1 (02:59, 208 s) |
+
+**Genuine RF loss is confined entirely to ERR-0005.** Every other day measured zero. The freezes are
+independent of it, recur at roughly one per day, and last ~3.5 minutes.
+
+### Three consequences
+
+**1. The standing watch is answered: the freezes are not new to the no-LNA regime.** One occurred on
+07-30 with the LNA still installed. Removing the LNA did not cause them. That watch can close; what
+replaces it is a watch on the freeze itself.
+
+**2. The monitor's reception metric cannot tell the two apart.** It counts published output, so a
+frozen process and a deaf receiver both read `WINDOW: 0/21 (0%)`. Every "unexplained dropout" in the
+standing watch was scored by an instrument that cannot make the distinction the watch was about.
+The log rule above **can**, and costs nothing to apply.
+
+**3. A freeze does not merely lose data — it misdates the data it recovers.** Packets are stamped at
+*parse* time (`pkt['dateTime'] = int(time.time() + 0.5)`), not receive time, so everything buffered
+during a freeze collapses onto the resume instant. On 2026-08-03 the record for 03:00 was written at
+03:03:24, 03:01–03:03 have no records at all, and the following record absorbed ~3.5 minutes of
+packets. **This distorts exactly the counters campaign B measures** — first downward across the
+frozen windows, then upward in the one that follows.
+
+### What this means for campaign B (DEC-0066)
+
+DEC-0066's hold was correct, and its stated bar — *"an established cause for the two unexplained
+outages, or a bound on them tight enough that their contribution is provably negligible"* — is now
+partly met and partly reframed:
+
+- The recurring class is **explained in kind** (process freeze, RF unaffected), **bounded**
+  (~1/day, ~3.5 min, ~0.4 % of wall-clock), and **pre-dates the LNA removal**.
+- ERR-0005 remains unexplained, but it is now demonstrably a **single incident**, not the tip of a
+  recurring pattern — the 21 detections that day and zero on every other day are the evidence.
+- The load-bearing risk has moved. It is no longer "the receiver is unreliable"; it is
+  "**the instrument conflates a software freeze with deafness**". A ~3.5 min freeze inside a 6 h arm
+  block moves that block's mean by roughly 0.8 pts against a 2 pt adoption threshold — material, and
+  removable by excluding freeze-affected windows rather than by waiting for clean weather.
+
+**Campaign B stays held** — this decision does not launch it. But the condition for launching is now
+a concrete, mechanical one (detect and exclude freezes) instead of an open-ended one.
+
+### Ruled out, with evidence rather than reasoning
+
+| Hypothesis | Killed by |
+|---|---|
+| NAS-wide I/O stall | influxdb's retention timer fired at 07:01:06.576 Z **mid-freeze**, sub-ms consistent with every other check |
+| The S37/DEC-0036 stdout pipe wedge | live `weewx.conf` `[Logging]` has **only** a file handler — no console handler exists |
+| Container CPU-quota throttling | DSM's 4.4 kernel exposes **no `cpu.cfs_quota_us` and no `cpu.stat`** — only `cpu.shares`. CFS bandwidth control is not in play |
+| `pressure_service`'s HTTP call blocking the loop | 82 completed fetches, slowest **8.99 s**, zero abandoned |
+| The monitor's 6-hourly archive read holding the lock | summaries run at HH:00; the freezes do not |
+| The HH:04 six-hourly gap cluster | campaign A arm swaps at HH:05:02 — deliberate restarts, benign |
+
+### What is still open
+
+**Why the process freezes.** All threads stop together and nothing is logged — consistent with one
+thread blocking inside a write to the bind-mounted log volume while holding the shared logging lock,
+which would silence every other thread at its next log call. The box is chronically I/O-bound
+(**18.6 % cumulative iowait**, load average 6/13/15 on four cores), which makes a multi-second — even
+multi-minute — write stall plausible. **Not proven.** The discriminating observation is the thread
+state during a freeze: `D` (uninterruptible I/O) versus `S`. A read-only watcher exists to capture it.
+
+Upstream saw this and worked around it without diagnosing it — `get_stderr()`'s own comment reads
+*"When a lot rtldavis packets are read, a hangup will occur regularly, sometimes of more than a
+minute."* The 10 s cap in that function is that workaround.
+
+**Separately, the driver's stall detection is structurally blind to this failure mode** and should
+not be "fixed" by shortening the 150 s threshold — the threshold is correct for what it was built to
+catch. A freeze is not the driver's to detect; it needs an external observer.
+
+### Lesson
+
+The evidence that separated two phenomena had been in the logs since before campaign A, and the
+component that distinguishes them — a 150 s watchdog whose firing and *non-firing* are both
+informative — was already deployed and already working correctly. What was missing was reading its
+silence as data. **A watchdog that does not fire is telling you something.** Compare DEC-0035's
+structurally blind test and DEC-0045's passing test with the wrong assertion: three variants of the
+same mistake, which is trusting an instrument without asking what it is physically able to observe.
