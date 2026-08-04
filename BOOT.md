@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S63)
+## ▶ Resume here (S64)
 
 **S63 found that "prod went deaf" was wrong for the recurring case (DEC-0067).** The receiver was
 fine; the **weewx process freezes** for ~3.5 min about once a day, and the monitor's metric — which
@@ -24,6 +24,11 @@ on every other day.** So ERR-0005 is a genuine RF outage and a **single incident
 **Campaign B stays HELD (DEC-0066)** — but its launch condition is now mechanical (detect and
 exclude freeze windows) rather than "wait until the instrument is trusted". Prod is healthy; the
 LNA is out and the schedule is shifted in-repo.
+
+**S64 shipped a small CI fix, closed a stale ops tracker, and got the first live D-vs-S capture of a
+freeze** — an overnight watcher caught the 08-03 23:23 freeze and found all 12 named threads `S`
+(sleeping), none `D` (blocked on I/O). Leans away from the leading I/O-blocking hypothesis but is
+one sample, not conclusive — see Blockers below. Nothing here changes campaign B's gate.
 
 ### Current state — every row re-verified at S63 open, not carried over
 
@@ -77,19 +82,21 @@ winner stays sealed until after B.
 20 minutes earlier had not. Nobody knows why. That gap is why DEC-0065 declined to automate the
 recreate.
 
-**Model note (closeout step 6):** S62 ran on **Opus 5**. S63 opened on Sonnet, then the owner
-escalated to **Opus 5** for the outage diagnosis — correct call, it was unfamiliar debugging. That
-was a bare `/model`, so it **persists as the new-session default**: restore the Sonnet floor before
-the next execution-shaped session.
+**Model note:** S64 ran entirely on Sonnet, no escalation — floor is correct, nothing to restore.
 
 ## Blockers
 
 1. **The weewx process freezes ~3.5 min, roughly once a day. Cause unknown (DEC-0067).** Replaces
    the old "two unexplained outages" blocker, which conflated two things. Freezes seen 07-30 08:04,
-   08-02 13:46, 08-03 02:59 — **07-30 was LNA-in, so they pre-date the LNA removal.** All threads
-   stop at once and nothing is logged; leading hypothesis is a thread blocking on the bind-mounted
-   log volume while holding the logging lock (box runs at 18.6 % cumulative iowait). **Unproven** —
-   the discriminating capture is thread state `D` vs `S` during a freeze.
+   08-02 13:46, 08-03 02:59, **08-03 23:23 (262 s, S64)** — **07-30 was LNA-in, so they pre-date the
+   LNA removal.** All threads stop at once and nothing is logged; leading hypothesis was a thread
+   blocking on the bind-mounted log volume while holding the logging lock (box runs at 18.6 %
+   cumulative iowait). **First live capture (S64) leans against that**, not conclusive: an overnight
+   watcher caught the 23:23 freeze ~2 min in and all 12 named threads read `S`, none `D` —
+   independently confirmed against the raw log (exactly one gap ≥60 s all night). But the design's
+   second sample (meant to confirm the state persists) took ~7 min instead of 20 s (12 sequential
+   `nasctl` round-trips) and landed after the freeze had already recovered — one clean sample, not
+   two. Next: fix the second-sample timing, catch another. Detail: `docs/ROADMAP.md` P0 freeze item.
 2. **ERR-0005 is still unexplained** — but is demonstrably a **single incident**, not the head of a
    pattern (21 driver detections that day, 0 on every other). Do not let it block B on its own.
 3. **`database is locked` is recurrent and pre-dates the LNA removal** (08-01 15:08, 08-02 19:45;
@@ -101,13 +108,14 @@ the next execution-shaped session.
 
 ## Ordered backlog
 
-1. **Find out why the process freezes (DEC-0067).** Capture thread state during one: `D` =
-   blocked on I/O (leading hypothesis), `S` = lock or socket. A read-only watcher polling
-   `weewx.log`'s size and dumping `/proc/<tid>/stat` is enough and needs no NAS deploy — S63 built
-   one at `scratchpad/stallwatch.sh` but the session ended before it caught a freeze; it is **not**
-   in the repo, rebuild or re-run it. Container thread PIDs come from
-   `/sys/fs/cgroup/cpuacct/docker/<CID>/tasks`. Then: make the metric freeze-aware, fix the DB lock,
-   launch B.
+1. **Find out why the process freezes (DEC-0067).** S64 re-ran the S63 watcher (still only in
+   scratchpad, not the repo — rebuild or re-run it, same design) overnight and got a first live
+   sample: `S` not `D` on all 12 named threads, ~2 min into the 08-03 23:23 freeze. Leans against
+   the I/O-blocking hypothesis but isn't conclusive — the second sample landed ~7 min late (12
+   sequential `nasctl` calls) instead of the intended 20 s, after the freeze had already recovered.
+   **Next: fix the second-sample timing (batch/parallelize the per-thread reads), then catch
+   another.** Container thread PIDs come from `/sys/fs/cgroup/cpuacct/docker/<CID>/tasks`; entirely
+   read-only, no NAS deploy needed. Then: make the metric freeze-aware, fix the DB lock, launch B.
 2. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at
    `interval = 15` + `backfill = 1` flag, ERR-0003's path. Back up the DB first.
 3. Post-campaign: LNA-in vs LNA-out grand comparison (A × B), final prod config decision, whether
@@ -175,6 +183,6 @@ the next execution-shaped session.
   (`weewx S61` vs `dash S151`). **This file is the single source of truth for the current session
   number and the handoff.**
 
-_Last updated: 2026-08-03 (S63) — corrected S62's stale handoff, then rewrote Blockers and the
-standing watches around DEC-0067 (the recurring dropouts are process freezes, not RF loss). Session
+_Last updated: 2026-08-04 (S64) — merged the Node 20 CI fix, closed ops#114, and folded in the first
+live D-vs-S freeze capture (leans against I/O-blocking, one sample, not conclusive). Session
 numbering: this repo's own counter; governed era runs S16 → …_
