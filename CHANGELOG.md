@@ -5,6 +5,27 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S64] — 2026-08-04 — First live D-vs-S capture of a freeze, plus two closed trackers
+
+- **CI: bumped pinned GitHub Actions off Node 20** (#121, closes weewx-rtldavis#117).
+  `actions/checkout` v4→v7, `actions/setup-python` v5→v7, `peter-evans/dockerhub-description`
+  v4→v5 — Node 20 runners are removed this Fall and every CI run already warned. Breaking-changes
+  for each action were checked against how these specific workflows use them; none apply.
+- **ops#114 closed.** It tracked campaign A toward an expected 08-06 self-close, but campaign A
+  actually ended 4 days early via its own abort tripwire (2026-08-02, confirmed correct in S62) —
+  there was never going to be a completion email to wait for.
+- **First live thread-state capture of a process freeze (DEC-0067's open question).** An overnight
+  read-only watcher (poll `weewx.log` size, `nasctl cat /proc/<tid>/stat` on the container's thread
+  IDs) ran 15 h (17:32→08:32) and caught the 08-03 23:23:03→23:27:25 freeze (262 s, zero driver
+  stall exceptions that day — the process-freeze signature, not RF loss). All 12 named threads read
+  `S` (sleeping), none `D` (uninterruptible I/O), about 2 min into the freeze — independently
+  confirmed against the raw log (exactly one gap ≥60 s all night, matching the watcher's count).
+  **Leans away from the leading I/O-blocking hypothesis but isn't conclusive**: the design's second
+  sample, meant to confirm the state persists, took ~7 min instead of the intended 20 s (12
+  sequential `nasctl` round-trips) and landed after the freeze had already recovered. One clean
+  sample, not two. Detail: [docs/ROADMAP.md](docs/ROADMAP.md) P0 freeze item.
+
+---
 ## [S63] — 2026-08-03 — The recurring "reception dropouts" are process freezes, and the driver already knew
 
 Diagnostic session, no production change. Nothing was deployed; campaign B stays held.
