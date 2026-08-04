@@ -183,12 +183,19 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       **Still open, tracked below: why it freezes.** ERR-0005's own root cause also remains
       unestablished, but it no longer gates campaign B on its own.
 - [ ] **P0 — why does the weewx process freeze? (DEC-0067)** ~3.5 min, roughly once a day; seen
-      07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59. All threads stop together and nothing is
-      logged — consistent with a thread blocking on the bind-mounted log volume while holding the
-      shared logging lock, on a box at **18.6 % cumulative iowait**. **Unproven.** The
-      discriminating capture is thread state `D` (uninterruptible I/O) vs `S` during a freeze:
-      poll `weewx.log`'s size, then read `/proc/<tid>/stat` for the thread IDs in
-      `/sys/fs/cgroup/cpuacct/docker/<CID>/tasks`. Read-only; no NAS deploy needed. Ruled out
+      07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59, **08-03 23:23 (262 s, S64).** All threads
+      stop together and nothing is logged — the leading hypothesis was a thread blocking on the
+      bind-mounted log volume while holding the shared logging lock, on a box at **18.6 %
+      cumulative iowait**. **First live capture (S64): still unproven, but leans away from that.**
+      An overnight watcher (poll `weewx.log`'s size, read `/proc/<tid>/stat` for the thread IDs in
+      `/sys/fs/cgroup/cpuacct/docker/<CID>/tasks`, read-only, no NAS deploy) ran 15 h and caught the
+      08-03 23:23 freeze ~2 min in: **all 12 named threads were `S` (sleeping), none `D`**
+      (uninterruptible I/O) — independently confirmed against the raw log (exactly one gap ≥60 s in
+      the watched window, matching the watcher's own count). One caveat: the design's second sample
+      (meant to confirm the state *persists*, 20 s later) is 12 sequential `nasctl` round-trips and
+      landed ~7 min later in practice, after the freeze had already recovered — so this is one clean
+      in-freeze sample, not two. Next: fix the second-sample timing (batch or parallelize the
+      per-thread reads) and catch another one before treating `S`-not-`D` as settled. Ruled out
       already: NAS-wide stall, the S37 stdout wedge, CPU-quota throttling, `pressure_service`.
       Upstream hit this and worked around it without diagnosing it (`get_stderr()`'s 10 s cap).
 - [ ] **P0 — the `database is locked` defect.** Recurrent and **pre-dates the LNA removal**
