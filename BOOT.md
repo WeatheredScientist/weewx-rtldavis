@@ -12,23 +12,42 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S64)
+## ▶ Resume here (S65)
 
-**S63 found that "prod went deaf" was wrong for the recurring case (DEC-0067).** The receiver was
-fine; the **weewx process freezes** for ~3.5 min about once a day, and the monitor's metric — which
-counts *published output* — cannot tell that apart from deafness. The driver's own 150 s watchdog is
-the discriminator, and it had been reporting correctly all along: **21 firings during ERR-0005, zero
-on every other day.** So ERR-0005 is a genuine RF outage and a **single incident**; the recurring
-"dropouts" are software freezes that **pre-date the LNA removal** (one on 07-30, LNA in).
+**S63 (DEC-0067):** recurring dropouts are process freezes, not RF loss — a single-incident RF
+outage (ERR-0005, driver watchdog fired 21×) is separate from the ~3.5 min/day freeze phenomenon,
+which pre-dates the LNA removal. **S64:** CI fix, closed a stale ops tracker, first live D-vs-S
+capture (23:23 freeze, all 12 threads `S`, none `D` — one sample, not conclusive).
 
-**Campaign B stays HELD (DEC-0066)** — but its launch condition is now mechanical (detect and
-exclude freeze windows) rather than "wait until the instrument is trusted". Prod is healthy; the
-LNA is out and the schedule is shifted in-repo.
+**Campaign B stays HELD (DEC-0066)** — launch condition is mechanical (detect and exclude freeze
+windows), not "wait until trusted". Prod is healthy; LNA is out, schedule shifted in-repo.
 
-**S64 shipped a small CI fix, closed a stale ops tracker, and got the first live D-vs-S capture of a
-freeze** — an overnight watcher caught the 08-03 23:23 freeze and found all 12 named threads `S`
-(sleeping), none `D` (blocked on I/O). Leans away from the leading I/O-blocking hypothesis but is
-one sample, not conclusive — see Blockers below. Nothing here changes campaign B's gate.
+**S65 fixed the watcher and ran it live.** Parallelized the 12 per-thread reads (background+`wait`)
+— a full sample is now ~1-2s, not the ~7 min that made S64's second sample land late. Found and
+fixed a dedup bug the hard way: v3 caught the *same* freeze three times tonight (identical frozen
+log size all three) instead of three distinct ones, burning `MAX_CATCH=3` on one event and exiting
+8h early — v4 now waits for the log to regrow before re-arming. Wired in a native macOS notification
+(`osascript`, confirmed deliverable live) on each catch and on exit — the watcher is a detached
+`nohup`+`caffeinate` process, no Claude session or cloud needed for it to reach the owner.
+
+**Tonight's freeze** (21:48:59–21:52:37 UTC, ~4 min): all `S` throughout except three isolated `R`
+blips in a single `rtldavis` worker thread; `weewxd`'s main thread and all four REST uploaders
+stayed `S` the whole time. No `D`, consistent with S64 — leans further against I/O-blocking, points
+at something stuck in `weewxd`'s own loop rather than a wholesale freeze.
+
+**Cross-repo check (owner asked — HLF/coffee-radar share this NAS):** a *general* NAS-wide stall was
+already ruled out at S63 (InfluxDB's own timer fired sub-ms, on-schedule, mid-freeze). A *narrower*
+hypothesis — page-cache eviction from coffee-radar's scheduled batch runs or HLF's own heavy jobs,
+the mechanism behind HLF's own DEC-0162 incident class on this same box — hadn't been checked.
+Tonight: **coffee-radar's container was NOT present** during the freeze. Not proven, not ruled out;
+`nasctl ps` now captured on every future catch for free. Known freeze timestamps don't cleanly match
+coffee-radar's schedule; HLF's 15-min tick is too frequent to test by timestamp alone without HLF's
+own per-tick timing data, which isn't reachable from weewx's read-only `nasctl` access.
+
+**v4 watcher running now, unattended** — deadline 2026-08-05 13:33 UTC / 09:33 EDT, up to 3 more
+distinct catches, macOS-notifies per catch and on exit. Script still lives only in scratchpad —
+third rebuild from transcript archaeology; worth committing to `ops/` if this keeps recurring, not
+done yet (ask first).
 
 ### Current state — every row re-verified at S63 open, not carried over
 
@@ -82,21 +101,26 @@ winner stays sealed until after B.
 20 minutes earlier had not. Nobody knows why. That gap is why DEC-0065 declined to automate the
 recreate.
 
-**Model note:** S64 ran entirely on Sonnet, no escalation — floor is correct, nothing to restore.
+**Model note:** S64 and S65 both ran entirely on Sonnet, no escalation — floor correct, nothing to
+restore.
 
 ## Blockers
 
-1. **The weewx process freezes ~3.5 min, roughly once a day. Cause unknown (DEC-0067).** Replaces
-   the old "two unexplained outages" blocker, which conflated two things. Freezes seen 07-30 08:04,
-   08-02 13:46, 08-03 02:59, **08-03 23:23 (262 s, S64)** — **07-30 was LNA-in, so they pre-date the
-   LNA removal.** All threads stop at once and nothing is logged; leading hypothesis was a thread
-   blocking on the bind-mounted log volume while holding the logging lock (box runs at 18.6 %
-   cumulative iowait). **First live capture (S64) leans against that**, not conclusive: an overnight
-   watcher caught the 23:23 freeze ~2 min in and all 12 named threads read `S`, none `D` —
-   independently confirmed against the raw log (exactly one gap ≥60 s all night). But the design's
-   second sample (meant to confirm the state persists) took ~7 min instead of 20 s (12 sequential
-   `nasctl` round-trips) and landed after the freeze had already recovered — one clean sample, not
-   two. Next: fix the second-sample timing, catch another. Detail: `docs/ROADMAP.md` P0 freeze item.
+1. **The weewx process freezes, roughly once a day, ~3.5-4 min. Cause unknown (DEC-0067).** Seen
+   07-30 08:04, 08-02 13:46, 08-03 02:59, 08-03 23:23 (262s, S64), **08-04 21:48:59–21:52:37 (~4 min,
+   S65)** — 07-30 was LNA-in, so these pre-date the LNA removal. All threads stop at once and nothing
+   is logged; leading hypothesis was a thread blocking on the bind-mounted log volume while holding
+   the logging lock (box runs at 18.6% cumulative iowait). **S64+S65 captures both lean against
+   that**: every sample across both nights read `S`, never `D`, and S65 additionally saw a single
+   `rtldavis` worker thread intermittently go `R` while `weewxd`'s main thread and REST uploaders
+   stayed `S` throughout — points more specifically at something stuck in `weewxd`'s own loop.
+   **S64's slow-second-sample bug is fixed** (parallelized reads, ~1-2s/sample) **and so is a dedup
+   bug found tonight** (a single freeze was being caught repeatedly as if distinct, burning the catch
+   budget on one event). v4 watcher running now through 2026-08-05 13:33 UTC, notifies locally per
+   catch. **New this session: checked whether shared-NAS contention (coffee-radar/HLF) explains
+   it** — a general NAS-wide stall is already ruled out (DEC-0067), a narrower page-cache-eviction
+   variant (cf. HLF's own DEC-0162) is not ruled out but coffee-radar wasn't running during tonight's
+   freeze; `nasctl ps` now captured on every future catch. Detail: `docs/ROADMAP.md` P0 freeze item.
 2. **ERR-0005 is still unexplained** — but is demonstrably a **single incident**, not the head of a
    pattern (21 driver detections that day, 0 on every other). Do not let it block B on its own.
 3. **`database is locked` is recurrent and pre-dates the LNA removal** (08-01 15:08, 08-02 19:45;
@@ -108,14 +132,15 @@ recreate.
 
 ## Ordered backlog
 
-1. **Find out why the process freezes (DEC-0067).** S64 re-ran the S63 watcher (still only in
-   scratchpad, not the repo — rebuild or re-run it, same design) overnight and got a first live
-   sample: `S` not `D` on all 12 named threads, ~2 min into the 08-03 23:23 freeze. Leans against
-   the I/O-blocking hypothesis but isn't conclusive — the second sample landed ~7 min late (12
-   sequential `nasctl` calls) instead of the intended 20 s, after the freeze had already recovered.
-   **Next: fix the second-sample timing (batch/parallelize the per-thread reads), then catch
-   another.** Container thread PIDs come from `/sys/fs/cgroup/cpuacct/docker/<CID>/tasks`; entirely
-   read-only, no NAS deploy needed. Then: make the metric freeze-aware, fix the DB lock, launch B.
+1. **Find out why the process freezes (DEC-0067).** S65 fixed the watcher (parallelized reads,
+   dedup bug, macOS notification) and it's running unattended through 2026-08-05 13:33 UTC — check
+   `stall-capture.txt` or wait for the notification. Evidence so far (S64+S65, 2 nights): always `S`,
+   never `D`; S65 additionally saw a `rtldavis` worker thread intermittently `R` while `weewxd`'s
+   main thread stayed `S` — leans toward something stuck in `weewxd` itself, not I/O-blocking or a
+   wholesale freeze. Shared-NAS contention (coffee-radar/HLF) checked and not ruled out, but
+   coffee-radar wasn't running during tonight's catch. **Next: let the v4 watcher finish, then decide
+   whether the pattern is settled enough for a DEC.** Then: make the metric freeze-aware, fix the DB
+   lock, launch B.
 2. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at
    `interval = 15` + `backfill = 1` flag, ERR-0003's path. Back up the DB first.
 3. Post-campaign: LNA-in vs LNA-out grand comparison (A × B), final prod config decision, whether
@@ -183,6 +208,7 @@ recreate.
   (`weewx S61` vs `dash S151`). **This file is the single source of truth for the current session
   number and the handoff.**
 
-_Last updated: 2026-08-04 (S64) — merged the Node 20 CI fix, closed ops#114, and folded in the first
-live D-vs-S freeze capture (leans against I/O-blocking, one sample, not conclusive). Session
+_Last updated: 2026-08-04 (S65) — fixed the freeze-watcher (parallelized reads, dedup bug, macOS
+notification), caught a richer live sample (still S-not-D, plus a new R-blip detail), checked and
+partially addressed the shared-NAS-contention hypothesis, relaunched unattended overnight. Session
 numbering: this repo's own counter; governed era runs S16 → …_
