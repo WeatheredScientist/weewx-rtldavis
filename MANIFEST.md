@@ -30,6 +30,7 @@ Nothing here is read at session start — pull by name, mid-session, when the ta
 | `ops/rx_experiment.sh` | the RX campaign apparatus — schedule, swap, health check, abort. Currently loaded: **campaign B** (pilot + hold + square, DEC-0064) | campaign tracking or campaign design |
 | `docs/CAMPAIGN-B-RUNBOOK.md` | the swap-night checklist — owner gates, timeline, rollback paths, expected numbers | the 08-07 swap night, or any campaign-B question |
 | `ops/soak_check.sh` | acceptance-criteria verdict (`EXPECT_IMAGE` tracks the deployed tag) | after any deploy; any time a fresh verdict is wanted |
+| `ops/campaign_analyze.py` | **the campaign readout** (DEC-0069) — per-minute `rxCheckPercent` from the archive DB, structural freeze exclusion, per-arm means with the uncleaned figure alongside | reading ANY campaign result, A or B; the A-vs-B LNA contrast. **Pass `--since` for campaign A** — its aborted 07-29 attempt is in the same log (the tool warns) |
 | `ops/freeze_watch.sh` | read-only DEC-0067/DEC-0068 freeze watcher — polls `weewx.log`, captures paired `S`/`D`/`R` thread samples + a `nasctl ps` snapshot on a stall, macOS-notifies | investigating the process freeze, or verifying it's resolved |
 | `scripts/check_secrets.sh` | the secret gate (+ `scripts/test_check_secrets.sh`) | before every commit — **with a planted-payload positive control** |
 
