@@ -25,9 +25,13 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
   at or past S66 and this line still says S66, that itself is the signal it's overdue — run the
   same pass as S56 did (diff every open/pending item here against DECISIONS.md, CHANGELOG.md, and
   `BOOT.md` and `CHANGELOG.md`).
-- Last full reconciliation: **S56, 2026-07-28**. Targeted DEC-0057 pass at **S63, 2026-08-03**
+- Last full reconciliation: **S56, 2026-07-28**. Targeted DEC-0057 passes at **S63, 2026-08-03**
   (DEC-0067 — the watchdog and outage-explanation items closed, campaign B's gates restated, the
-  freeze split out from the DB lock). The next *full* pass is still due by S66.
+  freeze split out from the DB lock) and **S66, 2026-08-05** (DEC-0069 — the metric gate closed, the
+  DB lock restated as B's sole remaining gate).
+- ⚠️ **The by-S66 full pass is now DUE and has NOT been run.** S66 did the targeted DEC-0069 pass
+  only. The tripwire above fired as designed; honouring it is the next session's first ROADMAP task,
+  and this line stays until a full pass actually happens.
 
 ## The vision
 
@@ -193,11 +197,25 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       night, had neither coffee-radar nor elevated load. n=1 correlated out of 3 captured freezes;
       not a settled base rate. `ops/freeze_watch.sh` (S65, now committed — no longer a scratchpad
       rebuild every session) is the tool for any further capture. **Root cause is not fully
-      explained, but campaign B does not need it to be** — its actual remaining gates are the metric
-      going freeze-aware and the line below. Ruled out already: NAS-wide stall, the S37 stdout wedge,
+      explained, but campaign B does not need it to be** — and as of **DEC-0069 (S66) the metric gate
+      is CLOSED**, leaving the line below as B's sole remaining gate. DEC-0069 also bounds how much
+      these freezes were ever worth to the campaign: **±0.03 points** on a pooled arm mean against a
+      2.0-point adoption bar, once the metric is read at the resolution it is actually stored at.
+      Ruled out already: NAS-wide stall, the S37 stdout wedge,
       CPU-quota throttling, `pressure_service`. Upstream hit this and worked around it without
       diagnosing it (`get_stderr()`'s 10 s cap).
-- [ ] **P0 — the `database is locked` defect.** Recurrent and **pre-dates the LNA removal**
+- [x] ~~**P0 — make the campaign metric freeze-aware**~~ — **CLOSED by DEC-0069 (S66).** Two parts,
+      and the larger one was a *resolution* problem, not a freeze problem: `harvest()` read the
+      monitor's **5-minute** `RECEPTION:` aggregate, where one frozen minute drags a whole bucket
+      (measured 16 % / 27 % against ~72 %) — that is where the ~0.8-point estimate came from. The
+      same measurement is stored **per minute** in the archive DB as `rxCheckPercent`, where a freeze
+      damages one record. Exclusion is **structural** (drop the record either side of any gap, plus
+      NULL, plus non-physical `rx > 100`), never magnitude-based — a threshold would discard genuine
+      deep fades and bias every arm upward. Net effect on a pooled arm mean: **±0.03 points** against
+      a 2.0-point bar. New tool `ops/campaign_analyze.py` (+14 tests); `ops/rx_experiment.sh`
+      deliberately untouched. Campaign A recomputed: spread **0.94 pts**, no arm near adoption.
+- [ ] **P0 — the `database is locked` defect** — **now campaign B's SOLE remaining gate (DEC-0069).**
+      Recurrent and **pre-dates the LNA removal**
       (08-01 15:08, 08-02 19:45; earlier S59) — and **independent of the freezes above**. DEC-0067
       decomposed the 10-min outage: ~106 s of hung uploader threads + **120 s of weewx's own
       hardcoded wait** + ~5 min restart, so the thread hang is only ~18 % of it — the identical

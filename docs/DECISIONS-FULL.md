@@ -3251,3 +3251,162 @@ A one-shot container launched without `--name` is invisible to any check that gr
 name — its real identity is in `IMAGE`, not `NAMES`. This is a general NAS-ops gotcha, not specific
 to coffee-radar: any future "is container X running" check on this shared box should grep the whole
 `docker ps`/`nasctl ps` line, not assume a container's own image name is also its runtime name.
+
+## DEC-0069 — The campaign metric moves to per-minute `rxCheckPercent`, and freeze exclusion is structural
+
+**Status:** Accepted · **Date:** 2026-08-05 (S66) · **Closes** DEC-0066's second launch gate ·
+**corrects** DEC-0067's "down then up" and BOOT.md's ~0.8-point impact estimate ·
+design of DEC-0064 untouched · tool `ops/campaign_analyze.py`
+
+### What this settles
+
+DEC-0066 held campaign B on two gates, of which the real one was: make the campaign metric
+freeze-aware. This settles *how*, and — unexpectedly — *how much it was ever worth*.
+
+The answer has two halves. The larger half is a **source change**: the campaign was reading a
+5-minute aggregate, and the same measurement exists at 1-minute resolution in the archive DB. The
+smaller half is an **exclusion rule**, which turns out to be worth ~0.03 points once the source is
+right.
+
+### The defect, measured
+
+`ops/rx_experiment.sh`'s `harvest()` scrapes the monitor's 5-minute `RECEPTION: NN%` line. A freeze
+lands inside one of those buckets and drags the whole bucket down — **measured 16 % and 27 %** on
+2026-08-04 against a ~72 % neighbourhood — so one bad minute destroys four good ones. Across a 6 h
+arm block (72 such samples) that is `(72−16)/72 ≈ 0.78` points, which is where BOOT.md's ~0.8 figure
+came from. **That figure was right, but only for that metric.**
+
+The archive DB carries the driver's own `rxCheckPercent` — good CRC-decoded packets over theoretical
+max, which S31 established as the honest metric — **per archive record, i.e. per minute**. At that
+resolution the same freeze damages *one* record: `(75−10.31)/360 ≈ 0.18` points on the same block,
+and ~0.05 pooled across an arm. Changing the source is ~4× of the fix before any exclusion logic
+runs.
+
+### The freeze signature in the archive
+
+Scanned 2026-07-29 → 2026-08-05: **10 988 records, 33 gaps**. Every gap falls into one of three
+classes, and they do not overlap:
+
+| Class | `rx` before the gap | `rx` after the gap | n | Identification |
+|---|---|---|---|---|
+| **Process freeze** | anomalously low (4.0–17.2) | normal, non-NULL | ~10 | matches every freeze in the DEC-0067/0068 record |
+| **Arm swap** | normal (63–85) | **NULL** | 12 | the HH:04 cluster — campaign A's own swaps |
+| **Lock / outage** | normal | **NULL** | 4 | the two `database is locked` events, and ERR-0005 |
+
+Population baseline for scale: median **75.0**, p05 **61.9**, p01 **56.5**. The freeze records at
+4–17 sit far below p01 — they are not bad RF minutes, they are artifacts.
+
+**The contaminated record is the one ADJACENT to the gap, not the minutes inside it.** Those minutes
+are simply *absent rows* and need no handling at all — this is the finding that shrank the whole
+design, because BOOT.md had assumed they scored as zeros. WeeWX assembles the freeze-start record
+from a truncated accumulation period but still divides by the full nominal interval; `interval`
+stays `1`, so **the row cannot identify itself as contaminated** and detection must be structural.
+
+Worked example, 2026-08-04 (`Added record` write-lag in brackets; normal lag is 15–20 s):
+
+```
+17:47  rx=72.73  [19s]        19:12  rx=70.00  [16s]
+17:48  rx=10.31  [232s]  <--  19:13  rx= 4.29  [153s]  <--
+17:49  ABSENT                 19:14  ABSENT
+17:50  ABSENT                 19:15  ABSENT
+17:51  ABSENT                 19:16  rx=73.33  [17s]
+17:52  rx=87.50  [15s]        19:17  rx=80.95  [17s]
+```
+
+### The rule
+
+Three independent exclusions, deliberately not collapsed into one so each can be argued with
+separately:
+
+1. **Gap-adjacent** — drop the record immediately before *and* after any spacing gap. Symmetric, so
+   it catches truncation and absorption without having to know which occurred.
+2. **NULL `rxCheckPercent`** — the restart artifact; already treated as a gap by
+   `summarize_reception_rows()`.
+3. **Non-physical (`rx > 100`)** — an independent backstop; see below.
+
+Plus a settle window (default 600 s, matching `rx_experiment.sh`'s `SETTLE_SECS`) after each swap.
+Total cost on campaign A: **152 records excluded of 4 285 in-block, ~3.5 %.**
+
+### Why not a magnitude threshold
+
+"Drop anything under 20 %" is simpler and is **wrong**. The campaign exists to *measure* reception;
+a rule keyed on magnitude discards genuine deep fades and biases every arm upward — precisely the
+confound the Latin square was built to remove. Structure identifies artifacts; magnitude does not.
+This is asserted as a positive control in `tests/test_campaign_analyze.py`, which proves both that
+the structural rule keeps a real 30 % fade and that a magnitude rule destroys it.
+
+### The 200 % record — DEC-0067's "up" is real, and rarer than stated
+
+2026-07-29 03:10 carries `rxCheckPercent = 200.0`: a record that absorbed a 2-minute span while
+still stamped `interval=1`. This is exactly the post-freeze inflation DEC-0067 predicted. **An
+initial reading of two freezes found no inflation and concluded there was none; the 8-day scan
+found this one.** So DEC-0067's "down then up" stands — with the correction that the "up" is
+*conditional*, not routine (weewx usually advances past the gap and starts a fresh accumulator
+instead), and appears once in 8 days against roughly ten freezes.
+
+It matters out of proportion to its rarity: `summarize_reception_rows()` applies **no cap**, so such
+a record contributes twice its expected packets — an *upward* push of ~0.35 points on a 6 h block,
+larger than the downward push of the freeze that caused it.
+
+### Campaign A, recomputed
+
+12 blocks, 2026-07-30 00:05 → 2026-08-02 00:05, balanced:
+
+| Arm | Settings | n | Mean | sd | vs. uncleaned |
+|---|---|---|---|---|---|
+| A | gain 372 ex 0 | 1038 | **74.81 %** | 8.22 | −0.02 |
+| C | gain 372 ex 50 | 1044 | 74.37 % | 8.10 | +0.00 |
+| D | gain 207 ex 50 | 1044 | 74.17 % | 8.22 | −0.03 |
+| B | gain 207 ex 0 | 1038 | 73.87 % | 8.28 | +0.03 |
+
+**The freeze-aware correction is ±0.03 points** against a 2.0-point adoption bar — real, but ~60×
+smaller than the estimate that made it a launch gate. Total arm spread is **0.94 points**; no arm
+approaches adoption. Gain 372 beats 207 in both `ex` pairings but marginally; `ex` shows no
+consistent effect.
+
+**Cross-metric check:** BOOT.md records campaign A pooled at 72.4 % from the monitor scrape; this
+reads ~74.3 % from `rxCheckPercent`. The ~1.9-point offset matches `weewx_monitor.py`'s own
+documented "runs ~1–2 pts optimistic" note (the driver floor-divides the period, S31). Two
+independent metrics agreeing on the offset is a real validation of both — **and it means A-vs-B must
+be compared on the same metric**, which is now guaranteed because both are recomputed by the same
+tool from the same source.
+
+**Sealing note (honest disclosure):** DEC-0066 recorded that A's arm winner stays sealed until after
+B. Validating this tool against real data necessarily computed it, and the numbers above are now
+known before B runs. Pre-registration protects the *analysis plan* — DEC-0064 locked B's arms, and
+DEC-0059 locked the adoption bar, both before any of this — so the design is not compromised. But
+the unsealing was a side effect of tooling, not a decision anyone took deliberately, and it is
+recorded here rather than left implicit.
+
+### Two defects found while building the tool
+
+Both would have produced confident wrong numbers rather than an error:
+
+- **Pooled campaign attempts.** Campaign A aborted 2026-07-29 and restarted clean on 07-30. A bare
+  run pooled the aborted 75-minute arm-B block with the campaign proper, giving arm B ~60 extra
+  records — an unbalanced Latin square, printed as a tidy four-row table with nothing to indicate
+  it. Fixed mechanically: the tool now detects multiple attempts in one apparatus log and says so
+  (DEC-0040 — a docstring warning would not have executed).
+- **Unbounded fetch.** Deriving the query's lower bound locally meant asking the NAS for
+  `dateTime >= 0` and dragging the entire archive across ssh — measured: does not finish inside
+  120 s. The bound is now resolved on the NAS from the apparatus log's first timestamp, before the
+  query runs.
+
+Also corrected: the report header named a window wider than the one actually analyzed when `--since`
+excluded early blocks. Provenance a reader would have to verify by hand is provenance that lies.
+
+### Consequences
+
+- **DEC-0066's second gate is closed.** The remaining gate is the `database is locked` defect (try
+  WAL mode first).
+- `ops/rx_experiment.sh` is **unchanged** — the unattended, prod-writing apparatus was not touched
+  to close this, and `harvest()` keeps producing its independent cross-check.
+- Campaign B's readout runs `ops/campaign_analyze.py --campaign B`; the A-vs-B LNA contrast runs the
+  same tool over both windows.
+
+### Lesson
+
+The instrument's *resolution* was a bigger error term than the artifact everyone was chasing. Five
+sessions went into explaining why the process freezes; the metric defect it was supposed to be
+corrupting was mostly an artifact of averaging the measurement into 5-minute buckets before storing
+it. **Check what resolution a number was recorded at before designing a correction for it.**
