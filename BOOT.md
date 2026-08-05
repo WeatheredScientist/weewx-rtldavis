@@ -30,24 +30,38 @@ log size all three) instead of three distinct ones, burning `MAX_CATCH=3` on one
 (`osascript`, confirmed deliverable live) on each catch and on exit — the watcher is a detached
 `nohup`+`caffeinate` process, no Claude session or cloud needed for it to reach the owner.
 
-**Tonight's freeze** (21:48:59–21:52:37 UTC, ~4 min): all `S` throughout except three isolated `R`
+**Freeze #1 tonight** (17:48:59–17:52:37 EDT, ~4 min): all `S` throughout except three isolated `R`
 blips in a single `rtldavis` worker thread; `weewxd`'s main thread and all four REST uploaders
-stayed `S` the whole time. No `D`, consistent with S64 — leans further against I/O-blocking, points
-at something stuck in `weewxd`'s own loop rather than a wholesale freeze.
+stayed `S` the whole time. No `D`, consistent with S64. **Coffee-radar was NOT running and loadavg
+was normal (0.3–0.7)** — no shared-NAS signature on this instance.
 
-**Cross-repo check (owner asked — HLF/coffee-radar share this NAS):** a *general* NAS-wide stall was
-already ruled out at S63 (InfluxDB's own timer fired sub-ms, on-schedule, mid-freeze). A *narrower*
-hypothesis — page-cache eviction from coffee-radar's scheduled batch runs or HLF's own heavy jobs,
-the mechanism behind HLF's own DEC-0162 incident class on this same box — hadn't been checked.
-Tonight: **coffee-radar's container was NOT present** during the freeze. Not proven, not ruled out;
-`nasctl ps` now captured on every future catch for free. Known freeze timestamps don't cleanly match
-coffee-radar's schedule; HLF's 15-min tick is too frequent to test by timestamp alone without HLF's
-own per-tick timing data, which isn't reachable from weewx's read-only `nasctl` access.
+**Freeze #2 tonight** (19:13:43–19:15:41 EDT, ~2 min): **loadavg spiked to 12.39** (vs. the 0.3–0.7
+baseline seen everywhere else) and **coffee-radar was confirmed running the entire time.**
+`nasctl inspect` showed image `coffee-radar` on a container Docker auto-named `dreamy_merkle` — its
+scheduled command never passes `--name`, which is why grepping `docker ps` for the literal string
+"coffee-radar" found nothing on every earlier check. Started **19:00:16 EDT**, 13m27s before
+detection, still running well after recovery. That start time lines up almost exactly with
+coffee-radar's documented 19:00 daily run — **its schedule is local time (EDT), not UTC**, a
+unit mismatch in this session's own earlier check (owner: "I almost never refer to UTC, I live in
+US Eastern"). `pid=30506 (rtldavis)` read `R` in *both* 20s-apart samples this time — continuously
+runnable, not a single blip — more consistent with CPU contention than the brief ticks seen
+elsewhere. `weewxd`'s main thread still read `S` throughout, never `D`.
 
-**v4 watcher running now, unattended** — deadline 2026-08-05 13:33 UTC / 09:33 EDT, up to 3 more
-distinct catches, macOS-notifies per catch and on exit. Script still lives only in scratchpad —
-third rebuild from transcript archaeology; worth committing to `ops/` if this keeps recurring, not
-done yet (ask first).
+**Owner's read: coffee-radar likely has *some* impact — evidence so far supports but doesn't settle
+that.** Freeze #1, same night, shows the identical symptom with neither coffee-radar running nor
+elevated load, so it isn't the sole cause, or not every instance shares it. A general NAS-wide stall
+is still ruled out (S63/DEC-0067 — InfluxDB's own timer fired sub-ms, on-schedule, mid-freeze); this
+is narrower — coffee-radar (or whatever drives load-12 spikes) as a contributor to *some* freezes,
+not all. Re-checking the 4 historical timestamps against coffee-radar's now-corrected local-time
+schedule still shows no clean match for any of them, but a documented-schedule comparison is weaker
+evidence than tonight's direct `docker ps`/`inspect` observation — and DSM's own task-run history
+(if coffee-radar logs one) hasn't been checked yet. `nasctl ps` is captured on every future catch,
+so more coincidences (or non-coincidences) will keep accumulating.
+
+**v4 watcher running now, unattended** — 1 of 3 catches used, deadline 09:33 EDT tomorrow, macOS-
+notifies per catch and on exit. Script still lives only in scratchpad — third rebuild from
+transcript archaeology; worth committing to `ops/` if this keeps recurring, not done yet (ask
+first).
 
 ### Current state — every row re-verified at S63 open, not carried over
 
@@ -106,21 +120,21 @@ restore.
 
 ## Blockers
 
-1. **The weewx process freezes, roughly once a day, ~3.5-4 min. Cause unknown (DEC-0067).** Seen
-   07-30 08:04, 08-02 13:46, 08-03 02:59, 08-03 23:23 (262s, S64), **08-04 21:48:59–21:52:37 (~4 min,
-   S65)** — 07-30 was LNA-in, so these pre-date the LNA removal. All threads stop at once and nothing
-   is logged; leading hypothesis was a thread blocking on the bind-mounted log volume while holding
-   the logging lock (box runs at 18.6% cumulative iowait). **S64+S65 captures both lean against
-   that**: every sample across both nights read `S`, never `D`, and S65 additionally saw a single
-   `rtldavis` worker thread intermittently go `R` while `weewxd`'s main thread and REST uploaders
-   stayed `S` throughout — points more specifically at something stuck in `weewxd`'s own loop.
-   **S64's slow-second-sample bug is fixed** (parallelized reads, ~1-2s/sample) **and so is a dedup
-   bug found tonight** (a single freeze was being caught repeatedly as if distinct, burning the catch
-   budget on one event). v4 watcher running now through 2026-08-05 13:33 UTC, notifies locally per
-   catch. **New this session: checked whether shared-NAS contention (coffee-radar/HLF) explains
-   it** — a general NAS-wide stall is already ruled out (DEC-0067), a narrower page-cache-eviction
-   variant (cf. HLF's own DEC-0162) is not ruled out but coffee-radar wasn't running during tonight's
-   freeze; `nasctl ps` now captured on every future catch. Detail: `docs/ROADMAP.md` P0 freeze item.
+1. **The weewx process freezes, roughly once a day, ~2-4 min. Cause unknown (DEC-0067).** Seen
+   07-30 08:04, 08-02 13:46, 08-03 02:59, 08-03 23:23 (262s, S64), **08-04 17:48–17:52 EDT (~4 min)
+   and 08-04 19:13–19:15 EDT (~2 min, both S65)** — 07-30 was LNA-in, so these pre-date the LNA
+   removal. All threads stop at once and nothing is logged; leading hypothesis was a thread blocking
+   on the bind-mounted log volume while holding the logging lock (box runs at 18.6% cumulative
+   iowait). **Every sample across 3 freezes over 2 nights read `S`, never `D`.** **New signal (S65's
+   second catch): loadavg spiked to 12.39 (vs. the 0.3–0.7 baseline everywhere else) and coffee-radar
+   was confirmed running the entire freeze** — via `nasctl inspect`, not a `docker ps` name match
+   (its scheduled job never sets `--name`, so it shows up Docker-auto-named and was missed by every
+   earlier name-string check). Its 19:00:16 EDT start lines up with coffee-radar's documented 19:00
+   daily run — that schedule is local time, not UTC, a unit mismatch corrected this session. **Not
+   the sole cause**: the *first* freeze the same night had no coffee-radar and normal loadavg.
+   **S64's slow-second-sample bug and a same-night dedup bug are both fixed** (parallelized reads,
+   ~1-2s/sample; v4 waits for log regrowth before re-arming). v4 watcher running through 09:33 EDT
+   tomorrow, 1 of 3 catches used, notifies locally per catch. Detail: `docs/ROADMAP.md` P0 item.
 2. **ERR-0005 is still unexplained** — but is demonstrably a **single incident**, not the head of a
    pattern (21 driver detections that day, 0 on every other). Do not let it block B on its own.
 3. **`database is locked` is recurrent and pre-dates the LNA removal** (08-01 15:08, 08-02 19:45;
@@ -133,14 +147,15 @@ restore.
 ## Ordered backlog
 
 1. **Find out why the process freezes (DEC-0067).** S65 fixed the watcher (parallelized reads,
-   dedup bug, macOS notification) and it's running unattended through 2026-08-05 13:33 UTC — check
-   `stall-capture.txt` or wait for the notification. Evidence so far (S64+S65, 2 nights): always `S`,
-   never `D`; S65 additionally saw a `rtldavis` worker thread intermittently `R` while `weewxd`'s
-   main thread stayed `S` — leans toward something stuck in `weewxd` itself, not I/O-blocking or a
-   wholesale freeze. Shared-NAS contention (coffee-radar/HLF) checked and not ruled out, but
-   coffee-radar wasn't running during tonight's catch. **Next: let the v4 watcher finish, then decide
-   whether the pattern is settled enough for a DEC.** Then: make the metric freeze-aware, fix the DB
-   lock, launch B.
+   dedup bug, macOS notification) and it's running unattended through 09:33 EDT tomorrow — check
+   `stall-capture.txt` or wait for the notification (1 of 3 catches used). Evidence: always `S`,
+   never `D`, across 3 freezes over 2 nights. **S65's second catch directly ties coffee-radar to at
+   least one freeze** — confirmed running via `nasctl inspect` (not a name-string match, which missed
+   it every prior check), loadavg 12.39 vs. 0.3–0.7 baseline — but the *first* freeze the same night
+   had neither, so it's a contributor, not the sole cause. **Next: let the v4 watcher finish
+   collecting, then check DSM's own coffee-radar run history against all known freeze times (a
+   proper local-time comparison this time) before deciding whether this is settled enough for a
+   DEC.** Then: make the metric freeze-aware, fix the DB lock, launch B.
 2. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at
    `interval = 15` + `backfill = 1` flag, ERR-0003's path. Back up the DB first.
 3. Post-campaign: LNA-in vs LNA-out grand comparison (A × B), final prod config decision, whether
@@ -209,6 +224,6 @@ restore.
   number and the handoff.**
 
 _Last updated: 2026-08-04 (S65) — fixed the freeze-watcher (parallelized reads, dedup bug, macOS
-notification), caught a richer live sample (still S-not-D, plus a new R-blip detail), checked and
-partially addressed the shared-NAS-contention hypothesis, relaunched unattended overnight. Session
-numbering: this repo's own counter; governed era runs S16 → …_
+notification); caught two distinct freezes the same night, one of them with coffee-radar confirmed
+running and loadavg spiking to 12.39 — a real but not sole contributor, since the other freeze had
+neither. Session numbering: this repo's own counter; governed era runs S16 → …_
