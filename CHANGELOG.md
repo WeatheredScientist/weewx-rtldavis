@@ -5,6 +5,38 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S66] — 2026-08-05 — Campaign metric goes freeze-aware (DEC-0069); campaign B's metric gate closed
+
+- **New `ops/campaign_analyze.py` + 14 tests** — reads per-minute `rxCheckPercent` from the archive
+  DB, excludes freeze artifacts structurally, reports per-arm means with the *uncleaned* figure
+  alongside so the size of the correction is visible rather than asserted. `ops/rx_experiment.sh`
+  is deliberately untouched: the unattended, prod-config-writing apparatus was not modified to close
+  a reporting gate.
+- **The gate was mostly a resolution problem, not a freeze problem.** `harvest()` scraped the
+  monitor's *5-minute* `RECEPTION:` aggregate, where one frozen minute drags the whole bucket
+  (measured 16 % and 27 % against a ~72 % neighbourhood) and destroys four good minutes — that is
+  where BOOT's ~0.8-point estimate came from, and it was correct *for that metric*. The same
+  measurement is stored **per minute** in the archive. Net effect on a pooled arm mean: **±0.03
+  points** against a 2.0-point adoption bar.
+- **Measured the freeze signature** over 10 988 records / 33 gaps: three non-overlapping classes
+  (freeze / arm swap / lock-outage). **The contaminated record is the one adjacent to the gap; the
+  freeze minutes are simply absent rows** — BOOT had assumed they scored as zeros, which is what
+  made the estimate ~60× too large. Retro-found one freeze nobody had logged (07-29 22:12).
+- **Corrects DEC-0067 in both directions.** Its predicted post-freeze "up" is real — 2026-07-29
+  03:10 reads `rxCheckPercent = 200.0` — but conditional, ~1 in 8 days. An initial two-freeze
+  reading here concluded there was no "up" at all; the 8-day scan overturned that.
+- **Campaign A recomputed:** A 74.81 / C 74.37 / D 74.17 / B 73.87, spread **0.94 pts**, no arm near
+  adoption. The ~1.9-pt offset from the previously-recorded 72.4 % matches `weewx_monitor.py`'s own
+  "~1–2 pts optimistic" note — the two metrics validate each other, and A-vs-B must be read on the
+  same one. *This unsealed A's arm winner ahead of B; see DEC-0069's sealing note.*
+- **Two build-time defects caught, both of which would have printed confident wrong numbers:** a bare
+  run pooled campaign A's aborted 07-29 attempt with the campaign proper (unbalanced square, tidy
+  table, no indication) — now detected mechanically; and deriving the query bound locally dragged the
+  entire archive over ssh — now bounded NAS-side.
+- **ROADMAP:** metric gate closed; the `database is locked` defect restated as campaign B's **sole**
+  remaining gate. The by-S66 *full* reconciliation tripwire fired and is flagged as still owed.
+
+---
 ## [S65] — 2026-08-04 — Freeze-watcher fixed (parallel reads, dedup bug, local notification); two freezes caught, one tied to coffee-radar's scheduled run
 
 - **The watcher's second-sample bug is fixed.** S64's second `S`-vs-`D` sample landed ~7 min late
