@@ -40,10 +40,20 @@ under [Pre-S16].
   schedule still shows no clean match, but that comparison is weaker evidence than tonight's direct
   `docker ps`/`inspect` observation, and DSM's own coffee-radar run history (if it logs one) hasn't
   been checked yet. `nasctl ps` is captured on every future catch, at no extra cost.
-- Watcher relaunched (v4) after each catch — 1 of 3 used, deadline 09:33 EDT tomorrow. Script still
-  lives only in scratchpad, not the repo — third time it's been rebuilt from session-transcript
-  archaeology; worth committing to `ops/` if this keeps recurring. Detail:
-  [docs/ROADMAP.md](docs/ROADMAP.md) P0 freeze item.
+- **The overnight run finished at its 15h deadline with exactly one catch** — the coffee-radar one
+  above; no third freeze materialized. `docs/ROADMAP.md`'s P0 freeze item updated to match.
+- **DEC-0068 accepted**, capturing this finding as the settled (if partial) record: coffee-radar is
+  a confirmed contributor to some freezes, not a full explanation. n=1 correlated of 3 total
+  detailed captures — not a base rate. Full body: `docs/DECISIONS-FULL.md`.
+- **`ops/freeze_watch.sh` committed** — third time this watcher was rebuilt from session-transcript
+  archaeology (S63, S64, S65); no reason for a fourth. Also fixed a real bug found while writing
+  this up: its coffee-radar-presence check grepped container *names* via `nasctl ps`, but a one-shot
+  container run without `--name` (coffee-radar's own scheduled command) never gets one, so the check
+  could never have matched — now greps the whole `nasctl ps` line, catching the `IMAGE` column too.
+  `MANIFEST.md` gains a row.
+- **Priority shifts off freeze-chasing.** Root cause isn't fully explained, but campaign B doesn't
+  need it to be — its two real remaining gates (make the metric freeze-aware, fix the DB lock) are
+  unchanged by this finding and are next.
 
 ---
 ## [S64] — 2026-08-04 — First live D-vs-S capture of a freeze, plus two closed trackers
