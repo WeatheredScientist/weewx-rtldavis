@@ -3176,3 +3176,78 @@ informative — was already deployed and already working correctly. What was mis
 silence as data. **A watchdog that does not fire is telling you something.** Compare DEC-0035's
 structurally blind test and DEC-0045's passing test with the wrong assertion: three variants of the
 same mistake, which is trusting an instrument without asking what it is physically able to observe.
+
+## DEC-0068 — Coffee-radar is a confirmed contributor to some process freezes, not a full explanation
+
+**Status:** Accepted · **Date:** 2026-08-05 (S65) · **Extends** DEC-0067's open "why it freezes"
+question · does **not** change DEC-0064's design · Campaign B's DEC-0066 gates are unchanged
+
+### What this settles
+
+Direct, measured evidence — not a timestamp inference — that coffee-radar's scheduled batch job
+coincided with one weewx process freeze on 2026-08-04. This NAS runs three of the owner's projects
+as containers (`weewx-rtldavis-v2`, `hyperlocal-forecast-api`, `coffee-radar`), and hyperlocal-
+forecast has its own well-measured incident class on this same box (its own DEC-0162: coffee-radar's
+scheduled runs are a confirmed cause of severe page-cache-eviction stalls there). The question asked
+this session was whether that shared-NAS mechanism also explains weewx's freezes. The answer is:
+sometimes, confirmed once, not always.
+
+### The measurement
+
+An overnight watcher (`ops/freeze_watch.sh`, this session — polls `weewx.log`'s size, captures a
+paired 12-thread `S`/`D`/`R` sample 20 s apart on a stall, plus a `nasctl ps` container snapshot)
+caught two distinct freezes the night of 2026-08-04:
+
+| | Freeze #1 | Freeze #2 |
+|---|---|---|
+| Time (EDT) | 17:48:59–17:52:37 (~4 min) | 19:13:43–19:15:41 (~2 min) |
+| loadavg at detection | 0.67 / 0.74 / 0.66 | **12.39 / 12.18 / 8.17** |
+| coffee-radar running | No | **Yes — confirmed** |
+| Thread states | all `S`, three isolated single-sample `R` blips | all `S` except `pid=30506 (rtldavis)`, which read `R` in **both** 20s-apart samples |
+| `weewxd` main thread | `S` throughout | `S` throughout |
+
+Coffee-radar's presence during freeze #2 was confirmed with `nasctl inspect`, not a name match:
+its scheduled command (`docker run --rm --env-file … coffee-radar node src/index.js --parallel 3`)
+never passes `--name`, so the running container gets a Docker-random name (`dreamy_merkle` on the
+night in question) with its real identity visible only in the `IMAGE` field. Grepping `docker ps`
+output for the literal string `coffee-radar` — the check this session ran first, against freeze #1
+— structurally cannot match such a container; `ops/freeze_watch.sh`'s own coffee-radar detection had
+the same bug and is fixed as part of committing it (greps the whole `nasctl ps` line, not just the
+`NAMES` column). `nasctl inspect` showed the container had started **19:00:16 EDT**, 13m27s before
+detection, and was still running well after recovery — a start time that lines up almost exactly
+with coffee-radar's own documented 19:00 daily scheduled run. That schedule is **local time (EDT)**,
+not UTC — a unit mismatch in this session's own first pass at comparing freeze timestamps against
+it, corrected here.
+
+### What this does NOT settle
+
+- **Not the sole cause.** Freeze #1, the same night, shows the identical symptom (all `S`, brief `R`
+  ticks, `weewxd` never `D`) with coffee-radar not running and loadavg normal. Either freezes have
+  more than one trigger, or coffee-radar's presence is a contributing-but-not-necessary condition.
+- **n=1 coincidence.** One correlated instance out of three total captured freezes (S64's 08-03
+  23:23 one plus these two) is suggestive, not a base rate. The 4 historical freeze timestamps
+  (07-30 08:04, 08-02 13:46, 08-03 02:59, 08-03 23:23) were re-checked against coffee-radar's
+  corrected local-time schedule (07:00/19:00 main, 6-hourly watchlist, Monday 14:00 prodigal) and
+  show no clean match for any of them — but a documented-schedule comparison is weaker evidence than
+  a direct `docker ps`/`inspect` observation, and DSM's own coffee-radar run history, if it logs
+  one, has not been checked.
+- **Mechanism unconfirmed.** `weewxd`'s own main thread reads `S`, never `D`, even during the
+  load-12 freeze — not literal I/O-blocking in the classic sense. CPU scheduling contention, page-
+  cache eviction (the mechanism behind HLF's own DEC-0162 on this box), and memory pressure are all
+  still plausible and undistinguished by the current instrumentation.
+
+### Consequences
+
+Campaign B's gates (DEC-0066) are unchanged: make the campaign metric freeze-aware, fix the DB lock.
+This finding doesn't newly block or unblock B — freezes already needed exclusion from the campaign
+metric regardless of cause. `ops/freeze_watch.sh` is now a committed, reusable diagnostic instead of
+a scratchpad script rebuilt from session-transcript archaeology three sessions running (S63, S64,
+S65) — any future freeze investigation, or a check that this is resolved, starts from a working tool
+instead of a rebuild.
+
+### Lesson
+
+A one-shot container launched without `--name` is invisible to any check that greps `docker ps` by
+name — its real identity is in `IMAGE`, not `NAMES`. This is a general NAS-ops gotcha, not specific
+to coffee-radar: any future "is container X running" check on this shared box should grep the whole
+`docker ps`/`nasctl ps` line, not assume a container's own image name is also its runtime name.

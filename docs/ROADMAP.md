@@ -182,22 +182,21 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       The 13:47 dropout fired nothing → **the receiver was fine and the process was frozen.**
       **Still open, tracked below: why it freezes.** ERR-0005's own root cause also remains
       unestablished, but it no longer gates campaign B on its own.
-- [ ] **P0 — why does the weewx process freeze? (DEC-0067)** ~3.5 min, roughly once a day; seen
-      07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59, **08-03 23:23 (262 s, S64).** All threads
-      stop together and nothing is logged — the leading hypothesis was a thread blocking on the
-      bind-mounted log volume while holding the shared logging lock, on a box at **18.6 %
-      cumulative iowait**. **First live capture (S64): still unproven, but leans away from that.**
-      An overnight watcher (poll `weewx.log`'s size, read `/proc/<tid>/stat` for the thread IDs in
-      `/sys/fs/cgroup/cpuacct/docker/<CID>/tasks`, read-only, no NAS deploy) ran 15 h and caught the
-      08-03 23:23 freeze ~2 min in: **all 12 named threads were `S` (sleeping), none `D`**
-      (uninterruptible I/O) — independently confirmed against the raw log (exactly one gap ≥60 s in
-      the watched window, matching the watcher's own count). One caveat: the design's second sample
-      (meant to confirm the state *persists*, 20 s later) is 12 sequential `nasctl` round-trips and
-      landed ~7 min later in practice, after the freeze had already recovered — so this is one clean
-      in-freeze sample, not two. Next: fix the second-sample timing (batch or parallelize the
-      per-thread reads) and catch another one before treating `S`-not-`D` as settled. Ruled out
-      already: NAS-wide stall, the S37 stdout wedge, CPU-quota throttling, `pressure_service`.
-      Upstream hit this and worked around it without diagnosing it (`get_stderr()`'s 10 s cap).
+- [ ] **P0 — why does the weewx process freeze? (DEC-0067, DEC-0068)** ~2-4 min, roughly once a
+      day; seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59, 08-03 23:23 (262 s, S64), and two
+      more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;
+      `weewxd`'s own main thread reads `S`, never `D`, across every capture so far — leans against
+      the original "blocked on the bind-mounted log volume" hypothesis. **DEC-0068 (S65): this NAS
+      also runs coffee-radar, and it was confirmed running (via `nasctl inspect`, not a name match —
+      its scheduled job never sets `--name`) during one freeze, with loadavg spiking to 12.39 against
+      a 0.3–0.7 baseline — a real contributor, not a full explanation.** The other S65 freeze, same
+      night, had neither coffee-radar nor elevated load. n=1 correlated out of 3 captured freezes;
+      not a settled base rate. `ops/freeze_watch.sh` (S65, now committed — no longer a scratchpad
+      rebuild every session) is the tool for any further capture. **Root cause is not fully
+      explained, but campaign B does not need it to be** — its actual remaining gates are the metric
+      going freeze-aware and the line below. Ruled out already: NAS-wide stall, the S37 stdout wedge,
+      CPU-quota throttling, `pressure_service`. Upstream hit this and worked around it without
+      diagnosing it (`get_stderr()`'s 10 s cap).
 - [ ] **P0 — the `database is locked` defect.** Recurrent and **pre-dates the LNA removal**
       (08-01 15:08, 08-02 19:45; earlier S59) — and **independent of the freezes above**. DEC-0067
       decomposed the 10-min outage: ~106 s of hung uploader threads + **120 s of weewx's own
