@@ -61,9 +61,13 @@ on purpose: that pair is the cross-campaign LNA anchor, and it is the reason
 this tool recomputes A rather than reusing A's originally-harvested numbers.
 
 Usage:
-    python3 ops/campaign_analyze.py --campaign A
+    python3 ops/campaign_analyze.py --campaign A --since 1785384300
     python3 ops/campaign_analyze.py --campaign B --settle 900
     python3 ops/campaign_analyze.py --campaign A --raw-dump rows.csv
+
+Campaign A NEEDS that `--since`: its aborted 2026-07-29 attempt shares the same
+apparatus log, and without a cutoff those blocks join the arm means. The tool warns
+and names the epoch, but it will not refuse — pass it.
 
 Connection facts come from the environment or ~/.claude/nas.env, never from this
 PUBLIC repo (DEC-0012): NAS_PORT / NAS_USER / NAS_HOST.
