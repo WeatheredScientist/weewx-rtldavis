@@ -133,12 +133,12 @@ behaves differently here (OPS-DEC-0036/0062).
    build. Freeze root cause stays unexplained (DEC-0067/0068) and **gates nothing**.
 2. **Check ops#141 for HLF's restart** before trusting any dashboard/forecast reading — HLF was left
    stale by the WAL rollback and needs its container restarted by an HLF session.
-3. **Two overdue doc-hygiene items, both self-reported by their own tripwires.** (a) The full
-   `docs/ROADMAP.md` reconciliation: its guardrail says "by S66" and S66 did only targeted DEC
-   passes. (b) **This file is ~3,630 tokens against its ~2,500 cap.** S66 deleted the duplicated
-   rule sections (net *smaller* than at S66 open, despite adding two DECs), but ~1,100 tokens still
-   need rehoming to `MANIFEST.md` rows — per DEC-0063 that means moving content, not raising the cap.
-   Best candidates now: "Standing watches", "What we learned about the LNA", "Before B can launch".
+3. **Doc hygiene: one done, one still owed.** ✅ The full `docs/ROADMAP.md` reconciliation ran at
+   S66 — 8 open items diffed, 4 stale ones fixed (including a DEC-0057 update missed the day
+   before), next check due **by S76**. ❌ **This file is ~4,000 tokens against its ~2,500 cap** and
+   needs ~1,500 rehomed to `MANIFEST.md` rows — per DEC-0063 that means moving content, not raising
+   the cap. Best candidates: "Standing watches", "What we learned about the LNA", "Before B can
+   launch".
 4. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at
    `interval = 15` + `backfill = 1` flag, ERR-0003's path. Back up the DB first.
 5. Post-campaign: LNA-in vs LNA-out grand comparison (A × B) — **run `ops/campaign_analyze.py` over
