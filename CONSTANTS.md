@@ -46,6 +46,16 @@ DEC-0046).**
 **Ask "which layer actually wins in prod?" for every file, every time.** A previous session's answer
 about a *different* file proves nothing about this one.
 
+### Live-config deviations from stock — NAS-only, no repo artifact (DEC-0070)
+
+`weewx.conf` is mounted and **never committed** (DEC-0012), so anything set in it exists only on the
+NAS, with no CI and no diff to notice. **A container recreate from a stock config silently reverts
+these.** Re-apply and re-verify after any recreate.
+
+| Setting | Value | Why |
+|---|---|---|
+| `[DatabaseTypes][[SQLite]]` → `timeout` | **30** | weedb defaults to **5 s** (`weedb/sqlite.py:136`). At 5 s a reader holding the lock six seconds cost a CRITICAL + weewx's hardcoded 120 s wait + restart ≈ **5–10 min outage**. 30 s stays under the 60 s archive interval so records can't pile up. Interim until WAL (blocked by ops#141) |
+
 ## Release / rollback
 
 | Thing | Value |
