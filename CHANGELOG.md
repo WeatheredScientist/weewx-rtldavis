@@ -60,6 +60,25 @@ under [Pre-S16].
 - **Corrects DEC-0067's reader list:** it named "the dashboard" as an archive-DB reader. Scanning
   every container that mounts a weewx path finds only `hyperlocal-forecast-api`, `eh-proxy` (parent
   dir, read-only), and weewx itself.
+- **WAL tried and ROLLED BACK (DEC-0071) — with a self-inflicted ~6 min prod outage.** HLF shipped
+  the directory mount (ops#141), WAL went live 06:56 EDT, and hyperlocal-forecast **froze on a stale
+  snapshot within minutes**. Two blockers, both missed: a Docker `:ro` bind makes the **files**
+  read-only, and DEC-0070's own test only chmod'd the *directory*, so it never reproduced that —
+  structurally blind, DEC-0035's lesson recurring; and SQLite creates `weewx.sdb-wal` mode **0555**,
+  so even a read-write mount leaves a non-root reader unable to write it.
+- **Rolling back was the hard part.** `PRAGMA journal_mode=DELETE` needs an exclusive lock that
+  weewx's persistent connection denies, and with the container stopped there's no `docker exec`
+  either. Resolved by letting weewx apply it: `[[[pragmas]]] journal_mode = DELETE`, kept in place so
+  the mode is re-pinned on every start. **That pragma was first written as a scalar** — weedb wants a
+  mapping, so it raised `TypeError: string indices must be integers` and crash-looped weewxd
+  (CRITICALs 07:18:58, 07:20:22) until the subsection form landed at 07:24.
+- **Process failures worth naming:** the first rollback attempt opened with a `SELECT COUNT(*)` that
+  had *already* timed out earlier the same session, and the config shape was assumed from the field
+  name rather than checked against the consumer whose source had been read an hour before. Two of
+  three failures repeated lessons already written down in this repo.
+- **Net:** WAL is not viable as scoped; `timeout = 30` is the fix, not an interim, and delivers most
+  of WAL's practical benefit. weewx healthy and current. **hyperlocal-forecast is still stale and
+  needs a container restart by an HLF session** — reported on ops#141, relabelled `repo:hlf`.
 - **Branch hygiene:** nine merged S62–S66 feature branches deleted (local + remote), restoring the
   `dev` + `main` steady state CONSTANTS.md specifies. Every one verified contained in `dev` first;
   `main` deliberately untouched. BOOT.md's "stale branch still exists, harmless" row retired with it.
