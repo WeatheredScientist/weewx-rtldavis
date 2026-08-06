@@ -5,7 +5,7 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
-## [S66] — 2026-08-05 — Campaign metric goes freeze-aware (DEC-0069); campaign B's metric gate closed
+## [S66] — 2026-08-05 — Both campaign-B gates handled: metric goes freeze-aware (DEC-0069), DB lock bounded (DEC-0070)
 
 - **New `ops/campaign_analyze.py` + 14 tests** — reads per-minute `rxCheckPercent` from the archive
   DB, excludes freeze artifacts structurally, reports per-arm means with the *uncleaned* figure
@@ -35,6 +35,31 @@ under [Pre-S16].
   entire archive over ssh — now bounded NAS-side.
 - **ROADMAP:** metric gate closed; the `database is locked` defect restated as campaign B's **sole**
   remaining gate. The by-S66 *full* reconciliation tripwire fired and is flagged as still owed.
+- **DB lock bounded (DEC-0070) — it was two defaults, not a bug.** `journal_mode=delete` (a reader's
+  SHARED lock blocks the writer) plus weedb's **5 s** SQLite timeout (`weedb/sqlite.py:136`, and the
+  live config set none). Six seconds of reader therefore cost a CRITICAL + weewx's hardcoded 120 s
+  wait + restart ≈ **5–10 min outage**. Shipped **`timeout = 30`** to the live `weewx.conf`; verified
+  in the running system (resolved `database_dict` carries it) and restart healthy at **106 s**.
+  Outages now capped at ~30 s. New behaviour to expect: weewx *blocks* rather than erroring, and such
+  a stall is indistinguishable from a DEC-0067 freeze to `freeze_watch.sh` — excluded correctly by
+  `campaign_analyze.py`, not a bug to chase.
+- **WAL is the real fix and is blocked cross-repo — filed ops#141.** `hyperlocal-forecast-api` binds
+  the archive DB as a single *file*, so WAL's `-wal`/`-shm` siblings can never appear beside it. An
+  initial reading that the mount would also need to become *writable* was **tested and disproved** on
+  the container's own SQLite 3.46.1: read-only directory mounts work with `-shm` present or absent;
+  only the single-file case fails, and it fails as `no such table`, not as stale data. So `RW=false`
+  stays and no HLF code changes.
+- **`CONSTANTS.md` gains a live-config deviations table.** `weewx.conf` is the mounted layer and is
+  never committed, so `timeout = 30` exists only on the NAS with no CI and no diff — a stock
+  container recreate would silently revert it.
+- **Guard finding (belongs to ops):** the NAS mutation that wrote live prod config **did not trip the
+  Class C guard** — `ssh <nas> "python3 -" < script` hides the mutation in stdin while the guard
+  matches the command string, and that is the batching shape CONVENTIONS recommends. Meanwhile the
+  *read* guard fired three times on `grep`/`tail` against files carrying no secrets. Owner-authorized
+  in chat, so nothing improper — but the mechanism didn't enforce it.
+- **Corrects DEC-0067's reader list:** it named "the dashboard" as an archive-DB reader. Scanning
+  every container that mounts a weewx path finds only `hyperlocal-forecast-api`, `eh-proxy` (parent
+  dir, read-only), and weewx itself.
 - **Branch hygiene:** nine merged S62–S66 feature branches deleted (local + remote), restoring the
   `dev` + `main` steady state CONSTANTS.md specifies. Every one verified contained in `dev` first;
   `main` deliberately untouched. BOOT.md's "stale branch still exists, harmless" row retired with it.
