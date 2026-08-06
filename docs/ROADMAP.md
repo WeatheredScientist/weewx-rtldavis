@@ -214,8 +214,16 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       deep fades and bias every arm upward. Net effect on a pooled arm mean: **±0.03 points** against
       a 2.0-point bar. New tool `ops/campaign_analyze.py` (+14 tests); `ops/rx_experiment.sh`
       deliberately untouched. Campaign A recomputed: spread **0.94 pts**, no arm near adoption.
-- [ ] **P0 — the `database is locked` defect** — **now campaign B's SOLE remaining gate (DEC-0069).**
-      Recurrent and **pre-dates the LNA removal**
+- [ ] **P0 — the `database is locked` defect** — **BOUNDED at S66 (DEC-0070), not yet closed.** Root
+      cause is a pair of untouched defaults: `journal_mode=delete` (a reader's SHARED lock blocks the
+      writer) plus weedb's **5 s** SQLite timeout (`weedb/sqlite.py:136`), so six seconds of reader
+      cost a CRITICAL + weewx's hardcoded 120 s wait + restart ≈ **5–10 min**. **Shipped `timeout = 30`
+      in the live `weewx.conf`** — outages now capped at ~30 s, verified in the running system.
+      **The real fix is WAL, blocked by a cross-repo mount:** `hyperlocal-forecast-api` binds the DB
+      as a single *file*, so WAL's `-wal`/`-shm` siblings can never appear. Tested on SQLite 3.46.1 —
+      read-only directory mounts work fine (`RW=false` can stay); only the single-file case fails.
+      Filed **ops#141** (`repo:hlf`). Flip WAL only after that lands and HLF is verified under the
+      existing journal. Remaining detail below **pre-dates the LNA removal**
       (08-01 15:08, 08-02 19:45; earlier S59) — and **independent of the freezes above**. DEC-0067
       decomposed the 10-min outage: ~106 s of hung uploader threads + **120 s of weewx's own
       hardcoded wait** + ~5 min restart, so the thread hang is only ~18 % of it — the identical
