@@ -3621,3 +3621,64 @@ repo* — a structurally blind test (DEC-0035) and a config assumed rather than 
 consumer (DEC-0031/0046). Having the lesson on file is not the same as applying it under time
 pressure on an incident path. **When a change is going badly, stop and re-read the consuming code
 before the next attempt** — every one of these was cheaper to check than to undo.
+
+---
+
+## DEC-0072 — The MANIFEST indexes classes, and that makes each script's header a load-bearing artifact
+
+**Status:** Accepted · **Date:** 2026-08-06 (S67) · **Amends** DEC-0063's tier-file structure ·
+**applies** eaglehunt-ops STANDARD rule 9 (OPS-DEC-0098) · ops#145
+
+### What this settles
+
+`MANIFEST.md` had one row per artifact. That shape cannot hold a fixed cap: the row count tracks a
+population that only grows — one row per ops script, per runbook, per handoff — so the file crosses
+any cap by construction rather than by neglect. Measured at S67: 1948 tokens against a 1000 cap,
+197% — the worst of the four member repos in the ops sweep.
+
+The fix is not a bigger cap and not fewer artifacts. **Where every member of a set shares a
+load-time convention, the index carries one row naming the set and the convention, and the instances
+self-describe at their source.** `ops/*` + `scripts/*` collapsed from five per-artifact rows to one:
+*the script's header comment is its manual — read it before using or extending one.*
+
+### Why this was safe here, and how that was checked
+
+Rule 9 is only sound if the convention actually holds. It was verified before being relied on, not
+assumed: the headers of `soak_check.sh`, `rx_experiment.sh`, `campaign_analyze.py`,
+`find_duplicate_frames.py`, `freeze_watch.sh` and `check_secrets.sh` already state why each exists
+and which lying symptom it was built to catch — **richer than the MANIFEST rows that duplicated
+them.** That is STANDARD rule 5 applied to the index itself: the row was the second copy.
+
+Coverage went **up**, not down. The old index carried rows for 5 of the 11 harness scripts; six
+(`backfill_container.py`, `backfill_influx.py`, `find_duplicate_frames.py`, `usb_watchdog.sh`,
+`wxcheck.py`, `wxcheck.sh`) had no row at all. One class row covers all eleven.
+
+### The obligation this creates — the reason this is a DEC and not a chore
+
+A class row is a **promise about every present and future member of the set.** From now on:
+
+- **A new script in `ops/` or `scripts/` must ship with a header that answers "why does this exist,
+  and when would I load it?"** A script with a bare shebang silently falsifies the index. The index
+  will not notice; nothing will fail; a future session simply will not find what it needs.
+- **A fact that is true of one script belongs in that script, not in the MANIFEST.** Four such facts
+  were moved back at S67: campaign A needs `--since` (`campaign_analyze.py`); campaign B is the
+  loaded schedule and `install` refuses a stale one (`rx_experiment.sh`); `EXPECT_IMAGE` must track
+  the deployed tag (`soak_check.sh`). Each had drifted into the index because the index was the
+  thing being read.
+
+This is the trade: the index gets cheap and stays cheap, and the cost moves to a discipline that has
+to be maintained at the source. It is the right trade only while the headers stay honest.
+
+### What was NOT done
+
+The `docs/` rows were left per-artifact. Their "when to load" genuinely cannot be inferred from name
+or location — `ASSESSMENT.md` needs its "read as a dated audit of S23" caveat, `ROADMAP.md` needs
+its same-session DEC-0057 rule — which is exactly the exception rule 9 reserves.
+
+### Result
+
+`BOOT.md` 3734 → 2161 tokens (cap 2500); `MANIFEST.md` 1948 → 970 (cap 1000). Verified by running
+`checks/tier-sweep.sh` itself against fixtures rather than by hand arithmetic — the tool that files
+the issue is the tool that confirms the fix. MANIFEST landed at 3% headroom, deliberately not at
+100% of cap: the dashboard's S193 diet hit exactly the cap with zero headroom and was over again
+within a session, which is the failure this leaves room against.
