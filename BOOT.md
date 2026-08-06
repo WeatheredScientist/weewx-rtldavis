@@ -14,30 +14,27 @@ is a **separate repo** — don't make dashboard changes here.
 
 ## ▶ Resume here (S66)
 
-**S66 closed campaign B's metric gate (DEC-0069).** New `ops/campaign_analyze.py` (+14 tests) reads
-per-minute `rxCheckPercent` straight from the archive DB, excludes freeze artifacts **structurally**,
-and prints each arm's uncleaned mean beside the cleaned one. `ops/rx_experiment.sh` was deliberately
-**not touched** — the unattended prod-config writer stays as-is, and its `harvest()` output remains
-an independent cross-check.
+**Both of campaign B's DEC-0066 gates are handled. The next move is a judgment call, not more work:
+launch B on what we have, or wait for WAL.** Prod healthy; LNA out; schedule dates still a
+placeholder. Freeze root cause stays unexplained (DEC-0067/0068) and **gates nothing**.
 
-**The gate was mostly a RESOLUTION problem, not a freeze problem.** `harvest()` read the monitor's
-*5-minute* `RECEPTION:` aggregate, where one frozen minute drags the whole bucket (measured 16 % and
-27 % against a ~72 % neighbourhood). That is where the ~0.8-pt estimate came from, and it was right
-*for that metric*. The archive stores the same measurement **per minute**. Net correction on a
-pooled arm mean: **±0.03 pts against a 2.0-pt adoption bar** — real, ~60× smaller than believed.
-**The contaminated record is the one adjacent to each gap; the freeze minutes are simply absent
-rows** (BOOT had assumed they scored as zeros — that assumption was the whole error).
+**Gate 1 — metric is freeze-aware (DEC-0069).** `ops/campaign_analyze.py` (+14 tests) reads
+per-minute `rxCheckPercent` from the archive DB and excludes freeze artifacts *structurally*.
+`ops/rx_experiment.sh` deliberately untouched. The gate turned out to be a **resolution** problem:
+the old 5-minute aggregate let one frozen minute wreck four good ones (~0.8 pts); per-minute, the
+real correction is **±0.03 pts against a 2.0-pt bar**. Campaign A recomputed — A 74.81 / C 74.37 /
+D 74.17 / B 73.87, spread 0.94, no arm near adoption — **which unsealed A's winner ahead of B**
+(side effect of tool validation, not a decision; DEC-0069 sealing note). A-vs-B must be read on the
+same metric; the tool guarantees that.
 
-**Campaign A is recomputed, and this unsealed its arm winner ahead of B** (DEC-0066 had sealed it;
-validating the tool necessarily computed it — design uncompromised, but it was a side effect, not a
-decision). A 74.81 / C 74.37 / D 74.17 / B 73.87, spread **0.94 pts**, no arm near adoption.
-Cross-check: the ~1.9-pt offset from the old 72.4 % matches `weewx_monitor.py`'s own documented
-"~1–2 pts optimistic" note — **so A-vs-B must be read on the same metric**, which the tool now
-guarantees for both.
-
-**Campaign B stays HELD (DEC-0066), now on ONE gate: the DB lock.** Prod healthy; LNA out; schedule
-dates still a placeholder. Freeze root cause remains unexplained (DEC-0067/0068) and **no longer
-gates anything** — `ops/freeze_watch.sh` is committed if another spot-check is ever wanted.
+**Gate 2 — DB lock BOUNDED, not closed (DEC-0070).** Two untouched defaults, not a bug:
+`journal_mode=delete` + weedb's **5 s** timeout meant six seconds of reader cost ~5–10 min of
+outage. **`timeout = 30` now live** → capped at ~30 s, verified in the running system. *New
+behaviour:* weewx now **blocks** rather than erroring, and such a stall is indistinguishable from a
+DEC-0067 freeze — correctly excluded by `campaign_analyze.py`, **not a bug to chase**. The real fix
+is WAL, blocked cross-repo by `hyperlocal-forecast-api`'s single-*file* DB mount →
+**[ops#141](https://github.com/WeatheredScientist/eaglehunt-ops/issues/141)**. Flip WAL only after
+that lands and HLF is verified under the existing journal.
 
 ### Current state — re-verified at S66 close
 
@@ -67,8 +64,9 @@ success, and prose would not have caught it (DEC-0040).
 2. ~~Make the campaign metric freeze-aware~~ — **DONE (DEC-0069, S66).** `ops/campaign_analyze.py`.
    Read B with `--campaign B`; read A with `--campaign A --since 1785384300` (its aborted 07-29
    attempt shares the same apparatus log — the tool warns, but pass it anyway).
-3. **Fix the DB-lock defect — the SOLE remaining gate.** Independent of the freezes. Try **WAL mode**
-   on the archive DB first; bound the uploader-thread joins second.
+3. **DB-lock defect — BOUNDED (DEC-0070), not closed.** `timeout = 30` live; outages ~30 s not
+   ~10 min. WAL (the real fix) waits on [ops#141](https://github.com/WeatheredScientist/eaglehunt-ops/issues/141).
+   **Open call: launch B on the bounded version, or wait for WAL?**
 4. ~~Deploy the watchdog~~ — **done**, verified live at S63 open.
 5. Then: promote + tag → rebuild `:v2.0.12` from the **merged tip** (`bdc4f9f`) → push `:v2.0.12`
    (`:latest` only after our own station proves it) → regenerate the schedule → the Class C deploy
@@ -110,24 +108,26 @@ behaves differently here (OPS-DEC-0036/0062).
    **±0.03 pts** on a pooled arm mean). Full reasoning: DEC-0068; detail: `docs/ROADMAP.md` P0 item.
 2. **ERR-0005 is still unexplained** — but is demonstrably a **single incident**, not the head of a
    pattern (21 driver detections that day, 0 on every other). Do not let it block B on its own.
-3. **`database is locked` is recurrent and pre-dates the LNA removal** (08-01 15:08, 08-02 19:45;
-   earlier S59). Independent of the freezes. The 10-min outage decomposes as ~106 s hung threads +
-   **120 s of weewx's own hardcoded wait** + ~5 min restart — the hang is only ~18 % of it, and the
-   identical lock on 08-01 cost 4 min because threads exited in 0.26 s. **The archive DB is not in
-   WAL mode** — the standard cause of this contention, and the first thing to try.
+3. ✅ **`database is locked` — BOUNDED at S66 (DEC-0070).** Cause was two untouched defaults, not a
+   bug: `journal_mode=delete` + weedb's 5 s timeout. `timeout = 30` now live, so a slow reader costs
+   ~30 s instead of 5–10 min. **Still on `delete` journal** — WAL awaits ops#141. Watch for it
+   recurring *despite* the cap: that would mean a reader holding the lock >30 s, which is a
+   different problem.
 - **`ppm`/`fc` still unmeasured** and deliberately unchanged for B (would confound the LNA contrast).
 
 ## Ordered backlog
 
-1. **Fix the DB lock, then launch B** — the metric gate closed at S66 (DEC-0069), so this is the
-   only thing between here and campaign B. **Try WAL mode on the archive DB first** (it is not in
-   WAL mode; that is the standard cause of exactly this contention), bound the uploader-thread joins
-   second. Freeze root cause stays unexplained (DEC-0067/0068) and **gates nothing**.
+1. **Decide whether campaign B launches now.** Both DEC-0066 gates are handled: the metric is
+   freeze-aware (DEC-0069) and the DB lock is **bounded** to ~30 s outages (DEC-0070). Neither is
+   perfect — WAL is still pending [ops#141](https://github.com/WeatheredScientist/eaglehunt-ops/issues/141).
+   This is a judgment call, not more work: launch on the bounded version, or wait for WAL.
+   Freeze root cause stays unexplained (DEC-0067/0068) and **gates nothing**.
 2. **Two overdue doc-hygiene items, both self-reported by their own tripwires.** (a) The full
-   `docs/ROADMAP.md` reconciliation: its guardrail says "by S66" and S66 did only the targeted
-   DEC-0069 pass. (b) **This file is ~3,970 tokens against its ~2,500 cap** and has been over since
-   before S66 — per DEC-0063 that means content moves to `MANIFEST.md` or `ARCHIVE/`, not a bigger
-   cap. Neither is hard; both need a session that isn't mid-design.
+   `docs/ROADMAP.md` reconciliation: its guardrail says "by S66" and S66 did only targeted DEC
+   passes. (b) **This file is ~3,630 tokens against its ~2,500 cap.** S66 deleted the duplicated
+   rule sections (net *smaller* than at S66 open, despite adding two DECs), but ~1,100 tokens still
+   need rehoming to `MANIFEST.md` rows — per DEC-0063 that means moving content, not raising the cap.
+   Best candidates now: "Standing watches", "What we learned about the LNA", "Before B can launch".
 3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at
    `interval = 15` + `backfill = 1` flag, ERR-0003's path. Back up the DB first.
 4. Post-campaign: LNA-in vs LNA-out grand comparison (A × B) — **run `ops/campaign_analyze.py` over
@@ -157,46 +157,25 @@ behaves differently here (OPS-DEC-0036/0062).
 ✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62,
   DEC-0065 — the abort was correct, DEC-0061's budget holds).
 
-## Standing rules that bite most often
+## Gotchas that survive here because they are NOT in the canonical docs
 
-- **Ask "which layer actually wins in prod?" for any file we ship (DEC-0046).** Driver +
-  `pressure_service.py` + `entrypoint.sh` are **baked** (image); `weewx.conf` is **mounted**
-  (live edit); `influx.py` is mounted (scp correct). Exact inverses; a release changing shipped
-  config must patch the live NAS copy in the same window and verify in the **running system**.
-- **The transcript is an egress path (DEC-0047).** `readconf` for configs, `scan-transcripts` to
-  audit; never a line-count window on a sectioned config. **Logs are not covered (DEC-0062)** —
-  never log key material.
-- **`docker kill`, never `docker stop`** (DEC-0008). **`docker logs` always with `--tail N`**
-  (DEC-0036; hook-blocked).
-- **Prod is sacred.** One dongle, one receiver (DEC-0011). `main` = production truth; `dev` = work.
-- **Pause for approval before every commit and before any push.** Discuss design before coding.
-- **No-Rewrite Rule (DEC-0014).**
-- **After patching any `.py` the WeeWX venv imports, clear the pyc cache.**
-- A shipped/closed/reprioritized DEC gets its `docs/ROADMAP.md` line updated the **same session**
-  (DEC-0057). ROADMAP is **P0–P3 only** (DEC-0058); long-horizon items live in `BACKLOG.md`.
+The non-negotiables (public repo · prod is sacred · `docker kill` not `stop` · pause before every
+commit · No-Rewrite · pyc cache) live in **`CLAUDE.md`**; gates, interpreter and git workflow in
+**`docs/CONVENTIONS.md`**; the deploy-layer table in **`CONSTANTS.md`**. *Restating them here was a
+second copy, which STANDARD rule 5 calls a defect — deleted at S66.* What is left is only what those
+files do not say:
 
-## Style notes & contribution conventions
+- **The secret gate also exits 0 with `nothing to scan` when nothing is staged.** A green run proves
+  nothing until you `git add` first (DEC-0039/0045), and it wants a planted-payload positive control.
+- **Ask "which layer wins in prod?" per file, every time** (DEC-0046) — a previous session's answer
+  about a *different* file proves nothing. `CONSTANTS.md` has the table; a shipped config change must
+  also patch the live NAS copy and be verified in the **running system**.
+- **This file is the single source of truth for the session number and the handoff** (DEC-0023);
+  prefix cross-repo refs (`weewx S66` vs `dash S151`).
 
-**This repo is PUBLIC and has external contributors** — the only one in the family that does.
-
-- **No credential, live `weewx.conf`, `monitor.env`, or `proxy.env` ever enters any commit on any
-  branch** (DEC-0012). Committed source carries `YOUR_*` placeholders; infra facts use
-  `<NAS_HOST>` / `<NAS_USER>` / `<SSH_PORT>` placeholders with real values in the gitignored
-  local-infra doc. Show every secret found *before* scrubbing so it can be rotated.
-- **Run the secret gate with a planted-payload positive control.** It prints nothing and exits 0 on
-  a clean pass — *and also exits 0 with `nothing to scan` when no files are staged*. `git add`
-  first (DEC-0039/DEC-0045).
-- **Validation gates and the exact interpreter are in `docs/CONVENTIONS.md`** — use them verbatim;
-  **`ruff format` is not a gate and must not be run** (DEC-0027).
-- Prose: **US spelling, concise over thorough, friendly and non-shaming** in anything public-facing.
-  Community posts and upstream comments are drafted, owner-reviewed, never posted without a go.
-- Sessions use **this repo's own independent counter** (DEC-0023); prefix cross-repo references
-  (`weewx S61` vs `dash S151`). **This file is the single source of truth for the current session
-  number and the handoff.**
-
-_Last updated: 2026-08-05 (S66) — DEC-0069: campaign metric moved to per-minute archive
-`rxCheckPercent` with structural (not magnitude-based) freeze exclusion; new `ops/campaign_analyze.py`
-+14 tests, `ops/rx_experiment.sh` untouched. The gate was mostly a resolution problem — net
-correction **±0.03 pts** against a 2.0-pt bar, ~60× smaller than the estimate that made it a gate.
-Campaign A recomputed (and thereby unsealed). Campaign B now on **one** gate: the DB lock. Session
-numbering: this repo's own counter; governed era runs S16 → …_
+_Last updated: 2026-08-05 (S66) — **DEC-0069** (metric freeze-aware, per-minute `rxCheckPercent`,
+structural exclusion; campaign A recomputed and thereby unsealed) and **DEC-0070** (DB lock bounded:
+`timeout = 30` live, ~30 s not ~10 min; WAL blocked cross-repo → ops#141). Both DEC-0066 gates now
+handled — launching B is a judgment call, not more work. Also: branch steady state restored; this
+file's duplicated rule sections deleted per STANDARD rule 5. Session numbering: this repo's own
+counter; governed era runs S16 → …_
