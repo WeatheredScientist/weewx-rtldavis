@@ -39,13 +39,11 @@ guarantees for both.
 dates still a placeholder. Freeze root cause remains unexplained (DEC-0067/0068) and **no longer
 gates anything** — `ops/freeze_watch.sh` is committed if another spot-check is ever wanted.
 
-### Current state — every row re-verified at S63 open, not carried over
-
-*(S62's handoff was stale — its branch merged and its watchdog deployed between sessions. Fixed.)*
+### Current state — re-verified at S66 close
 
 | Thing | State |
 |---|---|
-| `s62-incident-followups` | **merged** (PR #118, `bdc4f9f`). Stale branch still exists, harmless |
+| Branches | **steady state restored (S66): exactly `dev` + `main`, local and remote.** Nine merged S62–S66 feature branches deleted. Nothing stale to reconcile |
 | `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip when B launches |
 | Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's, mtime Jul 29) |
 | Watchdog (DEC-0065) | **deployed and live** — NAS copy matches repo tip byte-for-byte, zero resets since |
@@ -93,10 +91,11 @@ it — see DEC-0069's sealing note.*
 20 minutes earlier had not. Nobody knows why. That gap is why DEC-0065 declined to automate the
 recreate.
 
-**Model note:** S66 escalated to **Opus 5** for the DEC-0069 design work, via `/model claude-opus-5`
-— the *argument* form, which persists as the new-session default (OPS-DEC-0010) rather than being
-session-only. `~/.claude/settings.json` still read `"model": "sonnet"` when checked mid-session.
-**Verify the floor is still Sonnet at next session start**; if it moved, restore it.
+**Model note:** S66 escalated to **Opus 5** for the DEC-0069 design work via `/model claude-opus-5`
+— the *argument* form, which per OPS-DEC-0010 persists as the new-session default rather than being
+session-only. **Checked at close: `~/.claude/settings.json` still reads `"model": "sonnet"` — floor
+intact, nothing to restore.** Worth a glance at next session start anyway, since the desktop app
+behaves differently here (OPS-DEC-0036/0062).
 
 ## Blockers
 
