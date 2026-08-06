@@ -38,6 +38,30 @@ the DEC, do not re-derive it):
 - ✅ **`loopdata.py` + `ops/reception_service.py` removed** (S47) — both vestigial, files renamed
   aside on the NAS in case of rollback. DEC-0005, CHANGELOG `[S47]`.
 
+## Standing watches — read-only, none of these block anything (moved from BOOT.md, S67)
+
+They live here rather than in `BOOT.md` because a watch is not in-flight work: it fires or it
+doesn't, and until it fires there is nothing to do. Check them when something looks odd, or when a
+trigger below is plainly satisfied.
+
+- **Co-rejection grep** (DEC-0054): **0 hits through 08-01 18:30**. Single-token pattern
+  `co-rejecting` — *multi-word `nasctl grep` patterns silently match nothing*; positive-control any
+  zero before believing it.
+- **Humidity-spike watch** — unfired. **Method and arithmetic are in DEC-0044 — do not re-derive.**
+- **DEC-0049 phantom-rainRate** — unfired. The next calm, saturated, cooling night is a free test.
+- **First frost** — the signed decode's negative branch gets its first live air test.
+- **DEC-0056 revisit trigger** — a rain-rejection email on a genuinely *wet* day.
+- **Upstream replies** — four open threads (lheijst #22/#23, issue #15, david-lutz#1).
+  `docs/UPSTREAM-THREADS.md` holds the state and the etiquette.
+- **Dependabot** may open a deps PR — review it, never auto-merge.
+
+✅ **Dropouts watch is CLOSED (DEC-0067)**, replaced by the process-freeze blocker. **Never re-open
+it on a `WINDOW: 0/21` reading**: that metric cannot tell a freeze from deafness, which was the whole
+problem. The rule is a >150 s gap **with** `rtldavis process stalled` = RF; silent = freeze.
+
+✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
+— the abort was correct, DEC-0061's budget holds).
+
 ## Needs a check / housekeeping (moved from STATUS.md, S60)
 
 - **⚠️ The freeze MECHANISM is still open (DEC-0036) — but the trigger and the fuel are both gone.**
@@ -107,6 +131,18 @@ the DEC, do not re-derive it):
   live log: zero `RAW_` lines. Log rotation is daily and working. Pruned S52.
 
 ## Durable RF findings (from 2026-06-01 tuning sweeps — keep; these guide P2)
+
+**What campaign A says about the LNA — hold it loosely (moved from BOOT.md, S67):**
+- **Recomputed at S66 on per-minute `rxCheckPercent` (DEC-0069):** arm A (372/ex0) **74.81%** ·
+  C (372/ex50) 74.37 · D (207/ex50) 74.17 · B (207/ex0) 73.87. Spread **0.94 pts** — no arm anywhere
+  near the 2-pt adoption bar.
+- **Campaign B's 372 anchor must be read against arm A's 74.81%, on the same tool and metric.**
+  `ops/campaign_analyze.py` is what guarantees that. The older 72.4% figure is a monitor-scrape and
+  runs ~1.9 pts low — **never mix the two**.
+- ~14 h of LNA-out at gain 372 gave 72.6% with no hour-07 notch. **Suggestive only — do not conclude
+  futility from it.**
+- A's winner was meant to stay sealed until after B; S66's tool validation unsealed it as a side
+  effect of validating the tool, not as a decision (DEC-0069 sealing note).
 
 **Site has a reproducible twice-daily reception notch at hours 07 and 19 (S58, 2026-08-01):**
 - **The observation.** Archive `rxCheckPercent` binned by local hour, 07-24→07-29 (pre-campaign,

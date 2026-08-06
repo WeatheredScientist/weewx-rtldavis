@@ -19,9 +19,9 @@ Read it first — do not infer "where we are" from any other doc.
 
 ## Required reading — three files, then stop (DEC-0063)
 
-1. `BOOT.md` — where we are right now: session #, active work, blockers, backlog, standing watches
+1. `BOOT.md` — where we are right now: session #, active work, blockers, ordered backlog
 2. `CONSTANTS.md` — durable facts: infra, deploy layers, release/rollback, hardware, git model
-3. `MANIFEST.md` — one row per on-demand artifact, and when to load it
+3. `MANIFEST.md` — what to pull on demand, and when. Indexes **classes**, not instances (DEC-0072)
 
 Everything else (`CLAUDE.md`'s rules, conventions, principles, decisions, architecture, interfaces,
 roadmap) is pulled **by name from `MANIFEST.md` when the task touches it**. Lazily loaded is not

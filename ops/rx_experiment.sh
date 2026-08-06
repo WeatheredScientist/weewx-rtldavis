@@ -7,6 +7,12 @@
 # apparatus. The schedule table below is the pre-registration: it is fixed, static,
 # and reviewable before a single block runs.
 #
+# CURRENTLY LOADED: campaign B — pilot + hold + square (DEC-0064). Campaign A is
+# finished and STOPped; its sentinel stays in place. Read any campaign result with
+# ops/campaign_analyze.py, never from the 5-minute aggregate this script harvests
+# (DEC-0069) — and note `install` REFUSES a schedule whose first row has already
+# passed, because due_arm() would otherwise silently join mid-square (DEC-0066).
+#
 # WHY NOT ops/gain_sweep.sh (DEC-0014 documented cause for not extending it):
 #   1. It is SEQUENTIAL — all reps of a gain run back to back, so every arm is
 #      confounded with time-of-day and weather. That is the precise flaw DEC-0048
