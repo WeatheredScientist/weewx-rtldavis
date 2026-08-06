@@ -14,10 +14,22 @@ is a **separate repo** — don't make dashboard changes here.
 
 ## ▶ Resume here (S66)
 
+### ▶▶ NEXT SESSION (S67) — agreed at S66 close, do these two in order
+
+1. **Check hyperlocal-forecast first.** It was left **stale** by the DEC-0071 WAL rollback and needs
+   a container restart by an HLF session (ops#141). Verify before anything else:
+   `curl -s http://<nas>:8000/api/v1/current` → is `quality.is_stale` false and `observation_time`
+   advancing? weewx and the DB are fine; only HLF is affected. Also open on that side:
+   **hyperlocal-forecast PR #286** adds a 30 s busy timeout to its read-only archive connection —
+   the reader half of DEC-0070. If still unmerged, say so rather than letting it sit (S37's lesson).
+2. **Then launch campaign B.** Nothing blocks it. The work is mechanical and the order is in
+   "Before B can launch" step 5 below: promote + tag → rebuild `:v2.0.12` from the merged tip →
+   push → **regenerate the SCHEDULE= dates** (they are in the past; `install` refuses a stale
+   schedule) → Class C deploy → `install`. `docs/CAMPAIGN-B-RUNBOOK.md` governs the night.
+
 **Both of campaign B's DEC-0066 gates are handled, and there is nothing left to wait for — WAL was
-tried and abandoned (DEC-0071). Launching B is now purely a judgment call with no remaining build
-work.** Prod healthy; LNA out; schedule dates still a placeholder. Freeze root cause stays
-unexplained (DEC-0067/0068) and **gates nothing**.
+tried and abandoned (DEC-0071). Launching B is a decision, not remaining build work.** Prod healthy;
+LNA out. Freeze root cause stays unexplained (DEC-0067/0068) and **gates nothing**.
 
 **Gate 1 — metric is freeze-aware (DEC-0069).** `ops/campaign_analyze.py` (+14 tests) reads
 per-minute `rxCheckPercent` from the archive DB and excludes freeze artifacts *structurally*.
@@ -85,14 +97,13 @@ success, and prose would not have caught it (DEC-0040).
 
 ### What we learned about the LNA — hold it loosely
 
-~14 h at gain 372 with the LNA out: mean **72.6%**, **no hour-07 notch** (S58 measured a ~2 pt notch
-LNA-in). **Campaign A, recomputed at S66 on the honest per-minute metric (DEC-0069):** A (372/ex0)
-**74.81%**, C (372/ex50) 74.37%, D (207/ex50) 74.17%, B (207/ex0) 73.87% — spread **0.94 pts**, no
-arm near the 2-pt bar. The old pooled 72.4% figure came from the monitor scrape and runs ~1.9 pts
-low against `rxCheckPercent`, as `weewx_monitor.py` itself documents. The clean comparison is B's
-372 anchor against **A's arm A, 74.81%** — same metric, same tool. **Do not conclude futility from
-the ~14 h figure above.** *A's arm winner was sealed until after B; S66's tool validation unsealed
-it — see DEC-0069's sealing note.*
+**Campaign A, recomputed at S66 on per-minute `rxCheckPercent` (DEC-0069):** A (372/ex0) **74.81%**
+· C (372/ex50) 74.37 · D (207/ex50) 74.17 · B (207/ex0) 73.87 — spread **0.94 pts**, no arm near the
+2-pt bar. **B's 372 anchor must be read against A's arm A (74.81%), same tool, same metric** —
+`ops/campaign_analyze.py` guarantees that. The old 72.4% is monitor-scrape and runs ~1.9 pts low; do
+not mix the two. Also ~14 h LNA-out at 372 gave 72.6% with no hour-07 notch — **suggestive only, do
+not conclude futility from it.** *A's winner was sealed until after B; S66's tool validation
+unsealed it (DEC-0069 sealing note).* Reasoning: DEC-0069.
 
 **Root cause of ERR-0005 is still unestablished.** A container recreate fixed it; a `kill`+`start`
 20 minutes earlier had not. Nobody knows why. That gap is why DEC-0065 declined to automate the
