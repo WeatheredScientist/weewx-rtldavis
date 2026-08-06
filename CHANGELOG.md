@@ -35,6 +35,9 @@ under [Pre-S16].
   entire archive over ssh — now bounded NAS-side.
 - **ROADMAP:** metric gate closed; the `database is locked` defect restated as campaign B's **sole**
   remaining gate. The by-S66 *full* reconciliation tripwire fired and is flagged as still owed.
+- **Branch hygiene:** nine merged S62–S66 feature branches deleted (local + remote), restoring the
+  `dev` + `main` steady state CONSTANTS.md specifies. Every one verified contained in `dev` first;
+  `main` deliberately untouched. BOOT.md's "stale branch still exists, harmless" row retired with it.
 
 ---
 ## [S65] — 2026-08-04 — Freeze-watcher fixed (parallel reads, dedup bug, local notification); two freezes caught, one tied to coffee-radar's scheduled run
