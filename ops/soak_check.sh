@@ -17,6 +17,10 @@
 #   ops/soak_check.sh              # check since the container started
 #   ops/soak_check.sh 3600         # check only the last N seconds
 #
+# EXPECT_IMAGE (below) must name the tag actually deployed, or the identity check
+# goes red on a healthy station — and, worse, goes green on the wrong image after a
+# rollback. Bump it with the deploy, not after it.
+#
 # Exit 0 = all green. Exit 1 = something needs a human.
 set -uo pipefail
 

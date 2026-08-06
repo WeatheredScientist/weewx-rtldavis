@@ -121,9 +121,10 @@ here.
 
 **Still open — ordinary watches, not a new arc.** Current status (co-rejecting grep, humidity-spike
 signature DEC-0044, first-frost test of the signed-decode negative branch, DEC-0056's
-rain-rejection revisit trigger) lives in `BOOT.md`'s standing watches — not duplicated here, and not
-evidence this P1 item is still "in progress." **`#74` calm-windDir left this list at S59**, closed
-on five consecutive clean days with a positive control (`BOOT.md` §Standing watches).
+rain-rejection revisit trigger) lives in **`BACKLOG.md` §Standing watches** — moved there from
+`BOOT.md` at S67 (DEC-0072), since a watch that has not fired is not in-flight work. Not duplicated
+here, and not evidence this P1 item is still "in progress." **`#74` calm-windDir left this list at
+S59**, closed on five consecutive clean days with a positive control.
 
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
 bound and done via reversible live hot-swap with an instant rollback path.

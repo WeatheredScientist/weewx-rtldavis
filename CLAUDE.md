@@ -17,7 +17,7 @@ can use it (PRINCIPLES §1, docs/INTERFACES.md).
 
 | File | Answers |
 |------|---------|
-| `BOOT.md` | **where we are right now** — current session, active work, blockers, ordered backlog, standing watches. The single source of truth for the session number and the handoff |
+| `BOOT.md` | **where we are right now** — current session, active work, blockers, ordered backlog. The single source of truth for the session number and the handoff. *Standing watches moved to `BACKLOG.md` at S67 (DEC-0072)* |
 | `CONSTANTS.md` | durable facts — infra, deploy layers, release/rollback, hardware, git model |
 | `MANIFEST.md` | one row per on-demand artifact: what it holds and when to load it |
 

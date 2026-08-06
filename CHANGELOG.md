@@ -5,6 +5,33 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S67] — 2026-08-06 — Tier-file diet (ops#145, DEC-0072): both files under cap, detail pushed to the source
+
+- **`BOOT.md` 3734 → 2161 tok (cap 2500), `MANIFEST.md` 1948 → 970 tok (cap 1000)** — verified with
+  `checks/tier-sweep.sh` itself against fixtures, not by hand arithmetic. Both green, exit 0.
+- **`MANIFEST.md` switched to class rows (STANDARD rule 9).** `ops/*` + `scripts/*` collapsed from
+  five per-artifact rows to one naming the convention — *the script's header comment is its manual*.
+  The convention was **verified before relying on it**: the docstrings already carry more than the
+  rows that duplicated them. Coverage went **up**, because 6 of the 11 harness scripts had no row.
+- **Four facts that existed only in the index now live in the scripts** — `campaign_analyze.py`
+  documents that campaign A needs `--since`; `rx_experiment.sh` states campaign B is loaded and that
+  `install` refuses a stale schedule; `soak_check.sh` states `EXPECT_IMAGE` must track the deploy.
+  Content moved, not deleted.
+- **`BOOT.md`**: standing watches and the campaign-A LNA findings rehomed to `BACKLOG.md`; the
+  DEC-0069/0070/0071 write-ups cut to one-liners with pointers, since the full bodies are already in
+  `DECISIONS-FULL.md` (STANDARD rule 5 — a second copy is a defect).
+- **Fixed a stale launch pointer.** BOOT told the next session to rebuild `:v2.0.12` from
+  `bdc4f9f` — 13 commits stale, predating DEC-0069/0070/0071, so the image would have silently
+  lacked `campaign_analyze.py` and `freeze_watch.sh`. Now: take the tip from `git rev-parse`.
+- **Found:** `ops/soak_check.sh`'s `EXPECT_IMAGE` defaults to `v2.0.12` while prod runs `v2.0.11`, so
+  a soak run today goes red on a healthy station. Noted in the script and in the launch sequence.
+- **Found:** `~/.claude/hooks/secret-read-guard.sh` matches by basename and so blocks reads of this
+  repo's *clean* `ops/wxcheck.sh` (it uses `${WU_API_KEY}`, no literals). Workaround `readconf`
+  documented in BOOT; the guard is ops-owned, so not changed here.
+- HLF confirmed recovered — container recreated with hyperlocal-forecast PR #286 merged; ops#141
+  relabelled `repo:hlf`, nothing further owed by this repo.
+
+---
 ## [S66] — 2026-08-05 — Both campaign-B gates handled: metric goes freeze-aware (DEC-0069), DB lock bounded (DEC-0070)
 
 - **New `ops/campaign_analyze.py` + 14 tests** — reads per-minute `rxCheckPercent` from the archive
