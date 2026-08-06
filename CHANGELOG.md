@@ -79,6 +79,14 @@ under [Pre-S16].
 - **Net:** WAL is not viable as scoped; `timeout = 30` is the fix, not an interim, and delivers most
   of WAL's practical benefit. weewx healthy and current. **hyperlocal-forecast is still stale and
   needs a container restart by an HLF session** — reported on ops#141, relabelled `repo:hlf`.
+- **Full ROADMAP reconciliation run (the by-S66 tripwire, honoured).** All 8 open items diffed
+  against DECISIONS/CHANGELOG/BOOT. Four were stale: the tiering migration sat unchecked *while its
+  own body read "Executed S60"*; the v2.0.12 row said "BUILDING 2026-08-02" for four sessions when
+  that build no longer exists; campaign B's gates were listed open after DEC-0069/0070/0071 cleared
+  them; and the DB-lock row still said "flip WAL once ops#141 lands" **after DEC-0071 abandoned
+  WAL** — a same-session DEC-0057 update missed the day before, which is precisely what the full
+  pass exists to catch. Also fixed: the P2 heading still announced "CAMPAIGN A RUNNING", and the
+  archive-DB reader list still named the dashboard. Next check due **by S76**.
 - **Branch hygiene:** nine merged S62–S66 feature branches deleted (local + remote), restoring the
   `dev` + `main` steady state CONSTANTS.md specifies. Every one verified contained in `dev` first;
   `main` deliberately untouched. BOOT.md's "stale branch still exists, harmless" row retired with it.
