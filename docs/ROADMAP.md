@@ -3,7 +3,8 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
+**Last updated:** 2026-08-06 (S66 — **full reconciliation**, see the guardrail below for what it
+caught). Prior structural change: 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
 "Long-term direction" section, per DEC-0058 — this file is now P0–P3 only, the actively sequenced
 plan, so it doesn't get cluttered by uncalendared/aspirational items. Earlier same-session pass:
 folded the old P1 + P1.5 sections into one continuous data-integrity arc covering v2.0.3–v2.0.11;
@@ -21,17 +22,20 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S66** (~10 sessions out). If the session counter is
-  at or past S66 and this line still says S66, that itself is the signal it's overdue — run the
-  same pass as S56 did (diff every open/pending item here against DECISIONS.md, CHANGELOG.md, and
-  `BOOT.md` and `CHANGELOG.md`).
-- Last full reconciliation: **S56, 2026-07-28**. Targeted DEC-0057 passes at **S63, 2026-08-03**
-  (DEC-0067 — the watchdog and outage-explanation items closed, campaign B's gates restated, the
-  freeze split out from the DB lock) and **S66, 2026-08-05** (DEC-0069 — the metric gate closed, the
-  DB lock restated as B's sole remaining gate).
-- ⚠️ **The by-S66 full pass is now DUE and has NOT been run.** S66 did the targeted DEC-0069 pass
-  only. The tripwire above fired as designed; honouring it is the next session's first ROADMAP task,
-  and this line stays until a full pass actually happens.
+- **Next scheduled reconciliation check: by S76** (~10 sessions out). If the session counter is
+  at or past S76 and this line still says S76, that itself is the signal it's overdue — run the
+  same pass as S56 and S66 did (diff every open/pending item here against DECISIONS.md,
+  CHANGELOG.md and `BOOT.md`).
+- Last full reconciliation: **S66, 2026-08-06** — all 8 open items diffed. Four were stale and
+  fixed: the tiering migration was still unchecked *while its own body said "Executed S60"*; the
+  v2.0.12 row had read "BUILDING 2026-08-02" for four sessions when that build no longer exists;
+  campaign B's gates were listed as open after DEC-0069/0070/0071 cleared them; and the DB-lock row
+  still said "flip WAL once ops#141 lands" **after DEC-0071 had abandoned WAL** — a same-session
+  DEC-0057 update that was missed the day before, and exactly what this pass exists to catch. Also
+  corrected: the P2 heading still announced "CAMPAIGN A RUNNING", and the archive-DB reader list
+  still named the dashboard.
+- Earlier: full pass **S56, 2026-07-28**. Targeted DEC-0057 passes at **S63** (DEC-0067) and
+  **S66** (DEC-0069).
 
 ## The vision
 
@@ -79,7 +83,8 @@ DEC-0095 → here), remote URL casing + stale-branch cleanup (S56). See CHANGELO
 ASSESSMENT.md for detail — not re-narrated here.
 - [ ] **Keep-a-Changelog headings + DECISIONS entry-skeleton convergence** (proposed S25, never
       picked up).
-- [ ] **Session-context tiering migration — DEC-0063, decided S59, execute S60.** The third
+- [x] ~~**Session-context tiering migration — DEC-0063, decided S59, execute S60.**~~ **DONE S60**
+      (this row said so in its own body while staying unchecked — caught by the S66 full pass). The third
       generation of the docs-diet idea (dash DEC-0081 → hyperlocal DEC-0095 → DEC-0030 here →
       ops `STANDARD.md`): `BOOT.md`/`CONSTANTS.md`/`MANIFEST.md`/`ARCHIVE/` replace the DEC-0030
       Tier-1 set. Adopted on measurement against ops#130's own recommendation to defer — Tier-1
@@ -127,7 +132,7 @@ bound and done via reversible live hot-swap with an instant rollback path.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P2 — RF optimization, done honestly (PRINCIPLES §3) — **CAMPAIGN A RUNNING (DEC-0059)**
+## P2 — RF optimization, done honestly (PRINCIPLES §3) — **A COMPLETE, B READY BUT HELD**
 DEC-0048 (S41) deferred this into one designed experiment; the apparatus (`ops/rx_experiment.sh` +
 `tests/test_rx_experiment.py`, S56/DEC-0059) is now deployed and executing. The seven
 pre-governance sweep scripts are deleted; two of them were silently broken.
@@ -144,8 +149,11 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       characterization (922 samples, mean 72.4) and the multi-day drift error bar. **Arm winner
       stays sealed until after B.** Settles DEC-0017 (**absorbed**). Tracked at
       [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
-- [ ] **v2.0.12 release carrying DEC-0062 + `BIAS_TEE` env — BUILDING 2026-08-02 (moved up from
-      Thu 08-06).** `entrypoint.sh` reads `BIAS_TEE` (default 1 — published image unchanged; all
+- [ ] **v2.0.12 release carrying DEC-0062 + `BIAS_TEE` env — BUILT, NOT PUBLISHED.** *(Status
+      corrected S66: this said "BUILDING 2026-08-02" for four sessions. S62's local build is **gone**,
+      Docker Hub still carries `:v2.0.11` + `:latest`, and prod runs v2.0.11. **Rebuild from the
+      merged tip when campaign B launches** — the build is a launch step, not a pending task.)*
+      `entrypoint.sh` reads `BIAS_TEE` (default 1 — published image unchanged; all
       four branches verified S62). Also carries S62's driver stderr fix (**`0.20+ws.4`**, ERR-0005)
       and the README version banner, which was three releases stale. Push `:v2.0.12`, deploy with
       `-e BIAS_TEE=0`, then move `:latest` only after our own station proves it. Carry DEC-0046
@@ -160,15 +168,16 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       and B's 32 swaps each expose it to the abort that already killed campaign A. Apparatus, tests,
       runbook and image are all ready; only the timing is open. **Schedule dates are now in the past
       — regenerate before any `install`.**
-      **Gates restated after DEC-0067 (S63).** "Explain the outages" is substantially met: the
-      recurring class is **process freezes, not RF loss**, bounded (~1/day, ~3.5 min) and
-      pre-dating the LNA removal, while ERR-0005 is a **single incident** (21 driver detections
-      that day, 0 on every other). The watchdog gate is **done**. What replaces them is narrower
-      and mechanical: **make the metric freeze-aware** — the monitor counts *published output*, so
-      a freeze and a deaf receiver both read `WINDOW: 0/21`, and a ~3.5 min freeze moves a 6 h
-      arm block's mean ~0.8 pts against a 2 pt adoption threshold (then *inflates* the record
-      after it, via parse-time stamping). Detect and exclude freeze windows using DEC-0067's log
-      rule. The DB-lock fix stays a gate.
+      **ALL GATES NOW CLEARED (S66) — the hold is a judgment call, not a work item.**
+      *Explain the outages* — substantially met at DEC-0067: the recurring class is **process
+      freezes, not RF loss**, bounded (~1/day, ~3.5 min) and pre-dating the LNA removal, while
+      ERR-0005 is a **single incident**. *Watchdog* — done (S63). *Metric freeze-aware* — **done
+      (DEC-0069)**, and the gate turned out to be mostly a **resolution** problem: the old 5-minute
+      aggregate let one frozen minute wreck four good ones (~0.8 pts), while per-minute
+      `rxCheckPercent` puts the real correction at **±0.03 pts against a 2.0-pt bar**. *DB lock* —
+      **bounded (DEC-0070)**, outages ~30 s not ~10 min, and **WAL was tried and abandoned
+      (DEC-0071)**, so there is nothing further to wait for. **Nothing remains to build before B
+      launches.**
       **First honest no-LNA telemetry already accruing** — ~14 h at gain 372 gave mean 72.6% with
       no hour-07 notch, against campaign A's pooled 72.4%. Treat that as suggestive only: A's
       figure pools all four arms including gain 207, so it is biased low, and the clean comparison
@@ -214,23 +223,33 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       deep fades and bias every arm upward. Net effect on a pooled arm mean: **±0.03 points** against
       a 2.0-point bar. New tool `ops/campaign_analyze.py` (+14 tests); `ops/rx_experiment.sh`
       deliberately untouched. Campaign A recomputed: spread **0.94 pts**, no arm near adoption.
-- [ ] **P0 — the `database is locked` defect** — **BOUNDED at S66 (DEC-0070), not yet closed.** Root
+- [ ] **P0 — the `database is locked` defect** — **BOUNDED at S66 (DEC-0070); no further work
+      planned.** Stays open because the defect is capped rather than eliminated, not because
+      anything is queued — WAL was the remaining idea and DEC-0071 abandoned it. Root
       cause is a pair of untouched defaults: `journal_mode=delete` (a reader's SHARED lock blocks the
       writer) plus weedb's **5 s** SQLite timeout (`weedb/sqlite.py:136`), so six seconds of reader
       cost a CRITICAL + weewx's hardcoded 120 s wait + restart ≈ **5–10 min**. **Shipped `timeout = 30`
       in the live `weewx.conf`** — outages now capped at ~30 s, verified in the running system.
-      **The real fix is WAL, blocked by a cross-repo mount:** `hyperlocal-forecast-api` binds the DB
-      as a single *file*, so WAL's `-wal`/`-shm` siblings can never appear. Tested on SQLite 3.46.1 —
-      read-only directory mounts work fine (`RW=false` can stay); only the single-file case fails.
-      Filed **ops#141** (`repo:hlf`). Flip WAL only after that lands and HLF is verified under the
-      existing journal. Remaining detail below **pre-dates the LNA removal**
+      **⛔ WAL WAS TRIED AND ROLLED BACK — do not retry it (DEC-0071, S66).** HLF shipped the
+      directory mount (ops#141); WAL went live 06:56 EDT on 08-06 and HLF **froze on a stale
+      snapshot within minutes**. Two blockers, both missed by DEC-0070: a Docker `:ro` bind makes the
+      **files** read-only (DEC-0070's test chmod'd only the *directory*, so it never reproduced the
+      condition — structurally blind, DEC-0035 again), and SQLite creates `weewx.sdb-wal` mode
+      **0555**, so even a read-write mount leaves a non-root reader unable to write it. Rolling back
+      cost a **~6 min crash loop**. `journal_mode = DELETE` is now pinned by a `[[[pragmas]]]`
+      subsection so an accidental flip cannot recur. **`timeout = 30` is the fix, not an interim** —
+      it delivers most of WAL's practical benefit at none of this risk. Remaining detail below
+      **pre-dates the LNA removal**
       (08-01 15:08, 08-02 19:45; earlier S59) — and **independent of the freezes above**. DEC-0067
       decomposed the 10-min outage: ~106 s of hung uploader threads + **120 s of weewx's own
       hardcoded wait** + ~5 min restart, so the thread hang is only ~18 % of it — the identical
       lock on 08-01 cost 4 min because the threads exited in 0.26 s. **Lead fix: the archive DB is
-      not in WAL mode** (no `-wal` file while actively written), which is the standard cause of
-      exactly this contention; bound the uploader-thread joins second. Archive DB readers: the
-      monitor (read-only, 6-hourly), the dashboard, `weectl`.
+      not in WAL mode**, the standard cause of exactly this contention — *tried, see above*. If this
+      ever recurs **despite** the 30 s cap, that means a reader held the lock >30 s and is a
+      different problem; bound the uploader-thread joins then. **Archive DB readers (corrected S66,
+      DEC-0070 — this row previously named "the dashboard"):** scanning every container that mounts a
+      weewx path finds only `hyperlocal-forecast-api`, `eh-proxy` (parent dir, read-only), and weewx
+      itself. Plus the NAS monitor (read-only, 6-hourly) and `weectl`.
 - [x] ~~24 h **receiveWindow sweep**; reconcile image tag ↔ Dockerfile~~ — **dissolved by DEC-0059.**
       `-ex N` ≡ `receiveWindow 300+N` (upstream sums them), so the window is a mounted-config knob,
       no rebuild, and it is simply the second factor of the campaigns above. The `rw*` image tags
