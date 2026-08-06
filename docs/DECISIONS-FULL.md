@@ -3531,3 +3531,93 @@ Two defaults, five seconds apart, cost ten minutes each time they met. Neither w
 weedb's fallback, the other was SQLite's journal mode — and the config that could have overridden
 either was simply silent. **Before designing a fix, check what the untouched defaults actually are**;
 the answer here was a one-line config change, not an architecture.
+
+## DEC-0071 — WAL was tried and rolled back: the mount was never the only blocker, and my test that said otherwise was structurally blind
+
+**Status:** Accepted · **Date:** 2026-08-06 (S66) · **Bounds** DEC-0070's WAL recommendation ·
+**corrects** a test this session published as evidence · ops#141
+
+### What this settles
+
+DEC-0070 said WAL was the real fix for the `database is locked` defect, blocked only by
+hyperlocal-forecast-api's single-*file* bind mount. HLF shipped the directory mount (its S235). WAL
+was flipped at 06:56 EDT and **rolled back at 07:24**. It is not viable as scoped, for a reason that
+was present all along and that this repo's own evidence missed.
+
+### The test that was wrong
+
+DEC-0070 published a four-scenario table, run on the container's own SQLite 3.46.1, concluding that
+a **read-only directory mount works** with WAL and therefore `RW=false` could stay. That conclusion
+was wrong because the test did not reproduce the condition it claimed to:
+
+```python
+os.chmod(tmp, stat.S_IRUSR | stat.S_IXUSR)   # the DIRECTORY only
+```
+
+It made the *directory* read-only. The files inside kept their read-write permissions, so SQLite
+could still open `weewx.sdb-shm` for writing. **A Docker `:ro` bind mount makes the files read-only
+too.** A WAL reader must write the `-shm` index to join the WAL; HLF cannot, so it silently falls
+back to the main database alone — which in WAL mode stops advancing except at auto-checkpoints.
+Result: HLF froze on a stale snapshot within minutes, exactly the failure DEC-0070 predicted for the
+*single-file* mount and then declared solved.
+
+This is DEC-0035's lesson recurring: **a passing test proves nothing if it is structurally blind to
+the thing it is testing.** The scenario labels said "read-only"; the mechanism under test never was.
+
+### The second blocker, which no mount change can fix
+
+```
+weewx.sdb       0777  root
+weewx.sdb-wal   0555  root      <- read-only for everyone
+weewx.sdb-shm   0777  root
+```
+
+SQLite creates the `-wal` here mode **0555**. Even a read-write mount would not let a non-root reader
+write it. Any future WAL attempt must solve file permissions, not just mount granularity. This also
+explains why a non-root SSH user could not checkpoint the WAL at all
+(`attempt to write a readonly database`).
+
+### Rolling back was the hard part
+
+`PRAGMA journal_mode=DELETE` needs an **exclusive** lock; weewx holds a persistent connection, so it
+failed with `database is locked`, and with the container stopped there is no `docker exec` to run it
+in either. Resolved by making weewx do it: `[[[pragmas]]] journal_mode = DELETE` under `[[SQLite]]`,
+which weedb applies on every connection (`weedb/sqlite.py:141-143`) as root, at startup, when it is
+the only connection. **The pragma is left in place deliberately** — it re-pins `delete` on every
+start, so an accidental WAL flip can never again silently strand a reader.
+
+### Self-inflicted outage, recorded because the shape recurs
+
+The pragma was first written as the scalar `pragmas = journal_mode = DELETE`. weedb iterates
+`pragmas` as a **mapping**, so configobj requires a subsection; the scalar parses as a string,
+iterating it yields characters, and weewxd crash-looped on
+`TypeError: string indices must be integers`. **Prod lost ~6 minutes of collection** (CRITICALs at
+07:18:58 and 07:20:22). Two process failures behind it, both this session's own:
+
+1. The first rollback attempt opened with `SELECT COUNT(*) FROM archive` — a full scan of a 30 MB
+   table under a live writer that **had already timed out once earlier the same session**. Repeating
+   a known-slow query on an incident path cost a 120 s timeout at the worst moment.
+2. The config shape was assumed from the field name rather than checked against the consumer, even
+   though the consuming code had been read and quoted in DEC-0070 an hour earlier.
+
+### Consequences
+
+- **WAL is not viable as scoped.** Do not retry until both the mount *and* the `-wal` permission
+  story are designed. ops#141 carries the detail.
+- **The DB-lock defect stays bounded, not cured** — DEC-0070's `timeout = 30` caps outages at ~30 s
+  against the old 5–10 min. That is most of the practical benefit WAL offered, at none of this risk.
+- **HLF did not self-recover.** weewx and the DB were healthy and current within minutes; HLF stayed
+  anchored on a `reference_time` from the crash-loop window with every core field in
+  `missing_fields`. It needs a container restart, left to an HLF session (ops#141, relabelled
+  `repo:hlf`). Whether a read failure can permanently poison that cached anchor is an HLF robustness
+  question this incident exposed.
+- **Campaign B is unaffected.** Its metric gate (DEC-0069) and its bounded lock gate (DEC-0070) both
+  stand; nothing here changes the launch decision.
+
+### Lesson
+
+Two of the three failures in this sequence were *repeats of lessons already written down in this
+repo* — a structurally blind test (DEC-0035) and a config assumed rather than verified against its
+consumer (DEC-0031/0046). Having the lesson on file is not the same as applying it under time
+pressure on an incident path. **When a change is going badly, stop and re-read the consuming code
+before the next attempt** — every one of these was cheaper to check than to undo.
