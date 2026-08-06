@@ -3410,3 +3410,124 @@ The instrument's *resolution* was a bigger error term than the artifact everyone
 sessions went into explaining why the process freezes; the metric defect it was supposed to be
 corrupting was mostly an artifact of averaging the measurement into 5-minute buckets before storing
 it. **Check what resolution a number was recorded at before designing a correction for it.**
+
+## DEC-0070 — The DB lock is a 5-second timeout with a 10-minute penalty; WAL is the fix and a cross-repo mount blocks it
+
+**Status:** Accepted · **Date:** 2026-08-05 (S66) · **Addresses** DEC-0066's last launch gate ·
+**bounded, not closed** — the real fix is filed as ops#141 · **applies** DEC-0046 (mounted layer)
+
+### What this settles
+
+The `database is locked` defect is not mysterious and not a weewx bug. It is a **default**:
+`weedb/sqlite.py:136` reads `timeout = to_int(argv.get('timeout', 5))`, the live config set none,
+and the archive runs `journal_mode=delete` where a reader's SHARED lock blocks the writer. So a
+reader holding the lock for **six seconds** produces `CRITICAL Database OperationalError`, weewx's
+hardcoded **120 s** wait, and a restart — **5–10 minutes of outage**. The penalty is three orders of
+magnitude larger than the cause.
+
+Measured on 2026-08-02 (the CRITICAL lands *after* the teardown, because weewx shuts services down
+in the exception path before logging):
+
+```
+19:47:16  ERROR Unable to shut down OWM thread
+19:47:22  OWM: Published record 19:44:00      <- uploaders 3 min behind
+19:47:42  rtldavis with pid 15 killed
+19:47:44  CRITICAL Database OperationalError exception: database is locked
+19:47:44  CRITICAL     ****  Waiting 2 minutes then retrying...
+```
+
+Live state at diagnosis: `journal_mode=delete`, `synchronous=2`, `page_size=4096`, DB **29.1 MB**,
+SQLite **3.46.1**, WeeWX **5.4.0**.
+
+### What shipped now
+
+`timeout = 30` added to `[DatabaseTypes][[SQLite]]` in the **live** `weewx.conf`. A reader that takes
+seven seconds now costs a seven-second delay instead of a ten-minute outage. 30 s, not 60 s,
+deliberately: it stays under the 60 s archive interval so records cannot pile up behind a wait.
+
+Verified in the running system, not in the artifact (DEC-0046):
+
+```
+resolved database_dict : {'database_name': 'weewx.sdb', 'driver': 'weedb.sqlite',
+                          'SQLITE_ROOT': '/opt/weewx-data/archive', 'timeout': '30'}
+timeout weedb will use : 30 seconds (default was 5)
+```
+
+Restart healthy: new archive record **106 s** after `kill`→`start`, inside DEC-0061's documented
+~115 s worst case.
+
+**Honest cost:** weewx now *blocks* up to 30 s instead of erroring. That trades a 5–10 min outage
+for a ≤30 s stall — a good trade (a stall loses one record; a restart loses ten minutes) but it is a
+new behaviour. Such a stall is indistinguishable from a DEC-0067 process freeze to
+`ops/freeze_watch.sh`, and `ops/campaign_analyze.py` will exclude it via the gap-adjacent rule.
+Both are correct; neither is a bug to chase.
+
+### Why WAL is not shipped, and what actually blocks it
+
+WAL removes the cause outright — readers stop blocking writers. It is blocked by a **cross-repo
+mount contract**: `hyperlocal-forecast-api` bind-mounts the archive DB as a **single file**
+(`SRC=…/archive/weewx.sdb DST=/data/weewx/weewx.sdb RW=false`). WAL needs `weewx.sdb-wal` and
+`weewx.sdb-shm` beside the database; with a single-file mount those siblings can never appear in
+that container.
+
+**The initial reading of this was wrong and the correction matters.** The first assumption was that
+the mount would also have to become writable, because a WAL reader needs to create the `-shm` index
+— which would have meant granting a read-only consumer write access to weewx's archive directory,
+a real regression. Tested instead of asserted, on the container's own SQLite 3.46.1, with a live
+writer holding data in the WAL:
+
+| Scenario | `mode=ro` reader |
+|---|---|
+| Directory mount, writable | OK |
+| Directory mount, **read-only**, `-shm` present | OK |
+| Directory mount, **read-only**, `-shm` absent | **OK** |
+| **Single-file mount (today's HLF)** | **`OperationalError: no such table: archive`** |
+
+SQLite's read-only WAL fallback handles the read-only case, so `RW=false` can stay and the fix is
+*only* file → directory. HLF's in-container path stays `/data/weewx/weewx.sdb` either way, so **no
+HLF code or config change is needed.** Note also that HLF's own
+`observations/weewx.py::_connect_read_only` sets no busy timeout, so it takes Python's 5 s default
+and is exposed to the same contention from the other side.
+
+Filed as **ops#141** (`repo:hlf`, `tier:mid`) with the staged order: change the mount and verify HLF
+under the *existing* `delete` journal first, so a failure there is unambiguously about the mount;
+only then flip WAL, which is reversible via `PRAGMA journal_mode=DELETE`.
+
+### The drift risk this creates
+
+`weewx.conf` is the **mounted** layer (DEC-0046) and is never committed (DEC-0012). So this change
+exists **only on the NAS**, in a file with no repo artifact and no CI. A future container recreate
+from a stock config would silently revert it and nobody would know until the next ten-minute
+outage. Recorded as a `CONSTANTS.md` row for exactly that reason — the deviation from stock has to
+live somewhere a session actually reads.
+
+### Guard finding, recorded because it is load-bearing
+
+The NAS mutation that wrote the live production config **did not trip the Class C guard**. The
+command was `ssh <nas> "python3 -" < script.py`: the guard pattern-matches the ssh command *string*,
+which here says only `python3 -`, while the mutating code arrives over **stdin**. Any NAS mutation
+can be laundered through this shape — and it is the shape `docs/CONVENTIONS.md` actively recommends
+("batch remote work into a single `bash -s` session"). The owner had authorized this specific action
+in chat, so nothing improper occurred; the point is that the mechanism did not enforce it.
+
+The asymmetry is the sharp part: in the same session the *read* guard fired three times on `grep` or
+`tail` appearing anywhere in a command string, including against files carrying no secrets, while
+the high-risk mutation path had a straightforward bypass. Belongs to eaglehunt-ops (OPS-DEC-0060 —
+a repo session may not edit the machine-wide floor).
+
+### Consequences
+
+- Campaign B's last gate is **bounded, not closed**. Outages are capped at ~30 s instead of ~10 min,
+  which is enough to stop the defect contaminating a campaign; the cause is removed when ops#141
+  lands and WAL is flipped.
+- DEC-0067's reader list needs a correction: it named "the dashboard" as an archive-DB reader. A
+  scan of every container mounting a weewx path finds only `hyperlocal-forecast-api` (the DB file),
+  `eh-proxy` (the parent directory, read-only), and weewx itself. The dashboard reaches this data by
+  another route.
+
+### Lesson
+
+Two defaults, five seconds apart, cost ten minutes each time they met. Neither was chosen — one was
+weedb's fallback, the other was SQLite's journal mode — and the config that could have overridden
+either was simply silent. **Before designing a fix, check what the untouched defaults actually are**;
+the answer here was a one-line config change, not an architecture.
