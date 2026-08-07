@@ -30,6 +30,21 @@ under [Pre-S16].
   documented in BOOT; the guard is ops-owned, so not changed here.
 - HLF confirmed recovered — container recreated with hyperlocal-forecast PR #286 merged; ops#141
   relabelled `repo:hlf`, nothing further owed by this repo.
+- **`ops/soak_check.sh` expectations reset to what prod actually runs.** `EXPECT_IMAGE`
+  `:v2.0.12` → `:v2.0.11` and `EXPECT_DRIVER` `0.20+ws.4` → `0.20+ws.3`. Both were bumped together
+  at S62 (`e21c03e`) in anticipation of a `:v2.0.12` release that never deployed, so for five
+  sessions the soak check would have reported two red criteria against a correct deployment —
+  including the DEC-0031 driver canary, the one check whose whole job is to notice a wrong image.
+  Nobody ran it, which is the only reason it went unnoticed. `CONSTANTS.md`'s driver-banner row
+  carried the same anticipatory value and now distinguishes prod from the repo.
+- **Running it surfaced a real prod finding (new blocker 4).** Three `rtldavis process stalled`
+  events on 08-06 (09:53 / 10:10 / 10:32 EDT) that the USB watchdog did not log — its log has been
+  silent since 2026-05-22 and there is no watchdog pidfile, though its `STALL_PATTERN` does match
+  those lines. `BOOT.md`'s "watchdog deployed and live" had been asserted from **file identity**,
+  not process liveness — DEC-0031's shape, and corrected in place. Reception recovered to 81%;
+  nothing is degraded now, but this wants verifying before an unattended campaign B.
+- The 6 tracebacks the soak check counts are the DEC-0071 crash loop (07:18–07:24 EDT), already
+  known and resolved — `weewx.log` persists across restarts, so they stay in the window.
 
 ---
 ## [S66] — 2026-08-05 — Both campaign-B gates handled: metric goes freeze-aware (DEC-0069), DB lock bounded (DEC-0070)
