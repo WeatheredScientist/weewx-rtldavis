@@ -81,14 +81,14 @@ join the WAL — the mount was never the only blocker. `timeout = 30` gives most
    and nobody knows why — which is why DEC-0065 declined to automate the recreate. Doesn't block B.
 3. **`ppm`/`fc` still unmeasured**, deliberately unchanged for B (measuring now would confound the
    LNA contrast).
-4. **The USB watchdog is NOT RUNNING and has not been since 2026-05-22** (established S67 — full
-   evidence in `BACKLOG.md`). Hand-started once from a shell, never supervised: no crontab entry, no
-   pidfile, and NAS uptime 29.6 d means it died at the 07-08 boot at the latest. **The script is
-   fine and byte-identical to repo** — only supervision is missing. Three qualifying stalls on 08-06
-   (09:53 / 10:10 / 10:32 EDT) went unhandled; those are **RF/USB, not the process freeze** (gap
-   *with* the stall line = RF; silent = freeze). Reception recovered to 81%, nothing degraded now.
-   **Fix before campaign B** — an unattended multi-night campaign is exactly when it must work.
-   Needs a design call (esynoscheduler, as `weewx_monitor.py` uses?) plus a Class C NAS action.
+4. **The USB watchdog is NOT RUNNING and has not been since 2026-05-22** (established S67; evidence
+   in `BACKLOG.md`). Hand-started once, never supervised; the script itself is fine and
+   byte-identical to repo — only supervision is missing. Three stalls on 08-06 went unhandled
+   (**RF/USB, not the process freeze**: gap *with* the stall line = RF, silent = freeze). Reception
+   recovered to 81%, nothing degraded now. **Design settled — DEC-0073, read it before starting.**
+   Four parts (supervision, heartbeat, a `soak_check.sh` assertion, reset-rate alerting) plus the
+   agreed campaign call: watchdog **ON**, with `campaign_analyze.py` taught a fourth gap class for
+   reset-adjacent minutes. **Implementing it GATES campaign B**; the install is Class C.
 
 ## Ordered backlog
 
