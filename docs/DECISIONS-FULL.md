@@ -3682,3 +3682,96 @@ its same-session DEC-0057 rule — which is exactly the exception rule 9 reserve
 the issue is the tool that confirms the fix. MANIFEST landed at 3% headroom, deliberately not at
 100% of cap: the dashboard's S193 diet hit exactly the cap with zero headroom and was over again
 within a session, which is the failure this leaves room against.
+
+---
+
+## DEC-0073 — Supervise the USB watchdog, make its absence loud, and model its resets before campaign B
+
+**Status:** Accepted (design; implementation follows) · **Date:** 2026-08-06 (S67) ·
+**gates** campaign B · **extends** DEC-0069's gap taxonomy · **re-proves** DEC-0035
+
+### What this settles
+
+`ops/usb_watchdog.sh` was deployed 2026-05-22, hand-started once, and never ran again. Nothing
+supervised it: no crontab entry, no pidfile, no boot task. It died no later than the 2026-07-08 NAS
+reboot and was absent for three qualifying stalls on 2026-08-06. For ~2.5 months `BOOT.md` recorded
+it as "deployed and live." Evidence: `BACKLOG.md` §USB watchdog.
+
+Two defects, and fixing only the first would leave the more important one:
+
+1. **It is not supervised.** A hand-started `tail -F | while read` loop cannot survive a reboot.
+2. **Its absence is invisible.** A watchdog that is not running writes exactly the same log as one
+   running with nothing to do: nothing. No observation distinguishes them, so the failure could only
+   ever be found by accident — which is how it was found.
+
+Defect 2 is the one worth deciding about. Supervision without observability just moves the silence.
+
+### Decision
+
+**(a) Supervise it the way the monitor is supervised.** `weewx_monitor.py:102-115` has run reliably
+for months on a PID guard — read pidfile, exit 0 if `/proc/<pid>` exists, else claim it and release
+via `atexit` — plus a scheduled task that re-launches every 5 minutes. The guard makes re-launch
+idempotent, so the scheduler carries no state. Give `usb_watchdog.sh` the same guard and cadence.
+Proven in this exact environment, no new dependency, survives reboots because the scheduler does.
+
+**(b) Give it a heartbeat.** Touch a liveness file on each loop tick, so liveness is an mtime
+comparison rather than an inference. Deliberately not a periodic "still alive" log line: that grows
+the log without bound and buries the real events.
+
+**(c) Make `ops/soak_check.sh` assert it — the structural half.** That script exists to answer "is
+the station actually healthy, or does it just look Up?", and a dead watchdog is exactly that
+question, which it did not ask. Add a criterion: heartbeat mtime within 2× the tick interval, else
+red. Without this we fix one instance and leave the class, and the next unsupervised helper dies the
+same silent way.
+
+**(d) Treat a rising reset rate as a signal.** The watchdog treats a symptom. A watchdog that
+silently papers over a degrading dongle is worse than none, so resets stay logged with reasons and a
+rising rate should reach the monitor's alert path.
+
+### The campaign-B interaction, and the call made
+
+`ops/campaign_analyze.py` sorts every archive gap into three non-overlapping classes — **freeze**
+(rx before 4–17 %, rx after normal and non-NULL), **arm swap** (rx before normal, rx after NULL) and
+**lock/outage** (same shape as a swap) — validated over 2026-07-29 → 08-05, 10 988 records, 33 gaps.
+
+**The watchdog was dead for the whole of that window.** A USB-reset gap is therefore a fourth class
+the taxonomy has never observed. By shape — reception degrades into the stall, the dongle
+power-cycles, reception returns — a reset would most likely be absorbed into **freeze** and silently
+excluded. That may even be the right treatment, but it would be right *by accident*, and this repo
+has been burned twice by precisely that (DEC-0035, DEC-0071): a test blind to the condition it tests
+proves nothing about it. Enabling the watchdog also changes the apparatus of a pre-registered
+experiment (DEC-0048), which must not happen implicitly.
+
+**Chosen (owner call, S67): watchdog ON for campaign B, and `campaign_analyze.py` taught a fourth
+gap class** that reads the watchdog log and excludes reset-adjacent minutes explicitly. Rejected:
+leaving resets unmodelled (reintroduces the DEC-0035 shape, and B's headline number could be quietly
+shaped by an intervention nobody accounted for), and disabling the watchdog for the campaign (an
+unattended multi-night run with no USB recovery is the exact scenario it exists for). The change is
+small because the apparatus already excludes gaps — this adds a source of truth, not a mechanism.
+
+### Verified before deciding
+
+- **The dongle has not moved:** `/sys/bus/usb/devices/1-3/` still reads `idVendor 0bda`,
+  `idProduct 2838` (Realtek RTL2838), and `syno_vbus_reset` is present. Worth checking, because a
+  silently wrong path would make every future reset a no-op that logs success.
+- **The script is sound.** On 2026-05-22 it detected 3 stalls, fired 2 resets and correctly skipped
+  the middle one for its 300 s cooldown. NAS copy byte-identical to repo (sha256 `fc65a0d7…`).
+- **The monitor's guard was read, not remembered** — `weewx_monitor.py:102-115`.
+
+### What this does NOT do
+
+- It does not explain **why** the stalls happen. This is mitigation. The 08-06 burst — three in 40
+  minutes, then ten hours of nothing — stays unexplained and is not closed here.
+- It does not change the reset mechanism or the 300 s cooldown; both worked as designed.
+- It does not touch the driver or the deployed image.
+
+### Consequences
+
+- Campaign B gains a pre-launch gate: the watchdog verified **running**, by heartbeat, not by a sha.
+- `soak_check.sh` gains a criterion, so this class of silent death is caught by the tool whose job
+  that already was.
+- Installing the scheduled task is a NAS mutation: **Class C, owner-run.**
+- **Lesson, and the reason this is a DEC rather than a chore: a sha match proves the FILE, never the
+  PROCESS.** "Deployed and live — NAS copy matches repo byte-for-byte, zero resets since" was true in
+  both its sub-claims and wrong in its conclusion. For anything long-running, liveness needs its own
+  evidence.
