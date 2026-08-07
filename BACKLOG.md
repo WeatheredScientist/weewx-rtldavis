@@ -66,6 +66,15 @@ problem. The rule is a >150 s gap **with** `rtldavis process stalled` = RF; sile
 
 Open. `BOOT.md` blocker 4 carries the summary; this is the working material.
 
+> ⚠️ **READ BEFORE TRUSTING ANY RESET LINE IN A PROD LOG.** Finding 1 below is **fixed on `dev`
+> (S67, `9b0a0e5`) but NOT DEPLOYED.** The NAS still runs the pre-fix monitor (`85d7afb`), so
+> **`weewx_monitor.log` keeps printing `RESET: triggering syno_vbus_reset` — an operation that does
+> not happen** — until someone deploys. The deploy is Class C and was deferred at S67 when the token
+> mint was refused twice; it is a log-text change only, no behaviour, so nothing is broken by the
+> delay. **Deploy it before starting this investigation**, or the first thing the investigation reads
+> is the same lie that misdirected S67. Procedure: `scp` from the merged `dev` tip, sha-verify,
+> owner-run `sudo kill` on the pidfile, esynoscheduler respawns within 5 min.
+
 **Finding 1 — the log line names an operation that does not happen.** `reset_dongle()`
 (`weewx_monitor.py:347`) logs `RESET: triggering syno_vbus_reset`, but it never touches that node.
 It shells out to `usb_reset.sh`, which is a **driver unbind/rebind, not a power cycle**:
