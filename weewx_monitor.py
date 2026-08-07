@@ -31,6 +31,19 @@ REPEAT   = 7200
 # missing was any notion of whether the remedy WORKED.
 RESET_VERIFY_S  = 180   # seconds after a reset before judging it effective
 RESET_MAX_TRIES = 3     # consecutive ineffective resets before we stop and escalate
+
+# --- What a "reset" actually IS (S67, DEC-0074) ---
+# Named here ONCE, and used for both the subprocess call and every log line about
+# it, so the message can never again drift from the action. Until S67 this was
+# logged as "RESET: triggering syno_vbus_reset" -- an operation that has not run
+# since the logic moved out of the retired usb_watchdog.sh, which really did write
+# that node. The monitor runs usb_reset.sh, which is a driver UNBIND/REBIND and not
+# a power cycle. Months of logs named the wrong operation, and a reader reasoning
+# from them (including a Claude session at S67) reasons about the wrong mechanism.
+# If the script ever changes what it does, change USB_RESET_ACTION with it.
+USB_RESET_SCRIPT = os.environ.get(
+    'USB_RESET_SCRIPT', '/volume1/docker/weewx-rtldavis/usb_reset.sh')
+USB_RESET_ACTION = 'USB driver unbind/rebind'
 CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 DOCKER_BIN = os.environ.get('DOCKER_BIN', '/usr/local/bin/docker')
 
@@ -222,10 +235,10 @@ def send_rain_glitch_alert(ts, detail, phantom_in, raw_line, test=False):
 
 def do_reset(notify=True):
     try:
-        log("RESET: running usb_reset.sh via sudo")
+        log(f"RESET: running {USB_RESET_SCRIPT} via sudo ({USB_RESET_ACTION})")
         import subprocess
         result = subprocess.run(
-            ['sudo', '/volume1/docker/weewx-rtldavis/usb_reset.sh'],
+            ['sudo', USB_RESET_SCRIPT],
             capture_output=True, text=True, timeout=15
         )
         if result.returncode == 0:
@@ -240,7 +253,7 @@ def do_reset(notify=True):
                 send_email(f"{STATION_NAME}: RTL-SDR reset", f"Dongle reset at {datetime.now()}. Vendor: {vendor}")
         else:
             log(f"RESET error: {result.stderr}")
-            send_email(f"{STATION_NAME}: RTL-SDR reset FAILED", f"usb_reset.sh failed: {result.stderr}")
+            send_email(f"{STATION_NAME}: RTL-SDR reset FAILED", f"{USB_RESET_SCRIPT} failed: {result.stderr}")
     except Exception as e:
         log(f"RESET error: {e}")
 
@@ -344,7 +357,7 @@ def reset_dongle(last_reset, notify=True):
     if now - last_reset < RESET_CD:
         log(f"SKIP reset: cooldown ({int(now-last_reset)}s)")
         return last_reset
-    log("RESET: triggering syno_vbus_reset")
+    log(f"RESET: {USB_RESET_ACTION} via {USB_RESET_SCRIPT}")
     import threading
     t = threading.Thread(target=do_reset, kwargs={'notify': notify}, daemon=True)
     t.start()
