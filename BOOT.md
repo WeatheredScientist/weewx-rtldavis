@@ -33,7 +33,10 @@ The sequence, in order:
    whose first row has already passed (DEC-0066) — without that guard a stale schedule joins
    mid-square with no pilot, or records the campaign complete without running it. Both look like
    success.
-5. **Bump `EXPECT_IMAGE` in `ops/soak_check.sh`** with the deploy, not after it.
+5. **Bump `EXPECT_IMAGE` *and* `EXPECT_DRIVER` in `ops/soak_check.sh`** as part of the deploy —
+   `:v2.0.12` and `0.20+ws.3` → `0.20+ws.4` together. Both were reset to prod's actual values at
+   S67 after being bumped early at S62 for this release; bumping them again before it ships would
+   recreate exactly that.
 6. **Class C deploy steps → `install`.**
 
 ### Current state — verified at S67 open
@@ -46,7 +49,7 @@ The sequence, in order:
 | `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip at launch |
 | Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's, mtime Jul 29) |
 | Campaign A | **STOPped, sentinel in place.** Do not clear it |
-| Watchdog (DEC-0065) | deployed and live — NAS copy matches repo tip byte-for-byte, zero resets since |
+| USB watchdog | ⚠️ **file deployed; no evidence it RUNS** — silent through three matching stalls on 08-06. Prior "deployed and live" was asserted from file identity, not process liveness (DEC-0031's shape). Blocker 4 |
 | hyperlocal-forecast | ✅ recovered. Container recreated 08-06 with HLF PR #286 merged (the reader-side 30 s busy timeout). ops#141 relabelled `repo:hlf` — **nothing further owed by this repo** |
 
 ### The two gates, as one-liners (full reasoning in the DECs — do not re-derive)
@@ -61,11 +64,10 @@ The sequence, in order:
   bug to chase**. Watch for it recurring *despite* the cap: that would mean a reader holding the lock
   >30 s, a different problem.
 
-**⛔ Do not retry WAL (DEC-0071).** Tried 08-06, rolled back in 28 minutes. A Docker `:ro` bind makes
-the **files** read-only, and SQLite creates `weewx.sdb-wal` mode `0555` — so a non-root reader can
-never join the WAL, and the directory mount was never the only blocker. `timeout = 30` already
-delivers most of WAL's practical benefit. The `journal_mode = DELETE` pragma is left in place **on
-purpose**, re-pinning `delete` every start.
+**⛔ Do not retry WAL (DEC-0071).** Tried 08-06, rolled back in 28 min. A Docker `:ro` bind makes the
+**files** read-only and SQLite creates `weewx.sdb-wal` mode `0555`, so a non-root reader can never
+join the WAL — the mount was never the only blocker. `timeout = 30` gives most of the benefit. The
+`journal_mode = DELETE` pragma stays **on purpose**, re-pinning `delete` every start.
 
 ## Blockers
 
@@ -81,6 +83,14 @@ purpose**, re-pinning `delete` every start.
    DEC-0065 declined to automate the recreate. Do not let it block B.
 3. **`ppm`/`fc` still unmeasured**, deliberately unchanged for B (measuring now would confound the
    LNA contrast).
+4. **Three `rtldavis process stalled` events on 08-06 (09:53 / 10:10 / 10:32 EDT); the USB watchdog
+   logged none.** Found at S67 by actually *running* `ops/soak_check.sh` — nobody had for five
+   sessions. Two questions, don't conflate: (a) does the watchdog process run at all — log silent
+   since 2026-05-22, no pidfile, though its `STALL_PATTERN` does match these lines; (b) why a burst
+   of three ~2.5 h after the 07:25 restart, then ten hours of nothing. These are **RF/USB, not the
+   process freeze** (gap *with* the stall line = RF; silent = freeze). Reception recovered to 81%,
+   nothing degraded now. **Verify the watchdog before campaign B** — an unattended multi-night
+   campaign is exactly when it must work.
 
 ## Ordered backlog
 
@@ -123,7 +133,6 @@ those files do not say:
 - **This file is the single source of truth for the session number and the handoff** (DEC-0023);
   prefix cross-repo refs (`weewx S67` vs `dash S151`).
 
-_Last updated: 2026-08-06 (S67) — HLF confirmed recovered (ops#141 closed out to `repo:hlf`); ops#145
-doc diet: `BOOT.md` and `MANIFEST.md` brought under cap, standing watches + LNA findings rehomed to
-`BACKLOG.md`, MANIFEST switched to class rows (STANDARD rule 9) with the detail pushed into the
-script headers. Campaign B is cleared to launch — the only open question is when._
+_Last updated: 2026-08-06 (S67) — HLF recovered (ops#141 → `repo:hlf`); ops#145 doc diet closed
+(DEC-0072): both tier files under cap, MANIFEST on class rows. Then `EXPECT_IMAGE`/`EXPECT_DRIVER`
+reset to prod's real values, which surfaced blocker 4. Campaign B is cleared — the question is when._
