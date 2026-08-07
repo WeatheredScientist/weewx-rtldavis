@@ -64,8 +64,11 @@ problem. The rule is a >150 s gap **with** `rtldavis process stalled` = RF; sile
 
 ## USB watchdog: not running since 2026-05-22 — the evidence (S67)
 
-Summary and the pre-campaign-B action live in `BOOT.md` blocker 4. The forensics are here so the
-handoff stays inside its cap.
+> ⚠️ **Read DEC-0074 first. The conclusion drawn from this evidence was wrong.** Everything below
+> about `ops/usb_watchdog.sh` being dead is accurate and still stands — but it did **not** mean the
+> watchdog *function* was missing. `weewx_monitor.py` carries it and handled every stall. The script
+> was a superseded predecessor and is now retired; kept here because the *method* is reusable and
+> the failure of reasoning is worth not repeating: nobody checked whether something else did the job.
 
 - **How it was established.** `ops/usb_watchdog.sh` logs `Watchdog started` unconditionally at
   line 32, *before* its `tail -F | while read` loop — so every start writes that line. The complete
