@@ -24,6 +24,24 @@ under [Pre-S16].
 - Verified before deciding, not assumed: the dongle is still on USB `1-3` (`0bda:2838`, Realtek
   RTL2838) with `syno_vbus_reset` present — a silently wrong path would make every future reset a
   no-op that logs success — and the monitor's PID guard was read at source rather than remembered.
+- **DEC-0073 (a)(b)(c) implemented.** `ops/usb_watchdog.sh` gains the PID guard, a heartbeat touched
+  every tick, and env-overridable paths (the old hardcoded ones are much of why its behaviour was
+  never tested). The loop now uses `read -t` so **the heartbeat ticks on a quiet log** — a bare
+  `read` blocks until a line arrives, which would let `soak_check.sh` call a live watchdog dead.
+  A closed `tail` pipe is distinguished from an idle one so the script exits and lets the scheduler
+  restart it, rather than spinning.
+- **New `tests/test_usb_watchdog.sh` — 8 tests, and they have teeth.** They cover the *supervision*,
+  which is what actually failed: heartbeat on a quiet log, pidfile contents, stall detection, the
+  300 s cooldown, non-matching lines triggering nothing, the PID guard refusing a second instance,
+  and a **stale pidfile being reclaimed** (if that were fatal, one `kill -9` would keep the watchdog
+  dead forever — the exact permanence this DEC exists to prevent). Positive-controlled: reverting
+  the `read -t` to a bare `read` turns the heartbeat test red, and restoring it turns it green.
+- **`ops/soak_check.sh` asserts the heartbeat** (2× the 60 s tick). Confirmed against prod, where it
+  correctly reports `USB WATCHDOG NOT RUNNING` — production is its own positive control here.
+- **Not done, and gating campaign B:** deploying the new script and installing the 5-minute task
+  (Class C — prod still runs the dead pre-DEC-0073 copy); reset-rate alerting, which needs a
+  `weewx_monitor.py` change since the monitor reads `weewx.log` and not the watchdog log; and
+  `campaign_analyze.py`'s fourth gap class, best written once real reset lines exist to test against.
 
 - **`BOOT.md` 3734 → 2161 tok (cap 2500), `MANIFEST.md` 1948 → 970 tok (cap 1000)** — verified with
   `checks/tier-sweep.sh` itself against fixtures, not by hand arithmetic. Both green, exit 0.
