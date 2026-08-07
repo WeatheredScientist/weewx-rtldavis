@@ -5,7 +5,25 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
-## [S67] — 2026-08-06 — Tier-file diet (ops#145, DEC-0072): both files under cap, detail pushed to the source
+## [S67] — 2026-08-06 — Tier-file diet (ops#145, DEC-0072); watchdog found dead and its supervision designed (DEC-0073)
+
+- **DEC-0073 — supervise the USB watchdog, make its absence loud, model its resets.** Design agreed,
+  implementation is the open work and it now **gates campaign B**. Four parts: adopt
+  `weewx_monitor.py:102-115`'s PID guard plus a 5-minute scheduled re-launch (the guard makes
+  re-launch idempotent, so the scheduler carries no state); a heartbeat file so liveness is an mtime
+  check rather than an inference; **`ops/soak_check.sh` asserts that heartbeat** — the structural
+  half, since that script exists to ask "healthy, or just looks Up?" and had never asked it of the
+  watchdog; and a rising reset rate reaching the alert path.
+- **The campaign-B call that came with it.** `campaign_analyze.py`'s three-class gap taxonomy
+  (freeze / arm swap / lock-outage) was validated over 07-29 → 08-05 — **a window in which the
+  watchdog was dead** — so a USB-reset gap is a fourth class it has never seen and would, by shape,
+  be absorbed into `freeze` and excluded *by accident*. That is DEC-0035's and DEC-0071's failure
+  shape exactly. Agreed: **watchdog ON for B, analyzer taught the fourth class** so reset-adjacent
+  minutes are excluded explicitly and auditably, rather than a measured result being quietly shaped
+  by an intervention nobody modelled.
+- Verified before deciding, not assumed: the dongle is still on USB `1-3` (`0bda:2838`, Realtek
+  RTL2838) with `syno_vbus_reset` present — a silently wrong path would make every future reset a
+  no-op that logs success — and the monitor's PID guard was read at source rather than remembered.
 
 - **`BOOT.md` 3734 → 2161 tok (cap 2500), `MANIFEST.md` 1948 → 970 tok (cap 1000)** — verified with
   `checks/tier-sweep.sh` itself against fixtures, not by hand arithmetic. Both green, exit 0.
