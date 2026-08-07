@@ -62,6 +62,33 @@ problem. The rule is a >150 s gap **with** `rtldavis process stalled` = RF; sile
 ✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
 — the abort was correct, DEC-0061's budget holds).
 
+## USB watchdog: not running since 2026-05-22 — the evidence (S67)
+
+Summary and the pre-campaign-B action live in `BOOT.md` blocker 4. The forensics are here so the
+handoff stays inside its cap.
+
+- **How it was established.** `ops/usb_watchdog.sh` logs `Watchdog started` unconditionally at
+  line 32, *before* its `tail -F | while read` loop — so every start writes that line. The complete
+  log is **845 bytes** and contains exactly **one**, dated `2026-05-22 16:00:00`. The deployed
+  script's mtime is `May 22 16:00`, the same minute: hand-started once, from a shell.
+- **Nothing supervises it.** No `/etc/crontab` entry matching watchdog/weewx/rtldavis, and no
+  pidfile beside `weewx_monitor.pid` (the monitor has one; this doesn't).
+- **NAS uptime 29.6 days** at the check (booted ~2026-07-08), so a loop started in May could not
+  have survived regardless. Dead since 07-08 at the very latest.
+- **It went unnoticed because its failure is silent by construction** — a watchdog that isn't
+  running produces exactly the same log (nothing) as one running with nothing to do.
+- **The script is not the problem.** On 2026-05-22 it performed correctly: 3 stalls detected, 2
+  resets fired, the middle one properly skipped for the 300 s cooldown. NAS copy is byte-identical
+  to the repo — sha256 `fc65a0d7f3fd30a0efd94371bf107a02e63198043b62ff19157f988d03141818`, 1238
+  bytes both. **Only supervision is missing.**
+- **The claim that hid it:** BOOT read *"deployed and live — NAS copy matches repo tip
+  byte-for-byte, zero resets since."* Both literal sub-claims were true and re-verified. The
+  conclusion was still wrong: zero resets because nothing was listening, not because nothing needed
+  resetting. **A sha match answers "is the file right", never "is the process alive."**
+- **Open design call before it can be fixed:** how to supervise it. `weewx_monitor.py` uses
+  esynoscheduler with a pidfile and is respawned within ~5 min — the obvious precedent. Restarting
+  it is a NAS mutation (Class C, owner-run).
+
 ## Needs a check / housekeeping (moved from STATUS.md, S60)
 
 - **⚠️ The freeze MECHANISM is still open (DEC-0036) — but the trigger and the fuel are both gone.**

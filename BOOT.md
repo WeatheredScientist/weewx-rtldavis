@@ -49,7 +49,7 @@ The sequence, in order:
 | `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip at launch |
 | Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's, mtime Jul 29) |
 | Campaign A | **STOPped, sentinel in place.** Do not clear it |
-| USB watchdog | ⚠️ **file deployed; no evidence it RUNS** — silent through three matching stalls on 08-06. Prior "deployed and live" was asserted from file identity, not process liveness (DEC-0031's shape). Blocker 4 |
+| USB watchdog | ⛔ **NOT RUNNING since 2026-05-22** — deployed and byte-correct, but hand-started once and never supervised. Blocker 4 |
 | hyperlocal-forecast | ✅ recovered. Container recreated 08-06 with HLF PR #286 merged (the reader-side 30 s busy timeout). ops#141 relabelled `repo:hlf` — **nothing further owed by this repo** |
 
 ### The two gates, as one-liners (full reasoning in the DECs — do not re-derive)
@@ -71,35 +71,32 @@ join the WAL — the mount was never the only blocker. `timeout = 30` gives most
 
 ## Blockers
 
-1. **The weewx process freezes, roughly once a day, ~2–4 min. Cause not fully explained (DEC-0067,
-   DEC-0068).** Six occurrences logged; the last three have thread-state captures, all `S`, never
-   `D`. DEC-0068 confirmed coffee-radar (shares this NAS) running during one of them at loadavg
-   12.39 vs a 0.3–0.7 baseline — **a real contributor, not the sole cause**; n=1 correlated of 3.
-   `ops/freeze_watch.sh` is the reusable catcher. **Gates nothing** — DEC-0069 bounds its campaign
-   impact at ±0.03 pts. Detail: DEC-0068, `docs/ROADMAP.md` P0.
-2. **ERR-0005 is still unexplained** — but demonstrably a **single incident**, not the head of a
-   pattern (21 driver detections that day, 0 on every other). Root cause unestablished: a container
-   recreate fixed it, a `kill`+`start` 20 min earlier had not, and nobody knows why. That gap is why
-   DEC-0065 declined to automate the recreate. Do not let it block B.
+1. **The weewx process freezes ~once a day, 2–4 min. Cause not fully explained (DEC-0067/0068).**
+   Six logged; last three have thread captures, all `S`, never `D`. Coffee-radar (shares this NAS)
+   was running during one at loadavg 12.39 vs 0.3–0.7 baseline — **a real contributor, not the sole
+   cause**; n=1 of 3. `ops/freeze_watch.sh` is the catcher. **Gates nothing** — DEC-0069 bounds the
+   campaign impact at ±0.03 pts. Detail: DEC-0068, `docs/ROADMAP.md` P0.
+2. **ERR-0005 unexplained** — but a **single incident**, not a pattern (21 driver detections that
+   day, 0 on every other). A container recreate fixed it, a `kill`+`start` 20 min earlier had not,
+   and nobody knows why — which is why DEC-0065 declined to automate the recreate. Doesn't block B.
 3. **`ppm`/`fc` still unmeasured**, deliberately unchanged for B (measuring now would confound the
    LNA contrast).
-4. **Three `rtldavis process stalled` events on 08-06 (09:53 / 10:10 / 10:32 EDT); the USB watchdog
-   logged none.** Found at S67 by actually *running* `ops/soak_check.sh` — nobody had for five
-   sessions. Two questions, don't conflate: (a) does the watchdog process run at all — log silent
-   since 2026-05-22, no pidfile, though its `STALL_PATTERN` does match these lines; (b) why a burst
-   of three ~2.5 h after the 07:25 restart, then ten hours of nothing. These are **RF/USB, not the
-   process freeze** (gap *with* the stall line = RF; silent = freeze). Reception recovered to 81%,
-   nothing degraded now. **Verify the watchdog before campaign B** — an unattended multi-night
-   campaign is exactly when it must work.
+4. **The USB watchdog is NOT RUNNING and has not been since 2026-05-22** (established S67 — full
+   evidence in `BACKLOG.md`). Hand-started once from a shell, never supervised: no crontab entry, no
+   pidfile, and NAS uptime 29.6 d means it died at the 07-08 boot at the latest. **The script is
+   fine and byte-identical to repo** — only supervision is missing. Three qualifying stalls on 08-06
+   (09:53 / 10:10 / 10:32 EDT) went unhandled; those are **RF/USB, not the process freeze** (gap
+   *with* the stall line = RF; silent = freeze). Reception recovered to 81%, nothing degraded now.
+   **Fix before campaign B** — an unattended multi-night campaign is exactly when it must work.
+   Needs a design call (esynoscheduler, as `weewx_monitor.py` uses?) plus a Class C NAS action.
 
 ## Ordered backlog
 
 1. **Launch campaign B** (above) — or decide not to, deliberately.
-2. **Doc hygiene — ops#145.** ✅ Closed at S67 (**DEC-0072**): both tier files under cap, standing
-   watches and the LNA findings rehomed to `BACKLOG.md`, four script headers given the detail the
-   MANIFEST used to carry. **DEC-0072 leaves a standing obligation** — a new `ops/`/`scripts/` file
-   must ship with a header saying why it exists and when to load it, because the class row promises
-   that and nothing will fail if it's missing. ✅ `docs/ROADMAP.md` reconciled at S66; next check due
+2. ✅ **Doc hygiene — ops#145 closed at S67 (DEC-0072).** Standing obligation it leaves: a new
+   `ops/`/`scripts/` file must ship with a header saying why it exists and when to load it — the
+   MANIFEST class row promises that, and nothing fails if it's missing. ✅ `docs/ROADMAP.md`
+   reconciled at S66; next check due
    **by S76**.
 3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at `interval = 15`
    + `backfill = 1`, ERR-0003's path. Back up the DB first.
@@ -130,6 +127,10 @@ those files do not say:
 - **`~/.claude/hooks/secret-read-guard.sh` matches by basename**, so it blocks reads of the repo's
   own clean `ops/wxcheck.sh` (which uses `${WU_API_KEY}`, no literals) because the *NAS* copy once
   held a key. Use `readconf <path>` to read it. Guard-side fix is ops-owned, not this repo's.
+- **A sha match proves the FILE, never the PROCESS.** "Deployed and live — NAS copy matches repo
+  byte-for-byte" was true about the bytes and false about liveness for ~2.5 months (blocker 4). For
+  anything long-running, liveness needs its own evidence: a pidfile, a heartbeat line, or a start
+  line in its own log.
 - **This file is the single source of truth for the session number and the handoff** (DEC-0023);
   prefix cross-repo refs (`weewx S67` vs `dash S151`).
 
