@@ -183,10 +183,14 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       no hour-07 notch, against campaign A's pooled 72.4%. Treat that as suggestive only: A's
       figure pools all four arms including gain 207, so it is biased low, and the clean comparison
       is B's 372 anchor against A's — which is exactly why 372 is in both campaigns.
-- [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE**, verified live at the
-      S63 open: the NAS `weewx_monitor.py` matches the repo tip byte-for-byte, with zero resets or
-      escalations since. It was deployed between sessions, outside a session, which is why S62's
-      handoff still listed it as pending.
+- [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
+      handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
+      was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,
+      with zero resets or escalations since" proves the FILE, never the PROCESS — and "zero resets"
+      can mean nothing was listening just as easily as nothing needed doing. That exact reasoning,
+      applied to a *different* script, produced a whole decision entry on a false premise at S67.
+      Liveness now has its own assertion in `ops/soak_check.sh`. **Cite process evidence, not a
+      checksum.**
 - [x] ~~**P0 — explain the two unexplained 08-02 outages**~~ — **substantially answered by DEC-0067
       (S63).** They were two different phenomena filed under one name. The driver's own 150 s
       watchdog is the discriminator and had been reporting correctly all along: it fires only when
