@@ -62,6 +62,40 @@ problem. The rule is a >150 s gap **with** `rtldavis process stalled` = RF; sile
 ✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
 — the abort was correct, DEC-0061's budget holds).
 
+## Why USB resets fire but never work — evidence and the decisive test (S67)
+
+Open. `BOOT.md` blocker 4 carries the summary; this is the working material.
+
+**Finding 1 — the log line names an operation that does not happen.** `reset_dongle()`
+(`weewx_monitor.py:347`) logs `RESET: triggering syno_vbus_reset`, but it never touches that node.
+It shells out to `usb_reset.sh`, which is a **driver unbind/rebind, not a power cycle**:
+
+```sh
+echo '1-3' > /sys/bus/usb/drivers/usb/unbind ; sleep 3 ; echo '1-3' > /sys/bus/usb/drivers/usb/bind
+```
+
+The retired `usb_watchdog.sh` genuinely did `echo 1 > syno_vbus_reset`. When the logic moved into the
+monitor the *action* changed and the *message* did not, so every reset line in every log for months
+has named the wrong operation. Fix the message before anyone reasons from it again.
+
+**Hypothesis (NOT established) — the reset treats the device while the fault is the consumer's grip
+on it.** Unbind/rebind re-probes the driver without power-cycling the port, so the dongle stays
+enumerated (still `devnum 5`, `/dev/bus/usb/001/005`). The stalled consumer is `rtldavis` inside a
+privileged container holding an open libusb handle, and nothing in the reset path makes it drop that
+handle or restarts it. Consistent with: 3/3 failures 08-06, 9/9 on 08-02, ERR-0005 (host could see
+the dongle while `rtldavis` could not claim it), and DEC-0065's note that a container **recreate**
+fixed ERR-0005 where `kill`+`start` had not.
+
+**The decisive test, at the next stall:** capture `/dev/bus/usb/001/` and the dongle's `devnum` on
+the host *and* inside the container, before and after a reset. Stale container view or a surviving
+handle confirms it. If both look clean, the stall is not a USB fault at all and the reset is
+treating the wrong thing entirely.
+
+**Also worth deciding:** the escalation ladder tops out at "email a human that the ineffective thing
+was ineffective." It never tries the intervention that has actually worked (container recreate).
+DEC-0065 declined to automate that while ERR-0005's cause was unknown — coherent, but it means three
+failed resets currently produce no further action.
+
 ## USB watchdog: not running since 2026-05-22 — the evidence (S67)
 
 > ⚠️ **Read DEC-0074 first. The conclusion drawn from this evidence was wrong.** Everything below

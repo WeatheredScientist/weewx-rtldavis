@@ -59,6 +59,21 @@ under [Pre-S16].
   monitor fired **nine resets on 08-02, inside the 07-29 → 08-05 window `campaign_analyze.py`'s
   taxonomy was validated against**. So reset-adjacent gaps are already inside campaign A's recomputed
   figures. That makes the fourth-gap-class question one about a result DEC-0069 already published.
+- **`weewx_monitor.py` was never in `MANIFEST.md` — the hole that caused DEC-0073.** It is tracked
+  in this repo, at the root, 38 KB, the largest operational file here, and it appeared zero times in
+  the index. DEC-0072's class row scopes to `ops/*` + `scripts/*`, which excludes the repo root, so
+  the diet did not just miss it — it codified the omission behind a rule that reads as if it covers
+  the harness. Since the session-start read is BOOT + CONSTANTS + MANIFEST, nothing in the load path
+  named the file that **is** the watchdog; the index shaped where I looked and had a hole exactly
+  where the answer was. Now has its own row, whose "load when" is *any "what handles X at runtime?"
+  question — read this BEFORE concluding a capability is missing*. Preamble gains the rule that was
+  missing: **a file in no class gets its own row.**
+- **The reset log line names an operation that never happens.** `reset_dongle()` logs
+  `RESET: triggering syno_vbus_reset` but shells out to `usb_reset.sh`, which is a driver
+  **unbind/rebind, not a power cycle**. The retired `usb_watchdog.sh` really did write
+  `syno_vbus_reset`; when the logic moved into the monitor the action changed and the message did
+  not. Every reset line in every log for months has named the wrong operation. Evidence, the
+  leading hypothesis for why the resets fail, and the decisive test are in `BACKLOG.md`.
 - Also noticed: `weewx.log` rotates at midnight, so the DEC-0031 driver canary reads `UNVERIFIED`
   after rotation until the next restart logs a banner — the same silent-window class. The reset
   counters were made rotation-aware (they read `.log` and `.log.1`); the canary was not, and wants a
