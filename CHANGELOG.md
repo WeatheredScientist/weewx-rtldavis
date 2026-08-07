@@ -81,6 +81,30 @@ under [Pre-S16].
   `syno_vbus_reset`; when the logic moved into the monitor the action changed and the message did
   not. Every reset line in every log for months has named the wrong operation. Evidence, the
   leading hypothesis for why the resets fail, and the decisive test are in `BACKLOG.md`.
+- **Monitor deploy deferred, and recorded rather than remembered.** The corrected log message is on
+  `dev` but the NAS still runs the pre-fix copy, so prod logs keep printing the line that isn't true.
+  The Class C token mint was refused twice, and since the change is log text with no behaviour, rung
+  2 of the ladder applied — defer, don't hand over a paste-me command. A blocking note now sits at
+  the top of `BACKLOG.md`'s reset section, because from the repo side that fix looks *done*: merged,
+  tested, closed. The next session's first act would otherwise be reading the exact lines it fixed.
+- **Lessons filed cross-repo as [ops#147](https://github.com/WeatheredScientist/eaglehunt-ops/issues/147)**
+  (`repo:` all four, `tier:frontier`). Eight items on one through-line — *every failure this session
+  was a green-looking signal resting on the wrong evidence* — so it continues OPS-DEC-0040 and
+  DEC-0035 rather than opening a new concern. The two with leverage: **the index directs attention,
+  so a hole in it is invisible** (STANDARD rule 9 as written lets a diet codify an omission — a class
+  row scoped to `ops/*` reads as "all the operational scripts" while excluding the repo root, which
+  is exactly how `weewx_monitor.py` stayed unindexed), and **a file match proves the FILE, never the
+  PROCESS**. Both are better served by a mechanical check than a written rule, per OPS-DEC-0040's own
+  argument; `checks/tier-sweep.sh` already reads each repo's pushed files and could enumerate
+  operational artifacts covered by no row.
+- **`weewx_monitor.py` now has its own MANIFEST row**, and the preamble states the rule that was
+  missing: *a file in no class gets its own row.* It is the largest operational file in the repo and
+  had never been indexed — the direct cause of the DEC-0073 error, since the session-start read path
+  contained no pointer to the thing that answers "what handles this at runtime?".
+- **`docs/ROADMAP.md` line corrected (DEC-0057, same session):** the watchdog-deploy item cited
+  *"matches the repo tip byte-for-byte, with zero resets or escalations since"* as proof it was live.
+  That is the exact wrong-evidence pattern DEC-0074 corrects, sitting in the roadmap as a worked
+  example. The deployment was real; the reasoning was not.
 - Also noticed: `weewx.log` rotates at midnight, so the DEC-0031 driver canary reads `UNVERIFIED`
   after rotation until the next restart logs a banner — the same silent-window class. The reset
   counters were made rotation-aware (they read `.log` and `.log.1`); the canary was not, and wants a
