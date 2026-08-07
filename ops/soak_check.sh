@@ -107,6 +107,16 @@ echo \"record_age_s=\$((now - lt))\"
 # --- reception ---
 echo \"window_pct=\$(grep 'WINDOW:' \"\$M\" | tail -1 | grep -oE '\([0-9]+%\)' | tr -d '()%')\"
 
+# --- the USB watchdog's own liveness (DEC-0073c) ---
+# A watchdog that is not running logs exactly what a watchdog with nothing to do
+# logs: nothing. Only the heartbeat distinguishes them.
+WDH=/volume1/docker/weewx-rtldavis/logs/weewx_watchdog.alive
+WDP=/volume1/docker/weewx-rtldavis/logs/weewx_watchdog.pid
+hb=\$(stat -c %Y \$WDH 2>/dev/null || echo 0)
+echo \"wd_hb_age=\$([ \"\$hb\" -gt 0 ] && echo \$((now - hb)) || echo -1)\"
+wp=\$(cat \$WDP 2>/dev/null)
+echo \"wd_proc=\$([ -n \"\$wp\" ] && [ -d /proc/\$wp ] && echo alive || echo dead)\"
+
 # --- phantom rain: the DEC-0042 signature, auto-detected ---
 # A raw rainRate>0/rain=0 row is NOT itself the signature: the ISS's own rain-rate message
 # (rtldavis.py message_type 5) reports 'time since last tip' for a while after a REAL tip,
@@ -190,7 +200,21 @@ if [ -n "$wp" ] && [ "$wp" -ge 80 ] 2>/dev/null; then ok "reception window" "${w
 elif [ -n "$wp" ]; then note "reception window low" "${wp}%"
 else note "no reception window reported" ""; fi
 
-# 9. The two free experiments this soak is really for
+# 9. The USB watchdog itself (DEC-0073c).
+# This criterion exists because the watchdog was dead for ~2.5 months and this
+# script -- whose entire job is "healthy, or does it just look Up?" -- did not ask.
+# Fixing only the watchdog would have left the class; this is what catches it.
+# Threshold is 2x the watchdog's 60 s tick.
+hba=$(get wd_hb_age)
+if [ -z "$hba" ] || [ "$hba" -lt 0 ] 2>/dev/null; then
+  bad "USB WATCHDOG NOT RUNNING" "no heartbeat file — never started, or a pre-DEC-0073 copy is deployed"
+elif [ "$hba" -le 120 ]; then
+  ok "USB watchdog alive" "heartbeat ${hba}s ago, pid $(get wd_proc)"
+else
+  bad "USB WATCHDOG STALE" "heartbeat ${hba}s ago (>2x tick), pid $(get wd_proc) — died silently, the DEC-0073 shape"
+fi
+
+# 10. The two free experiments this soak is really for
 echo
 echo "── THE TWO OPEN EXPERIMENTS ────────────────────────────────────────────"
 hn=$(get hraw_n)
