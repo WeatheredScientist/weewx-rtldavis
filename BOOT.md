@@ -27,16 +27,14 @@ The sequence, in order:
    stale by S67 and predates DEC-0069/0070/0071 (no `campaign_analyze.py`, no `freeze_watch.sh`).
    Building from a remembered sha ships a green checkmark on a silently incomplete image.
 3. **Push `:v2.0.12`.** `:latest` only after our own station proves it.
-4. **Regenerate the `SCHEDULE=` dates** in `ops/rx_experiment.sh` — shift the whole block by a
-   constant offset (S62's method: 39 substitutions; the structure tests confirm the square survives).
-   The current 08-10 → 08-19 dates are an arbitrary placeholder. `install` **refuses** a schedule
-   whose first row has already passed (DEC-0066) — without that guard a stale schedule joins
-   mid-square with no pilot, or records the campaign complete without running it. Both look like
-   success.
+4. **Regenerate the `SCHEDULE=` dates** in `ops/rx_experiment.sh` — shift the block by a constant
+   offset (S62's method: 39 substitutions; structure tests confirm the square survives). The 08-10 →
+   08-19 dates are a placeholder. `install` **refuses** a schedule whose first row has passed
+   (DEC-0066): without it a stale schedule joins mid-square with no pilot, or records the campaign
+   complete without running it — both look like success.
 5. **Bump `EXPECT_IMAGE` *and* `EXPECT_DRIVER` in `ops/soak_check.sh`** as part of the deploy —
-   `:v2.0.12` and `0.20+ws.3` → `0.20+ws.4` together. Both were reset to prod's actual values at
-   S67 after being bumped early at S62 for this release; bumping them again before it ships would
-   recreate exactly that.
+   `:v2.0.12` and `ws.3` → `ws.4` together. Both were reset to prod's real values at S67 after being
+   bumped early at S62; bumping them before the ship recreates exactly that.
 6. **Class C deploy steps → `install`.**
 
 ### Current state — verified at S67 open
@@ -81,14 +79,17 @@ join the WAL — the mount was never the only blocker. `timeout = 30` gives most
    and nobody knows why — which is why DEC-0065 declined to automate the recreate. Doesn't block B.
 3. **`ppm`/`fc` still unmeasured**, deliberately unchanged for B (measuring now would confound the
    LNA contrast).
-4. **The USB watchdog is NOT RUNNING and has not been since 2026-05-22** (established S67; evidence
-   in `BACKLOG.md`). Hand-started once, never supervised; the script itself is fine and
-   byte-identical to repo — only supervision is missing. Three stalls on 08-06 went unhandled
-   (**RF/USB, not the process freeze**: gap *with* the stall line = RF, silent = freeze). Reception
-   recovered to 81%, nothing degraded now. **Design settled — DEC-0073, read it before starting.**
-   Four parts (supervision, heartbeat, a `soak_check.sh` assertion, reset-rate alerting) plus the
-   agreed campaign call: watchdog **ON**, with `campaign_analyze.py` taught a fourth gap class for
-   reset-adjacent minutes. **Implementing it GATES campaign B**; the install is Class C.
+4. **The USB watchdog is NOT RUNNING in prod, and has not been since 2026-05-22** (established S67;
+   evidence in `BACKLOG.md`). Hand-started once, never supervised. Three stalls on 08-06 went
+   unhandled (**RF/USB, not the process freeze**: gap *with* the stall line = RF, silent = freeze);
+   reception recovered to 81%, nothing degraded now. **Design: DEC-0073 — read it first.**
+   ✅ **Built at S67:** PID guard + heartbeat in `ops/usb_watchdog.sh` (paths env-overridable),
+   `tests/test_usb_watchdog.sh` (8 tests, positive-controlled), and `soak_check.sh` asserts the
+   heartbeat — correctly red against prod today. **Still open, GATES campaign B:** (1) **deploy** +
+   install the 5-min task (Class C; until then prod runs the dead pre-DEC-0073 copy); (2) reset-rate
+   alerting — needs a `weewx_monitor.py` change, since the monitor reads `weewx.log`, not the
+   watchdog log; (3) `campaign_analyze.py`'s fourth gap class, best written once real reset lines
+   exist to test against.
 
 ## Ordered backlog
 
