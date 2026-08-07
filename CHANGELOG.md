@@ -68,7 +68,14 @@ under [Pre-S16].
   where the answer was. Now has its own row, whose "load when" is *any "what handles X at runtime?"
   question — read this BEFORE concluding a capability is missing*. Preamble gains the rule that was
   missing: **a file in no class gets its own row.**
-- **The reset log line names an operation that never happens.** `reset_dongle()` logs
+- **Reset log message fixed structurally, not textually** (+4 tests, positive-controlled).
+  `USB_RESET_SCRIPT` and `USB_RESET_ACTION` are now named once and used for both the subprocess call
+  and every log line about it, so the message cannot drift from the action again. Correcting the
+  string alone would have left the same trap armed. `tests/test_reset_log_matches_action.py` asserts
+  no `log()`/`send_email()` call names `syno_vbus_reset`, that the call site uses the constant rather
+  than a duplicated literal path, and that mechanism log lines derive from the constants —
+  reintroducing the exact historical line turns two of them red.
+- **The reset log line named an operation that never happened.** `reset_dongle()` logged
   `RESET: triggering syno_vbus_reset` but shells out to `usb_reset.sh`, which is a driver
   **unbind/rebind, not a power cycle**. The retired `usb_watchdog.sh` really did write
   `syno_vbus_reset`; when the logic moved into the monitor the action changed and the message did
