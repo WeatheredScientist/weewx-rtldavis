@@ -130,4 +130,6 @@ backlogged; the `rw250-test` tag is a retired misnomer kept only for rollback.)*
 
 `weewx_monitor.py` runs as limited user `weewx-monitor` (RF reception tracking, WOW-BE threshold,
 daily summary email), sudo scoped to `usb_reset.sh`, credentials in gitignored `monitor.env`
-(DEC-0009). `usb_watchdog.sh` guards the dongle. RF sweep + backfill tooling lives in `ops/`.
+(DEC-0009). **`weewx_monitor.py` guards the dongle** — it carries `reset_dongle()`/`watchdog_stall()`
+alongside its alerting, and is the only thing that does; the standalone `usb_watchdog.sh` was a
+superseded predecessor, retired at S67 (DEC-0074). RF sweep + backfill tooling lives in `ops/`.

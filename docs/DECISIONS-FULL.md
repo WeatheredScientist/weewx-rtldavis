@@ -3775,3 +3775,92 @@ small because the apparatus already excludes gaps — this adds a source of trut
   PROCESS.** "Deployed and live — NAS copy matches repo byte-for-byte, zero resets since" was true in
   both its sub-claims and wrong in its conclusion. For anything long-running, liveness needs its own
   evidence.
+
+---
+
+## DEC-0074 — Retire `ops/usb_watchdog.sh`: the monitor IS the watchdog, and DEC-0073 solved a problem that did not exist
+
+**Status:** Accepted · **Date:** 2026-08-07 (S67) · **Supersedes DEC-0073** ·
+**corrects** the S67 blocker-4 finding · **re-proves** DEC-0031 against its own author
+
+### What this settles
+
+DEC-0073 concluded that the USB watchdog was dead and that three stalls on 2026-08-06 "went
+unhandled". **The second half was false.** `weewx_monitor.py` — pid 5015, alive, log seconds old —
+carries `reset_dongle()` (line 342) and `watchdog_stall()` with escalation (line 354), wired to
+`'rtldavis process stalled'` at line 692. It handled all three stalls within seconds:
+
+```
+09:53:40 STALL detected → RESET: triggering syno_vbus_reset → done, idVendor=0bda
+10:11:13 STALL detected → RESET → done
+10:32:52 STALL detected → RESET → done
+```
+
+`ops/usb_watchdog.sh` is a **superseded standalone predecessor**. Its function was absorbed first
+into `weewx_monitor.sh` (which still carries a `reset_dongle()` and is itself dead — it references
+the pre-v2 container name) and then into `weewx_monitor.py`, which does strictly more: it verifies
+whether a reset actually *worked* (`RESET_VERIFY_S`), escalates after `RESET_MAX_TRIES`
+consecutive ineffective resets, distinguishes 'stalled' from 'not running', and records that a USB
+reset does not fix the latter and may have caused ERR-0005.
+
+**So the script is retired, not deployed.** Deploying it would have put a second, uncoordinated
+resetter on the same dongle with an unshared cooldown, next to a monitor whose own source records
+the 2026-08-02 incident of **nine resets in 75 minutes**. That is a regression, not a fix.
+
+### How the wrong conclusion was reached, since the shape recurs
+
+The evidence for "not running" was sound and is unchanged: the script logs `Watchdog started`
+unconditionally, its whole 845-byte log holds one such line from 2026-05-22, nothing supervises it,
+and NAS uptime bounded it anyway. What was never checked was **whether anything else was doing the
+job.** Three sources were consulted — the watchdog's log, `weewx.log`, and the process table — and
+all three are silent about the monitor. `weewx_monitor.log` was never read, and it holds the answer
+in plain text.
+
+This is DEC-0031's lesson turned on its author: *the artifact in front of you being wrong does not
+establish that the system is broken.* "This component is dead" and "this capability is missing" are
+different claims requiring different evidence, and DEC-0073 conflated them.
+
+### What survives from DEC-0073
+
+- **"A sha match proves the FILE, never the PROCESS."** Still exactly right, and it is what found the
+  dead script in the first place. Now generalized: liveness needs its own evidence, and so does
+  *absence of function* — check the whole system, not the one component you are looking at.
+- **The `soak_check.sh` criterion**, repointed. It now asserts the **monitor's** liveness (live pid
+  plus a log younger than 300 s — its poll is 30 s, and a live pid with a stale log means *wedged*,
+  which is not the same as dead), because that is the process whose death would leave stalls
+  unhandled and unalerted.
+- **What DEC-0073 got right about the class:** this script had no criterion in `soak_check.sh`, and
+  neither did the monitor. Now the monitor does.
+
+### The real defect, which DEC-0073 walked past
+
+All three resets on 08-06 **failed**:
+
+```
+09:56:45  RESET ineffective (1/3); bad windows still 8
+10:14:16  RESET ineffective (1/3); bad windows still 10
+10:36:23  RESET ineffective (1/3); bad windows still 15
+```
+
+Three stalls, three resets, zero recoveries, and the bad-window count climbing 8 → 10 → 15. The
+monitor is working correctly and reporting that **the remedy does not work**. `soak_check.sh` now
+carries a criterion for exactly this (`USB RESETS INEFFECTIVE`), because a watchdog that fires is
+not the same as a watchdog that helps. This is open and unexplained.
+
+### Consequence for campaign B, which is larger than DEC-0073 thought
+
+DEC-0073 framed USB-reset gaps as a *new* class that enabling the watchdog would introduce. Wrong
+again, and in the more expensive direction: the monitor has been firing resets all along — **nine on
+2026-08-02, inside the 2026-07-29 → 08-05 window that `campaign_analyze.py`'s three-class taxonomy
+was validated against.** So reset-adjacent gaps are already in campaign A's recomputed numbers,
+classified as freeze or swap or lock. The fourth-class question is therefore not a pre-launch
+nicety for B; it is a question about a result already published in DEC-0069. Still open.
+
+### Consequences
+
+- `ops/usb_watchdog.sh` and `tests/test_usb_watchdog.sh` deleted. Recoverable from git history if
+  the standalone form is ever wanted; it should not be.
+- **No NAS change was made, and none was needed.** Blocker 4's "deploy" gate on campaign B is void.
+- `soak_check.sh` asserts monitor liveness and reset effectiveness.
+- Two things stay open: why the resets do not work, and whether reset gaps have already skewed the
+  campaign-A figures.
