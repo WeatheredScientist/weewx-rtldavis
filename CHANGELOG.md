@@ -38,10 +38,31 @@ under [Pre-S16].
   the `read -t` to a bare `read` turns the heartbeat test red, and restoring it turns it green.
 - **`ops/soak_check.sh` asserts the heartbeat** (2× the 60 s tick). Confirmed against prod, where it
   correctly reports `USB WATCHDOG NOT RUNNING` — production is its own positive control here.
-- **Not done, and gating campaign B:** deploying the new script and installing the 5-minute task
-  (Class C — prod still runs the dead pre-DEC-0073 copy); reset-rate alerting, which needs a
-  `weewx_monitor.py` change since the monitor reads `weewx.log` and not the watchdog log; and
-  `campaign_analyze.py`'s fourth gap class, best written once real reset lines exist to test against.
+- **DEC-0074 supersedes DEC-0073 the same session, before anything was deployed.** Asked to deploy
+  the watchdog, I read `weewx_monitor.py` first and found it already **is** the watchdog —
+  `reset_dongle()` (l.342), `watchdog_stall()` with escalation (l.354), wired at l.692 — alive as
+  pid 5015, and it had handled all three of the 08-06 stalls within seconds. **DEC-0073's claim that
+  those stalls "went unhandled" was false.** The evidence for the standalone script being dead was
+  sound; what was never checked was whether anything *else* did the job. Three sources were
+  consulted — the watchdog's log, `weewx.log`, the process table — and all three are silent about
+  the monitor, whose own log holds the answer in plain text. DEC-0031's lesson turned on its author:
+  *"this component is dead" and "this capability is missing" are different claims.*
+- **`ops/usb_watchdog.sh` and its tests deleted, not deployed.** Deploying would have added a second
+  uncoordinated resetter to the same dongle, unshared cooldown, beside a monitor whose source
+  records nine resets in 75 minutes on 08-02. **No NAS change was made, and none was needed.**
+- **The `soak_check.sh` criterion survives, repointed at the monitor** — live pid plus a log younger
+  than 300 s, since its poll is 30 s and a live pid with a stale log means *wedged*, not dead.
+- **The real defect, which DEC-0073 walked past:** all three resets on 08-06 **failed** —
+  `RESET ineffective (1/3)` each time, bad windows climbing **8 → 10 → 15**. The monitor works and is
+  reporting that the remedy doesn't. New `USB RESETS INEFFECTIVE` criterion. Open and unexplained.
+- **Bigger consequence for campaign B:** reset gaps are not a new class B would introduce — the
+  monitor fired **nine resets on 08-02, inside the 07-29 → 08-05 window `campaign_analyze.py`'s
+  taxonomy was validated against**. So reset-adjacent gaps are already inside campaign A's recomputed
+  figures. That makes the fourth-gap-class question one about a result DEC-0069 already published.
+- Also noticed: `weewx.log` rotates at midnight, so the DEC-0031 driver canary reads `UNVERIFIED`
+  after rotation until the next restart logs a banner — the same silent-window class. The reset
+  counters were made rotation-aware (they read `.log` and `.log.1`); the canary was not, and wants a
+  follow-up.
 
 - **`BOOT.md` 3734 → 2161 tok (cap 2500), `MANIFEST.md` 1948 → 970 tok (cap 1000)** — verified with
   `checks/tier-sweep.sh` itself against fixtures, not by hand arithmetic. Both green, exit 0.

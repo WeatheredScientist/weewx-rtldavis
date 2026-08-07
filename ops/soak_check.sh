@@ -107,15 +107,21 @@ echo \"record_age_s=\$((now - lt))\"
 # --- reception ---
 echo \"window_pct=\$(grep 'WINDOW:' \"\$M\" | tail -1 | grep -oE '\([0-9]+%\)' | tr -d '()%')\"
 
-# --- the USB watchdog's own liveness (DEC-0073c) ---
-# A watchdog that is not running logs exactly what a watchdog with nothing to do
-# logs: nothing. Only the heartbeat distinguishes them.
-WDH=/volume1/docker/weewx-rtldavis/logs/weewx_watchdog.alive
-WDP=/volume1/docker/weewx-rtldavis/logs/weewx_watchdog.pid
-hb=\$(stat -c %Y \$WDH 2>/dev/null || echo 0)
-echo \"wd_hb_age=\$([ \"\$hb\" -gt 0 ] && echo \$((now - hb)) || echo -1)\"
-wp=\$(cat \$WDP 2>/dev/null)
-echo \"wd_proc=\$([ -n \"\$wp\" ] && [ -d /proc/\$wp ] && echo alive || echo dead)\"
+# --- the monitor IS the USB watchdog (DEC-0074) ---
+# weewx_monitor.py carries reset_dongle()/watchdog_stall() as well as alerting, so
+# its liveness is the watchdog's liveness. If it dies, stalls go unhandled AND
+# unalerted, and nothing in weewx.log says so.
+MP=/volume1/docker/weewx-rtldavis/logs/weewx_monitor.pid
+ML=/volume1/docker/weewx-rtldavis/logs/weewx_monitor.log
+mp=\$(cat \$MP 2>/dev/null)
+echo \"mon_proc=\$([ -n \"\$mp\" ] && [ -d /proc/\$mp ] && echo alive || echo dead)\"
+mlog=\$(stat -c %Y \$ML 2>/dev/null || echo 0)
+echo \"mon_log_age=\$([ \"\$mlog\" -gt 0 ] && echo \$((now - mlog)) || echo -1)\"
+# Both the current log and the previous one: weewx_monitor.log rotates daily at
+# 00:05, so a check run just after midnight would otherwise report 0 resets while
+# yesterday's sit one file away -- a silent window exactly when a bad night ended.
+echo \"mon_resets=\$(cat \$ML \$ML.1 2>/dev/null | grep -c 'RESET: triggering')\"
+echo \"mon_reset_bad=\$(cat \$ML \$ML.1 2>/dev/null | grep -c 'RESET ineffective')\"
 
 # --- phantom rain: the DEC-0042 signature, auto-detected ---
 # A raw rainRate>0/rain=0 row is NOT itself the signature: the ISS's own rain-rate message
@@ -200,19 +206,23 @@ if [ -n "$wp" ] && [ "$wp" -ge 80 ] 2>/dev/null; then ok "reception window" "${w
 elif [ -n "$wp" ]; then note "reception window low" "${wp}%"
 else note "no reception window reported" ""; fi
 
-# 9. The USB watchdog itself (DEC-0073c).
-# This criterion exists because the watchdog was dead for ~2.5 months and this
-# script -- whose entire job is "healthy, or does it just look Up?" -- did not ask.
-# Fixing only the watchdog would have left the class; this is what catches it.
-# Threshold is 2x the watchdog's 60 s tick.
-hba=$(get wd_hb_age)
-if [ -z "$hba" ] || [ "$hba" -lt 0 ] 2>/dev/null; then
-  bad "USB WATCHDOG NOT RUNNING" "no heartbeat file — never started, or a pre-DEC-0073 copy is deployed"
-elif [ "$hba" -le 120 ]; then
-  ok "USB watchdog alive" "heartbeat ${hba}s ago, pid $(get wd_proc)"
+# 9. The monitor, which IS the USB watchdog (DEC-0074).
+# This script exists to ask "healthy, or does it just look Up?" and had never asked
+# it of the process that handles USB stalls. Its 30 s poll makes a 300 s log age
+# generous; a live pid with a stale log means wedged, which is not the same as dead.
+mpr=$(get mon_proc); mla=$(get mon_log_age)
+if [ "$mpr" = "alive" ] && [ -n "$mla" ] && [ "$mla" -ge 0 ] && [ "$mla" -le 300 ] 2>/dev/null; then
+  ok "monitor/watchdog alive" "log ${mla}s ago"
+elif [ "$mpr" = "alive" ]; then
+  bad "MONITOR LOG STALE" "pid alive but log ${mla}s old — wedged, so stalls go unhandled"
 else
-  bad "USB WATCHDOG STALE" "heartbeat ${hba}s ago (>2x tick), pid $(get wd_proc) — died silently, the DEC-0073 shape"
+  bad "MONITOR/WATCHDOG DEAD" "no live pid — USB stalls go unhandled AND unalerted"
 fi
+# The remedy's own effectiveness. S67: three stalls, three resets, all ineffective,
+# bad windows climbing 8 -> 10 -> 15. A firing watchdog is not a working one.
+mrb=$(get mon_reset_bad)
+if [ "${mrb:-0}" -eq 0 ]; then ok "USB resets effective" "$(get mon_resets) fired, 0 ineffective"
+else bad "USB RESETS INEFFECTIVE" "${mrb} logged ineffective of $(get mon_resets) — the remedy is not working"; fi
 
 # 10. The two free experiments this soak is really for
 echo

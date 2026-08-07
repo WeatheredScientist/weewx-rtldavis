@@ -71,25 +71,25 @@ join the WAL — the mount was never the only blocker. `timeout = 30` gives most
 
 1. **The weewx process freezes ~once a day, 2–4 min. Cause not fully explained (DEC-0067/0068).**
    Six logged; last three have thread captures, all `S`, never `D`. Coffee-radar (shares this NAS)
-   was running during one at loadavg 12.39 vs 0.3–0.7 baseline — **a real contributor, not the sole
-   cause**; n=1 of 3. `ops/freeze_watch.sh` is the catcher. **Gates nothing** — DEC-0069 bounds the
-   campaign impact at ±0.03 pts. Detail: DEC-0068, `docs/ROADMAP.md` P0.
-2. **ERR-0005 unexplained** — but a **single incident**, not a pattern (21 driver detections that
-   day, 0 on every other). A container recreate fixed it, a `kill`+`start` 20 min earlier had not,
-   and nobody knows why — which is why DEC-0065 declined to automate the recreate. Doesn't block B.
+   ran during one at loadavg 12.39 vs 0.3–0.7 — **a real contributor, not the sole cause**; n=1 of 3.
+   `ops/freeze_watch.sh` catches it. **Gates nothing** — DEC-0069 bounds it at ±0.03 pts. DEC-0068.
+2. **ERR-0005 unexplained** — a **single incident**, not a pattern (21 driver detections that day, 0
+   on every other). A recreate fixed it, a `kill`+`start` 20 min earlier had not, nobody knows why —
+   which is why DEC-0065 declined to automate the recreate. Doesn't block B.
 3. **`ppm`/`fc` still unmeasured**, deliberately unchanged for B (measuring now would confound the
    LNA contrast).
-4. **The USB watchdog is NOT RUNNING in prod, and has not been since 2026-05-22** (established S67;
-   evidence in `BACKLOG.md`). Hand-started once, never supervised. Three stalls on 08-06 went
-   unhandled (**RF/USB, not the process freeze**: gap *with* the stall line = RF, silent = freeze);
-   reception recovered to 81%, nothing degraded now. **Design: DEC-0073 — read it first.**
-   ✅ **Built at S67:** PID guard + heartbeat in `ops/usb_watchdog.sh` (paths env-overridable),
-   `tests/test_usb_watchdog.sh` (8 tests, positive-controlled), and `soak_check.sh` asserts the
-   heartbeat — correctly red against prod today. **Still open, GATES campaign B:** (1) **deploy** +
-   install the 5-min task (Class C; until then prod runs the dead pre-DEC-0073 copy); (2) reset-rate
-   alerting — needs a `weewx_monitor.py` change, since the monitor reads `weewx.log`, not the
-   watchdog log; (3) `campaign_analyze.py`'s fourth gap class, best written once real reset lines
-   exist to test against.
+4. **USB resets FIRE but do not WORK — the live defect (DEC-0074).** On 08-06 three stalls each got
+   a reset within seconds and **all three failed**: `RESET ineffective (1/3)`, bad windows climbing
+   **8 → 10 → 15**. `weewx_monitor.py` **is** the watchdog (`reset_dongle` l.342, `watchdog_stall`
+   l.354, wired l.692), it is alive, and it is correctly reporting that the remedy doesn't help.
+   `soak_check.sh` now carries `USB RESETS INEFFECTIVE`. Unexplained; ERR-0005 noted a reset can make
+   things *worse*. ⚠️ **DEC-0073 is superseded — it claimed these stalls "went unhandled", which was
+   false, and would have deployed a second uncoordinated resetter. `ops/usb_watchdog.sh` is retired,
+   no NAS change was needed, and its "deploy" gate on campaign B is void.**
+5. **Reset gaps may already be inside campaign A's numbers (DEC-0074).** The monitor fired **nine
+   resets on 08-02** — inside the 07-29 → 08-05 window `campaign_analyze.py`'s three-class taxonomy
+   was validated against. So reset-adjacent gaps were classified as freeze/swap/lock in the figures
+   DEC-0069 published. **This is a question about an existing result, not a pre-launch nicety.**
 
 ## Ordered backlog
 
