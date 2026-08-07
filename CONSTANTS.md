@@ -64,7 +64,7 @@ these.** Re-apply and re-verify after any recreate.
 | Published image | `:v2.0.11` + `:latest` — matches prod, no drift |
 | Rollback | `:v2.0.10`, still on the NAS and Docker Hub |
 | Prod baseline tag | `prod-baseline-20260728b` (`main` == this) |
-| Driver banner | `0.20+ws.4` |
+| Driver banner | **prod runs `0.20+ws.3`** (shipped in `:v2.0.11`, built 2026-07-28). The repo is on `0.20+ws.4` — bumped at S62 for the **unshipped** `:v2.0.12`. Don't read the repo's value as prod's |
 | Release mechanics | no git on the NAS; the `docker-compose.yml` there is stale/decorative — always `docker inspect` the live container. `kill` → `rm` → `sleep 3` → `run`, never `compose up` |
 
 ## Hardware / site
