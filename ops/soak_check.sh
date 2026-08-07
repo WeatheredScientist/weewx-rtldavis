@@ -17,9 +17,13 @@
 #   ops/soak_check.sh              # check since the container started
 #   ops/soak_check.sh 3600         # check only the last N seconds
 #
-# EXPECT_IMAGE (below) must name the tag actually deployed, or the identity check
-# goes red on a healthy station — and, worse, goes green on the wrong image after a
-# rollback. Bump it with the deploy, not after it.
+# EXPECT_IMAGE (below) must name the tag actually deployed RIGHT NOW, not the one
+# being prepared. It was set to :v2.0.12 from S62 until S67 while prod ran :v2.0.11
+# -- bumped in ANTICIPATION of a release that never deployed, so the identity check
+# would have gone red on a perfectly healthy station for five sessions. Nobody ran
+# it, which is the only reason it went unnoticed. The mirror-image failure is worse:
+# left too high after a rollback, it goes GREEN on the wrong image. Bump it as part
+# of the deploy, never before and never after.
 #
 # Exit 0 = all green. Exit 1 = something needs a human.
 set -uo pipefail
@@ -36,10 +40,14 @@ case "${NAS_PORT}${NAS_USER}${NAS_HOST}" in (*'<'*)
 esac
 WINDOW="${1:-0}"          # seconds; 0 = since container start
 CONTAINER=weewx-rtldavis-v2
-EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.12}"
-# The DEC-0031 canary. Bump with DRIVER_VERSION in rtldavis.py on every driver
-# release -- a release must be distinguishable in the running log (DEC-0046).
-EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.4}"
+EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.11}"
+# The DEC-0031 canary. Same rule as EXPECT_IMAGE above: this is what prod is
+# running NOW, not what the repo is on. rtldavis.py went to 0.20+ws.4 at S62
+# (2026-08-02) for the unshipped v2.0.12, but prod is v2.0.11, built 2026-07-28,
+# which ships ws.3 -- so this was bumped in the same anticipatory commit and for
+# five sessions the canary reported a mismatch on a correct deployment. Bump both
+# variables as part of the deploy that ships them (DEC-0046).
+EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.3}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }
