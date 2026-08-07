@@ -45,6 +45,19 @@ under [Pre-S16].
   nothing is degraded now, but this wants verifying before an unattended campaign B.
 - The 6 tracebacks the soak check counts are the DEC-0071 crash loop (07:18–07:24 EDT), already
   known and resolved — `weewx.log` persists across restarts, so they stay in the window.
+- **Blocker 4 resolved to a fact: the USB watchdog has not run since 2026-05-22.** It logs
+  `Watchdog started` unconditionally before its `tail -F` loop, and the complete 845-byte log holds
+  exactly one such line, timestamped the same minute the script was deployed — hand-started once
+  from a shell and never supervised (no crontab entry, no pidfile). NAS uptime of 29.6 days means it
+  died at the 2026-07-08 boot at the latest. **The script is not at fault** — on 05-22 it caught 3
+  stalls, fired 2 resets and correctly skipped one for cooldown, and its NAS copy is byte-identical
+  to the repo. Only supervision is missing. Evidence in `BACKLOG.md`; fix needs a design call plus a
+  Class C action, and is now a pre-campaign-B gate.
+- **The lesson, added to BOOT's gotchas: a sha match proves the FILE, never the PROCESS.** The claim
+  that hid this for ~2.5 months was *"deployed and live — NAS copy matches repo tip byte-for-byte,
+  zero resets since."* Both sub-claims were true and re-verified. The conclusion was still wrong:
+  zero resets because nothing was listening. A watchdog that isn't running emits exactly the same
+  log as one with nothing to do, so its failure mode is silent by construction.
 
 ---
 ## [S66] — 2026-08-05 — Both campaign-B gates handled: metric goes freeze-aware (DEC-0069), DB lock bounded (DEC-0070)
