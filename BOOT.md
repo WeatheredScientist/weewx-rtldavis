@@ -14,56 +14,58 @@ is a **separate repo** — don't make dashboard changes here.
 
 ## ▶ Resume here (S68)
 
-### ▶▶ FIRST — two cheap things S67 left ready
+### ▶▶ THE JOB: why do the USB resets never work? (blocker 4)
 
-1. **Deploy the corrected monitor** (~5 min). `dev` has it, the NAS does not, so prod logs still
-   print `RESET: triggering syno_vbus_reset` — an operation that does not happen. Log text only;
-   deferred at S67 when the Class C mint was refused twice. **Do it before the reset investigation**,
-   or that investigation reads the same lie that misdirected S67. `scp` from the merged tip →
-   sha-verify → owner-run `sudo kill` on the pidfile → respawns ≤5 min.
-2. **Then decide campaign B** (below). DEC-0066's gates are still handled; S67 added no formal gate.
+**Agreed at S67 close as S68's work.** ⚠️ **Judgment-tier debugging — escalate the model first.**
+Cross-layer (kernel USB, Docker device passthrough, libusb, the Go demodulator, container lifecycle)
+and the hypothesis is explicitly *not* established.
 
-**New at S67 — neither formally blocks B, but read both first:**
-- **Resets fire but never work** (blocker 4). So an unattended multi-night run has **no working
-  recovery from a stalled dongle**. True all along, so not a new gate — just don't launch believing
-  the watchdog will save a bad night.
-- **Reset gaps may already sit inside campaign A's published numbers** (blocker 5). This one affects
-  the A-vs-B comparison, which is the entire point of B. Settle it before *reading* B, not before
-  running it.
+Everything it needs is ready. Hypothesis, evidence and the decisive test: `BACKLOG.md`.
 
-### ▶▶ Campaign B — the launch sequence, unchanged
+Three things learned the hard way at S67:
+- **Reset lines before 2026-08-07 19:28 name `syno_vbus_reset`, an operation that never ran.** Prod
+  is right now; the *history* still lies. That is what sent S67 down the wrong path.
+- **The decisive capture needs a live stall** (~1/day, unpredictable): host *and* in-container views
+  of `/dev/bus/usb/001/` + the dongle's `devnum`, before and after a reset. Design it in advance.
+- **`weewx_monitor.py` is the watchdog**, alive and supervised. Do not re-derive that.
+
+Then **decide campaign B** (below). DEC-0066's gates hold; S67 added no formal gate. But blocker 5 —
+reset gaps possibly inside campaign A's published numbers — affects the A-vs-B comparison, which is
+B's entire point: settle it before *reading* B, not before running it. And an unattended run has **no
+working dongle recovery**; true all along, so not a gate, but don't launch expecting a rescue.
+
+### ▶▶ Campaign B — the launch sequence
 
 `docs/CAMPAIGN-B-RUNBOOK.md` governs the night. In order:
 
-1. **Promote + tag.** `dev` is **80 commits ahead of `main`**; `main` is the production-truth branch.
-2. **Rebuild `:v2.0.12` from the merged tip.** ⚠️ **Take the tip from `git rev-parse origin/dev`, not
-   from any sha written down here** — S66's copy of this list named `bdc4f9f`, which was 13 commits
-   stale by S67 and predates DEC-0069/0070/0071 (no `campaign_analyze.py`, no `freeze_watch.sh`).
-   Building from a remembered sha ships a green checkmark on a silently incomplete image.
+1. **Promote + tag.** `dev` is ~90 ahead of `main`; `main` is the production-truth branch.
+2. **Rebuild `:v2.0.12` from the merged tip.** ⚠️ **Take it from `git rev-parse origin/dev`, never a
+   sha written down here** — S66's copy named `bdc4f9f`, 13 commits stale by S67 and predating
+   DEC-0069/0070/0071. A remembered sha ships a green checkmark on a silently incomplete image.
 3. **Push `:v2.0.12`.** `:latest` only after our own station proves it.
 4. **Regenerate the `SCHEDULE=` dates** in `ops/rx_experiment.sh` — shift the block by a constant
    offset (S62's method: 39 substitutions; structure tests confirm the square survives). The 08-10 →
    08-19 dates are a placeholder. `install` **refuses** a schedule whose first row has passed
-   (DEC-0066): without it a stale schedule joins mid-square with no pilot, or records the campaign
-   complete without running it — both look like success.
+   (DEC-0066): a stale one joins mid-square with no pilot, or records the campaign complete without
+   running it — both look like success.
 5. **Bump `EXPECT_IMAGE` *and* `EXPECT_DRIVER` in `ops/soak_check.sh`** as part of the deploy —
    `:v2.0.12` and `ws.3` → `ws.4` together. Both were reset to prod's real values at S67 after being
    bumped early at S62; bumping them before the ship recreates exactly that.
 6. **Class C deploy steps → `install`.**
 
-### Current state — verified at S67 open
+### Current state (S67 close)
 
 | Thing | State |
 |---|---|
 | Prod | **v2.0.11**, driver **ws.3**, LNA **out**, gain 372, ~70–80%. Emitting live |
 | Live-config deviations | `timeout = 30` + `[[[pragmas]]] journal_mode = DELETE`, both verified in the running `weewx.conf`. Table in `CONSTANTS.md` |
-| `weewx_monitor.py` | **alive and supervised** — a Synology boot task re-checks its pidfile every 5 min. It **is** the USB watchdog; it handled every 08-06 stall (DEC-0074). ⚠️ NAS copy is **one commit behind `dev`** — see FIRST above |
+| `weewx_monitor.py` | **alive, supervised, and current** — Synology boot task re-checks its pidfile every 5 min; NAS matches the merged tip (`97fe334`), deployed + verified 08-07. It **is** the USB watchdog (DEC-0074) |
 | Branches | steady state: exactly `dev` + `main`. `dev` ~90 ahead of `main` |
 | `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip at launch |
 | Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's) |
 | Campaign A | **STOPped, sentinel in place.** Do not clear it |
 
-### The two DEC-0066 gates — closed. Reasoning is in the DECs; do not re-derive it
+### The two DEC-0066 gates — closed. Reasoning lives in the DECs
 
 - **Metric freeze-aware (DEC-0069)** — `ops/campaign_analyze.py`, per-minute `rxCheckPercent`,
   structural exclusion. Read B with `--campaign B`; **A needs `--since 1785384300`**.
@@ -78,13 +80,12 @@ is a **separate repo** — don't make dashboard changes here.
 
 1. **The weewx process freezes ~once a day, 2–4 min. Cause not fully explained (DEC-0067/0068).**
    Six logged; last three have thread captures, all `S`, never `D`. Coffee-radar (shares this NAS)
-   ran during one at loadavg 12.39 vs 0.3–0.7 — **a real contributor, not the sole cause**; n=1 of 3.
-   `ops/freeze_watch.sh` catches it. **Gates nothing** — DEC-0069 bounds it at ±0.03 pts. DEC-0068.
+   ran during one at loadavg 12.39 vs 0.3–0.7 — **a contributor, not the sole cause**; n=1 of 3.
+   `ops/freeze_watch.sh` catches it. **Gates nothing** — DEC-0069 bounds it at ±0.03 pts.
 2. **ERR-0005 unexplained** — a **single incident**, not a pattern (21 driver detections that day, 0
    on every other). A recreate fixed it, a `kill`+`start` 20 min earlier had not, nobody knows why —
-   which is why DEC-0065 declined to automate the recreate. Doesn't block B.
-3. **`ppm`/`fc` still unmeasured**, deliberately unchanged for B (measuring now would confound the
-   LNA contrast).
+   why DEC-0065 declined to automate the recreate. Doesn't block B.
+3. **`ppm`/`fc` unmeasured**, deliberately unchanged for B (measuring would confound the LNA contrast).
 4. **USB resets FIRE but do not WORK — the live defect (DEC-0074).** 08-06: three stalls, three
    resets within seconds, **all three failed** (`RESET ineffective (1/3)`, bad windows 8 → 10 → 15);
    9/9 failed on 08-02 too. The watchdog works and is reporting that **the remedy doesn't**.
@@ -98,9 +99,9 @@ is a **separate repo** — don't make dashboard changes here.
 
 ## Ordered backlog
 
-1. **Deploy the corrected monitor**, then **launch campaign B** — or decide not to, deliberately.
-2. **Why the resets fail** (blocker 4) and **whether reset gaps skew campaign A** (blocker 5).
-   Working material + the decisive test: `BACKLOG.md`.
+1. **Why the resets fail** (blocker 4) — S68's agreed job. Then **whether reset gaps skew campaign
+   A** (blocker 5). Working material + the decisive test: `BACKLOG.md`.
+2. **Launch campaign B** — or decide not to, deliberately.
 3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at `interval = 15`
    + `backfill = 1`, ERR-0003's path. Back up the DB first.
 4. Post-campaign: **LNA-in vs LNA-out grand comparison (A × B)** via `ops/campaign_analyze.py` over
@@ -135,7 +136,7 @@ deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
 - **This file is the single source of truth for the session number and the handoff** (DEC-0023);
   prefix cross-repo refs (`weewx S67` vs `dash S151`).
 
-_Last updated: 2026-08-07 (S67 close) — ops#145 closed (DEC-0072); soak_check expectations reset to
+_Last updated: 2026-08-08 (S67 close) — ops#145 closed (DEC-0072); soak_check expectations reset to
 prod's real values, which surfaced the watchdog thread; **DEC-0074 superseded DEC-0073** after the
-monitor turned out to be the watchdog all along. Live now: resets that fire but never work, and
-reset gaps possibly inside campaign A's figures. Lessons filed cross-repo as ops#147._
+monitor turned out to be the watchdog all along; corrected monitor deployed and verified live.
+S68's job is agreed: **why the resets never work**. Lessons filed cross-repo as ops#147._
