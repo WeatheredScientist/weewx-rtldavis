@@ -44,6 +44,19 @@ RESET_MAX_TRIES = 3     # consecutive ineffective resets before we stop and esca
 USB_RESET_SCRIPT = os.environ.get(
     'USB_RESET_SCRIPT', '/volume1/docker/weewx-rtldavis/usb_reset.sh')
 USB_RESET_ACTION = 'USB driver unbind/rebind'
+
+# --- Reset forensics (S68, BOOT blocker 4) ---
+# The resets fire and do not work; nobody knows why. usb_forensics.sh photographs
+# the USB state and rtldavis's grip on the device around a reset, so the NEXT
+# stall answers the question instead of merely repeating it.
+#
+# The pre/post captures are fired by usb_reset.sh, NOT from here, because they
+# need root and this monitor runs unprivileged (which is why the reset itself goes
+# through sudo). This module fires only the +RESET_VERIFY_S capture, which is
+# host-side and therefore degraded by construction -- it still shows whether the
+# rebind's devnum change persisted, which is the question at that moment.
+USB_FORENSICS_SCRIPT = os.environ.get(
+    'USB_FORENSICS_SCRIPT', '/volume1/docker/weewx-rtldavis/usb_forensics.sh')
 CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 DOCKER_BIN = os.environ.get('DOCKER_BIN', '/usr/local/bin/docker')
 
@@ -233,6 +246,29 @@ def send_rain_glitch_alert(ts, detail, phantom_in, raw_line, test=False):
         body += f"\nLog line:\n{raw_line}"
     send_email(f"{STATION_NAME}: {tag}rain-counter glitch rejected", body)
 
+def usb_forensics(phase):
+    """Fire one read-only USB capture. Evidence only -- never load-bearing.
+
+    Deliberately swallows everything: a capture is worth strictly less than the
+    watchdog it observes, so no failure here may disturb the reset path. A
+    missing script is the normal state on a box where S68's deploy has not
+    landed, and is not worth an ERROR line every time.
+    """
+    import subprocess
+    try:
+        if not os.access(USB_FORENSICS_SCRIPT, os.X_OK):
+            return None
+        out = subprocess.run([USB_FORENSICS_SCRIPT, phase],
+                             capture_output=True, text=True, timeout=30)
+        path = out.stdout.strip()
+        if path:
+            log(f"FORENSICS: {phase} capture -> {path}")
+        return path or None
+    except Exception as e:
+        log(f"FORENSICS: {phase} capture failed ({e}) -- reset path unaffected")
+        return None
+
+
 def do_reset(notify=True):
     try:
         log(f"RESET: running {USB_RESET_SCRIPT} via sudo ({USB_RESET_ACTION})")
@@ -247,6 +283,16 @@ def do_reset(notify=True):
             except OSError:
                 vendor = 'unknown'
             log(f"RESET: done, idVendor={vendor}")
+            # A zero exit does not mean the script had nothing to say. It refuses
+            # to run the forensics helper if that helper is not root-owned and
+            # root-only-writable (it would escalate our own sudo grant), and it
+            # reports that on stderr while still performing the reset. Discarding
+            # output on success would turn that refusal into a silent no-op --
+            # the capture would simply never happen and nothing would say so.
+            for stream in (result.stdout, result.stderr):
+                for line in (stream or '').splitlines():
+                    if line.strip():
+                        log(f"RESET script: {line.strip()}")
             # notify=False for repeat resets within one outage: nine identical
             # "RTL-SDR reset" emails is how the real alarm got buried (ERR-0005).
             if notify:
@@ -412,12 +458,17 @@ def watchdog_poll(wu_bad_windows, now):
     WD['check_at'] = 0.0
     if wu_bad_windows == 0:
         log("RESET verified effective; watchdog counters cleared")
+        # Captured on success too, on purpose: a working reset is the control
+        # this whole investigation lacks. Without it there is nothing to diff a
+        # failed reset against, and every observation looks equally suspicious.
+        usb_forensics('verify-effective')
         WD['tries'] = 0
         WD['escalated'] = False
     else:
         WD['tries'] += 1
         log(f"RESET ineffective ({WD['tries']}/{RESET_MAX_TRIES}); "
             f"bad windows still {wu_bad_windows}")
+        usb_forensics('verify-ineffective')
 
 
 def watchdog_recovered():

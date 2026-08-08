@@ -356,8 +356,12 @@ The monitor needs to reset the USB dongle, which requires root access to `/sys/b
 
 The Task Scheduler script (which runs as root on boot) adds the narrow sudoers rule, then drops privileges to run the monitor as `weewx-monitor`. This means:
 - A bug or exploit in the monitor cannot affect the rest of the NAS
-- The only escalation possible is running `usb_reset.sh` — which only does the USB bind/unbind
+- The only escalation possible is running `usb_reset.sh` — the USB bind/unbind, plus the read-only capture below
 - `usb_reset.sh` is owned by root and not writable by `weewx-monitor`
+
+`usb_reset.sh` also runs `usb_forensics.sh` before and after the reset, to record what the USB bus and the SDR process looked like on either side of it. That capture is read-only and optional — if the script is absent, the reset proceeds unchanged.
+
+Because it is invoked from inside the sudo grant, `usb_forensics.sh` runs as root too. So it must be owned by root and not writable by anyone else, on exactly the same reasoning as `usb_reset.sh`: a helper that `weewx-monitor` could rewrite would turn the narrow grant into arbitrary root execution. `usb_reset.sh` checks this itself and refuses to run a helper that fails it, reporting the refusal to the monitor log rather than skipping quietly.
 
 > Note: Synology DSM may overwrite `/etc/sudoers` on system updates. The Task Scheduler script recreates the sudoers rule on every boot, so it survives updates automatically.
 
@@ -395,7 +399,13 @@ rm -f /volume1/docker/weewx-rtldavis/logs/weewx_monitor.pid
 sudo -u weewx-monitor -E python3 -u /volume1/docker/weewx-rtldavis/weewx_monitor.py >> /volume1/docker/weewx-rtldavis/logs/weewx_monitor.log 2>&1 &
 ```
 
-> **Note:** The USB device path `1-3` in `usb_reset.sh` is specific to the DS918+. Check your path with `lsusb` and update accordingly.
+5. **Install the reset forensics** (optional; skip it and the reset still works):
+```bash
+sudo install -o root -g root -m 755 usb_forensics.sh /volume1/docker/weewx-rtldavis/usb_forensics.sh
+```
+Root-owned and root-only-writable is not a style preference here — see the Security Note above.
+
+> **Note:** The USB device path `1-3` is specific to the DS918+, and appears in both `usb_reset.sh` and `usb_forensics.sh` (as `USB_RESET_PORT`). Check your path with `lsusb` and update both, or the capture will document a different port from the one being reset.
 
 ### Log Rotation (weewx_monitor.log)
 
