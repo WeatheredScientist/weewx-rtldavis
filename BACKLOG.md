@@ -66,14 +66,19 @@ problem. The rule is a >150 s gap **with** `rtldavis process stalled` = RF; sile
 
 Open. `BOOT.md` blocker 4 carries the summary; this is the working material.
 
-> ⚠️ **READ BEFORE TRUSTING ANY RESET LINE IN A PROD LOG.** Finding 1 below is **fixed on `dev`
-> (S67, `9b0a0e5`) but NOT DEPLOYED.** The NAS still runs the pre-fix monitor (`85d7afb`), so
-> **`weewx_monitor.log` keeps printing `RESET: triggering syno_vbus_reset` — an operation that does
-> not happen** — until someone deploys. The deploy is Class C and was deferred at S67 when the token
-> mint was refused twice; it is a log-text change only, no behaviour, so nothing is broken by the
-> delay. **Deploy it before starting this investigation**, or the first thing the investigation reads
-> is the same lie that misdirected S67. Procedure: `scp` from the merged `dev` tip, sha-verify,
-> owner-run `sudo kill` on the pidfile, esynoscheduler respawns within 5 min.
+> ✅ **RESOLVED 2026-08-07 (S67) — deployed and verified.** Finding 1's fix is live: the NAS runs
+> `97fe334`, matching the merged `dev` tip, and the monitor restarted as pid 3870 at 19:28 — **two
+> hours after** the file landed at 17:10, which is what proves the running process loaded the new
+> code rather than merely that the file on disk is right. (A sha match alone proves neither, and
+> believing otherwise is what cost this repo 2.5 months — DEC-0074.)
+>
+> **So reset lines logged from 2026-08-07 19:28 onward are trustworthy.** Anything earlier says
+> `RESET: triggering syno_vbus_reset`, an operation that never ran — **when reading historical logs
+> for this investigation, treat every pre-19:28 reset line as naming the wrong mechanism.** That
+> misdirection is what sent S67 down the wrong path.
+>
+> The corrected line will not actually appear until the next stall, which may be days out. Nothing
+> is pending; the code is right and the process is running it.
 
 **Finding 1 — the log line names an operation that does not happen.** `reset_dongle()`
 (`weewx_monitor.py:347`) logs `RESET: triggering syno_vbus_reset`, but it never touches that node.
