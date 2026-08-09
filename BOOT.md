@@ -12,27 +12,36 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S68)
+## ▶ Resume here (S69)
 
-### ▶▶ THE JOB: why do the USB resets never work? (blocker 4)
+### ▶▶ THE JOB: deploy the reset forensics, then let the next stall answer blocker 4
 
-**Agreed at S67 close as S68's work.** ⚠️ **Judgment-tier debugging — escalate the model first.**
-Cross-layer (kernel USB, Docker device passthrough, libusb, the Go demodulator, container lifecycle)
-and the hypothesis is explicitly *not* established.
+**S68 built the apparatus; it captures nothing until it reaches the NAS.** Design, hypothesis and the
+two predicted signatures are settled in **DEC-0075** — read that, don't re-derive it.
 
-Everything it needs is ready. Hypothesis, evidence and the decisive test: `BACKLOG.md`.
+**The deploy (Class C, owner-gated), from the MERGED `dev` tip, never a sha written down here.** The
+NAS layout is **flat** — no `ops/` there. `scp` `ops/usb_forensics.sh`, `usb_reset.sh` and
+`weewx_monitor.py`; **install the forensics root-owned, mode 755** (`install -o root -g root -m 755`)
+or `usb_reset.sh` will correctly refuse it and log `FORENSICS REFUSED` with no captures. Restart:
+`ssh -t nas-admin 'sudo kill <pid>'` — **`-t` required**, respawn ≤5 min. **Verify by process
+evidence, never by sha** (DEC-0074): process start *after* file mtime. Then hand-run
+`usb_forensics.sh baseline` — read-only, safe on a healthy system, and the control a stall is diffed
+against.
 
-Three things learned the hard way at S67:
-- **Reset lines before 2026-08-07 19:28 name `syno_vbus_reset`, an operation that never ran.** Prod
-  is right now; the *history* still lies. That is what sent S67 down the wrong path.
-- **The decisive capture needs a live stall** (~1/day, unpredictable): host *and* in-container views
-  of `/dev/bus/usb/001/` + the dongle's `devnum`, before and after a reset. Design it in advance.
-- **`weewx_monitor.py` is the watchdog**, alive and supervised. Do not re-derive that.
+**Then wait.** ~1/day, unpredictable, none since 08-07 19:28. Captures land in `logs/usb-forensics/`;
+read the `pre`/`post` pair together. **Both clean means the stall is not a USB fault at all** — a real
+answer, not a null result.
 
-Then **decide campaign B** (below). DEC-0066's gates hold; S67 added no formal gate. But blocker 5 —
-reset gaps possibly inside campaign A's published numbers — affects the A-vs-B comparison, which is
-B's entire point: settle it before *reading* B, not before running it. And an unattended run has **no
-working dongle recovery**; true all along, so not a gate, but don't launch expecting a rescue.
+**While waiting, blocker 5** needs no stall: are reset-adjacent gaps already inside campaign A's
+DEC-0069 figures? Nine resets on 08-02 sit inside the 07-29 → 08-05 validation window.
+
+Then **decide campaign B** (below). DEC-0066's gates hold. Blocker 5 affects the A-vs-B comparison,
+which is B's entire point: settle it before *reading* B, not before running it. An unattended run has
+**no working dongle recovery** — true all along, so not a gate, but don't launch expecting a rescue.
+
+Two things not to re-derive: **`weewx_monitor.py` IS the watchdog** (DEC-0074), and **every reset line
+before 2026-08-07 19:28 names `syno_vbus_reset`, an operation that never ran** — prod is right now,
+the *history* still lies, and that is what sent S67 down the wrong path.
 
 ### ▶▶ Campaign B — the launch sequence
 
@@ -53,7 +62,7 @@ working dongle recovery**; true all along, so not a gate, but don't launch expec
    bumped early at S62; bumping them before the ship recreates exactly that.
 6. **Class C deploy steps → `install`.**
 
-### Current state (S67 close)
+### Current state (S68 close)
 
 | Thing | State |
 |---|---|
@@ -64,6 +73,7 @@ working dongle recovery**; true all along, so not a gate, but don't launch expec
 | `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip at launch |
 | Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's) |
 | Campaign A | **STOPped, sentinel in place.** Do not clear it |
+| Reset forensics | **committed, NOT deployed** (DEC-0075). Captures nothing until step 1–4 above run |
 
 ### The two DEC-0066 gates — closed. Reasoning lives in the DECs
 
@@ -90,8 +100,9 @@ working dongle recovery**; true all along, so not a gate, but don't launch expec
    resets within seconds, **all three failed** (`RESET ineffective (1/3)`, bad windows 8 → 10 → 15);
    9/9 failed on 08-02 too. The watchdog works and is reporting that **the remedy doesn't**.
    `soak_check.sh` carries `USB RESETS INEFFECTIVE`. Unexplained — and ERR-0005 says a reset can make
-   things *worse*. Hypothesis + the decisive test: `BACKLOG.md`. **DEC-0073 is superseded**; it
-   claimed these stalls went unhandled, which was false.
+   things *worse*. **Apparatus now exists and is not yet deployed (DEC-0075)**; blocked on that and
+   on a live stall, not on analysis. **DEC-0073 is superseded**; it claimed these stalls went
+   unhandled, which was false.
 5. **Reset gaps may already be inside campaign A's published numbers (DEC-0074).** Nine resets on
    08-02 — inside the 07-29 → 08-05 window `campaign_analyze.py`'s three-class gap taxonomy was
    validated against, so reset-adjacent gaps were sorted into freeze/swap/lock in the figures
@@ -99,8 +110,8 @@ working dongle recovery**; true all along, so not a gate, but don't launch expec
 
 ## Ordered backlog
 
-1. **Why the resets fail** (blocker 4) — S68's agreed job. Then **whether reset gaps skew campaign
-   A** (blocker 5). Working material + the decisive test: `BACKLOG.md`.
+1. **Deploy the forensics, then read the first stall** (blocker 4). Then **whether reset gaps skew
+   campaign A** (blocker 5) — that one needs no stall and can be done today.
 2. **Launch campaign B** — or decide not to, deliberately.
 3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at `interval = 15`
    + `backfill = 1`, ERR-0003's path. Back up the DB first.
@@ -136,7 +147,9 @@ deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
 - **This file is the single source of truth for the session number and the handoff** (DEC-0023);
   prefix cross-repo refs (`weewx S67` vs `dash S151`).
 
-_Last updated: 2026-08-08 (S67 close) — ops#145 closed (DEC-0072); soak_check expectations reset to
-prod's real values, which surfaced the watchdog thread; **DEC-0074 superseded DEC-0073** after the
-monitor turned out to be the watchdog all along; corrected monitor deployed and verified live.
-S68's job is agreed: **why the resets never work**. Lessons filed cross-repo as ops#147._
+_Last updated: 2026-08-08 (S68 close) — **DEC-0075**: reset forensics built, committed, **not
+deployed**; capture-only, so DEC-0065's ladder is untouched. The change introduced a root-escalation
+via the sudo grant and closed it in the same commit (mechanically, not in prose). **DEC-0076**: the
+secret gate missed `GMAIL_PASS`-shaped keys — the fifth hole, found by the routine pre-commit
+positive control, nothing ever leaked; harness 41 → 51. ROADMAP gained the blocker-4 P0 line it had
+never had. S69's job: **deploy, then read the first stall**._
