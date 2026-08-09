@@ -78,8 +78,37 @@ fi
 # `_key` is shared by the detector AND by every POSITIONED allow term below, so
 # an allow can only ever fire against the key the detector actually matched —
 # never against some other word that happens to appear later on the line.
-_key='(password|passcode|api_?key|api_?secret|token|secret|[^A-Za-z_]key)'
-secret_re="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=-]{8,}'
+_key='(password|passcode|pass|PASS|api_?key|api_?secret|token|secret|[^A-Za-z_]key)'
+_assign="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=-]{8,}'
+
+# --- S68: bare `pass`, and the app-password literal (hole class 5) ---
+# `pass` was added to _key above because the key list held `password` and
+# `passcode` but nothing for the `_PASS` abbreviation — so `GMAIL_PASS = "..."`
+# was missed in every spelling, and GMAIL_PASS is the exact variable this
+# project's monitor uses. Verified missed before the fix, caught after.
+#
+# `PASS` is listed separately from `pass` on purpose. Detection is case-insensitive,
+# but THE ALLOW-LIST IS NOT (see bug class 1 above) — so without the uppercase
+# spelling here, the allow rules could never excuse `GMAIL_PASS = os.environ.get(...)`
+# or README's `GMAIL_PASS="your_gmail_app_password"`, and widening the key list
+# would have turned the gate into a false-positive machine on this repo's own
+# source. The harness caught exactly that, which is what it is for.
+#
+# `pass` is deliberately bare rather than `passwd`: README documents the sudoers
+# line `NOPASSWD: /volume1/...`, and a `passwd` alternative matches that and
+# reports the path as a credential. Bare `pass` cannot, because the detector
+# requires `[:=]` right after the key and `NOPASSWD` has `WD` there. Same reason
+# Python's `pass` statement and `passed = True` do not trip it.
+#
+# The second detector below exists because _assign needs 8+ CONSECUTIVE value
+# characters, and Google displays an app password as four 4-character groups.
+# the four-group form people actually paste breaks that run at 4 and slips through
+# even with `pass` in the key list. Matching the literal shape is narrow enough to
+# stay quiet: four lowercase 4-letter groups inside one pair of quotes. (Spelled
+# out here in prose rather than as an example, because writing the example would
+# make this comment a finding — comments earn no exemption, DEC-0045.)
+_apppw='["'"'"'][a-z]{4}([[:space:]][a-z]{4}){3}["'"'"']'
+secret_re="${_assign}|${_apppw}"
 
 # NOTE: there is deliberately NO "the line is a comment" allow rule. It was
 # removed in S40 (bug class 4 / DEC-0045). A comment marker is not evidence about

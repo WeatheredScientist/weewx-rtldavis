@@ -100,10 +100,11 @@ handle or restarts it. Consistent with: 3/3 failures 08-06, 9/9 on 08-02, ERR-00
 the dongle while `rtldavis` could not claim it), and DEC-0065's note that a container **recreate**
 fixed ERR-0005 where `kill`+`start` had not.
 
-**The decisive test, at the next stall:** capture `/dev/bus/usb/001/` and the dongle's `devnum` on
-the host *and* inside the container, before and after a reset. Stale container view or a surviving
-handle confirms it. If both look clean, the stall is not a USB fault at all and the reset is
-treating the wrong thing entirely.
+> ✅ **The decisive test is BUILT, S68 — see DEC-0075, and do not re-derive its design here.**
+> `ops/usb_forensics.sh` brackets every reset with the host USB tree, the container's view via
+> `/proc/<pid>/root`, and `rtldavis`'s open fds. **Committed, not deployed** — `BOOT.md` carries the
+> deploy steps and the root-ownership requirement. Still blocked on a live stall (~1/day), so the
+> reading of it is genuinely the next session's work, not this material's.
 
 **Also worth deciding:** the escalation ladder tops out at "email a human that the ineffective thing
 was ineffective." It never tries the intervention that has actually worked (container recreate).
