@@ -25,10 +25,10 @@ telling the next session to redo finished work. Prod runs merged tip `ad7e5a4`; 
 `logs/usb-forensics/`; read the `pre`/`post` pair together. **Both clean means the stall is not a USB
 fault at all** — a real answer, not a null result.
 
-⚠️ **One live wart:** the *deployed* `usb_forensics.sh` reports `started=` from `/proc/<pid>` mtime =
-**access** time, so it will claim a days-old `rtldavis` just restarted. Fixed on `dev` (#146,
-merged) — **re-install that one file** to clear it. Decisive signatures unaffected; a capture before
-then is still worth having, just ignore `started=`.
+The deployed copy is **current and correct** — `dc7912ae`, root-owned, re-installed and re-verified
+08-09 after the `/proc`-mtime fix (#146). A live capture confirms `age=` now reads 3.0 days against
+the container's uptime, with the proc-dir mtime kept beside it labelled "ACCESS time, NOT start".
+**Nothing to re-deploy.**
 
 ✅ **Blocker 5 is CLOSED (DEC-0077)** — reset gaps do **not** contaminate campaign A. Measured: 11
 resets (not nine), all on 08-02; the archive went normal → 105 absent rows → NULL → normal, the
@@ -52,7 +52,7 @@ worth repeating here because it has bitten twice: **take the build sha from `git
 origin/dev`, never one written down** — a remembered sha ships a green checkmark on a silently
 incomplete image.
 
-### Current state (S68d)
+### Current state (S68e)
 
 | Thing | State |
 |---|---|
@@ -63,7 +63,7 @@ incomplete image.
 | `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip at launch |
 | Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's) |
 | Campaign A | **STOPped, sentinel in place.** Do not clear it |
-| Reset forensics | **LIVE** (DEC-0075), deployed + verified 08-09 from `ad7e5a4`. Armed; awaiting a stall |
+| Reset forensics | **LIVE and current** (DEC-0075) — `usb_forensics.sh` `dc7912ae`, root-owned, re-verified on the box 08-09. Armed; awaiting a stall |
 
 ### The two DEC-0066 gates — closed. Reasoning lives in the DECs
 
@@ -101,10 +101,9 @@ incomplete image.
 
 ## Ordered backlog
 
-1. **Read the first stall capture** (blocker 4) — forensics are live, just waiting on the event.
-   Re-install `usb_forensics.sh` from the merged tip to clear the `started=` wart. ✅ Blocker 5 closed
-   (DEC-0077). **#147 FIXED, still OPEN** — close by hand after #148 merges (`Closes #N` never fires
-   on this repo's flow; CONVENTIONS §Git workflow).
+1. **Read the first stall capture** (blocker 4) — the apparatus is live, correct and verified;
+   **the event is the only thing left.** ✅ Blocker 5 closed (DEC-0077), ✅ #147 closed by hand
+   (`Closes #N` never fires on this repo's flow — CONVENTIONS §Git workflow).
 2. **Launch campaign B** — or decide not to, deliberately.
 3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at `interval = 15`
    + `backfill = 1`, ERR-0003's path. Back up the DB first.
@@ -143,9 +142,10 @@ deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
 - **This file is the single source of truth for the session number and the handoff** (DEC-0023);
   prefix cross-repo refs (`weewx S67` vs `dash S151`).
 
-_Last updated: 2026-08-09 (S68d) — reset forensics **deployed, verified live and smoke-tested**;
-the smoke test then caught a defect in them (`/proc` mtime is access time, not start — DEC-0074's
-own probe had the same flaw, both corrected). **Blocker 5 CLOSED (DEC-0077)**: campaign A's figures
-are uncontaminated, so B can be read against them. Also DEC-0075 (capture-only; a root-escalation
-introduced and closed in the same commit) and DEC-0076 (secret gate's fifth hole). S69's job:
-**read the first stall capture** — the event is the only thing left gating blocker 4._
+_Last updated: 2026-08-09 (S68e) — reset forensics **live, current and verified on hardware**:
+deployed, smoke-tested, the `/proc`-mtime defect that smoke test found now fixed AND re-verified
+(`age=` reads 3.0 days against container uptime). **Blocker 5 CLOSED (DEC-0077)** — campaign A's
+figures are uncontaminated, so B can be read against them. Also DEC-0075 (capture-only; a root
+escalation introduced and closed in the same commit) and DEC-0076 (secret gate's fifth hole).
+**Nothing is pending deployment.** S69's job: **read the first stall capture** — the event is the
+only thing gating blocker 4._
