@@ -46,22 +46,11 @@ the *history* still lies, and that is what sent S67 down the wrong path.
 
 ### ▶▶ Campaign B — the launch sequence
 
-`docs/CAMPAIGN-B-RUNBOOK.md` governs the night. In order:
-
-1. **Promote + tag.** `dev` is ~90 ahead of `main`; `main` is the production-truth branch.
-2. **Rebuild `:v2.0.12` from the merged tip.** ⚠️ **Take it from `git rev-parse origin/dev`, never a
-   sha written down here** — S66's copy named `bdc4f9f`, 13 commits stale by S67 and predating
-   DEC-0069/0070/0071. A remembered sha ships a green checkmark on a silently incomplete image.
-3. **Push `:v2.0.12`.** `:latest` only after our own station proves it.
-4. **Regenerate the `SCHEDULE=` dates** in `ops/rx_experiment.sh` — shift by a constant offset (S62:
-   39 substitutions; structure tests confirm the square survives). The 08-10 → 08-19 dates are a
-   placeholder. `install` **refuses** a schedule whose first row has passed (DEC-0066): a stale one
-   joins mid-square with no pilot, or records the campaign complete without running it — both look
-   like success.
-5. **Bump `EXPECT_IMAGE` *and* `EXPECT_DRIVER` in `ops/soak_check.sh`** as part of the deploy —
-   `:v2.0.12` and `ws.3` → `ws.4` together. Both were reset to prod's real values at S67 after being
-   bumped early at S62; bumping them before the ship recreates exactly that.
-6. **Class C deploy steps → `install`.**
+**`docs/CAMPAIGN-B-RUNBOOK.md` governs the night, and now also carries the release mechanics** (six
+steps, moved there S68d — BOOT was a second copy of a runbook it already pointed at). The one thing
+worth repeating here because it has bitten twice: **take the build sha from `git rev-parse
+origin/dev`, never one written down** — a remembered sha ships a green checkmark on a silently
+incomplete image.
 
 ### Current state (S68d)
 
