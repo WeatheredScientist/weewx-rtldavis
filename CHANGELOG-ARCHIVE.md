@@ -8,6 +8,92 @@ Nothing here is rewritten — text moves, history stays greppable.
 ---
 
 
+## [S66] — 2026-08-05 — Both campaign-B gates handled: metric goes freeze-aware (DEC-0069), DB lock bounded (DEC-0070)
+
+- **New `ops/campaign_analyze.py` + 14 tests** — reads per-minute `rxCheckPercent` from the archive
+  DB, excludes freeze artifacts structurally, reports per-arm means with the *uncleaned* figure
+  alongside so the size of the correction is visible rather than asserted. `ops/rx_experiment.sh`
+  is deliberately untouched: the unattended, prod-config-writing apparatus was not modified to close
+  a reporting gate.
+- **The gate was mostly a resolution problem, not a freeze problem.** `harvest()` scraped the
+  monitor's *5-minute* `RECEPTION:` aggregate, where one frozen minute drags the whole bucket
+  (measured 16 % and 27 % against a ~72 % neighbourhood) and destroys four good minutes — that is
+  where BOOT's ~0.8-point estimate came from, and it was correct *for that metric*. The same
+  measurement is stored **per minute** in the archive. Net effect on a pooled arm mean: **±0.03
+  points** against a 2.0-point adoption bar.
+- **Measured the freeze signature** over 10 988 records / 33 gaps: three non-overlapping classes
+  (freeze / arm swap / lock-outage). **The contaminated record is the one adjacent to the gap; the
+  freeze minutes are simply absent rows** — BOOT had assumed they scored as zeros, which is what
+  made the estimate ~60× too large. Retro-found one freeze nobody had logged (07-29 22:12).
+- **Corrects DEC-0067 in both directions.** Its predicted post-freeze "up" is real — 2026-07-29
+  03:10 reads `rxCheckPercent = 200.0` — but conditional, ~1 in 8 days. An initial two-freeze
+  reading here concluded there was no "up" at all; the 8-day scan overturned that.
+- **Campaign A recomputed:** A 74.81 / C 74.37 / D 74.17 / B 73.87, spread **0.94 pts**, no arm near
+  adoption. The ~1.9-pt offset from the previously-recorded 72.4 % matches `weewx_monitor.py`'s own
+  "~1–2 pts optimistic" note — the two metrics validate each other, and A-vs-B must be read on the
+  same one. *This unsealed A's arm winner ahead of B; see DEC-0069's sealing note.*
+- **Two build-time defects caught, both of which would have printed confident wrong numbers:** a bare
+  run pooled campaign A's aborted 07-29 attempt with the campaign proper (unbalanced square, tidy
+  table, no indication) — now detected mechanically; and deriving the query bound locally dragged the
+  entire archive over ssh — now bounded NAS-side.
+- **ROADMAP:** metric gate closed; the `database is locked` defect restated as campaign B's **sole**
+  remaining gate. The by-S66 *full* reconciliation tripwire fired and is flagged as still owed.
+- **DB lock bounded (DEC-0070) — it was two defaults, not a bug.** `journal_mode=delete` (a reader's
+  SHARED lock blocks the writer) plus weedb's **5 s** SQLite timeout (`weedb/sqlite.py:136`, and the
+  live config set none). Six seconds of reader therefore cost a CRITICAL + weewx's hardcoded 120 s
+  wait + restart ≈ **5–10 min outage**. Shipped **`timeout = 30`** to the live `weewx.conf`; verified
+  in the running system (resolved `database_dict` carries it) and restart healthy at **106 s**.
+  Outages now capped at ~30 s. New behaviour to expect: weewx *blocks* rather than erroring, and such
+  a stall is indistinguishable from a DEC-0067 freeze to `freeze_watch.sh` — excluded correctly by
+  `campaign_analyze.py`, not a bug to chase.
+- **WAL is the real fix and is blocked cross-repo — filed ops#141.** `hyperlocal-forecast-api` binds
+  the archive DB as a single *file*, so WAL's `-wal`/`-shm` siblings can never appear beside it. An
+  initial reading that the mount would also need to become *writable* was **tested and disproved** on
+  the container's own SQLite 3.46.1: read-only directory mounts work with `-shm` present or absent;
+  only the single-file case fails, and it fails as `no such table`, not as stale data. So `RW=false`
+  stays and no HLF code changes.
+- **`CONSTANTS.md` gains a live-config deviations table.** `weewx.conf` is the mounted layer and is
+  never committed, so `timeout = 30` exists only on the NAS with no CI and no diff — a stock
+  container recreate would silently revert it.
+- **Guard finding (belongs to ops):** the NAS mutation that wrote live prod config **did not trip the
+  Class C guard** — `ssh <nas> "python3 -" < script` hides the mutation in stdin while the guard
+  matches the command string, and that is the batching shape CONVENTIONS recommends. Meanwhile the
+  *read* guard fired three times on `grep`/`tail` against files carrying no secrets. Owner-authorized
+  in chat, so nothing improper — but the mechanism didn't enforce it.
+- **Corrects DEC-0067's reader list:** it named "the dashboard" as an archive-DB reader. Scanning
+  every container that mounts a weewx path finds only `hyperlocal-forecast-api`, `eh-proxy` (parent
+  dir, read-only), and weewx itself.
+- **WAL tried and ROLLED BACK (DEC-0071) — with a self-inflicted ~6 min prod outage.** HLF shipped
+  the directory mount (ops#141), WAL went live 06:56 EDT, and hyperlocal-forecast **froze on a stale
+  snapshot within minutes**. Two blockers, both missed: a Docker `:ro` bind makes the **files**
+  read-only, and DEC-0070's own test only chmod'd the *directory*, so it never reproduced that —
+  structurally blind, DEC-0035's lesson recurring; and SQLite creates `weewx.sdb-wal` mode **0555**,
+  so even a read-write mount leaves a non-root reader unable to write it.
+- **Rolling back was the hard part.** `PRAGMA journal_mode=DELETE` needs an exclusive lock that
+  weewx's persistent connection denies, and with the container stopped there's no `docker exec`
+  either. Resolved by letting weewx apply it: `[[[pragmas]]] journal_mode = DELETE`, kept in place so
+  the mode is re-pinned on every start. **That pragma was first written as a scalar** — weedb wants a
+  mapping, so it raised `TypeError: string indices must be integers` and crash-looped weewxd
+  (CRITICALs 07:18:58, 07:20:22) until the subsection form landed at 07:24.
+- **Process failures worth naming:** the first rollback attempt opened with a `SELECT COUNT(*)` that
+  had *already* timed out earlier the same session, and the config shape was assumed from the field
+  name rather than checked against the consumer whose source had been read an hour before. Two of
+  three failures repeated lessons already written down in this repo.
+- **Net:** WAL is not viable as scoped; `timeout = 30` is the fix, not an interim, and delivers most
+  of WAL's practical benefit. weewx healthy and current. **hyperlocal-forecast is still stale and
+  needs a container restart by an HLF session** — reported on ops#141, relabelled `repo:hlf`.
+- **Full ROADMAP reconciliation run (the by-S66 tripwire, honoured).** All 8 open items diffed
+  against DECISIONS/CHANGELOG/BOOT. Four were stale: the tiering migration sat unchecked *while its
+  own body read "Executed S60"*; the v2.0.12 row said "BUILDING 2026-08-02" for four sessions when
+  that build no longer exists; campaign B's gates were listed open after DEC-0069/0070/0071 cleared
+  them; and the DB-lock row still said "flip WAL once ops#141 lands" **after DEC-0071 abandoned
+  WAL** — a same-session DEC-0057 update missed the day before, which is precisely what the full
+  pass exists to catch. Also fixed: the P2 heading still announced "CAMPAIGN A RUNNING", and the
+  archive-DB reader list still named the dashboard. Next check due **by S76**.
+- **Branch hygiene:** nine merged S62–S66 feature branches deleted (local + remote), restoring the
+  `dev` + `main` steady state CONSTANTS.md specifies. Every one verified contained in `dev` first;
+  `main` deliberately untouched. BOOT.md's "stale branch still exists, harmless" row retired with it.
+---
 ## [S65] — 2026-08-04 — Freeze-watcher fixed (parallel reads, dedup bug, local notification); two freezes caught, one tied to coffee-radar's scheduled run
 
 - **The watcher's second-sample bug is fixed.** S64's second `S`-vs-`D` sample landed ~7 min late
