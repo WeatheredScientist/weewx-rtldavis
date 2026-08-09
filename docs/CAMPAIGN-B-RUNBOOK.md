@@ -130,3 +130,24 @@ only: meaningfully below the 74.83 LNA-in baseline, meaningfully above the 50% f
 
 Abort floor for the whole campaign-B era: **50%** (30-min mean) — ~5 SE below even a
 pessimistic 62% baseline; forgiving on purpose while the no-LNA level is unmeasured.
+
+## Release mechanics — the launch sequence (moved from `BOOT.md`, S68d)
+
+Moved here verbatim from `BOOT.md`, which was carrying a second copy of a runbook it already points
+at — the STANDARD rule 5 defect (a second copy is the drift the rule exists to stop), and the reason
+BOOT kept exceeding its DEC-0072 cap. In order:
+
+1. **Promote + tag.** `dev` runs far ahead of `main`; `main` is the production-truth branch.
+2. **Rebuild `:v2.0.12` from the merged tip.** ⚠️ **Take it from `git rev-parse origin/dev`, never a
+   sha written down anywhere** — S66's copy named `bdc4f9f`, 13 commits stale by S67 and predating
+   DEC-0069/0070/0071. A remembered sha ships a green checkmark on a silently incomplete image.
+3. **Push `:v2.0.12`.** `:latest` only after our own station proves it.
+4. **Regenerate the `SCHEDULE=` dates** in `ops/rx_experiment.sh` — shift by a constant offset (S62's
+   method: 39 substitutions; structure tests confirm the square survives). Any dates already in the
+   file are a placeholder. `install` **refuses** a schedule whose first row has passed (DEC-0066): a
+   stale one joins mid-square with no pilot, or records the campaign complete without running it —
+   both look like success.
+5. **Bump `EXPECT_IMAGE` *and* `EXPECT_DRIVER` in `ops/soak_check.sh`** as part of the deploy —
+   `:v2.0.12` and `ws.3` → `ws.4` together. Both were reset to prod's real values at S67 after being
+   bumped early at S62; bumping them before the ship recreates exactly that.
+6. **Class C deploy steps → `install`.**

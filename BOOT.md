@@ -18,24 +18,27 @@ is a **separate repo** — don't make dashboard changes here.
 
 ✅ **DEPLOYED AND VERIFIED 2026-08-09.** Do **not** re-deploy — that is the S60b/S63 trap, BOOT
 telling the next session to redo finished work. Prod runs merged tip `ad7e5a4`; monitor 3870 →
-**8810**. Smoke-tested live: pid discovery works, dongle `1-3` / `0bda:2838` / `devnum=5`. Design,
-hypothesis and the two predicted signatures: **DEC-0075** — don't re-derive them.
+**8810**; smoke-tested live on the NAS. Design, hypothesis and the two predicted signatures:
+**DEC-0075** — don't re-derive them.
 
 **Wait for the event.** ~1/day, unpredictable, none since 08-07 19:28. Captures land in
 `logs/usb-forensics/`; read the `pre`/`post` pair together. **Both clean means the stall is not a USB
 fault at all** — a real answer, not a null result.
 
-⚠️ **One live wart:** deployed `usb_forensics.sh` reports `started=` from `/proc/<pid>` mtime =
-**access** time, so it will claim a days-old `rtldavis` just restarted. Fixed in **PR #146**; merge
-and re-install that one file when convenient. Decisive signatures unaffected — a capture before then
-is still worth having, just ignore `started=`.
+⚠️ **One live wart:** the *deployed* `usb_forensics.sh` reports `started=` from `/proc/<pid>` mtime =
+**access** time, so it will claim a days-old `rtldavis` just restarted. Fixed on `dev` (#146,
+merged) — **re-install that one file** to clear it. Decisive signatures unaffected; a capture before
+then is still worth having, just ignore `started=`.
 
-**While waiting, blocker 5** needs no stall: are reset-adjacent gaps already inside campaign A's
-DEC-0069 figures? Nine resets on 08-02 sit inside the 07-29 → 08-05 validation window.
+✅ **Blocker 5 is CLOSED (DEC-0077)** — reset gaps do **not** contaminate campaign A. Measured: 11
+resets (not nine), all on 08-02; the archive went normal → 105 absent rows → NULL → normal, the
+documented lock/outage shape, already excluded because DEC-0069 drops the record either side of *any*
+gap without consulting the class. No present-but-low rows, which was the only real exposure. Campaign
+A's figures stand and B can be read against them.
 
-Then **decide campaign B** (below). DEC-0066's gates hold. Blocker 5 affects the A-vs-B comparison,
-which is B's entire point: settle it before *reading* B, not before running it. An unattended run has
-**no working dongle recovery** — true all along, so not a gate, but don't launch expecting a rescue.
+Then **decide campaign B** (below). DEC-0066's gates hold and blocker 5 is closed, so nothing now
+stands between B and being read against A. An unattended run still has **no working dongle
+recovery** — true all along, so not a gate, but don't launch expecting a rescue.
 
 Two things not to re-derive: **`weewx_monitor.py` IS the watchdog** (DEC-0074), and **every reset line
 before 2026-08-07 19:28 names `syno_vbus_reset`, an operation that never ran** — prod is right now,
@@ -43,30 +46,19 @@ the *history* still lies, and that is what sent S67 down the wrong path.
 
 ### ▶▶ Campaign B — the launch sequence
 
-`docs/CAMPAIGN-B-RUNBOOK.md` governs the night. In order:
+**`docs/CAMPAIGN-B-RUNBOOK.md` governs the night, and now also carries the release mechanics** (six
+steps, moved there S68d — BOOT was a second copy of a runbook it already pointed at). The one thing
+worth repeating here because it has bitten twice: **take the build sha from `git rev-parse
+origin/dev`, never one written down** — a remembered sha ships a green checkmark on a silently
+incomplete image.
 
-1. **Promote + tag.** `dev` is ~90 ahead of `main`; `main` is the production-truth branch.
-2. **Rebuild `:v2.0.12` from the merged tip.** ⚠️ **Take it from `git rev-parse origin/dev`, never a
-   sha written down here** — S66's copy named `bdc4f9f`, 13 commits stale by S67 and predating
-   DEC-0069/0070/0071. A remembered sha ships a green checkmark on a silently incomplete image.
-3. **Push `:v2.0.12`.** `:latest` only after our own station proves it.
-4. **Regenerate the `SCHEDULE=` dates** in `ops/rx_experiment.sh` — shift the block by a constant
-   offset (S62's method: 39 substitutions; structure tests confirm the square survives). The 08-10 →
-   08-19 dates are a placeholder. `install` **refuses** a schedule whose first row has passed
-   (DEC-0066): a stale one joins mid-square with no pilot, or records the campaign complete without
-   running it — both look like success.
-5. **Bump `EXPECT_IMAGE` *and* `EXPECT_DRIVER` in `ops/soak_check.sh`** as part of the deploy —
-   `:v2.0.12` and `ws.3` → `ws.4` together. Both were reset to prod's real values at S67 after being
-   bumped early at S62; bumping them before the ship recreates exactly that.
-6. **Class C deploy steps → `install`.**
-
-### Current state (S68 close)
+### Current state (S68d)
 
 | Thing | State |
 |---|---|
 | Prod | **v2.0.11**, driver **ws.3**, LNA **out**, gain 372, ~70–80%. Emitting live |
 | Live-config deviations | `timeout = 30` + `[[[pragmas]]] journal_mode = DELETE`, both verified in the running `weewx.conf`. Table in `CONSTANTS.md` |
-| `weewx_monitor.py` | **alive, supervised, and current** — Synology boot task re-checks its pidfile every 5 min; NAS matches the merged tip (`97fe334`), deployed + verified 08-07. It **is** the USB watchdog (DEC-0074) |
+| `weewx_monitor.py` | **alive, supervised, current** — boot task re-checks its pidfile every 5 min; NAS matches merged tip `ad7e5a4`, pid **8810** since 08-09. It **is** the USB watchdog (DEC-0074) |
 | Branches | steady state: exactly `dev` + `main`. `dev` ~90 ahead of `main` |
 | `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip at launch |
 | Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's) |
@@ -95,23 +87,24 @@ the *history* still lies, and that is what sent S67 down the wrong path.
    why DEC-0065 declined to automate the recreate. Doesn't block B.
 3. **`ppm`/`fc` unmeasured**, deliberately unchanged for B (measuring would confound the LNA contrast).
 4. **USB resets FIRE but do not WORK — the live defect (DEC-0074).** 08-06: three stalls, three
-   resets within seconds, **all three failed** (`RESET ineffective (1/3)`, bad windows 8 → 10 → 15);
-   9/9 failed on 08-02 too. The watchdog works and is reporting that **the remedy doesn't**.
-   `soak_check.sh` carries `USB RESETS INEFFECTIVE`. Unexplained — and ERR-0005 says a reset can make
-   things *worse*. **Apparatus now exists and is not yet deployed (DEC-0075)**; blocked on that and
-   on a live stall, not on analysis. **DEC-0073 is superseded**; it claimed these stalls went
-   unhandled, which was false.
-5. **Reset gaps may already be inside campaign A's published numbers (DEC-0074).** Nine resets on
-   08-02 — inside the 07-29 → 08-05 window `campaign_analyze.py`'s three-class gap taxonomy was
-   validated against, so reset-adjacent gaps were sorted into freeze/swap/lock in the figures
-   DEC-0069 published. **A question about an existing result, not a pre-launch nicety.**
+   resets, **all three failed** (bad windows 8 → 10 → 15); **11/11 failed on 08-02** (the DECs say
+   nine — count corrected by DEC-0077). The watchdog works and is reporting that **the remedy
+   doesn't**. `soak_check.sh` carries `USB RESETS INEFFECTIVE`. Unexplained, and ERR-0005 says a reset
+   can make things *worse*. **Apparatus LIVE (DEC-0075); blocked on a live stall alone.**
+   **DEC-0073 superseded** — it claimed these stalls went unhandled, which was false.
+5. ✅ **CLOSED — reset gaps do NOT contaminate campaign A (DEC-0077).** They were sorted into
+   lock/outage, and it changes nothing: exclusion is structural on *any* gap, never class-based. The
+   one thing that would have mattered — present-but-low rows, which no rule excludes because
+   magnitude thresholds are refused by design — **did not occur**. Taxonomy amended: complete for
+   *shapes*, not *causes* (a USB reset is a fourth cause of the lock/outage shape). No analyzer
+   change; don't re-open when reading B.
 
 ## Ordered backlog
 
 1. **Read the first stall capture** (blocker 4) — forensics are live, just waiting on the event.
-   Merge PR #146 + re-install `usb_forensics.sh` (the `started=` wart). Then **whether reset gaps
-   skew campaign A** (blocker 5) — needs no stall, can be done today. Then **#147**, correcting
-   DEC-0074's documented probe where it is written down.
+   Re-install `usb_forensics.sh` from the merged tip to clear the `started=` wart. ✅ Blocker 5 closed
+   (DEC-0077). **#147 FIXED, still OPEN** — close by hand after #148 merges (`Closes #N` never fires
+   on this repo's flow; CONVENTIONS §Git workflow).
 2. **Launch campaign B** — or decide not to, deliberately.
 3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at `interval = 15`
    + `backfill = 1`, ERR-0003's path. Back up the DB first.
@@ -150,10 +143,9 @@ deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
 - **This file is the single source of truth for the session number and the handoff** (DEC-0023);
   prefix cross-repo refs (`weewx S67` vs `dash S151`).
 
-_Last updated: 2026-08-09 (S68b) — reset forensics **deployed and verified live**; the post-deploy
-smoke test then caught a real defect in them (`/proc` mtime ≠ start time, PR #146, and DEC-0074's own
-probe has the same flaw — #147). **DEC-0075**: capture-only, so DEC-0065's ladder is untouched. The change introduced a root-escalation
-via the sudo grant and closed it in the same commit (mechanically, not in prose). **DEC-0076**: the
-secret gate missed `GMAIL_PASS`-shaped keys — the fifth hole, found by the routine pre-commit
-positive control, nothing ever leaked; harness 41 → 51. ROADMAP gained the blocker-4 P0 line it had
-never had. S69's job: **deploy, then read the first stall**._
+_Last updated: 2026-08-09 (S68d) — reset forensics **deployed, verified live and smoke-tested**;
+the smoke test then caught a defect in them (`/proc` mtime is access time, not start — DEC-0074's
+own probe had the same flaw, both corrected). **Blocker 5 CLOSED (DEC-0077)**: campaign A's figures
+are uncontaminated, so B can be read against them. Also DEC-0075 (capture-only; a root-escalation
+introduced and closed in the same commit) and DEC-0076 (secret gate's fifth hole). S69's job:
+**read the first stall capture** — the event is the only thing left gating blocker 4._
