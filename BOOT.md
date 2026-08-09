@@ -53,11 +53,11 @@ the *history* still lies, and that is what sent S67 down the wrong path.
    sha written down here** — S66's copy named `bdc4f9f`, 13 commits stale by S67 and predating
    DEC-0069/0070/0071. A remembered sha ships a green checkmark on a silently incomplete image.
 3. **Push `:v2.0.12`.** `:latest` only after our own station proves it.
-4. **Regenerate the `SCHEDULE=` dates** in `ops/rx_experiment.sh` — shift the block by a constant
-   offset (S62's method: 39 substitutions; structure tests confirm the square survives). The 08-10 →
-   08-19 dates are a placeholder. `install` **refuses** a schedule whose first row has passed
-   (DEC-0066): a stale one joins mid-square with no pilot, or records the campaign complete without
-   running it — both look like success.
+4. **Regenerate the `SCHEDULE=` dates** in `ops/rx_experiment.sh` — shift by a constant offset (S62:
+   39 substitutions; structure tests confirm the square survives). The 08-10 → 08-19 dates are a
+   placeholder. `install` **refuses** a schedule whose first row has passed (DEC-0066): a stale one
+   joins mid-square with no pilot, or records the campaign complete without running it — both look
+   like success.
 5. **Bump `EXPECT_IMAGE` *and* `EXPECT_DRIVER` in `ops/soak_check.sh`** as part of the deploy —
    `:v2.0.12` and `ws.3` → `ws.4` together. Both were reset to prod's real values at S67 after being
    bumped early at S62; bumping them before the ship recreates exactly that.
@@ -114,7 +114,8 @@ the *history* still lies, and that is what sent S67 down the wrong path.
 
 1. **Read the first stall capture** (blocker 4) — forensics are live, just waiting on the event.
    Re-install `usb_forensics.sh` from the merged tip to clear the `started=` wart. ✅ Blocker 5 closed
-   (DEC-0077), ✅ #147 closed.
+   (DEC-0077). **#147 FIXED, still OPEN** — close by hand after #148 merges (`Closes #N` never fires
+   on this repo's flow; CONVENTIONS §Git workflow).
 2. **Launch campaign B** — or decide not to, deliberately.
 3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at `interval = 15`
    + `backfill = 1`, ERR-0003's path. Back up the DB first.
