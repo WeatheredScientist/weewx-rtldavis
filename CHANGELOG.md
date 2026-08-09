@@ -5,6 +5,33 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S68b] — 2026-08-09 — Forensics deployed and verified live; the smoke test then found a defect in them
+
+- **Deployed from the merged tip `ad7e5a4` and verified.** `usb_forensics.sh` + `usb_reset.sh` as
+  **root:root 755** (ownership is load-bearing — `usb_reset.sh` refuses a helper it does not own),
+  `weewx_monitor.py` as the service account, 644; monitor 3870 → **8810**, `Monitor started`,
+  polling normally, ~3.5 min gap inside the esynoscheduler window.
+- **The sudo half is owner-run and cannot be batched.** The `nas-admin` alias lands on an
+  unprivileged account with no NOPASSWD, and an agent session has no TTY: `-t` fails to allocate one, `-tt` forces a pty and then
+  hangs on a live `Password:`. Leading the remote script with `set -e` made the failed attempt a
+  clean no-op — verified afterwards: prod shas unchanged, zero `.bak` files created.
+- **Smoke-tested on the real box, which is the point.** Pid discovery by `comm` works; dongle
+  confirmed `1-3` / `0bda:2838` / `devnum=5`; the two root-only sections correctly self-labelled
+  `DEGRADED … UNREADABLE, not empty` rather than looking like a released handle.
+- **And it caught a defect in what had just shipped.** The capture reported `rtldavis` as 17 seconds
+  old; it had been up **2.88 days** (`/proc/<pid>/stat` field 22 vs `/proc/uptime`, corroborated by
+  the container Up 3 days and unbroken `weewx.log` output). `/proc/<pid>` **mtime is access time**,
+  and the script reads files under that directory moments earlier. In a stall capture it would have
+  asserted a restart that never happened — a fabricated event in the one artifact built to settle a
+  question whose hypothesis is deliberately unsettled. Fixed in **PR #146**; HZ=100 confirmed, not
+  assumed (250 or 1000 both date `rtldavis` before the container that spawned it).
+- **This undercuts DEC-0074's own probe — [#147](https://github.com/WeatheredScientist/weewx-rtldavis/issues/147).**
+  Its documented liveness check is `nasctl ls /proc/<newpid>` vs the file mtime: the same unsound
+  signal. The **lesson** stands — liveness needs process evidence — but the probe must become a
+  startup line in the log after the file mtime (what actually carried both the S67 and S68
+  verifications), field 22 vs `/proc/uptime`, and new-pid-plus-old-pid-gone.
+
+---
 ## [S68] — 2026-08-08 — Reset forensics built and armed (DEC-0075); secret gate's fifth hole closed (DEC-0076)
 
 - **DEC-0075 — the next stall photographs itself.** `ops/usb_forensics.sh` brackets every reset with

@@ -102,9 +102,9 @@ fixed ERR-0005 where `kill`+`start` had not.
 
 > ✅ **The decisive test is BUILT, S68 — see DEC-0075, and do not re-derive its design here.**
 > `ops/usb_forensics.sh` brackets every reset with the host USB tree, the container's view via
-> `/proc/<pid>/root`, and `rtldavis`'s open fds. **Committed, not deployed** — `BOOT.md` carries the
-> deploy steps and the root-ownership requirement. Still blocked on a live stall (~1/day), so the
-> reading of it is genuinely the next session's work, not this material's.
+> `/proc/<pid>/root`, and `rtldavis`'s open fds. **LIVE since 2026-08-09**, deployed and verified
+> from merged tip `ad7e5a4`, smoke-tested on the NAS. Blocked on the event alone now (~1/day), so
+> the reading of it is genuinely the next session's work, not this material's.
 
 **Also worth deciding:** the escalation ladder tops out at "email a human that the ineffective thing
 was ineffective." It never tries the intervention that has actually worked (container recreate).
