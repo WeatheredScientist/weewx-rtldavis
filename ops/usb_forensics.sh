@@ -119,7 +119,32 @@ for pid in $PIDS; do
     run sh -c "grep -E '^(Name|State|PPid|Threads):' /proc/$pid/status"
     say "wchan=$(cat "/proc/$pid/wchan" 2>/dev/null)"
     say "cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
-    say "started=$(stat -c %y "/proc/$pid" 2>/dev/null)"
+
+    # Age from /proc/<pid>/stat field 22 (starttime, in jiffies since boot)
+    # against /proc/uptime -- the canonical source.
+    #
+    # NOT from `stat -c %y /proc/<pid>`. That directory's mtime tracks recent
+    # ACCESS, not process start, and this script reads several files under it
+    # moments earlier -- so the mtime reads as "just now" for a process that has
+    # been up for days. Measured on this NAS 2026-08-09: the mtime said 17
+    # seconds old while field 22 said 2.88 days, and the container had been up 3
+    # days with unbroken output. In a stall capture the wrong version would have
+    # said "rtldavis just restarted" about a process that never did.
+    #
+    # HZ is 100 here (confirmed: 250 or 1000 both date rtldavis to before the
+    # container that spawned it). No `bc` on this box, so integer arithmetic
+    # only; the age in seconds is the reliable field and the wall-clock line is
+    # best-effort on top of it.
+    _st=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null)
+    _up=$(awk '{print $1}' /proc/uptime 2>/dev/null)
+    if [ -n "$_st" ] && [ -n "$_up" ]; then
+        _age=$(( ${_up%%.*} - _st / 100 ))
+        say "age=${_age}s  (from /proc/$pid/stat field 22 vs /proc/uptime)"
+        say "started=$(date -d "@$(( $(date +%s) - _age ))" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)"
+    else
+        say "age=(unreadable)"
+    fi
+    say "proc-dir-mtime=$(stat -c %y "/proc/$pid" 2>/dev/null) <- ACCESS time, NOT start"
 
     # Stated before the reads, not inferred after them. An EMPTY fd section from a
     # permission denial looks identical to one from a released handle, and those
