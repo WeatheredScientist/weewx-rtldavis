@@ -51,6 +51,14 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - Remote note: origin is the lowercase URL; GitHub redirects to canonical `WeatheredScientist/`
   (backlogged to fix).
+- **⚠️ `Closes #N` / `Fixes #N` DO NOT WORK on this repo's normal flow.** GitHub auto-closes only on
+  a merge to the **default branch**, which here is `main` — and `main` advances only at a
+  prod-baseline release, typically weeks behind. Work merged to `dev` with a `Closes #N` trailer
+  leaves the issue **open indefinitely**, and the trailer reads to everyone (including the next
+  session) as though it were handled. Found S68d, having done exactly that to #147 and then written
+  "✅ #147 closed" into `BOOT.md`. **Close the issue explicitly** (`gh issue close N -c "landed in
+  PR #M"`) once the PR merges, or say "addressed in #M" and leave it open on purpose. Keep the
+  trailer only as a cross-reference, never as the mechanism.
 
 ## Secrets (the public-repo rule — DEC-0012)
 
