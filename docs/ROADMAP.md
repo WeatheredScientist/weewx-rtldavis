@@ -213,9 +213,11 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       surviving fd confirms it; both clean means the stall is not a USB fault at all. **Blocked on
       the event alone now** (~1/day, none since 08-07 19:28), not on tooling. Minor: the deployed
       copy's `started=` field is unreliable until PR #146 is merged and that one file re-installed
-      (#147) — the decisive signatures are unaffected. **Then blocker 5:** whether reset-adjacent
-      gaps are already inside campaign A's DEC-0069 figures — a question about a published result,
-      not a pre-launch nicety.
+      (#147) — the decisive signatures are unaffected. ✅ **Blocker 5 CLOSED (DEC-0077):** reset gaps
+      do not contaminate campaign A. 11 resets (not nine), all 08-02; the archive went normal → 105
+      absent rows → NULL → normal, already excluded because DEC-0069 drops the record either side of
+      *any* gap without consulting the class. No present-but-low rows — the only real exposure.
+      Campaign A's figures stand.
 - [ ] **P0 — why does the weewx process freeze? (DEC-0067, DEC-0068)** ~2-4 min, roughly once a
       day; seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59, 08-03 23:23 (262 s, S64), and two
       more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;
