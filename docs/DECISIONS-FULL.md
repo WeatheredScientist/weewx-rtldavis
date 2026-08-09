@@ -3825,6 +3825,28 @@ different claims requiring different evidence, and DEC-0073 conflated them.
 - **"A sha match proves the FILE, never the PROCESS."** Still exactly right, and it is what found the
   dead script in the first place. Now generalized: liveness needs its own evidence, and so does
   *absence of function* — check the whole system, not the one component you are looking at.
+
+  ⚠️ **AMENDED 2026-08-09 (S68b, #147) — the lesson stands; the INSTRUMENT this DEC reached for does
+  not.** The check written down here and in the deploy notes was *"process start time after the file
+  mtime, via `nasctl ls /proc/<newpid>`"*. Measured on the NAS: `stat -c %y /proc/<pid>` reported an
+  `rtldavis` as **17 seconds old** when `/proc/<pid>/stat` field 22 against `/proc/uptime` put it at
+  **2.88 days**, corroborated by a container up 3 days with unbroken output. That directory's mtime
+  tracks **access**, so anything that reads `status`/`cmdline`/`fd` underneath it first — as a
+  liveness check naturally does — sees "just now".
+
+  There is an irony worth keeping rather than smoothing away: this DEC exists because months of logs
+  named an operation that never ran, and the probe it adopted in response would have reported a
+  restart that never happened. *Replacing a bad signal with an unverified one repeats the error at
+  one remove.*
+
+  **What actually holds** — and what carried both the S67 and S68 verifications in practice, though
+  neither said so at the time:
+  1. a **startup line in the log** (`Monitor started`) timestamped after the file mtime;
+  2. `/proc/<pid>/stat` **field 22** against `/proc/uptime` (HZ confirmed, not assumed);
+  3. a **new pid** with the **old pid gone** (`/proc/<oldpid>` absent).
+
+  Best used together. `ops/usb_forensics.sh` uses (2) and records the proc-dir mtime only under an
+  explicit "ACCESS time, NOT start" label.
 - **The `soak_check.sh` criterion**, repointed. It now asserts the **monitor's** liveness (live pid
   plus a log younger than 300 s — its poll is 30 s, and a live pid with a stale log means *wedged*,
   which is not the same as dead), because that is the process whose death would leave stalls
