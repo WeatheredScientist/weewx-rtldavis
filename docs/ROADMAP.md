@@ -200,6 +200,17 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       The 13:47 dropout fired nothing → **the receiver was fine and the process was frozen.**
       **Still open, tracked below: why it freezes.** ERR-0005's own root cause also remains
       unestablished, but it no longer gates campaign B on its own.
+- [ ] **P0 — why do the USB resets fire but never work? (DEC-0074, DEC-0075)** 3/3 failed on
+      2026-08-06 (`RESET ineffective`, bad windows 8 → 10 → 15), 9/9 on 08-02. The watchdog works and
+      is reporting that **the remedy does not**. *This line was missing until S68* — DEC-0074 raised
+      the defect at S67 and no ROADMAP item was opened for it, so the repo's sequenced plan did not
+      carry its own top blocker. **Apparatus ready, not yet deployed (DEC-0075):**
+      `ops/usb_forensics.sh` brackets every reset with host and in-container USB state plus
+      `rtldavis`'s open handles, so the next stall answers the question instead of repeating it.
+      **Hypothesis explicitly unestablished** — a stale container view or a surviving fd confirms it;
+      both clean means the stall is not a USB fault at all. Blocked only on a live stall (~1/day) and
+      on the Class C deploy. **Then blocker 5:** whether reset-adjacent gaps are already inside
+      campaign A's DEC-0069 figures — a question about a published result, not a pre-launch nicety.
 - [ ] **P0 — why does the weewx process freeze? (DEC-0067, DEC-0068)** ~2-4 min, roughly once a
       day; seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59, 08-03 23:23 (262 s, S64), and two
       more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;

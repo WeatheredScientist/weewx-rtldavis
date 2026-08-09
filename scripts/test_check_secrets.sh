@@ -61,6 +61,20 @@ bad=(
   '    # secret = s3cr3tvalue123'                                # (hole 19) indented comment
   '#token=deadbeef123456'                                        # (hole 20) no spaces
   '# self.password = hunter2hunter2'                             # (hole 21) NOT constructor plumbing
+  # --- S68: the `_PASS` abbreviation, and the app-password literal ---
+  # The key list held `password` and `passcode` but nothing for `_PASS`, which is
+  # the spelling weewx_monitor.py itself uses for its Gmail credential. All three
+  # forms below were verified MISSED before the fix. Nothing had ever been leaked
+  # through it — the tracked tree and the full history were both checked — so this
+  # closed a future hole, not a live one.
+  'GMAIL_PASS = "abcdefghijklmnop"'                              # (hole 22) _PASS, spaced =
+  'GMAIL_PASS="abcdefghijklmnop"'                                # (hole 23) _PASS, no spaces
+  'SMTP_PASS: abcdefghijklmnop'                                  # (hole 24) _PASS, colon
+  # The 4x4 form is what Google actually displays and what people paste. It slips
+  # past the assignment detector even WITH `pass` in the key list, because that
+  # detector needs 8+ consecutive value characters and this breaks every 4.
+  'GMAIL_PASS = "abcd efgh ijkl mnop"'                           # (hole 25) app-password literal
+  '# GMAIL_PASS = "abcd efgh ijkl mnop"'                         # (hole 26) ditto, commented
 )
 
 # --- must PASS (exit zero) ------------------------------------------------------
@@ -88,6 +102,17 @@ good=(
   '# api_key = ""'                                               # empty, commented
   '# token = INFLUX_TOKEN'                                       # ALL_CAPS reference, commented
   "# password = os.environ.get('WEEWX_PW')"                      # runtime lookup, commented
+  # --- S68: widening the key list must not start crying wolf. ---
+  # Each of these is a real line shape from this repo or its docs. The first is
+  # weewx_monitor.py's own credential lookup; the second is the sudoers line in
+  # README Setup step 4, which a `passwd` key alternative WOULD have reported as a
+  # credential (with the binary path as the "value") — the reason the fix uses
+  # bare `pass` instead. The last two are ordinary words that merely start with it.
+  "GMAIL_PASS = os.environ.get('GMAIL_PASS', '')"                # runtime lookup, _PASS key
+  'weewx-monitor ALL=(root) NOPASSWD: /volume1/docker/x.sh'      # sudoers line, not a secret
+  'GMAIL_PASS = "${GMAIL_PASS}"'                                 # interpolation, _PASS key
+  'passed = True'                                                # a word starting with pass
+  'if verify_passcode(x): pass'                                  # the Python statement
 )
 
 echo "── planted BAD payloads (each MUST be caught) ──────────────────────────"
