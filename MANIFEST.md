@@ -10,7 +10,7 @@ instances self-describe at source. **A file in no class gets its own row.**
 |---|---|
 | `docs/DECISIONS.md` + `docs/DECISIONS-FULL.md` — the settled-decision index; full ADR bodies | before working near a settled area. **Scan the index; never re-litigate a listed decision.** Grep the DEC id in FULL, never read it whole |
 | `CHANGELOG.md` + `CHANGELOG-ARCHIVE.md` — what shipped when | writing a closeout entry; the archive is forensic |
-| `docs/ROADMAP.md` — the sequenced plan, P0–P3 (DEC-0058) | choosing what's next; **updating a line a DEC just shipped (DEC-0057, same session)**. Has its own next-check tripwire |
+| `docs/ROADMAP.md` — the sequenced plan, P0–P3 (DEC-0058) | choosing what's next; **updating a line a DEC just shipped (DEC-0057)**. Has its own next-check tripwire |
 | `BACKLOG.md` — open ideas · durable RF findings · **standing watches** · long-term direction | RF work, anything horizon-scale, or whether a watch has fired |
 | `docs/CONVENTIONS.md` — git workflow, secrets, **the exact gates and the only interpreter with the tooling** | before any gate; before any commit |
 | `docs/PRINCIPLES.md` — durable intent · `docs/ASSESSMENT.md` — governance anchor | weighing a new decision. ASSESSMENT is a dated S23 audit, **pre-DEC-0063** |
@@ -24,8 +24,8 @@ instances self-describe at source. **A file in no class gets its own row.**
 | `docs/INTERFACES.md` — **the data contract**, loop-JSON + InfluxDB schema | changing anything a consumer reads. The repo's real deliverable |
 | `docs/DATA_ERRATA.md` — known-bad observations, corrections (`ERR-####`) | a suspect historical reading, or a retrospective correction (DEC-0025) |
 | `CHANGES-FROM-UPSTREAM.md` — the fork's divergence (DEC-0034) | changing driver behavior vs. upstream; preparing an upstream PR |
-| **`weewx_monitor.py` (repo ROOT, not `ops/`) — the NAS-side daemon.** It **is** the USB watchdog (`reset_dongle`, `watchdog_stall` + escalation), the uploader alerter and the reception tracker. Runs on the NAS host, not in the container | **any "what handles X at runtime?" question — read this BEFORE concluding a capability is missing** (DEC-0074: skipping it produced a DEC on a false premise) |
-| **`ops/*` + `scripts/*` + the root-level NAS scripts (`usb_reset.sh`, `entrypoint.sh`) — the harness**, plus `docs/CAMPAIGN-B-RUNBOOK.md` | any ops task, and the swap night. **Each script's header is its manual — read it before using or extending one**: why it exists, the lying symptom it catches, its gotchas. `ops/campaign_analyze.py` is the **only** sanctioned campaign readout (DEC-0069); `usb_reset.sh` runs as **root** under a path-scoped sudo grant (DEC-0075) |
+| **`weewx_monitor.py` (repo ROOT, not `ops/`) — the NAS-side daemon.** It **is** the USB watchdog (`reset_dongle`, `watchdog_stall` + escalation), the uploader alerter and the reception tracker. Runs on the NAS host, not in the container | **any "what handles X at runtime?" question — read this BEFORE concluding a capability is missing** (DEC-0074) |
+| **`ops/*` + `scripts/*` + the root-level NAS scripts (`usb_reset.sh`, `entrypoint.sh`) — the harness**, plus `docs/CAMPAIGN-B-RUNBOOK.md` | any ops task, and the swap night. **Each script's header is its manual — read it before using or extending one.** `ops/campaign_analyze.py` is the **only** sanctioned campaign readout (DEC-0069); `usb_reset.sh` runs as **root** under a path-scoped sudo grant (DEC-0075) |
 | `README.md` · `CONTRIBUTING.md` · `SECURITY.md` · `AGENTS.md` · `LICENSE` — the public face | changing anything user-visible, handling a report, or when another agent tool is involved |
 
 ## Not in a clone, never in the load path

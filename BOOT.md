@@ -12,69 +12,56 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S69)
+## ▶ Resume here (S70)
 
 ### ▶▶ THE JOB: read the first stall capture (blocker 4)
 
-✅ **DEPLOYED AND VERIFIED 2026-08-09.** Do **not** re-deploy — that is the S60b/S63 trap, BOOT
-telling the next session to redo finished work. Prod runs merged tip `ad7e5a4`; monitor 3870 →
-**8810**; smoke-tested live on the NAS. Design, hypothesis and the two predicted signatures:
-**DEC-0075** — don't re-derive them.
+The apparatus is **deployed, verified and armed** (DEC-0075) — `usb_forensics.sh` `dc7912ae`,
+root-owned, re-verified on the box 08-09 after the `/proc`-mtime fix. Do **not** re-deploy — that
+is the S60b/S63 trap, BOOT telling the next session to redo finished work. Design, hypothesis and
+the two predicted signatures: **DEC-0075** — don't re-derive them.
 
-**Wait for the event.** ~1/day, unpredictable, none since 08-07 19:28. Captures land in
-`logs/usb-forensics/`; read the `pre`/`post` pair together. **Both clean means the stall is not a USB
-fault at all** — a real answer, not a null result.
+**Wait for the event.** ~1/day, unpredictable; none since 08-07 19:28 (checked S69 — only the
+smoketest + verify files in `logs/usb-forensics/`). Read the `pre`/`post` pair together. **Both
+clean means the stall is not a USB fault at all** — a real answer, not a null result.
 
-The deployed copy is **current and correct** — `dc7912ae`, root-owned, re-installed and re-verified
-08-09 after the `/proc`-mtime fix (#146). A live capture confirms `age=` now reads 3.0 days against
-the container's uptime, with the proc-dir mtime kept beside it labelled "ACCESS time, NOT start".
-**Nothing to re-deploy.**
+Then **decide campaign B** (below). The DEC-0066 gates are closed and blocker 5 is closed
+(DEC-0077 — campaign A uncontaminated), so nothing stands between B and being read against A. An
+unattended run still has **no working dongle recovery** — true all along, so not a gate, but don't
+launch expecting a rescue.
 
-✅ **Blocker 5 is CLOSED (DEC-0077)** — reset gaps do **not** contaminate campaign A. Measured: 11
-resets (not nine), all on 08-02; the archive went normal → 105 absent rows → NULL → normal, the
-documented lock/outage shape, already excluded because DEC-0069 drops the record either side of *any*
-gap without consulting the class. No present-but-low rows, which was the only real exposure. Campaign
-A's figures stand and B can be read against them.
-
-Then **decide campaign B** (below). DEC-0066's gates hold and blocker 5 is closed, so nothing now
-stands between B and being read against A. An unattended run still has **no working dongle
-recovery** — true all along, so not a gate, but don't launch expecting a rescue.
-
-Two things not to re-derive: **`weewx_monitor.py` IS the watchdog** (DEC-0074), and **every reset line
-before 2026-08-07 19:28 names `syno_vbus_reset`, an operation that never ran** — prod is right now,
-the *history* still lies, and that is what sent S67 down the wrong path.
+Two things not to re-derive: **`weewx_monitor.py` IS the watchdog** (DEC-0074), and **every reset
+line before 2026-08-07 19:28 names `syno_vbus_reset`, an operation that never ran** — prod is right
+now, the *history* still lies, and that is what sent S67 down the wrong path.
 
 ### ▶▶ Campaign B — the launch sequence
 
-**`docs/CAMPAIGN-B-RUNBOOK.md` governs the night, and now also carries the release mechanics** (six
-steps, moved there S68d — BOOT was a second copy of a runbook it already pointed at). The one thing
-worth repeating here because it has bitten twice: **take the build sha from `git rev-parse
-origin/dev`, never one written down** — a remembered sha ships a green checkmark on a silently
-incomplete image.
+**`docs/CAMPAIGN-B-RUNBOOK.md` governs the night and carries the release mechanics.** The one thing
+worth repeating because it has bitten twice: **take the build sha from `git rev-parse origin/dev`,
+never one written down** — a remembered sha ships a green checkmark on a silently incomplete image.
 
-### Current state (S68e)
+### Current state (S69)
 
 | Thing | State |
 |---|---|
 | Prod | **v2.0.11**, driver **ws.3**, LNA **out**, gain 372, ~70–80%. Emitting live |
 | Live-config deviations | `timeout = 30` + `[[[pragmas]]] journal_mode = DELETE`, both verified in the running `weewx.conf`. Table in `CONSTANTS.md` |
-| `weewx_monitor.py` | **alive, supervised, current** — boot task re-checks its pidfile every 5 min; NAS matches merged tip `ad7e5a4`, pid **8810** since 08-09. It **is** the USB watchdog (DEC-0074) |
+| `weewx_monitor.py` | **alive, supervised, current** — NAS matches merged tip `ad7e5a4`, pid **8810** since 08-09. It **is** the USB watchdog (DEC-0074) |
 | Branches | steady state: exactly `dev` + `main`. `dev` ~90 ahead of `main` |
 | `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip at launch |
 | Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's) |
 | Campaign A | **STOPped, sentinel in place.** Do not clear it |
-| Reset forensics | **LIVE and current** (DEC-0075) — `usb_forensics.sh` `dc7912ae`, root-owned, re-verified on the box 08-09. Armed; awaiting a stall |
+| Reset forensics | **LIVE, armed** (DEC-0075); awaiting a stall |
 
-### The two DEC-0066 gates — closed. Reasoning lives in the DECs
+### DEC-0066 gates — closed; reasoning lives in the DECs
 
 - **Metric freeze-aware (DEC-0069)** — `ops/campaign_analyze.py`, per-minute `rxCheckPercent`,
   structural exclusion. Read B with `--campaign B`; **A needs `--since 1785384300`**.
-- **DB lock bounded, not cured (DEC-0070)** — `timeout = 30` live, ~30 s not 5–10 min. weewx now
-  *blocks* rather than erroring, which looks exactly like a DEC-0067 freeze and is correctly excluded.
-  **Not a bug to chase.** Only a recurrence *despite* the cap means a new problem.
-- **⛔ Never retry WAL (DEC-0071).** A `:ro` bind makes the *files* read-only and SQLite creates
-  `weewx.sdb-wal` mode `0555`, so a non-root reader can never join. The `journal_mode = DELETE`
-  pragma stays **on purpose**.
+- **DB lock bounded, not cured (DEC-0070)** — `timeout = 30` live. weewx now *blocks* rather than
+  erroring, which looks like a DEC-0067 freeze and is correctly excluded. **Not a bug to chase** —
+  only a recurrence *despite* the cap means a new problem.
+- **⛔ Never retry WAL (DEC-0071).** A `:ro` bind means SQLite creates `weewx.sdb-wal` mode `0555`,
+  so a non-root reader can never join. The `journal_mode = DELETE` pragma stays **on purpose**.
 
 ## Blockers
 
@@ -82,28 +69,22 @@ incomplete image.
    Six logged; last three have thread captures, all `S`, never `D`. Coffee-radar (shares this NAS)
    ran during one at loadavg 12.39 vs 0.3–0.7 — **a contributor, not the sole cause**; n=1 of 3.
    `ops/freeze_watch.sh` catches it. **Gates nothing** — DEC-0069 bounds it at ±0.03 pts.
-2. **ERR-0005 unexplained** — a **single incident**, not a pattern (21 driver detections that day, 0
-   on every other). A recreate fixed it, a `kill`+`start` 20 min earlier had not, nobody knows why —
-   why DEC-0065 declined to automate the recreate. Doesn't block B.
+2. **ERR-0005 unexplained** — a **single incident** (21 driver detections that day, 0 on every
+   other). A recreate fixed it, a `kill`+`start` 20 min earlier had not, nobody knows why — why
+   DEC-0065 declined to automate the recreate. Doesn't block B.
 3. **`ppm`/`fc` unmeasured**, deliberately unchanged for B (measuring would confound the LNA contrast).
 4. **USB resets FIRE but do not WORK — the live defect (DEC-0074).** 08-06: three stalls, three
-   resets, **all three failed** (bad windows 8 → 10 → 15); **11/11 failed on 08-02** (the DECs say
-   nine — count corrected by DEC-0077). The watchdog works and is reporting that **the remedy
-   doesn't**. `soak_check.sh` carries `USB RESETS INEFFECTIVE`. Unexplained, and ERR-0005 says a reset
-   can make things *worse*. **Apparatus LIVE (DEC-0075); blocked on a live stall alone.**
-   **DEC-0073 superseded** — it claimed these stalls went unhandled, which was false.
-5. ✅ **CLOSED — reset gaps do NOT contaminate campaign A (DEC-0077).** They were sorted into
-   lock/outage, and it changes nothing: exclusion is structural on *any* gap, never class-based. The
-   one thing that would have mattered — present-but-low rows, which no rule excludes because
-   magnitude thresholds are refused by design — **did not occur**. Taxonomy amended: complete for
-   *shapes*, not *causes* (a USB reset is a fourth cause of the lock/outage shape). No analyzer
-   change; don't re-open when reading B.
+   resets, all three failed; **11/11 failed on 08-02** (count per DEC-0077). The watchdog works and
+   is reporting that **the remedy doesn't**. `soak_check.sh` carries `USB RESETS INEFFECTIVE`.
+   Unexplained, and ERR-0005 says a reset can make things *worse*. **Apparatus LIVE (DEC-0075);
+   blocked on a live stall alone.** DEC-0073 superseded — it claimed these stalls went unhandled.
+5. ✅ **CLOSED (DEC-0077)** — reset gaps do **not** contaminate campaign A; exclusion is structural
+   on *any* gap. Don't re-open when reading B.
 
 ## Ordered backlog
 
-1. **Read the first stall capture** (blocker 4) — the apparatus is live, correct and verified;
-   **the event is the only thing left.** ✅ Blocker 5 closed (DEC-0077), ✅ #147 closed by hand
-   (`Closes #N` never fires on this repo's flow — CONVENTIONS §Git workflow).
+1. **Read the first stall capture** (blocker 4) — apparatus live and verified; **the event is the
+   only thing left.**
 2. **Launch campaign B** — or decide not to, deliberately.
 3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at `interval = 15`
    + `backfill = 1`, ERR-0003's path. Back up the DB first.
@@ -115,37 +96,21 @@ incomplete image.
 7. **Consider `.claude/transient-state`** (ops#113). Opt-in is this repo's call.
 8. Keep-a-Changelog headings + DECISIONS entry-skeleton convergence (proposed S25, never picked up).
 
-✅ **ops#145 closed at S67 (DEC-0072).** Standing obligation: a new `ops/`/`scripts/` file must ship
-with a header saying why it exists — the MANIFEST class row promises it, and nothing fails if it's
-missing. **A file in no class needs its own row** (`weewx_monitor.py` had none, which is how S67 went
-wrong). ROADMAP reconciled at S66, next check **by S76**. **Standing watches live in `BACKLOG.md`.**
+ROADMAP reconciled at S66; next check **by S76**. Standing watches live in `BACKLOG.md`.
 
 ## Gotchas that survive here because they are NOT in the canonical docs
 
 Non-negotiables live in **`CLAUDE.md`**; gates and git workflow in **`docs/CONVENTIONS.md`**; the
 deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
 
-- **The secret gate exits 0 with `nothing to scan` when nothing is staged.** Green proves nothing
-  until you `git add` first (DEC-0039/0045); positive-control it with a planted payload.
-- **Ask "which layer wins in prod?" per file, every time** (DEC-0046). A shipped config change must
-  also patch the live NAS copy and be verified in the **running system**.
-- **A file match proves the FILE, never the PROCESS — and never that a capability is absent.** Both
-  halves cost a session: "matches byte-for-byte, zero resets since" was true and its conclusion
-  wrong, and a dead script was read as a missing function while `weewx_monitor.py` did the job all
-  along (DEC-0074). Liveness needs process evidence; absence needs you to check what *else* provides
-  the function. ⚠️ **But DEC-0074's own probe is wrong — `#147`.** `/proc/<pid>` mtime is **access**
-  time, measured 08-09 reporting 17 s for a 2.88-day-old process. Use a **startup line in the log**
-  after the file mtime (what actually carried both the S67 and S68 verifications), `/proc/<pid>/stat`
-  field 22 vs `/proc/uptime`, and **new pid + old pid gone**.
+- **A file match proves the FILE, never the PROCESS — and never that a capability is absent**
+  (DEC-0074; both halves cost a session). Liveness needs process evidence — a **startup line in the
+  log after the file mtime**, `/proc/<pid>/stat` field 22 vs `/proc/uptime`, **new pid + old pid
+  gone**; never `/proc/<pid>` mtime, which is ACCESS time (#147). Absence needs you to check what
+  *else* provides the function.
 - **`secret-read-guard.sh` matches by basename**, so it blocks the repo's clean `ops/wxcheck.sh`
   (which uses `${WU_API_KEY}`). Read it with `readconf`. Guard fix is ops-owned.
-- **This file is the single source of truth for the session number and the handoff** (DEC-0023);
-  prefix cross-repo refs (`weewx S67` vs `dash S151`).
 
-_Last updated: 2026-08-09 (S68e) — reset forensics **live, current and verified on hardware**:
-deployed, smoke-tested, the `/proc`-mtime defect that smoke test found now fixed AND re-verified
-(`age=` reads 3.0 days against container uptime). **Blocker 5 CLOSED (DEC-0077)** — campaign A's
-figures are uncontaminated, so B can be read against them. Also DEC-0075 (capture-only; a root
-escalation introduced and closed in the same commit) and DEC-0076 (secret gate's fifth hole).
-**Nothing is pending deployment.** S69's job: **read the first stall capture** — the event is the
-only thing gating blocker 4._
+_Last updated: 2026-08-09 (S69) — tier-file trim (ops#152): BOOT and MANIFEST back under their caps;
+duplicates of DEC bodies and canonical docs deleted per STANDARD rules 1/9. No stall capture yet.
+S70's job: **read the first stall capture** — the event is the only thing gating blocker 4._
