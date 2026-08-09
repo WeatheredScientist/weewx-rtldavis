@@ -204,13 +204,16 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       2026-08-06 (`RESET ineffective`, bad windows 8 → 10 → 15), 9/9 on 08-02. The watchdog works and
       is reporting that **the remedy does not**. *This line was missing until S68* — DEC-0074 raised
       the defect at S67 and no ROADMAP item was opened for it, so the repo's sequenced plan did not
-      carry its own top blocker. **Apparatus ready, not yet deployed (DEC-0075):**
-      `ops/usb_forensics.sh` brackets every reset with host and in-container USB state plus
-      `rtldavis`'s open handles, so the next stall answers the question instead of repeating it.
-      **Hypothesis explicitly unestablished** — a stale container view or a surviving fd confirms it;
-      both clean means the stall is not a USB fault at all. Blocked only on a live stall (~1/day) and
-      on the Class C deploy. **Then blocker 5:** whether reset-adjacent gaps are already inside
-      campaign A's DEC-0069 figures — a question about a published result, not a pre-launch nicety.
+      carry its own top blocker. **Apparatus LIVE since 2026-08-09 (DEC-0075)** — deployed from
+      merged tip `ad7e5a4` and verified; `ops/usb_forensics.sh` brackets every reset with host and
+      in-container USB state plus `rtldavis`'s open handles, so the next stall answers the question
+      instead of repeating it. **Hypothesis explicitly unestablished** — a stale container view or a
+      surviving fd confirms it; both clean means the stall is not a USB fault at all. **Blocked on
+      the event alone now** (~1/day, none since 08-07 19:28), not on tooling. Minor: the deployed
+      copy's `started=` field is unreliable until PR #146 is merged and that one file re-installed
+      (#147) — the decisive signatures are unaffected. **Then blocker 5:** whether reset-adjacent
+      gaps are already inside campaign A's DEC-0069 figures — a question about a published result,
+      not a pre-launch nicety.
 - [ ] **P0 — why does the weewx process freeze? (DEC-0067, DEC-0068)** ~2-4 min, roughly once a
       day; seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59, 08-03 23:23 (262 s, S64), and two
       more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;

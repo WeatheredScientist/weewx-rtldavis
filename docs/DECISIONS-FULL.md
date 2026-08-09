@@ -3936,8 +3936,26 @@ non-zero and asserting the unbind/rebind still happened.
 
 ### Status
 
-Committed, **not yet deployed**. It captures nothing until it reaches the NAS (Class C), and
-`usb_forensics.sh` must be installed **root-owned** or `usb_reset.sh` will correctly refuse it.
+**Deployed and verified 2026-08-09**, from merged tip `ad7e5a4`. `usb_forensics.sh` and
+`usb_reset.sh` installed `root:root 755` (the ownership the guard depends on), `weewx_monitor.py` as
+the service account; monitor restarted 3870 → 8810, proven by its own startup log line rather than a
+sha. Smoke-tested live: pid discovery by `comm` works, the dongle is `1-3` / `0bda:2838` /
+`devnum=5`, and the root-only sections self-labelled `DEGRADED` when run unprivileged.
+
+**The smoke test immediately earned itself back**, which is the argument for running a capture script
+on the real box rather than only where every `/proc` read fails by design. It reported `rtldavis` as
+17 seconds old when the process had been up **2.88 days** — `/proc/<pid>` directory mtime is
+**access** time, and the script reads files under that directory moments earlier. In a stall capture
+that field would have asserted a restart that never happened: a fabricated event, in the one artifact
+built to settle a question whose hypothesis is deliberately unsettled. Fixed in PR #146 (field 22 vs
+`/proc/uptime`, HZ=100 confirmed not assumed).
+
+⚠️ **This flaw is not confined to this script.** DEC-0074's own replacement for "a sha match proves
+the FILE, never the PROCESS" is `nasctl ls /proc/<newpid>` against the file mtime — the same unsound
+probe. The **lesson** stands untouched; only the instrument was wrong. What actually carried both the
+S67 and the S68 verification was a **startup line in the log** timestamped after the file mtime.
+Tracked as **#147**; also usable: `/proc/<pid>/stat` field 22 vs `/proc/uptime`, and new-pid-with-old-
+pid-gone. Best used together.
 
 ---
 
