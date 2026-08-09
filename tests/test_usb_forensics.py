@@ -70,6 +70,27 @@ def test_forensics_dumps_no_environment():
         assert not any(banned in ln for ln in code)
 
 
+def test_forensics_does_not_use_proc_dir_mtime_as_start_time():
+    """Measured on the NAS 2026-08-09: `stat -c %y /proc/<pid>` reported 17
+    seconds for an rtldavis that had been up 2.88 days by /proc/<pid>/stat field
+    22, on a container up 3 days with unbroken output. That directory's mtime
+    tracks ACCESS, and this script reads several files under it moments before.
+
+    In a stall capture the wrong version would have reported "rtldavis just
+    restarted" about a process that never did -- a fabricated event in the one
+    artifact meant to settle the question. So the age must come from field 22,
+    and any use of the proc-dir mtime must be labelled as access time.
+    """
+    code = _code(FORENSICS)
+    stat_mtime = [ln for ln in code if 'stat -c %y "/proc/' in ln]
+    for line in stat_mtime:
+        assert "proc-dir-mtime" in line and "NOT start" in line, \
+            "proc-dir mtime may only appear labelled as access time"
+    assert any("/stat" in ln and "$22" in ln for ln in code), \
+        "start time must be derived from /proc/<pid>/stat field 22"
+    assert any("/proc/uptime" in ln for ln in code)
+
+
 def test_forensics_bounds_every_log_read():
     """An unbounded log read wedged this NAS for 7h18m once (DEC-0036)."""
     invocations = [ln for ln in _code(FORENSICS)
