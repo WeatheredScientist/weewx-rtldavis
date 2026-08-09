@@ -3864,3 +3864,126 @@ nicety for B; it is a question about a result already published in DEC-0069. Sti
 - `soak_check.sh` asserts monitor liveness and reset effectiveness.
 - Two things stay open: why the resets do not work, and whether reset gaps have already skewed the
   campaign-A figures.
+
+## DEC-0075 — Photograph the reset instead of reasoning about it: capture from inside the sudo grant, host-side through `/proc`
+
+**Status:** Accepted · **Date:** 2026-08-08 (S68) · **advances** DEC-0074's open blocker 4 ·
+**applies** DEC-0040 (prose does not execute) · **leaves DEC-0065 untouched**
+
+### What this settles
+
+The USB resets fire and do not work — 3/3 on 2026-08-06, 9/9 on 2026-08-02 — and the standing
+hypothesis is explicitly *not* established: the reset may be treating the **device** while the fault
+is the **consumer's grip** on it. `usb_reset.sh` is a driver unbind/rebind, not a power cycle, so the
+dongle stays enumerated and nothing makes the stalled `rtldavis` inside the container drop its open
+libusb handle.
+
+That predicts two observable things, and `ops/usb_forensics.sh` is built to see either:
+
+- **stale container view** — the host's `/dev/bus/usb/001/` gains a new `devnum` after the rebind
+  while the container still shows the old node; or
+- **surviving grip** — `rtldavis` still holds an fd on the pre-reset device node afterwards.
+
+If both look clean across a real stall, **the stall is not a USB fault at all** and the reset is
+treating the wrong thing entirely. That is a real answer too, and the capture is designed to be able
+to return it.
+
+### Why it had to be built before the evidence existed
+
+The decisive capture needs a live stall: ~1/day, unpredictable, and gone by the time anyone looks.
+There has been **no stall since the corrected reset code went live at 2026-08-07 19:28** (checked at
+S68 open: zero `RESET` and zero `stalled` lines in the 08-07 and 08-08 monitor logs, both greps
+positive-controlled against 1440/521-hit `WINDOW` counts). So there was nothing to read
+retroactively and no way to harvest this after the fact — the apparatus has to exist first.
+
+### The three design calls
+
+**1. Host-side `/proc`, not `docker exec`.** The container's view is reachable as
+`/proc/<pid>/root/dev/bus/usb/001/` and its handles as `/proc/<pid>/fd`. This fires *during a stall*,
+and a wedged container can block an exec indefinitely — the capture would hang on exactly the event
+it exists to record. `/proc` reads cannot. One pid, discovered by `comm`, yields every piece of
+evidence, and `rtldavis` being **absent** is itself a finding (the 'not running' mode, a different
+fault).
+
+**2. Pre/post fire from inside `usb_reset.sh`, not from the monitor.** Both decisive reads are
+root-only, and `weewx_monitor.py` runs as the unprivileged `weewx-monitor` user — which is *why* it
+shells the reset out through sudo. The sudoers grant is scoped to `usb_reset.sh` alone (README Setup
+step 4). Capturing from there therefore needs **no new sudoers grant** and lands the evidence at the
+only two moments that matter. The monitor fires only the `+RESET_VERIFY_S` capture, host-side and
+**self-labelled DEGRADED** — an unreadable fd section must never be mistaken for a released handle,
+which is the same absence-is-not-evidence trap DEC-0074 cost 2.5 months to.
+
+**3. Capture-only. The escalation ladder is unchanged.** DEC-0065 declined to automate the container
+recreate while ERR-0005's cause was unknown; that reasoning is untouched. Mixing a remedy change into
+the measurement meant to justify it would confound both. Three failed resets still produce an alert
+and no further action — deliberately, and still open.
+
+### The escalation this introduced, and closed
+
+Having `usb_reset.sh` execute a helper means **the helper runs as root under the NOPASSWD grant**. On
+this NAS mode 777 is common, so a helper writable by `weewx-monitor` would have converted that narrow
+grant into arbitrary root execution — precisely what the dedicated-user design exists to prevent.
+
+`usb_reset.sh` now verifies the helper is root-owned and root-only-writable before running it, and
+**refuses loudly** otherwise while still performing the reset; `do_reset()` logs the script's output
+on a zero exit so that refusal cannot become a silent no-op. Checked rather than documented, because
+prose does not execute (DEC-0040). Positive-controlled by neutering the check and watching the
+helper execute.
+
+**Evidence is never load-bearing over the watchdog it observes:** a missing, broken or refused
+capture always leaves the reset intact, proven by running the real script against a helper that exits
+non-zero and asserting the unbind/rebind still happened.
+
+### Status
+
+Committed, **not yet deployed**. It captures nothing until it reaches the NAS (Class C), and
+`usb_forensics.sh` must be installed **root-owned** or `usb_reset.sh` will correctly refuse it.
+
+---
+
+## DEC-0076 — The secret gate missed `GMAIL_PASS`-shaped keys: the fifth hole, and the first found by routine control rather than by audit
+
+**Status:** Accepted · **Date:** 2026-08-08 (S68) · **extends** DEC-0039/DEC-0045 ·
+**closes** a future hole, not a live one
+
+### What this settles
+
+The gate's key list held `password` and `passcode` but nothing for the `_PASS` abbreviation, so
+`GMAIL_PASS = "..."` was **undetected in every spelling** — spaced, unspaced, colon-separated.
+`GMAIL_PASS` is the exact variable name `weewx_monitor.py` uses for its Gmail credential, so the hole
+sat squarely under this repo's own secret.
+
+**Nothing was ever leaked through it.** The tracked tree carries no `_PASS` literal (the sole match is
+README's documented `NOPASSWD:` sudoers line) and no `GMAIL_PASS = "<literal>"` was ever added on any
+ref in the full history. This closed a future hole.
+
+### How it was found — the part worth keeping
+
+Not by an audit. By the **routine positive control before an unrelated commit** (DEC-0045's standing
+rule): a planted payload carried both an `api_key` line and a `GMAIL_PASS` line, the gate reported
+only the first, and the asymmetry was visible for free. The rule that costs one command per commit is
+what found the fifth instance of this gate being wrong.
+
+### The fix, and why it is two detectors
+
+- **bare `pass` in the key list.** Deliberately *not* `passwd`, which matches README's
+  `NOPASSWD: /volume1/...` and reports the binary path as a credential. Bare `pass` cannot: the
+  detector requires `[:=]` immediately after the key and `NOPASSWD` has `WD` there — the same reason
+  Python's `pass` statement and `passed = True` do not trip it.
+- **a literal matcher for the four-group app-password form.** It slips past the assignment detector
+  *even with* `pass` in the key list, because that detector needs 8+ **consecutive** value characters
+  and the four-group form breaks every 4. That is the shape Google displays and people paste.
+
+Each was proven necessary by removing it and watching its own payloads leak.
+
+### The false-positive half, which nearly shipped
+
+`PASS` is listed separately from `pass` because **detection is case-insensitive and the allow-list
+deliberately is not** — that asymmetry is what distinguishes a constant reference from a literal
+(bug class 1). Without the uppercase spelling, widening the key list made the gate report
+`weewx_monitor.py`'s own `os.environ` lookup and README's placeholder as credentials, and the
+tracked-tree check failed.
+
+**The harness caught that before it shipped.** A gate that cries wolf on a repo's own source gets
+switched off, so the false-positive direction is not a nicety — it is half the fix. Harness: 41 → 51
+cases, tracked tree still clean.
