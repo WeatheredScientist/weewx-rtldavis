@@ -47,6 +47,12 @@ under [Pre-S16].
   `docs/CAMPAIGN-B-RUNBOOK.md` governs the night. Verified absent from the runbook first, then
   **moved** there verbatim (not deleted) as a new "Release mechanics" section. BOOT 2516 → **~2332**,
   ~7% headroom rather than the 0.2% shaving bought.
+- **Forensics reinstalled and the fix verified on hardware (S68e).** The `/proc`-mtime fix from
+  #146 is now the deployed copy (`dc7912ae`, root-owned), and a live capture confirms it:
+  `age=259633s` (3.0 days, matching container uptime) beside `proc-dir-mtime` labelled "ACCESS
+  time, NOT start". The two fields visibly disagree in the artifact, with the right one marked.
+  Verified rather than assumed, since the earlier smoke test is what found the defect at all.
+  **#147 closed by hand**, #148 merged. Nothing pending deployment.
 - **The session's recurring shape, worth naming:** three distinct staleness classes — the deploy
   state, DEC-0074's probe, the `Closes #N` trailer — all the same defect. *A claim that was true when
   written, with nothing that would fail when it stopped being true.*
