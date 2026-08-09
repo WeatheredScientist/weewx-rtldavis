@@ -35,7 +35,21 @@ under [Pre-S16].
   `/proc/uptime`, and new-pid-with-old-pid-gone.
 - **Staleness sweep, again.** BOOT's blocker 4 still read "not yet deployed", its monitor row cited
   the pre-deploy sha, and the campaign-B paragraph still gated on blocker 5. All corrected, plus an
-  internal contradiction BOOT had acquired (9/9 vs 11). Tier caps re-measured: BOOT ~2494 (cap 2500).
+  internal contradiction BOOT had acquired (9/9 vs 11).
+- **`Closes #N` does not work on this repo's flow.** #147 was still open while BOOT claimed it
+  closed: GitHub auto-closes only on a merge to the **default branch, `main`**, which advances only
+  at a prod-baseline release. `git log --grep` shows the pattern used on `dev` before, so this is not
+  a one-off. Recorded in `docs/CONVENTIONS.md` §Git workflow — close explicitly, or say "addressed in
+  #M" and leave it open on purpose; keep the trailer as a cross-reference, never the mechanism.
+- **BOOT was a second copy of the runbook it points at.** It exceeded the DEC-0072 cap four times in
+  one day and each overrun was paid for by shaving words — which DEC-0072 explicitly rejects. The
+  cause was structural: six campaign-B launch steps sat directly under a line saying
+  `docs/CAMPAIGN-B-RUNBOOK.md` governs the night. Verified absent from the runbook first, then
+  **moved** there verbatim (not deleted) as a new "Release mechanics" section. BOOT 2516 → **~2332**,
+  ~7% headroom rather than the 0.2% shaving bought.
+- **The session's recurring shape, worth naming:** three distinct staleness classes — the deploy
+  state, DEC-0074's probe, the `Closes #N` trailer — all the same defect. *A claim that was true when
+  written, with nothing that would fail when it stopped being true.*
 
 ---
 ## [S68b] — 2026-08-09 — Forensics deployed and verified live; the smoke test then found a defect in them
