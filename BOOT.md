@@ -14,23 +14,21 @@ is a **separate repo** — don't make dashboard changes here.
 
 ## ▶ Resume here (S69)
 
-### ▶▶ THE JOB: deploy the reset forensics, then let the next stall answer blocker 4
+### ▶▶ THE JOB: read the first stall capture (blocker 4)
 
-**S68 built the apparatus; it captures nothing until it reaches the NAS.** Design, hypothesis and the
-two predicted signatures are settled in **DEC-0075** — read that, don't re-derive it.
+✅ **DEPLOYED AND VERIFIED 2026-08-09.** Do **not** re-deploy — that is the S60b/S63 trap, BOOT
+telling the next session to redo finished work. Prod runs merged tip `ad7e5a4`; monitor 3870 →
+**8810**. Smoke-tested live: pid discovery works, dongle `1-3` / `0bda:2838` / `devnum=5`. Design,
+hypothesis and the two predicted signatures: **DEC-0075** — don't re-derive them.
 
-**The deploy (Class C, owner-gated), from the MERGED `dev` tip, never a sha written down here.** The
-NAS layout is **flat** — no `ops/` there. `scp` `ops/usb_forensics.sh`, `usb_reset.sh` and
-`weewx_monitor.py`; **install the forensics root-owned, mode 755** (`install -o root -g root -m 755`)
-or `usb_reset.sh` will correctly refuse it and log `FORENSICS REFUSED` with no captures. Restart:
-`ssh -t nas-admin 'sudo kill <pid>'` — **`-t` required**, respawn ≤5 min. **Verify by process
-evidence, never by sha** (DEC-0074): process start *after* file mtime. Then hand-run
-`usb_forensics.sh baseline` — read-only, safe on a healthy system, and the control a stall is diffed
-against.
+**Wait for the event.** ~1/day, unpredictable, none since 08-07 19:28. Captures land in
+`logs/usb-forensics/`; read the `pre`/`post` pair together. **Both clean means the stall is not a USB
+fault at all** — a real answer, not a null result.
 
-**Then wait.** ~1/day, unpredictable, none since 08-07 19:28. Captures land in `logs/usb-forensics/`;
-read the `pre`/`post` pair together. **Both clean means the stall is not a USB fault at all** — a real
-answer, not a null result.
+⚠️ **One live wart:** deployed `usb_forensics.sh` reports `started=` from `/proc/<pid>` mtime =
+**access** time, so it will claim a days-old `rtldavis` just restarted. Fixed in **PR #146**; merge
+and re-install that one file when convenient. Decisive signatures unaffected — a capture before then
+is still worth having, just ignore `started=`.
 
 **While waiting, blocker 5** needs no stall: are reset-adjacent gaps already inside campaign A's
 DEC-0069 figures? Nine resets on 08-02 sit inside the 07-29 → 08-05 validation window.
@@ -73,7 +71,7 @@ the *history* still lies, and that is what sent S67 down the wrong path.
 | `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip at launch |
 | Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's) |
 | Campaign A | **STOPped, sentinel in place.** Do not clear it |
-| Reset forensics | **committed, NOT deployed** (DEC-0075). Captures nothing until step 1–4 above run |
+| Reset forensics | **LIVE** (DEC-0075), deployed + verified 08-09 from `ad7e5a4`. Armed; awaiting a stall |
 
 ### The two DEC-0066 gates — closed. Reasoning lives in the DECs
 
@@ -110,8 +108,10 @@ the *history* still lies, and that is what sent S67 down the wrong path.
 
 ## Ordered backlog
 
-1. **Deploy the forensics, then read the first stall** (blocker 4). Then **whether reset gaps skew
-   campaign A** (blocker 5) — that one needs no stall and can be done today.
+1. **Read the first stall capture** (blocker 4) — forensics are live, just waiting on the event.
+   Merge PR #146 + re-install `usb_forensics.sh` (the `started=` wart). Then **whether reset gaps
+   skew campaign A** (blocker 5) — needs no stall, can be done today. Then **#147**, correcting
+   DEC-0074's documented probe where it is written down.
 2. **Launch campaign B** — or decide not to, deliberately.
 3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at `interval = 15`
    + `backfill = 1`, ERR-0003's path. Back up the DB first.
@@ -141,14 +141,18 @@ deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
   halves cost a session: "matches byte-for-byte, zero resets since" was true and its conclusion
   wrong, and a dead script was read as a missing function while `weewx_monitor.py` did the job all
   along (DEC-0074). Liveness needs process evidence; absence needs you to check what *else* provides
-  the function.
+  the function. ⚠️ **But DEC-0074's own probe is wrong — `#147`.** `/proc/<pid>` mtime is **access**
+  time, measured 08-09 reporting 17 s for a 2.88-day-old process. Use a **startup line in the log**
+  after the file mtime (what actually carried both the S67 and S68 verifications), `/proc/<pid>/stat`
+  field 22 vs `/proc/uptime`, and **new pid + old pid gone**.
 - **`secret-read-guard.sh` matches by basename**, so it blocks the repo's clean `ops/wxcheck.sh`
   (which uses `${WU_API_KEY}`). Read it with `readconf`. Guard fix is ops-owned.
 - **This file is the single source of truth for the session number and the handoff** (DEC-0023);
   prefix cross-repo refs (`weewx S67` vs `dash S151`).
 
-_Last updated: 2026-08-08 (S68 close) — **DEC-0075**: reset forensics built, committed, **not
-deployed**; capture-only, so DEC-0065's ladder is untouched. The change introduced a root-escalation
+_Last updated: 2026-08-09 (S68b) — reset forensics **deployed and verified live**; the post-deploy
+smoke test then caught a real defect in them (`/proc` mtime ≠ start time, PR #146, and DEC-0074's own
+probe has the same flaw — #147). **DEC-0075**: capture-only, so DEC-0065's ladder is untouched. The change introduced a root-escalation
 via the sudo grant and closed it in the same commit (mechanically, not in prose). **DEC-0076**: the
 secret gate missed `GMAIL_PASS`-shaped keys — the fifth hole, found by the routine pre-commit
 positive control, nothing ever leaked; harness 41 → 51. ROADMAP gained the blocker-4 P0 line it had
