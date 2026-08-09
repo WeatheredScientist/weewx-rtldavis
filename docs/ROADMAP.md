@@ -190,7 +190,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       can mean nothing was listening just as easily as nothing needed doing. That exact reasoning,
       applied to a *different* script, produced a whole decision entry on a false premise at S67.
       Liveness now has its own assertion in `ops/soak_check.sh`. **Cite process evidence, not a
-      checksum.**
+      checksum** — but **not `/proc/<pid>` mtime**, which is access time and was measured reporting
+      17 s for a 2.88-day-old process (S68b, #147). Use a startup log line after the file mtime,
+      `/proc/<pid>/stat` field 22 vs `/proc/uptime`, and new-pid-with-old-pid-gone.
 - [x] ~~**P0 — explain the two unexplained 08-02 outages**~~ — **substantially answered by DEC-0067
       (S63).** They were two different phenomena filed under one name. The driver's own 150 s
       watchdog is the discriminator and had been reporting correctly all along: it fires only when
@@ -211,9 +213,11 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       surviving fd confirms it; both clean means the stall is not a USB fault at all. **Blocked on
       the event alone now** (~1/day, none since 08-07 19:28), not on tooling. Minor: the deployed
       copy's `started=` field is unreliable until PR #146 is merged and that one file re-installed
-      (#147) — the decisive signatures are unaffected. **Then blocker 5:** whether reset-adjacent
-      gaps are already inside campaign A's DEC-0069 figures — a question about a published result,
-      not a pre-launch nicety.
+      (#147) — the decisive signatures are unaffected. ✅ **Blocker 5 CLOSED (DEC-0077):** reset gaps
+      do not contaminate campaign A. 11 resets (not nine), all 08-02; the archive went normal → 105
+      absent rows → NULL → normal, already excluded because DEC-0069 drops the record either side of
+      *any* gap without consulting the class. No present-but-low rows — the only real exposure.
+      Campaign A's figures stand.
 - [ ] **P0 — why does the weewx process freeze? (DEC-0067, DEC-0068)** ~2-4 min, roughly once a
       day; seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59, 08-03 23:23 (262 s, S64), and two
       more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;
