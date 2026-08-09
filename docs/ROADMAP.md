@@ -190,7 +190,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       can mean nothing was listening just as easily as nothing needed doing. That exact reasoning,
       applied to a *different* script, produced a whole decision entry on a false premise at S67.
       Liveness now has its own assertion in `ops/soak_check.sh`. **Cite process evidence, not a
-      checksum.**
+      checksum** — but **not `/proc/<pid>` mtime**, which is access time and was measured reporting
+      17 s for a 2.88-day-old process (S68b, #147). Use a startup log line after the file mtime,
+      `/proc/<pid>/stat` field 22 vs `/proc/uptime`, and new-pid-with-old-pid-gone.
 - [x] ~~**P0 — explain the two unexplained 08-02 outages**~~ — **substantially answered by DEC-0067
       (S63).** They were two different phenomena filed under one name. The driver's own 150 s
       watchdog is the discriminator and had been reporting correctly all along: it fires only when
