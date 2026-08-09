@@ -67,7 +67,7 @@ problem. The rule is a >150 s gap **with** `rtldavis process stalled` = RF; sile
 Open. `BOOT.md` blocker 4 carries the summary; this is the working material.
 
 > ✅ **RESOLVED 2026-08-07 (S67) — deployed and verified.** Finding 1's fix is live: the NAS runs
-> `97fe334`, matching the merged `dev` tip, and the monitor restarted as pid 3870 at 19:28 — **two
+> `97fe334` at the time, matching the then-current `dev` tip, and the monitor restarted as pid 3870 at 19:28 — **two
 > hours after** the file landed at 17:10, which is what proves the running process loaded the new
 > code rather than merely that the file on disk is right. (A sha match alone proves neither, and
 > believing otherwise is what cost this repo 2.5 months — DEC-0074.)

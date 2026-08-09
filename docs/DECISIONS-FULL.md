@@ -4027,3 +4027,75 @@ tracked-tree check failed.
 **The harness caught that before it shipped.** A gate that cries wolf on a repo's own source gets
 switched off, so the false-positive direction is not a nicety — it is half the fix. Harness: 41 → 51
 cases, tracked tree still clean.
+
+## DEC-0077 — Reset gaps do NOT contaminate campaign A's figures: the exclusion is class-independent, and the outage left no rows to mis-average
+
+**Status:** Accepted · **Date:** 2026-08-09 (S68d) · **closes** blocker 5 ·
+**bounds** DEC-0074's concern · **amends** DEC-0069's taxonomy completeness claim ·
+**corrects** ERR-0005 / DEC-0065's reset count
+
+### What this settles
+
+DEC-0074 raised blocker 5: the monitor fired resets on 2026-08-02, **inside** the 07-29 → 08-05
+window `campaign_analyze.py`'s three-class gap taxonomy was validated against, so reset-adjacent gaps
+were sorted into freeze / arm-swap / lock-outage in the figures DEC-0069 published. It called this "a
+question about an existing result, not a pre-launch nicety." Correct to raise. The answer is **no
+contamination**, and the reasoning matters more than the verdict.
+
+### The measurement
+
+Every rotated monitor log spanning campaign A (`.11` = 07-29 through `.4` = 08-05) grepped for
+resets. **11 resets, all on 08-02**, 00:11:23 → 01:27:20. Seven of the eight days are empty, which
+independently corroborates DEC-0067's "0 detections on every other day measured".
+
+Archive rows across the incident (`rxCheckPercent`, `interval`, 08-01 23:00 → 08-02 03:30):
+
+| Time (EDT) | Row |
+|---|---|
+| 00:04 | **72.73%** — normal, and the last row before the outage |
+| 00:05 → 01:23 | **80 rows absent** |
+| 01:24 | **NULL** |
+| 01:25 → 01:50 | **25 rows absent** |
+| 01:51 | **NULL** |
+| 01:52 | 57.14% — back inside the population |
+
+### Why the figures are unaffected
+
+That shape is precisely the **lock/outage** signature the tool already documents: *rx BEFORE normal,
+rx AFTER NULL*. So the taxonomy classified it, and — the load-bearing point — **classification is
+descriptive; exclusion is structural.** DEC-0069's rule drops the record on either side of **any**
+gap, plus every NULL, plus `rx > 100`, without consulting the class. 00:04, 01:24 and 01:51 were all
+excluded. The 105 absent minutes contribute nothing: absent rows are not zeros, which the tool's own
+header already established and which is why the design shrank at DEC-0069.
+
+**The feared mode did not occur.** The real exposure was never mislabeling — it was a reset outage
+producing *present but low* rows, which nothing would exclude, because the tool refuses magnitude
+thresholds on purpose (a threshold discards genuine deep fades and biases every arm upward). No such
+rows exist here. The transition is normal → absent → NULL → normal with nothing low-but-present at
+either edge.
+
+### What IS wrong, narrowly
+
+DEC-0069's taxonomy says "every gap falls into one of three classes, and they do not overlap". That
+still holds as a statement about *shapes*. It is wrong as a statement about *causes*: a USB reset
+outage is a fourth cause producing the lock/outage shape. Since treatment keys on shape, **no
+analyzer change is warranted** — recorded so campaign B's reading does not re-open it.
+
+### Residuals, both bounded, neither gating
+
+- **01:52 (57.14%) survives the rule**, because it neighbours a NULL *row*, not a gap. It sits just
+  above the population p01 of 56.5, so it is plausible as real. Worst case it is one truncated
+  record: ≈ (72−57)/360 ≈ **0.04 pts** on a 6 h block, against a 0.94-pt observed spread and a 2.0-pt
+  adoption bar.
+- **105 minutes vanished from one arm's block** — ~2.4% of the campaign's 12 × 6 h. This costs
+  **precision, not bias**: during a receiver outage the arm's true RF performance is unmeasurable, and
+  a USB failure is not a property of the arm, so excluding it is the correct treatment rather than a
+  concession. Which arm is identifiable from the apparatus log if it is ever worth knowing; it does
+  not change the verdict.
+
+### A correction to the record
+
+The monitor log shows **11 resets**, not nine. ERR-0005 and DEC-0065 both state "nine resets in 75
+minutes" and refer to "reset #10 at 01:27:17"; that event is the **11th**, and the span is 76 min.
+Nothing downstream depended on the count — DEC-0065's argument is about unbounded retry, which 11
+makes marginally stronger — but the figure appears in two decision entries and should be right.
