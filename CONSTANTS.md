@@ -62,7 +62,7 @@ these.** Re-apply and re-verify after any recreate.
 | Thing | Value |
 |-------|-------|
 | Prod image | **`:v2.0.12`**, deployed 2026-08-10 (S70), NAS-built `9db5c1ddaac3` from `7b6fd42` |
-| Docker Hub | **lags prod** — still `:v2.0.11` + `:latest`; the `:v2.0.12` push is pending (`save` → laptop → `push`, DEC-0078). `:latest` moves only after the station proves the release |
+| Docker Hub | `:v2.0.12` pushed (config digest = the NAS build — verified). **`:latest` still points at v2.0.11** until the station proves the release; decide at GATE 2 |
 | Rollback | `:v2.0.11`, on the NAS and Docker Hub |
 | Prod baseline tag | `prod-baseline-20260810` (`main` = `7b6fd42` == prod) |
 | Driver banner | **prod runs `0.20+ws.4`** (shipped in `:v2.0.12`) |
