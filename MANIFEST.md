@@ -33,7 +33,7 @@ instances self-describe at source. **A file in no class gets its own row.**
 | Thing | Why it is not here |
 |---|---|
 | `ARCHIVE/` | local-only, gitignored, **never tracked** — S16 dumps with credential-shaped strings (DEC-0012). Nothing once *in* the repo is lost: `git log --follow` reaches it |
-| `docs/handoffs/` | three retired handoffs, kept because live docs cite them **by path**. Never lose `S38-cross-repo-architecture.md` — the family's agent protocol |
+| `docs/handoffs/` | retired handoffs, kept because live docs cite them **by path**. Never lose `S38-cross-repo-architecture.md` — the family's agent protocol |
 | `docs/upstream/` | drafts, gitignored — **never posted without an explicit go**. State lives in `UPSTREAM-THREADS.md` |
 | Dashboard code and decisions | `eaglehunt-weather-dashboard` — **don't change the dashboard here** (DEC-0010) |
 | Real infra values, coordinates, security follow-ups | the gitignored local-infra doc |

@@ -4201,3 +4201,75 @@ already has its own dedicated tracking apparatus).
   instead of relying on session memory or prose alone.
 - `.claude/` stays locally gitignored for everything else; this file and `settings.json` remain
   the two tracked exceptions.
+
+---
+
+## DEC-0080 — Solar diode-floor correction: exact-code `StdCalibrate` zero at the config layer
+
+**Status:** Accepted · **Date:** 2026-08-10 (S72) · **resolves** the S71 radiation-floor handoff ·
+**relates to** DEC-0029 · **applies** DEC-0070 at apply time
+
+### Context
+
+At true zero irradiance the VP2+ solar sensor's diode dark current decodes to **exactly**
+`sr_raw=1 × 1.757936 ≈ 1.758 W/m²` (`rtldavis.py` message type 6): near zero, only 0, 1.758 and
+3.516 are representable at all. The floor flows into the archive, InfluxDB and all nine RESTful
+uploads every dark minute — ~76 kJ/m²/day of phantom energy (12 h × 1.758). The June 2026 fix was
+dashboard-only and presentation-layer; it regressed at the chart layer during the July supercard
+refactor — the second time a per-path filter was dropped on refactor. The owner decided at S71 to
+fix at the source; the full diagnosis and both drafted designs are in
+`docs/handoffs/S71-radiation-floor-design.md` (verified there: radiation passes SensorQC's bounds
+unrejected per DEC-0029, and `StdCalibrate` runs ahead of `LoopJsonWriter` and every RESTful
+service in the live config, so one correction reaches every consumer).
+
+### Decision
+
+Option A — one `StdCalibrate` correction, exact-window and None-guarded:
+
+    radiation = radiation if radiation is None else (0 if 1.75 < radiation < 1.77 else radiation)
+
+- **Exact-code matching, not a tolerance.** The window brackets `1.757936` alone; 0 and 3.516 pass
+  untouched. Range form because only `math.*` is confirmed in `StdCalibrate`'s eval namespace;
+  None-guard because radiation is absent from most packets (ISS message rotation) and nullable
+  after QC rejection.
+- **Where it lives is the actual fix.** (1) The live NAS `weewx.conf` — the layer that wins in
+  prod (DEC-0046). (2) `weewx.conf.example` — the **versioned, public artifact**; the June fix
+  regressed precisely because it existed nowhere versioned. A reprovision from the example now
+  carries the correction, and downstream users of the published extension get it documented in the
+  WeeWX-idiomatic place for per-station sensor calibration. (3) A `CONSTANTS.md` live-config
+  deviations row (DEC-0070) — **added at apply time, not before**: CONSTANTS records what IS live,
+  and until the NAS edit lands the deviation does not exist.
+- **Apply deferred to post-GATE 2.** Campaign B's pilot runs tonight unattended with no working
+  dongle recovery; a config typo is a crash-loop-into-the-pilot risk (the `pragmas` scalar spelling
+  cost ~6 min of prod, attended). The artifact is months old; one more night is free.
+
+### Alternatives rejected
+
+- **Option B — almanac elevation-gated service** (drafted in the handoff): the only design that
+  distinguishes a genuine `sr_raw=1` twilight reading from the artifact. Rejected on three counts:
+  it **also** needs a live-config edit (`process_services`), so it escapes none of the config
+  fragility while adding image surface; it bakes one station's sensor calibration into the public
+  image's default service set (dark current varies unit-to-unit — wrong layer for a published
+  tool); and the edge it buys is a few minutes/day at one quantization step (~1.76 W/m², ~0.4
+  kJ/m²/day) — **below the instrument's own resolution** — for a new service, tests and a NAS
+  rebuild. Design preserved in the handoff; it could ride the #144 pressure rebuild if the edge is
+  ever wanted.
+- **Driver-layer zero** (`rtldavis.py` maps `sr_raw=1 → 0`): same collision as A but baked (a
+  rebuild to change), and it ships one station's floor as decode truth to every user of the
+  published driver.
+- **Patch the dashboard chart a second time:** rejected at S71 (owner) — a third per-consumer
+  filter is the exact shape that has now regressed twice.
+
+### Consequences
+
+- ~99%+ of the artifact removed at every consumer at once. Residual: a genuine twilight reading
+  that quantizes to `sr_raw=1` reads 0 for a few minutes/day — accepted, below sensor resolution.
+- Step-change in the historical series at cutover (night 1.758 → 0), accepted at S71; no
+  retroactive rewrite. Dark rows before cutover keep the floor — any future retro-correction is an
+  ERR entry (DEC-0025), currently not requested.
+- **Verify at apply:** the first corrected night must read 0 through the dark hours. If 3.516
+  (`sr_raw=2`) appears at night, the floor wanders one code — extend **per-code** (a second exact
+  band), never a loose threshold.
+- The dashboard's surviving `eh-ui.js` narrow-window filter becomes vestigial after cutover;
+  retiring it is dashboard-repo work (DEC-0010) — ops-tracker note to be filed at apply. The
+  regressed chart path needs no dashboard fix at all: post-cutover data arrives clean.
