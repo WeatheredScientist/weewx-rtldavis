@@ -5,6 +5,30 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S70] — 2026-08-10 — v2.0.12 promoted and built; campaign B GO, first launch night scrubbed on a dead VPN
+
+- **Campaign B: GO.** Assessed against DEC-0066's hold: both gates closed on measurement
+  (DEC-0069/0070), campaign A uncontaminated (DEC-0077) — the "instrument trusted" condition is
+  met. The swap-night constraint is moot: the LNA has been out since 08-02, so the launch is a
+  container swap + install, all remote.
+- **Release v2.0.12 promoted** (PR #151): dev → main, `main` = `7b6fd42`. Image delta vs v2.0.11
+  is four baked files (BIAS_TEE env, DEC-0062 redaction, driver stderr drain + ws.4 bump) —
+  observability only, pre-registered as the one-image-for-B plan (DEC-0064).
+- **The arm64 laptop can no longer build this image** — `docker build --platform linux/amd64`
+  dies in tar with `Function not implemented` (ENOSYS under emulation), and the failure hid
+  behind a `| tail` pipeline exit 0 until the log was read (the green-checkmark trap, again).
+  Built **natively on the NAS** instead (v2.0.3 precedent): `9db5c1ddaac3`, verified by an
+  explicit `BUILD-EXIT=0` marker. Hub push deferred (docker save → laptop → push from a home
+  network); `:latest` waits for prod proof.
+- **The 08-09 launch night was scrubbed at 00:58** — the VPN dropped end-to-end (ppp0 gone,
+  route fell back to the foreign LAN's gateway) with the 00:35 first pilot row already passed.
+  The runbook's postpone-24h contingency, exercised as designed: prod untouched, campaign A's
+  script + STOP sentinel still in place, nothing half-deployed. Schedule regenerated +1 day
+  (39 rows, S62's constant-offset method): **pilot 08-11T00:35, square 08-12 → 08-20T00:05**.
+- No stall overnight (blocker 4 still waiting); prod healthy through the NAS build (v2.0.11,
+  Up 4 days).
+
+---
 ## [S69] — 2026-08-09 — Tier files back under cap (ops#152)
 
 - **BOOT.md 10,617 → 7,557 chars (cap 10,000); MANIFEST.md 4,055 → 3,936 (cap 4,000)** — the
@@ -136,163 +160,5 @@ under [Pre-S16].
   item was opened, so the sequenced plan did not carry its own top blocker. Added.
 - Tests **169 → 184**. `usb_reset.sh` now also documented in README's Security Note and Setup, since
   its escalation surface changed.
-
----
-## [S67] — 2026-08-06 — Tier-file diet (ops#145, DEC-0072); watchdog found dead and its supervision designed (DEC-0073)
-
-- **DEC-0073 — supervise the USB watchdog, make its absence loud, model its resets.** Design agreed,
-  implementation is the open work and it now **gates campaign B**. Four parts: adopt
-  `weewx_monitor.py:102-115`'s PID guard plus a 5-minute scheduled re-launch (the guard makes
-  re-launch idempotent, so the scheduler carries no state); a heartbeat file so liveness is an mtime
-  check rather than an inference; **`ops/soak_check.sh` asserts that heartbeat** — the structural
-  half, since that script exists to ask "healthy, or just looks Up?" and had never asked it of the
-  watchdog; and a rising reset rate reaching the alert path.
-- **The campaign-B call that came with it.** `campaign_analyze.py`'s three-class gap taxonomy
-  (freeze / arm swap / lock-outage) was validated over 07-29 → 08-05 — **a window in which the
-  watchdog was dead** — so a USB-reset gap is a fourth class it has never seen and would, by shape,
-  be absorbed into `freeze` and excluded *by accident*. That is DEC-0035's and DEC-0071's failure
-  shape exactly. Agreed: **watchdog ON for B, analyzer taught the fourth class** so reset-adjacent
-  minutes are excluded explicitly and auditably, rather than a measured result being quietly shaped
-  by an intervention nobody modelled.
-- Verified before deciding, not assumed: the dongle is still on USB `1-3` (`0bda:2838`, Realtek
-  RTL2838) with `syno_vbus_reset` present — a silently wrong path would make every future reset a
-  no-op that logs success — and the monitor's PID guard was read at source rather than remembered.
-- **DEC-0073 (a)(b)(c) implemented.** `ops/usb_watchdog.sh` gains the PID guard, a heartbeat touched
-  every tick, and env-overridable paths (the old hardcoded ones are much of why its behaviour was
-  never tested). The loop now uses `read -t` so **the heartbeat ticks on a quiet log** — a bare
-  `read` blocks until a line arrives, which would let `soak_check.sh` call a live watchdog dead.
-  A closed `tail` pipe is distinguished from an idle one so the script exits and lets the scheduler
-  restart it, rather than spinning.
-- **New `tests/test_usb_watchdog.sh` — 8 tests, and they have teeth.** They cover the *supervision*,
-  which is what actually failed: heartbeat on a quiet log, pidfile contents, stall detection, the
-  300 s cooldown, non-matching lines triggering nothing, the PID guard refusing a second instance,
-  and a **stale pidfile being reclaimed** (if that were fatal, one `kill -9` would keep the watchdog
-  dead forever — the exact permanence this DEC exists to prevent). Positive-controlled: reverting
-  the `read -t` to a bare `read` turns the heartbeat test red, and restoring it turns it green.
-- **`ops/soak_check.sh` asserts the heartbeat** (2× the 60 s tick). Confirmed against prod, where it
-  correctly reports `USB WATCHDOG NOT RUNNING` — production is its own positive control here.
-- **DEC-0074 supersedes DEC-0073 the same session, before anything was deployed.** Asked to deploy
-  the watchdog, I read `weewx_monitor.py` first and found it already **is** the watchdog —
-  `reset_dongle()` (l.342), `watchdog_stall()` with escalation (l.354), wired at l.692 — alive as
-  pid 5015, and it had handled all three of the 08-06 stalls within seconds. **DEC-0073's claim that
-  those stalls "went unhandled" was false.** The evidence for the standalone script being dead was
-  sound; what was never checked was whether anything *else* did the job. Three sources were
-  consulted — the watchdog's log, `weewx.log`, the process table — and all three are silent about
-  the monitor, whose own log holds the answer in plain text. DEC-0031's lesson turned on its author:
-  *"this component is dead" and "this capability is missing" are different claims.*
-- **`ops/usb_watchdog.sh` and its tests deleted, not deployed.** Deploying would have added a second
-  uncoordinated resetter to the same dongle, unshared cooldown, beside a monitor whose source
-  records nine resets in 75 minutes on 08-02. **No NAS change was made, and none was needed.**
-- **The `soak_check.sh` criterion survives, repointed at the monitor** — live pid plus a log younger
-  than 300 s, since its poll is 30 s and a live pid with a stale log means *wedged*, not dead.
-- **The real defect, which DEC-0073 walked past:** all three resets on 08-06 **failed** —
-  `RESET ineffective (1/3)` each time, bad windows climbing **8 → 10 → 15**. The monitor works and is
-  reporting that the remedy doesn't. New `USB RESETS INEFFECTIVE` criterion. Open and unexplained.
-- **Bigger consequence for campaign B:** reset gaps are not a new class B would introduce — the
-  monitor fired **nine resets on 08-02, inside the 07-29 → 08-05 window `campaign_analyze.py`'s
-  taxonomy was validated against**. So reset-adjacent gaps are already inside campaign A's recomputed
-  figures. That makes the fourth-gap-class question one about a result DEC-0069 already published.
-- **`weewx_monitor.py` was never in `MANIFEST.md` — the hole that caused DEC-0073.** It is tracked
-  in this repo, at the root, 38 KB, the largest operational file here, and it appeared zero times in
-  the index. DEC-0072's class row scopes to `ops/*` + `scripts/*`, which excludes the repo root, so
-  the diet did not just miss it — it codified the omission behind a rule that reads as if it covers
-  the harness. Since the session-start read is BOOT + CONSTANTS + MANIFEST, nothing in the load path
-  named the file that **is** the watchdog; the index shaped where I looked and had a hole exactly
-  where the answer was. Now has its own row, whose "load when" is *any "what handles X at runtime?"
-  question — read this BEFORE concluding a capability is missing*. Preamble gains the rule that was
-  missing: **a file in no class gets its own row.**
-- **Reset log message fixed structurally, not textually** (+4 tests, positive-controlled).
-  `USB_RESET_SCRIPT` and `USB_RESET_ACTION` are now named once and used for both the subprocess call
-  and every log line about it, so the message cannot drift from the action again. Correcting the
-  string alone would have left the same trap armed. `tests/test_reset_log_matches_action.py` asserts
-  no `log()`/`send_email()` call names `syno_vbus_reset`, that the call site uses the constant rather
-  than a duplicated literal path, and that mechanism log lines derive from the constants —
-  reintroducing the exact historical line turns two of them red.
-- **The reset log line named an operation that never happened.** `reset_dongle()` logged
-  `RESET: triggering syno_vbus_reset` but shells out to `usb_reset.sh`, which is a driver
-  **unbind/rebind, not a power cycle**. The retired `usb_watchdog.sh` really did write
-  `syno_vbus_reset`; when the logic moved into the monitor the action changed and the message did
-  not. Every reset line in every log for months has named the wrong operation. Evidence, the
-  leading hypothesis for why the resets fail, and the decisive test are in `BACKLOG.md`.
-- **Monitor deploy deferred, and recorded rather than remembered.** The corrected log message is on
-  `dev` but the NAS still runs the pre-fix copy, so prod logs keep printing the line that isn't true.
-  The Class C token mint was refused twice, and since the change is log text with no behaviour, rung
-  2 of the ladder applied — defer, don't hand over a paste-me command. A blocking note now sits at
-  the top of `BACKLOG.md`'s reset section, because from the repo side that fix looks *done*: merged,
-  tested, closed. The next session's first act would otherwise be reading the exact lines it fixed.
-- **Lessons filed cross-repo as [ops#147](https://github.com/WeatheredScientist/eaglehunt-ops/issues/147)**
-  (`repo:` all four, `tier:frontier`). Eight items on one through-line — *every failure this session
-  was a green-looking signal resting on the wrong evidence* — so it continues OPS-DEC-0040 and
-  DEC-0035 rather than opening a new concern. The two with leverage: **the index directs attention,
-  so a hole in it is invisible** (STANDARD rule 9 as written lets a diet codify an omission — a class
-  row scoped to `ops/*` reads as "all the operational scripts" while excluding the repo root, which
-  is exactly how `weewx_monitor.py` stayed unindexed), and **a file match proves the FILE, never the
-  PROCESS**. Both are better served by a mechanical check than a written rule, per OPS-DEC-0040's own
-  argument; `checks/tier-sweep.sh` already reads each repo's pushed files and could enumerate
-  operational artifacts covered by no row.
-- **`weewx_monitor.py` now has its own MANIFEST row**, and the preamble states the rule that was
-  missing: *a file in no class gets its own row.* It is the largest operational file in the repo and
-  had never been indexed — the direct cause of the DEC-0073 error, since the session-start read path
-  contained no pointer to the thing that answers "what handles this at runtime?".
-- **`docs/ROADMAP.md` line corrected (DEC-0057, same session):** the watchdog-deploy item cited
-  *"matches the repo tip byte-for-byte, with zero resets or escalations since"* as proof it was live.
-  That is the exact wrong-evidence pattern DEC-0074 corrects, sitting in the roadmap as a worked
-  example. The deployment was real; the reasoning was not.
-- Also noticed: `weewx.log` rotates at midnight, so the DEC-0031 driver canary reads `UNVERIFIED`
-  after rotation until the next restart logs a banner — the same silent-window class. The reset
-  counters were made rotation-aware (they read `.log` and `.log.1`); the canary was not, and wants a
-  follow-up.
-
-- **`BOOT.md` 3734 → 2161 tok (cap 2500), `MANIFEST.md` 1948 → 970 tok (cap 1000)** — verified with
-  `checks/tier-sweep.sh` itself against fixtures, not by hand arithmetic. Both green, exit 0.
-- **`MANIFEST.md` switched to class rows (STANDARD rule 9).** `ops/*` + `scripts/*` collapsed from
-  five per-artifact rows to one naming the convention — *the script's header comment is its manual*.
-  The convention was **verified before relying on it**: the docstrings already carry more than the
-  rows that duplicated them. Coverage went **up**, because 6 of the 11 harness scripts had no row.
-- **Four facts that existed only in the index now live in the scripts** — `campaign_analyze.py`
-  documents that campaign A needs `--since`; `rx_experiment.sh` states campaign B is loaded and that
-  `install` refuses a stale schedule; `soak_check.sh` states `EXPECT_IMAGE` must track the deploy.
-  Content moved, not deleted.
-- **`BOOT.md`**: standing watches and the campaign-A LNA findings rehomed to `BACKLOG.md`; the
-  DEC-0069/0070/0071 write-ups cut to one-liners with pointers, since the full bodies are already in
-  `DECISIONS-FULL.md` (STANDARD rule 5 — a second copy is a defect).
-- **Fixed a stale launch pointer.** BOOT told the next session to rebuild `:v2.0.12` from
-  `bdc4f9f` — 13 commits stale, predating DEC-0069/0070/0071, so the image would have silently
-  lacked `campaign_analyze.py` and `freeze_watch.sh`. Now: take the tip from `git rev-parse`.
-- **Found:** `ops/soak_check.sh`'s `EXPECT_IMAGE` defaults to `v2.0.12` while prod runs `v2.0.11`, so
-  a soak run today goes red on a healthy station. Noted in the script and in the launch sequence.
-- **Found:** `~/.claude/hooks/secret-read-guard.sh` matches by basename and so blocks reads of this
-  repo's *clean* `ops/wxcheck.sh` (it uses `${WU_API_KEY}`, no literals). Workaround `readconf`
-  documented in BOOT; the guard is ops-owned, so not changed here.
-- HLF confirmed recovered — container recreated with hyperlocal-forecast PR #286 merged; ops#141
-  relabelled `repo:hlf`, nothing further owed by this repo.
-- **`ops/soak_check.sh` expectations reset to what prod actually runs.** `EXPECT_IMAGE`
-  `:v2.0.12` → `:v2.0.11` and `EXPECT_DRIVER` `0.20+ws.4` → `0.20+ws.3`. Both were bumped together
-  at S62 (`e21c03e`) in anticipation of a `:v2.0.12` release that never deployed, so for five
-  sessions the soak check would have reported two red criteria against a correct deployment —
-  including the DEC-0031 driver canary, the one check whose whole job is to notice a wrong image.
-  Nobody ran it, which is the only reason it went unnoticed. `CONSTANTS.md`'s driver-banner row
-  carried the same anticipatory value and now distinguishes prod from the repo.
-- **Running it surfaced a real prod finding (new blocker 4).** Three `rtldavis process stalled`
-  events on 08-06 (09:53 / 10:10 / 10:32 EDT) that the USB watchdog did not log — its log has been
-  silent since 2026-05-22 and there is no watchdog pidfile, though its `STALL_PATTERN` does match
-  those lines. `BOOT.md`'s "watchdog deployed and live" had been asserted from **file identity**,
-  not process liveness — DEC-0031's shape, and corrected in place. Reception recovered to 81%;
-  nothing is degraded now, but this wants verifying before an unattended campaign B.
-- The 6 tracebacks the soak check counts are the DEC-0071 crash loop (07:18–07:24 EDT), already
-  known and resolved — `weewx.log` persists across restarts, so they stay in the window.
-- **Blocker 4 resolved to a fact: the USB watchdog has not run since 2026-05-22.** It logs
-  `Watchdog started` unconditionally before its `tail -F` loop, and the complete 845-byte log holds
-  exactly one such line, timestamped the same minute the script was deployed — hand-started once
-  from a shell and never supervised (no crontab entry, no pidfile). NAS uptime of 29.6 days means it
-  died at the 2026-07-08 boot at the latest. **The script is not at fault** — on 05-22 it caught 3
-  stalls, fired 2 resets and correctly skipped one for cooldown, and its NAS copy is byte-identical
-  to the repo. Only supervision is missing. Evidence in `BACKLOG.md`; fix needs a design call plus a
-  Class C action, and is now a pre-campaign-B gate.
-- **The lesson, added to BOOT's gotchas: a sha match proves the FILE, never the PROCESS.** The claim
-  that hid this for ~2.5 months was *"deployed and live — NAS copy matches repo tip byte-for-byte,
-  zero resets since."* Both sub-claims were true and re-verified. The conclusion was still wrong:
-  zero resets because nothing was listening. A watchdog that isn't running emits exactly the same
-  log as one with nothing to do, so its failure mode is silent by construction.
 
 ---
