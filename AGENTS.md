@@ -14,19 +14,19 @@ real contract is the **data it produces** (loop-JSON file + InfluxDB line-protoc
 
 ## Where we are right now
 
-**`docs/STATUS.md` is the single source of truth** for the current session number and the active
-thread. Read it first — do not infer "where we are" from any other doc.
+**`BOOT.md` is the single source of truth** for the current session number and the active work.
+Read it first — do not infer "where we are" from any other doc.
 
-## Required reading (in order)
+## Required reading — three files, then stop (DEC-0063)
 
-1. `CLAUDE.md` — the map + the rules that must never break
-2. `docs/STATUS.md` — where we are right now (session #, active thread)
-3. `docs/CONVENTIONS.md` — how we operate (paths, commands, workflow, secrets)
-4. `docs/PRINCIPLES.md` — durable intent
-5. `docs/DECISIONS.md` — settled ADRs; do not re-litigate, supersede with a new DEC
-6. `docs/ARCHITECTURE.md` — the ISS→RTL-SDR→driver→WeeWX→sinks chain
-7. `docs/INTERFACES.md` — the data contract consumers depend on
-8. `docs/ROADMAP.md` — what's next, in what order
+1. `BOOT.md` — where we are right now: session #, active work, blockers, ordered backlog
+2. `CONSTANTS.md` — durable facts: infra, deploy layers, release/rollback, hardware, git model
+3. `MANIFEST.md` — what to pull on demand, and when. Indexes **classes**, not instances (DEC-0072)
+
+Everything else (`CLAUDE.md`'s rules, conventions, principles, decisions, architecture, interfaces,
+roadmap) is pulled **by name from `MANIFEST.md` when the task touches it**. Lazily loaded is not
+optional-to-read — *"working near it" means read it*, and `MANIFEST.md` says when.
+`ARCHIVE/` is never in the load path.
 
 ## Non-negotiable rules (full detail in the docs cited)
 
@@ -40,16 +40,22 @@ thread. Read it first — do not infer "where we are" from any other doc.
 - **Prod is sacred** — one dongle, one receiver, no drop-in dev. Deploy to dev first; agree a
   reversible test + rollback plan before touching prod (DEC-0011).
 - Session numbering is this repo's **own** independent lineage (DEC-0023); take it from
-  `docs/STATUS.md`. Prefix cross-repo references (`weewx S23` vs `dash S40`).
+  `BOOT.md`. Prefix cross-repo references (`weewx S23` vs `dash S40`).
 
 ## Validation
 
-Local quality gates (CI mirrors these); run before considering work complete:
+**The authoritative gate list is `docs/CONVENTIONS.md` §"Python / validation" — use it verbatim.**
+It is stated there once and nowhere else, deliberately: a duplicate list lived in this file until
+S60 and had drifted into naming `ruff-format`, which **DEC-0027 exists to reject** and which would
+reformat 30 of 33 files. The same drift was found and fixed in `CLAUDE.md` (S59b) and in
+`.pre-commit-config.yaml` (S43). Three copies, three drifts — hence one copy now.
 
-```bash
-pre-commit run --all-files        # ruff + ruff-format + mypy + the secret-scan gate (DEC-0015)
-python -m pytest                  # offline unit tests (tests/)
-```
+Two things worth knowing before you run anything:
+
+- Use the **repo venv** (`.venv/bin/python`). Neither a bare `python` nor `python3` on this box
+  carries pytest, mypy or ruff.
+- `pre-commit run --all-files` is a useful pre-flight, but a local mypy "Passed" is **not** proof CI
+  will pass — the incremental cache can mask real errors. `rm -rf .mypy_cache` first.
 
 ## Sibling repos (same governance family, don't edit from here)
 

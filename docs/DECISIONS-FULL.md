@@ -1905,7 +1905,7 @@ ops#22 found all three trio repos (+ coffeeradar) had independently invented the
 ritual despite common tiered-read/DECISIONS-index/STATUS.md-as-source-of-truth ancestry. This repo's
 was the loosest of the four: split across two separate CLAUDE.md paragraphs ("Session ritual — End"
 and a separate "Docs-diet ritual at close"), no numbered list. eaglehunt-ops published a generic
-6-step closeout skeleton (OPS-DEC-0016, locked OPS-DEC-0019 once three of four repos had adopted)
+6-step closeout skeleton (OPS-DEC-0016, locked OPS-DEC-0019b once three of four repos had adopted)
 and filed an adoption ask in each repo's own tracker (this repo's: weewx-rtldavis#56) — adopt, adapt,
 or decline is each repo's own call, per OPS-DEC-0001's charter that ops is not a master repo.
 
@@ -2208,3 +2208,1894 @@ demonstrably does not do during rain, and if that ever changes the failure is lo
 (≤ 0.30 in exposure per event within the StdQC band), and same-day recoverable from an independent
 record. That is the assurance: not that the tail case can't happen, but that it cannot happen
 *silently*.
+
+---
+
+## DEC-0057 — ROADMAP.md joins the closeout ritual: same-session updates + a next-check-due tripwire
+
+**Status:** Accepted · **Date:** 2026-07-28 (S56) · **Extends:** DEC-0052 (closeout skeleton)
+
+**Context.** A user-asked audit this session (S56) found `docs/ROADMAP.md` had drifted 20 sessions
+and 8 releases (S35 → S55c, v2.0.3 → v2.0.11) out of date: five real P1-tier releases (sensor-QC
+decode filter v2.0.4, reception-metric fix v2.0.8, frame-level co-rejection v2.0.9, signed temp
+decode v2.0.10, cap-16 tuning v2.0.11) had zero representation, and several already-completed
+housekeeping items (remote URL casing, stale-branch cleanup, the May rain-total reconciliation
+against the WeatherLink console, the README refresh) still showed as open checkboxes. Nothing in
+the closeout ritual (DEC-0052) ever asked whether a shipped DEC should move a ROADMAP line — the
+ritual updates STATUS.md and DECISIONS.md every session, but ROADMAP.md was only touched by the
+periodic docs-diet pass or an ad-hoc audit, so "same session" discipline never applied to it.
+
+**Decision:** two additions, not one, because they cover different failure modes.
+
+1. **Closeout step 5 (new):** if a DEC logged this session (step 4) ships, closes, or reprioritizes
+   a line item on `docs/ROADMAP.md`, update that line in the same session — not deferred to the
+   next docs-diet pass or the next audit. Mirrors the discipline step 4 already applies to
+   `DECISIONS.md` itself.
+2. **A tripwire inside ROADMAP.md**, not just a rule in CLAUDE.md: a "Keeping this current"
+   section naming the date of the last full reconciliation and a next-check-due session number
+   (~10 sessions out). If the session counter reaches or passes that number, run the full
+   reconciliation pass regardless of whether any DEC prompted it.
+
+**Why both, not just one.** The same-session rule (1) catches drift *at the moment it's created* —
+cheap, since the relevant context is already loaded that session. The tripwire (2) is the backstop
+for drift that accumulates from elapsed time or a missed trigger rather than any single DEC — the
+same failure mode that produced this session's 20-session gap in the first place: no individual
+session's DEC made the whole page stale, it went stale by accretion, so a rule that only fires on a
+DEC-shaped trigger would still miss it.
+
+**What changed:** CLAUDE.md's closeout skeleton (Session ritual → End) gains step 5; the model-tier
+restore check and commit+push steps renumber to 6 and 7. `docs/ROADMAP.md` gains the "Keeping this
+current" section, added this session alongside the fuller restructure that prompted this DEC.
+
+---
+
+## DEC-0058 — ROADMAP.md trimmed to P0–P3; P4 and long-term direction move to BACKLOG.md
+
+**Status:** Accepted · **Date:** 2026-07-28 (S56) · **Extends:** DEC-0057's same-session doc
+discipline
+
+**Context.** Same session, immediate follow-on to DEC-0057. Reviewing the just-restructured
+`docs/ROADMAP.md`, the owner asked whether long-term material had a dedicated home separate from
+the active plan, or whether "it's all still one roadmap" — and suggested a division would make the
+active list easier to track. Looking at the page: P0–P1 were fully shipped history, P2–P3 were the
+only genuinely active/sequenced tiers, and P4 + "Longer horizon" (credential hygiene, multi-source
+adaptability, the governance-template harvest, and the newly-added ops#110 winter-2027 item) were
+uncalendared direction with no scheduled date — sitting in the same file and same visual weight as
+the work actually coming up next.
+
+**Decision:** `docs/ROADMAP.md` now covers **P0–P3 only** — the actively-sequenced plan. P4 and
+"Longer horizon" content moves to a new "## Long-term direction" section in `BACKLOG.md`, which
+already existed as the unordered-ideas pool and was the natural home rather than inventing a fourth
+doc. `BACKLOG.md`'s existing "Open ideas" section is left as-is (near-term-ish, ungraded); the new
+section is explicitly for uncalendared/aspirational items, with a one-line rule at its top: pull an
+item into ROADMAP.md's P0–P3 when it's actually about to be worked, not before.
+
+**Why BACKLOG.md and not a new file.** STATUS.md (now) / ROADMAP.md (next, ordered) / BACKLOG.md
+(someday, unordered) already covers the three horizons this repo needs. A fourth document would
+duplicate that shape rather than clarify it — the actual problem wasn't a missing file, it was that
+two different horizons (medium-term P2–P3 and uncalendared P4/direction) were sharing one file with
+no visual separation. Splitting *within* the existing three-doc structure keeps DEC-0030's docs-diet
+philosophy (tiered, not proliferating) intact.
+
+**What changed:** `docs/ROADMAP.md` — priority-vocabulary note, intro paragraph, and the "LONG TERM"
+section removed (replaced by a one-line pointer to BACKLOG.md). `BACKLOG.md` — intro updated, new
+"## Long-term direction" section added. `CLAUDE.md`'s doc-map table rows for both files annotated
+with the split. Same pass also pruned a second stale copy of the already-resolved (S48) May
+rain-total item, found in `BACKLOG.md`'s "Data integrity" section while editing nearby content —
+same fact DEC-0057's ROADMAP reconciliation had already corrected once, in the other file.
+
+---
+
+## DEC-0059 — The RX experiment gets an apparatus; `-ex` collapses the window axis into the cheap layer
+
+**Status:** Accepted (design) · **Date:** 2026-07-28 (S56) · **Executes** DEC-0048 ·
+**amends** DEC-0048's "same run" clause · **supersedes** DEC-0008's `set_gain.sh` exemplar ·
+**absorbs** DEC-0017 · owner-approved after design review
+
+### What prompted it
+
+DEC-0048 committed to a designed RX experiment — hypothesis, control arm, averaged window,
+pre-registered metric — and then deferred it for 15 sessions because no apparatus existed. DEC-0017
+has been open since S16 for the same reason. The owner asked for the design, with two constraints:
+no data may go uncollected because of poor reception, and there must be an immediate rollback if
+anything egregious happens.
+
+### The finding that reshaped the design
+
+**`-ex N` is mathematically identical to `receiveWindow = 300 + N`.** Upstream sums them —
+`int64((receiveWindow + ex) * 1000000)` — and `receiveWindow` appears in no other expression. So the
+receive-window axis, which DEC-0048 treated as rebuild-only and therefore inseparable from the gain
+question, is actually reachable from the **mounted** `weewx.conf` at the same cost as gain.
+
+Consequences: the `rw250/rw350/rw400` images were **redundant**, not merely misnamed as DEC-0048
+recorded; the old CLI `-ex` sweep and the old `rw400` image were the same configuration measured
+twice (both ~63%, which is what equivalence predicts); and **no arm of this experiment requires an
+image build**, so the owner's immediate-rollback constraint is satisfiable on every axis.
+
+*Honest bound:* this was read from upstream master. The deployed binary comes from weewx-contrib's
+bundled `src.tgz` and is demonstrably older — it lacks master's startup settings line, absent from
+both `weewx.log` and container stdout. The deployed source has not been read directly. The
+equivalence is load-bearing only for how arms are *labelled*, not for validity: `-ex` is a real knob
+whose effect is measured directly either way.
+
+### The measured baseline, replacing a stale one
+
+447 five-minute reception samples (2026-07-27 full day + 07-28 to 13:29): **mean 73.3%, sd 4.67 pts**;
+p5/median/p95 = 67/74/79. The docs' long-quoted "~67–70%" was pessimistic. Two properties matter more
+than the mean:
+
+- **Autocorrelation ~0 beyond 10–15 min** (lag1 0.08, lag3 0.02) — samples are effectively
+  independent, so precision scales cleanly with time.
+- ~~**No detectable diurnal cycle** — hourly means 70–75 with no systematic pattern.~~
+  **AMENDED 2026-08-01 (S58) — the second half of that claim was wrong.** The *range* was right
+  (hourly means do sit in a narrow band), but "no systematic pattern" was not: re-reading the same
+  pre-campaign period from the archive's own `rxCheckPercent` at hourly resolution shows a
+  **reproducible ~2-point notch at hour 07 and again at hour 19** (72.6 and 72.7, against 74.2–75.6
+  for every other hour, n≈355/hour over 07-24→07-29). It is small enough to sit inside the 70–75
+  band — which is exactly how it was missed — but it repeats daily and is therefore systematic by
+  definition. Characterization and the falsified explanations are in BACKLOG.md §Durable RF
+  findings; **it does not affect this experiment's validity** (the Latin square balances any
+  time-of-day term across all four arms), but it does mean *diurnal structure exists at hourly
+  resolution* and any future analysis binned finer than 6 h must account for it.
+
+Together these say the "1–2 week averaged window" assumed by DEC-0017 and BACKLOG is roughly **7×
+more than the variance requires**. 24h per arm resolves 1.1 pts; 48h resolves 0.8.
+
+### The design
+
+Two campaigns, blocked by hardware state, at the owner's direction: **LNA in circuit first, then the
+LNA physically removed.** Within each campaign, a 2×2 factorial (gain × `ex`) run as a **Latin
+square** — 6-hour blocks on the monitor's existing 00/06/12/18 summary boundaries, rotated so each
+arm visits each quarter of the day exactly twice over 8 days. Campaign B's gain arms are centered
+higher: with ~20 dB of front-end gain removed the optimum moves up, so reusing campaign A's values
+would sweep two points that are both too low.
+
+Adoption rule, fixed in advance: beat the incumbent by **≥2 pts on reception without materially
+raising the duplicate-frame rate**. Incumbent wins ties. Two outcome metrics, not one, because a
+wider window buys marginal packets by increasing preamble false-alarm opportunities — the same
+mechanism as DEC-0035's ~722/day double-decodes. Both metrics are already logged; no new measurement
+code.
+
+**Declined: bracketing the LNA swap.** A blocked design confounds the LNA contrast with ~10 days of
+seasonal drift, and the analytically clean answer is a tight paired swap at the moment of removal.
+The owner judged that not worth the handling, which is their call to make. Mitigation instead of
+argument: campaign A's own 8 days measure multi-day drift directly, and that becomes the honest error
+bar on the LNA comparison rather than a confound we pretend isn't there.
+
+### Why a new apparatus rather than extending `ops/gain_sweep.sh` (DEC-0014 cause)
+
+It is **sequential** — every arm confounded with time-of-day, the precise flaw DEC-0048 exists to
+replace. Its metric is **dead**: it counts `RAW_DATAPACKET_MATCH`, which prod no longer logs, so it
+would report 0.0% for every arm and look like it worked — the green-exit-code-wrong-answer class that
+has bitten the secret gate four times. Its denominator is **wrong** (2.5 s hardcoded; this ISS is
+2.8125 s — the same ~13% error S29 already fixed once in the monitor). And it has no verification,
+rollback, abort, or health check. Patching would touch every line.
+
+**All seven pre-governance RF sweep scripts are deleted** (`gain_sweep.sh`, `gain_sweep_analyze.py`,
+`set_gain.sh`, `fc_sweep.sh`, `gain_ppm_check.sh`, `autotest_rf_timing.sh`,
+`recover_sweep_results.py`). DEC-0048's own complaint was artifacts outliving their meaning, and a
+silently-broken sweep script is worse than no script. Git history preserves them; the one durable
+finding that lived only in `fc_sweep.sh`'s header (gain 207 "confirmed best") was moved to BACKLOG
+before deletion.
+
+**This supersedes DEC-0008's closing sentence.** That DEC cites `set_gain.sh` as codifying
+`docker kill` + `docker start`; the codification moves to `rx_experiment.sh`'s `restart_container()`,
+which implements the same pattern plus S47's 3 s dongle-release sleep. DEC-0008's rule is unchanged —
+only its exemplar moves.
+
+### The safety model
+
+The script rewrites the live, credential-bearing `weewx.conf` 32 times and restarts prod each time.
+Six properties make that acceptable rather than merely convenient:
+
+1. **Arms are complete literal strings** — never assembled. A bug can only select the wrong
+   known-good arm, never synthesize a malformed one.
+2. **Revert is a whole-file snapshot restore**, not line surgery. Byte-exact.
+3. **Writes are atomic and verified by re-reading** before the container is ever restarted.
+4. **The abort tripwire is sticky** — a STOP sentinel halts the campaign until a human clears it; a
+   later scheduled tick cannot silently override it.
+5. **The schedule self-terminates into the production baseline**, so a forgotten campaign ends at
+   prod-normal rather than on an experimental arm.
+6. **Every failure path restores the baseline and emails**, via a mailer deliberately independent of
+   `weewx_monitor.py` — if the monitor is wedged, the abort must still reach a human.
+
+Abort threshold is 55% on a 30-min rolling mean: ~9.6 SE below the measured baseline, so it cannot
+fire on noise. The deeper reassurance is that reception degradation is **not** data loss — the ISS
+sends ~21.3 packets/min into 1-minute archive records, so a record only nulls if a full minute
+decodes zero packets. Even an arm halving reception to ~36% loses nothing. Corroborated empirically:
+DEC-0056's 70-day pass found rx<20% totaled 31 minutes with a longest run of one minute.
+
+### Tests
+
+`tests/test_rx_experiment.py` drives the real shell functions. It asserts the write is surgical
+against a fixture carrying two traps (a `-gain` in an unrelated section, another in a doc comment),
+that malformed configs are refused with the file unmodified, and — per DEC-0045 — carries a
+**positive control** proving the old global-regex approach corrupts that same fixture. If that
+control ever passes, the fixture has lost its teeth. The Latin square is machine-checked too: a
+one-row typo silently reintroduces the confound the design exists to remove, and nothing at runtime
+would notice. Mutation-tested; it goes red.
+
+### Status
+
+**Deployed and running (S57, 2026-07-29).** Phase 0 ran first and confirmed `FreqError` telemetry
+exists (see DEC-0060 for what that took). `ppm`/`fc` remain unmeasured (`0`/`0`) in all four
+arms — measuring them by value instead of leaving the axis dropped is a deliberately deferred
+follow-up, not a blocker (owner call: get the campaign running the same day). `rx_experiment.sh`
+deployed to the NAS project root, sha-verified, `install` run (baseline snapshotted). Owner created
+the two DSM Task Scheduler entries; the first automatic tick swapped to arm B (gain 207, `-ex 0`)
+at 10:52:37 EDT. Campaign A runs unattended for 8 days from there, self-terminating to baseline
+(expected completion ~2026-08-06). Tracked at
+[ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
+
+---
+
+## DEC-0060 — `debug_rtld` alone doesn't turn on driver debug logging — the `user` logger also has to be at DEBUG
+
+**Status:** Accepted · **Date:** 2026-07-29 (S57) · **extends** DEC-0043's root-logger override ·
+**explains** why DEC-0059's Phase 0 first attempt produced nothing
+
+### The gotcha
+
+`rtldavis.py`'s `dbg_rtld(verbosity, msg)` calls `logdbg(msg)` → `log.debug(msg)` — a plain Python
+`logging` call. Python's logging module filters at the **logger's** configured level before a
+handler ever sees the record. The live `weewx.conf`'s `[Logging][[loggers]][[[user]]]` carries
+`level = INFO`. So every `dbg_rtld()` call — at *any* `debug_rtld` value, 1, 2, or 3 — was being
+silently dropped by the logger itself, independent of the driver's own verbosity gate. `debug_rtld`
+only decides whether the driver *calls* `log.debug()`; it does not decide whether that call
+actually reaches the log file.
+
+This is not a new bug — it likely explains why `ops/find_duplicate_frames.py`'s own header already
+warns it "Requires `debug_rtld = 1` (or higher) **AND** the `user` logger at DEBUG in `[Logging]`."
+Nobody had connected that comment to a live Phase 0 attempt before now: `debug_rtld=2` ran for ~7h
+on 2026-07-28 and produced zero `chan:`/`FreqError` lines — not because the telemetry doesn't
+exist, but because the logger gate was closed the whole time.
+
+### The fix, and why it's scoped
+
+Adding a **`[[[user.rtldavis]]]`** logger entry at `level = DEBUG` — rather than raising the
+existing broader `[[[user]]]` entry — confirmed the telemetry within 13 seconds of the next
+restart. Scoping it to `user.rtldavis` specifically means `pressure_service`, `wcloud`, `influx`,
+`windy`, `owm`, and `loop_json_writer` (all children of the same `user` logger namespace, per
+Python's dotted-logger hierarchy) stay at `INFO` throughout — raising the parent would have
+changed verbosity for all of them at once, with no assessment of what each one's own debug-gated
+log calls would have dumped.
+
+### Standing rule
+
+**Any future need for `dbg_rtld()`/`dbg_parse()` output requires BOTH**: (1) `debug_rtld`/
+`debug_parse` at the right verbosity in `[Rtldavis]`, **and** (2) a scoped `[[[user.<module>]]]`
+logger entry at `DEBUG` in `[Logging][[loggers]]` — never the broader `[[[user]]]`. Revert both
+together when done; leaving either one in place either produces nothing (logger still at INFO) or
+over-scopes the verbosity increase (broader logger raised). This is now the confirmed, tested
+recipe — don't re-derive it from scratch, and don't assume `debug_rtld` alone is sufficient just
+because it *was* sufficient for the always-DEBUG `chan:`/`data:` design intent (it never has been,
+in this deployed config).
+
+---
+
+## DEC-0061 — Campaign A died of two defects the apparatus's own tests could not see; a timeout budget must be derived, not guessed
+
+**Status:** Accepted · **Date:** 2026-07-29 (S57b) · **fixes** DEC-0059's apparatus ·
+**extends** DEC-0045's positive-control rule to *runtime* budgets
+
+### What happened
+
+Campaign A ran for 80 minutes and aborted in its third block. The abort path did exactly what it
+was designed to do — restored the baseline snapshot, halted with a sticky STOP sentinel, left prod
+healthy — and then failed at the last step: it told nobody. Two independent defects, neither of
+which any of the 8 shipped tests could have caught, because both live in the gap between the script
+and the machine it runs on.
+
+### Defect 1 — the health-check budget was too small BY CONSTRUCTION
+
+`health_ok()` waited 18 × 5s (~90s) for a new archive record after a container restart. But a
+restart cannot produce one faster than:
+
+| term | value |
+|---|---|
+| weewx boot to "Starting main packet loop" | ~25 s |
+| wait for the next archive boundary | **up to 60 s** (the archive interval) |
+| write lag after that boundary | ~15–30 s |
+| **worst case** | **~115 s** |
+
+90 s could not cover 115 s. The check was a coin flip on where the restart landed relative to the
+minute boundary. Arm B won it at 10:52; arm C lost it at 12:13 — measured: `weewxd` init 12:11:46,
+first record 12:13:30, abort fired 12:13:27. **Three seconds.**
+
+The number 18 appears nowhere in a specification; it was a guess that happened to be near the true
+worst case, which is the most dangerous kind of wrong — it passes often enough to look correct.
+`HEALTH_TRIES` is now 36 (~180 s), and the test asserts *the arithmetic* (`boot + archive_interval
++ write_lag`) rather than the literal, so lowering it fails with the reason attached.
+
+**The generalizable rule: a timeout that waits on a periodic system must budget for a FULL period
+of that system, plus the work, plus slack. Derive it from the system's own constants and write the
+derivation next to the number.**
+
+### Defect 2 — every alert the script could send was broken
+
+`send_mail()` ran `. "$ENVFILE"`, which sets shell variables but does **not export** them. The
+`python3` heredoc that actually sends the mail is a *child process*, so it saw none of them and
+died on `KeyError: 'ALERT_FROM'`. This had been true since the file was written; no alert had ever
+been sent, so nothing had ever disproved it.
+
+This is the same shape as DEC-0060 one day earlier: **a configured-looking thing that was inert,
+and looked fine precisely because it had never been exercised.** Extracted `load_env()` with
+`set -a`/`set +a`, and tested the property that actually failed — that a *child process* can read
+the value — rather than that the shell can. Verified against the real `monitor.env` on the NAS
+after deploy (booleans only, never values): `ALERT_FROM/GMAIL_PASS/ALERT_TO` all `True`.
+
+### What the tests did right, and what they could not reach
+
+The suite's design held up where it applied: when a bad edit produced a mangled 28-row schedule
+mid-session, `test_schedule_is_a_balanced_latin_square` caught it immediately, and the new
+export test was mutation-verified (removed `set -a`, watched it go red, restored **from a file
+copy — never `git checkout`**, per the S55 gotcha).
+
+But both defects were *environmental* — one about wall-clock timing on this specific station, one
+about process boundaries — and the tests were all offline and hermetic. **A hermetic suite cannot
+falsify a claim about the machine.** That is not an argument for integration tests here (there is
+one dongle and no dev receiver, DEC-0011); it is an argument for writing the environmental
+assumption down as an assertion, which is what the health-budget test now does.
+
+### Schedule regenerated, not resumed
+
+The 07-29 run lost `A@00:05` entirely, took a partial `B@06:05`, and lost `C@12:05` — three
+damaged cells of the Latin square, which is precisely the time-of-day confound the design exists
+to remove. Resuming would have analyzed a broken square. The schedule was regenerated for a clean
+2026-07-30 start (completing 08-07), the stale state file was reset to `NONE` — otherwise the
+first tick would have "harvested" a period that ran on *baseline* config and recorded it as arm B
+data — and the aborted run's 88 samples were rotated aside rather than left to contaminate the
+data log. **~10 hours of delay to keep the experiment valid was the cheap side of that trade.**
+
+Also corrected: a comment claiming a `schedule --generate <date>` mode that **has never existed**
+in the code. The dev-side recipe that actually produces the table is recorded in its place.
+
+---
+
+## DEC-0062 — Logs are an egress path the read-guard does not cover; never log key material
+
+**Status:** Accepted · **Date:** 2026-07-29 (S57b) · **extends** DEC-0047 from configs to logs ·
+**applies** DEC-0046's layer question
+
+### The finding
+
+`pressure_service.py` logged `api_key[:8]` at INFO on every weewx startup. Eight characters, not
+the whole key — but *where* it lands is what matters:
+
+- It sits in `logs/weewx.log` **and its 30 daily rotations**, in plaintext.
+- **DEC-0047's `secret-read-guard` covers configs** (`weewx.conf`, `*.env`) — it does **not** cover
+  `weewx.log`. So the single most routine operation in this repo, *tail the log to confirm a
+  restart was clean*, walks straight past the guard and into an agent transcript.
+- That happened **twice on 2026-07-29** in one session, both times while verifying a restart.
+
+DEC-0047 modeled reading a *config* as an egress path. It did not model reading a *log*, because
+nothing was supposed to be in the log. Something was.
+
+### The rule
+
+**Never pass credential material to a log call — not the value, not a prefix, not a slice.** If the
+diagnostic question is "did the credentials load?", log the *answer* (`present`/`MISSING`), never a
+fragment of the input. Resolve presence flags into locals **before** the log call, so no credential
+attribute appears in a log argument at all — that keeps the invariant absolute and the checker
+simple. *A checker with exceptions is a weaker checker*: the first draft of the test here allowed
+"safe" truthiness reads, and the exception immediately made it ambiguous whether a given use was
+safe. Removing the exception from the *code* was better than adding it to the *test*.
+
+Guarded by `tests/test_pressure_service_no_key_logging.py`, which walks the AST rather than
+matching the wording — a reworded log line stays green, a reintroduced credential does not — and
+carries a positive control (DEC-0045) proving it still flags the exact line that shipped, including
+the `[:8]` slice form that made the original look harmless.
+
+### The layer trap, again
+
+The first note written about this said `pressure_service.py` was *mounted* and could be patched
+live. **Wrong.** `Dockerfile:117` bakes it, and `docker inspect` confirms it is absent from the
+mount list — an `scp` would have been a **silent no-op** with a green checkmark, which is exactly
+DEC-0031's trap and exactly what DEC-0046's standing question exists to catch. It was caught only
+by actually asking "which layer wins in prod?" instead of trusting the note. **Ask the question
+every time; a previous session's answer about a *different* file proves nothing about this one.**
+
+### Deployment: deliberately deferred
+
+The fix needs an image rebuild, and a rebuild restarts prod. Campaign A (DEC-0059/DEC-0061) is
+armed and running an 8-day factorial; swapping the image mid-campaign would change the binary
+under the arms and confound the very comparison the design exists to make. **The fix rides the
+next image release after the campaign completes (~2026-08-07).** The exposure it closes is a
+partial-prefix re-leak, and the full-key exposure it does *not* close (S41) has rotation as its
+only real remedy — so nothing is gained by rushing it into a running experiment.
+
+---
+
+## DEC-0063 — Adopt the eaglehunt-ops session-context tiering standard; migrate at the next session
+
+**Status:** Accepted · **Date:** 2026-08-01 (S59) · **Supersedes:** DEC-0030's Tier-1 table (the
+tiered *idea* survives; the specific six-file always-load set does not) · **Executes:**
+[eaglehunt-ops#130](https://github.com/WeatheredScientist/eaglehunt-ops/issues/130) ·
+**Spec:** `eaglehunt-ops/STANDARD.md` (OPS-DEC-0078)
+
+ops#130 offered the tiering standard to this repo and — unusually for a cross-repo ask — argued
+*against* it: "the case here is genuinely weak, and deferring is a defensible answer," on the
+grounds that this repo is the leanest in the forum at ~21K and migration would buy "maybe 6–8K
+tokens." Adoption is this repo's call under OPS-DEC-0001, so the honest thing was to check the
+premise rather than accept either the offer or the disclaimer.
+
+**Call: adopt.** The premise did not survive measurement.
+
+### What the measurement changed
+
+Two of ops#130's numbers are wrong in the direction that matters, both measured here on 2026-08-01:
+
+1. **The tree is not at ~21K.** It is at **~25.5K** (91,806 B across the six Tier-1 files). ops
+   measured a tree that was already two session-closes behind.
+2. **The saving is not 6–8K.** `CHANGELOG.md` (~7.6K) and the `DECISIONS.md` index (~4.6K) leaving
+   the always-load set is **~12.2K on its own** — already more than the quoted total — and
+   `STATUS.md` → `BOOT.md` at cap is another **~5.7K**. Against ~2K of new always-load
+   (`CONSTANTS.md` + `MANIFEST.md`), the realistic landing zone is **~5–6K, not ~19K**. ops#130's
+   own sentence is internally inconsistent: it names those two files as "most of" a total they
+   individually exceed.
+
+**The decisive number is neither — it is the rate.** Tier-1 measured at four consecutive merge
+points:
+
+| Ref | Session | Tier-1 |
+|---|---|---|
+| `376285d` | S57 | 75,987 B (~21.1K) |
+| `8755028` | S57 | 76,617 B (~21.3K) |
+| `7fece1f` | S57b | 83,874 B (~23.3K) |
+| `3b86fb6` | S58 | 87,235 B (~24.2K) |
+| `HEAD` | S59 | 91,806 B (~25.5K) |
+
+That is **~+1.1K tokens per session close**, and it is structural: STATUS.md and CHANGELOG.md both
+grow at every closeout by ritual (DEC-0052 steps 2 and 3). "Leanest in the forum" is a statement
+about a moment, not a trajectory — at this rate this repo passes 35K within ten sessions. **A
+defensible deferral has a half-life**, and that is the argument ops#130 could not make because it
+measured once.
+
+### The other two reasons
+
+- **Both siblings have already migrated.** The dashboard and hyperlocal-forecast each carry
+  `BOOT.md` + `MANIFEST.md`; ops carries all three. This repo is the last of the trio, and
+  cross-repo consistency is a standing goal, not a nicety — the drift this repo has repeatedly paid
+  for (DEC-0040, DEC-0050) is what divergence costs.
+- **`STATUS.md` at 29.6 KB is ~3× the `BOOT.md` cap** and wants the trim on its own merits,
+  independent of any standard. This session read all of it to act on two lines of it.
+
+### The one thing this repo must NOT inherit — an addendum to §3
+
+STANDARD.md §3 has the trio "load `ops/CONSTANTS.md` at session start," and separately notes this
+repo is public and "may point at ops but must never quote it." **Those two clauses are in tension
+here and the standard does not resolve it: `eaglehunt-ops` is PRIVATE and this repo is PUBLIC.** A
+`CLAUDE.md` that tells its reader to load `ops/CONSTANTS.md` is a dead end for every external
+contributor — which is the population this repo has and the other three do not. It also sits badly
+with §10's "any repo can be resumed cold from `BOOT.md` alone."
+
+**Resolution adopted here:** this repo's `CONSTANTS.md` is **self-sufficient for anyone who can
+clone it**. It carries the public constants outright (placeholders per DEC-0012 —
+`<NAS_HOST>`/`<NAS_USER>`/`<SSH_PORT>` as today), and any pointer to `ops/CONSTANTS.md` is marked
+explicitly as an owner-only supplement, never as a prerequisite. This is closer to coffeeradar's
+DEC-0017 posture ("if a doc points you at another project to find out what a rule is, that is a
+bug") than to the trio's, and it is deliberate: the reason coffeeradar takes the shape and not the
+pointer is *self-containedness*, and a public repo needs that for the same reason a self-contained
+one does. Filed back to ops as a spec gap, not resolved unilaterally in their file — this repo does
+not write across the boundary.
+
+### Why the migration is not in this session
+
+STANDARD.md §7 says migrate at a natural session end, when full state is in context — which is
+exactly now. It was still the wrong call: this session stood at **~157K absolute context** when the
+decision was made, against `AGENT-ECONOMY.md` §7's ~200K close-out ceiling (OPS-DEC-0068), and the
+mechanical work is ~40K more. Stranding a governance migration half-applied — `BOOT.md` written,
+`CLAUDE.md` still pointing at the old tier table — is materially worse than not starting, because
+the repo would then have two contradictory entrypoints and a hook (`resume_pointer_for()`) choosing
+between them by fallback order.
+
+So the **decision** is taken here, where the state is, and the **execution** is a work order in
+STATUS.md's next-session actions. That split is the point: §7's real requirement is that the
+*judgment* not be made cold, and it wasn't. A fresh session executing a written work order re-reads
+the Tier-1 docs at start anyway — those are the migration's inputs.
+
+**Reversal clause:** if the migration lands and a session finds itself pulling `DECISIONS.md` and
+`CHANGELOG.md` by name in most sessions anyway, the saving was illusory — the read moved rather
+than disappeared. Record that on the second occurrence and reopen this decision; do not quietly
+re-add them to the always-load set, which is how the accretion started.
+
+### Execution — S60, same day
+
+Migrated. Measured outcome, always-load set: **91,806 B (~25.5K tok) across six files →
+25,819 B (~7.2K) across four** (`BOOT.md` 8,975 · `CONSTANTS.md` 4,238 · `MANIFEST.md` 5,480 ·
+`CLAUDE.md` 7,126). A **72% cut**, at the optimistic end of this decision's ~19K estimate. `BOOT.md`
+landed at 2,493 tokens against its ~2,500 cap.
+
+Four things the plan did not anticipate, all resolved in-session:
+
+1. **The shared archiver matched a different set of files than ops#130 predicted.** It moves
+   *date-stamped* names, so it found three pre-governance root artifacts nobody had listed
+   (`DECISIONS_staging_20260704.md`, `..._Consolidation_...`, `..._ClaudeCode_Kickoff_...`) and did
+   **not** match the three `docs/handoffs/S3x-*.md` files ops#130 named for `ARCHIVE/` — those are
+   session-numbered. Checked before moving: the root three are unreferenced by any live doc; the
+   handoffs three are cited by path from `DECISIONS-FULL.md` and `CHANGELOG-ARCHIVE.md`. So the root
+   three were archived and the handoffs were left in place with `MANIFEST.md` rows. **Moving them
+   would have broken three live citations to satisfy a rule about the load path they were never in.**
+2. **`docs/STATUS.md` did not fit in `BOOT.md`,** and forcing it would have blown the cap (rule 1
+   forbids a bigger cap). Its content distributed by kind: live bench state → `BOOT.md`; open threads
+   and housekeeping → `BACKLOG.md` verbatim; the four upstream threads → a new
+   `docs/UPSTREAM-THREADS.md` (Tier 2). Resolved items collapsed to one-line pointers per rule 1.
+   The file is then **deleted, not archived** — git history preserves it and a copy would violate
+   rule 5.
+3. **The hook was verified BEFORE the delete, not after.** STANDARD §5's hazard is that a `BOOT.md`
+   matching no marker shape goes *silently* quiet. `resume_pointer_for()` was run against this repo
+   while `docs/STATUS.md` still existed (returned `BOOT.md` as source), and again after the delete.
+   Both passed. Doing this in the other order would have produced a repo that looks fine and has no
+   resume pointer — the DEC-0106 failure shape: not wrong output, no output.
+4. **A third copy of the broken validation-gate list was found in `AGENTS.md`** — still naming
+   `ruff-format`, which DEC-0027 rejects. S59b fixed `CLAUDE.md`'s copy, S43 fixed
+   `.pre-commit-config.yaml`'s. Three copies, three independent drifts, which is rule 5's thesis
+   demonstrated rather than argued. All three now point at the single list in `docs/CONVENTIONS.md`.
+   `CLAUDE.md`'s duplicated infra table went the same way — it had already gone stale on the
+   reception baseline and the driver-vs-config layer table.
+
+Not done, deliberately: `docs/ASSESSMENT.md` still describes STATUS.md as the source of truth. It is
+a **dated audit artifact**, not live guidance; rewriting a historical assessment to match today would
+destroy the record of what was true then. Flagged in its `MANIFEST.md` row instead.
+
+### A second public-repo divergence, found during execution — `ARCHIVE/` stays uncommitted
+
+STANDARD rule 3 says history is "preserved, not carried": retired material moves to `ARCHIVE/` and
+stays in the repo. **That does not work here, for the same reason §3's `ops/CONSTANTS.md` pointer
+does not: this repo is public and the others are not.**
+
+`ARCHIVE/` turned out to be gitignored already (`.gitignore` carries `archive/`, which matches
+case-insensitively on macOS), and the three files the shared archiver moved into it had **never been
+tracked**. Before treating that as a bug to fix by un-ignoring it, they were scanned: two of the
+three carry **IP-shaped and credential-shaped strings**. They are pre-governance conversation dumps
+from S16, written before any of this repo's secret hygiene existed. Committing them would be a
+DEC-0012 violation, and STANDARD §6 requires exactly this audit before any such file is committed.
+
+**Call: `ARCHIVE/` stays gitignored and local-only, and `MANIFEST.md` says so at the top of its
+`ARCHIVE/` section** — because the failure mode otherwise is a manifest that points a fresh cloner
+at three files their clone does not contain, which is the same dead-end-for-external-contributors
+problem this decision already called out once.
+
+Nothing is lost: those three were untracked working files all along, and genuinely retired *repo*
+content (`docs/STATUS.md`, every superseded revision) is preserved in **git history**, reachable
+with `git log --follow`. For a public repo, git history *is* the archive; a committed `ARCHIVE/`
+directory is a private-repo affordance.
+
+Both divergences share one root cause worth stating plainly: **the standard was written by and for
+private repos, and its two "preserve/share by pointing at a file" mechanisms — `ops/CONSTANTS.md`
+and `ARCHIVE/` — both assume every reader has access the public member's readers do not.** Reported
+to ops#130 as a spec gap, not patched into their file.
+
+---
+
+## DEC-0064 — Campaign B: the no-LNA RX campaign, with an overnight pilot and an owner-gated swap night
+
+**Status:** Accepted (design) · **Date:** 2026-08-01 (S61) · **Executes** the second half of
+DEC-0059's two-campaign design · **applies** DEC-0046 (bias tee is image-layer) ·
+**carries** DEC-0062's deferred deploy · owner-directed on timing, gating, and the pilot
+
+### What this settles
+
+Campaign A (LNA in circuit) self-terminates 2026-08-07T00:05. This decision pre-registers
+everything that follows so the swap night is execution, not derivation: the LNA comes out, the
+bias tee goes off, an overnight pilot bounds the no-LNA gain curve, and campaign B (the no-LNA
+Latin square) runs 08-08T00:05 → 08-16T00:05. Checklist: `docs/CAMPAIGN-B-RUNBOOK.md`.
+
+### The forensics that reframed the baseline
+
+The working assumption — "the pre-LNA baseline is 67.5%" (S29's changelog) — did not survive
+contact with the archive. A one-time local copy of the archive DB (cold backup, integrity-checked)
+shows exactly two `rxCheckPercent` plateaus, both dead flat, with the transition hidden inside the
+metric-dark gap (the pct_good deadlock, dead 06-18 → 07-05):
+
+| Era | Config | Mean | sd (5-min bins) | n |
+|---|---|---|---|---|
+| 2026-06-02 → 06-18 | gain 207 | **67.45** | 3.22 | 4,321 |
+| 2026-07-05 → 07-27 | gain 372, LNA in | **74.83** | 4.13 | 5,948 |
+
+The record contradicted itself about the June plateau's LNA state: S29 calls it "the pre-LNA
+baseline," but DEC-0017 says the gain-207 lock came from the 06-01 sweeps *with* the preamp, and
+that the owner was evaluating *without* the preamp as of 07-04 — placing the no-LNA period inside
+the dark gap, where no honest telemetry exists. The bias tee entered the image at v2.0.2
+(~05-31); session transcripts carry no removal/install dates (that era predates this repo's
+governance). **Resolved by owner memory (S61): the LNA was IN during June.** S29's "pre-LNA
+baseline" label was wrong; DEC-0017's narrative was right. Two consequences:
+
+1. **No honest no-LNA telemetry exists anywhere** — the pilot is the first real measurement,
+   and Friday's first samples are discovery, not verification against a known band.
+2. **Both plateaus are LNA-in, so their contrast is a same-hardware gain comparison:**
+   207 → 372 gained **~7.4 pts** (67.45 → 74.83). Cross-era and uncontrolled (different weeks,
+   the 06-16/17 anemometer swap sits inside the June window with no visible step), so it is
+   corroborating directional evidence, not designed-experiment grade — but it retroactively
+   answers DEC-0017's original 207-vs-372 question in 372's favor, independently of campaign
+   A's forthcoming controlled answer.
+
+### The design
+
+**Overnight pilot (08-07 00:35–04:20), pre-registered as arm-selection input only.** Five
+gain-only arms, 45 min each, strictly HIGH → LOW: 496, 449, 402, 372, 328 (all real R820T steps).
+45 min = 9 five-min samples ≈ SE 1.6 pts/arm at the June-plateau sd — enough to see the curve's
+shape, not enough to adopt anything. It is sequential and hour-confounded, the exact flaw
+DEC-0048 exists to avoid in the campaign proper; its legitimacy is that of a pilot study: it
+steers arm selection and shakes down the full apparatus (new image, bias tee off, swap → verify →
+harvest cycle) on the same tick machinery the campaign uses, the night before the campaign
+commits 8 days. High→low ordering makes the abort tripwire a feature: a weak low arm finding the
+reception cliff halts with the high arms already harvested — an overnight abort IS a pilot
+result. The window (00:35–04:20) sits inside the site's best-reception hours and clears the
+hour-07 notch (BACKLOG §Durable RF findings), so pilot numbers read slightly optimistic vs 24 h
+means; fine for bounding, stated so nobody mistakes them for campaign estimates.
+
+**The H hold (08-07 04:20 → 08-08 00:05).** Arm A's exact settings under a distinct label. Two
+jobs: the daylong no-LNA baseline-verification window (including how the 07/19 notch presents
+without the LNA), and clean bookkeeping — the hold harvests under its own tag, and the
+H→A swap at 08-08T00:05 is a real labeled swap, so the square's arm-A samples start clean
+instead of inheriting a 20-hour pseudo-block (the phantom-block lesson from A's un-rotated log,
+applied forward).
+
+**The square (08-08T00:05 → 08-16T00:05).** Same Latin-square structure as A: 2×2 factorial,
+6 h blocks, 32 blocks, 8/arm. Gain arms **{372, 496}**, not A's {372, 207}: with ~20 dB of
+front-end gain removed the optimum moves up, and both of A's points would sit too low
+(DEC-0059 said this at design time). 372 is the **cross-campaign anchor** — the same value ran
+in campaign A, so the LNA contrast is measured at identical settings. 496 is the R820T maximum,
+subject to Friday's pilot readout (GATE 2: a peak at/below 402 shifts the high arm; literals +
+tests + redeploy is a 15-minute daytime task). The ex axis {0, 50} and `-fc 0 -ppm 0` are
+**unchanged from A on purpose**: changing any other knob between campaigns would confound the
+LNA contrast. Adoption bar unchanged (DEC-0059): ≥2.0 pts over the incumbent without a
+duplicate-frame regression; incumbent wins ties.
+
+**Abort floor 50% (was 55%).** The no-LNA baseline is unmeasured until the pilot; 50% sits
+~5 SE below even a pessimistic 62% on a 30-min mean — forgiving on purpose, still far outside
+noise. Data-loss exposure is unchanged from DEC-0059's analysis: an archive record nulls only
+on a fully-dead minute.
+
+**The swap night is owner-gated (owner's direction).** Nothing kills the container or touches
+the bias tee until the owner's GO in chat, given only when physically at the dongle — the
+antenna-disconnected window is the 20–40 s SMA swap, not minutes. Sequence: A terminates →
+archive A's artifacts (`.campaignA` suffix) → deploy the B apparatus → **GO** → v2.0.12 with
+`BIAS_TEE=0` (the night's one Class C command; kill→rm→run from `docker inspect`, never
+compose) → physical swap → verify (bias-tee-off log line, DEC-0062 redaction, fresh archive
+record) → `install` → pilot fires 00:35. Every failure path in the apparatus still restores
+baseline and emails; the runbook adds the human-facing rollback (v2.0.11 retag) and the
+"A didn't terminate" path (abort + postpone 24 h, never improvise at midnight).
+
+**v2.0.12 carries the bias tee as configuration, not as a hardcoded flip.** `entrypoint.sh`
+reads `BIAS_TEE` (default 1): the published image keeps powering LNAs for every existing user
+of this public image, and our deployment turns it off with one env var. The off branch drives
+`rtl_biast -b 0` explicitly rather than trusting the power-on default. The image also finally
+ships DEC-0062's `pressure_service.py` redaction (deferred from S57b precisely to avoid a
+mid-campaign-A rebuild) — and because the release lands *between* campaigns, campaign B runs
+uniformly on one image with zero mid-campaign confound.
+
+**Campaign A stays unread and unadopted through the gap.** Its winner is moot for prod the
+moment the LNA comes out; its value is the LNA-in characterization and the honest multi-day
+drift error bar on the eventual LNA-in vs LNA-out comparison (DEC-0059 declined bracketing on
+exactly this plan). Analysis happens in parallel; nothing deploys from it.
+
+### What would change this
+
+A's completion slipping (schedule regenerates dev-side, 24 h postponement path in the runbook);
+the pilot finding the gain curve peaked at/below 402 (GATE 2 shifts the high arm before the
+square starts); the owner's answer on the June plateau (moves the expected-numbers table and
+the acceptance band, nothing structural).
+
+---
+
+## DEC-0065 — The watchdog escalates and hands off; it does not acquire a bigger hammer
+
+**Status:** Accepted · **Date:** 2026-08-02 (S62) · **Caused by** ERR-0005 · **amends** the
+auto-remediation half of `weewx_monitor.py` · owner-approved, including an explicit decision
+*against* the automatic container recreate the owner initially asked for
+
+### What this settles
+
+How the USB watchdog behaves when its remedy does not work. Before this it had exactly one
+response, applied without limit and without evaluation. It now tries a bounded number of times,
+checks whether each attempt worked, and escalates to a human when they don't.
+
+### What the incident measured
+
+ERR-0005 is the first time this loop was observed under a fault it could not fix:
+
+| Observation | Value |
+|---|---|
+| USB resets fired | **9**, across 75 minutes |
+| Resets that restored reception | **0** |
+| Emails sent during the outage | **17** in 80 minutes |
+| Emails distinguishing the 9th reset from the 1st | **0** |
+| Time from outage start to correct detection | **8 minutes** (RECEPTION ALERT, 00:13) |
+
+Reset #10 at 01:27:17 preceded, by 46 seconds, a strictly worse failure mode: the dongle still
+enumerated for `rtl_biast` (device found, R820T tuner found, bias-tee command returning success)
+while `rtldavis` could no longer claim it for streaming. The stall-recovery loop had separately
+killed and respawned `rtldavis` ~18 times to no effect.
+
+**Detection was never the deficiency and is not changed here.** The monitor caught the outage in
+eight minutes and said so. What failed was everything downstream of that.
+
+### The decision
+
+**1. A remedy that is never evaluated is a ritual, not a remedy.** `watchdog_poll()` now judges
+each reset by whether reception recovered within `RESET_VERIFY_S`. The old watchdog had no
+concept of its own effectiveness, which is why 9 failures looked identical to 9 attempts.
+
+**2. Bounded, then escalate.** Three ineffective resets and it stops resetting entirely and
+sends one unmistakable alert. `RESET_VERIFY_S` (180 s) is deliberately **shorter** than
+`RESET_CD` (300 s), so every attempt is judged before another is permitted — the counter can
+never advance on an attempt whose verdict is still pending. Escalation lands ~18 minutes after
+the first reset; for ERR-0005 that is an alert at ~00:29 instead of reset #10 at 01:27, and
+resets #4–#10 never fire, so the worse failure mode never happens.
+
+**3. "not running" is a different fault from "stalled".** A stall means the process runs and
+yields nothing; "not running" means it dies on startup. A USB unbind/rebind does not fix the
+latter and, on this evidence, plausibly caused it. `watchdog_not_running()` therefore never
+resets — it escalates immediately.
+
+**4. Alert economy is part of alerting.** Only the first reset of an outage emails. Nine
+identical "RTL-SDR reset" notices is how the one alarm that mattered got buried; a channel that
+cries wolf is not a channel.
+
+### Why NOT the automatic container recreate
+
+The owner's stated goal was to "autoinitiate proven fixes." Applying that bar honestly, the
+container recreate does not qualify:
+
+- **n = 1.** It worked once.
+- **We cannot explain it.** The campaign apparatus's own `restore_baseline` did
+  `kill; sleep 3; start` at 00:08:33 and reception stayed dead for 75 minutes; `kill; rm; run`
+  at 01:48:41 restored it. Nobody has established why those differ. A stale device-cgroup entry,
+  an orphaned USB claim, or simple coincidence with a fault that had cleared by 01:48 all remain
+  live explanations.
+- **`rm` is not reversible.** Automating it means reconstructing a `--privileged` container's
+  full run line correctly, unattended, or production is simply gone.
+
+Automating a remedy we cannot explain is how the nine-futile-resets pattern gets recreated at a
+larger blast radius. Instead, `build_recreate_cmd()` derives the command from the **live**
+container via `docker inspect` — never the NAS `docker-compose.yml`, which is stale and
+decorative — and puts it in the escalation email. One paste instead of 105 minutes, without
+handing an unexplained hammer to an unattended process. It returns `None` rather than a
+half-right line, and redacts env values whose names look credential-shaped: this monitor ships
+in a **public** repo and another user's container may carry real keys (DEC-0062).
+
+### Deliberately unchanged
+
+The vbus reset stays as the first-line remedy — it is bounded now, not demoted. `WU_RF_MIN_PCT`
+stays at 60 even though it fired on the 03:15 dew dip in the no-LNA regime; retuning it is a
+separate decision that wants campaign B's data, not this one's. Detection logic is untouched.
+
+### What would change this
+
+Establishing **why** the recreate works would make a phase-2 auto-recreate defensible — gated
+behind a dry-run-tested run-line derivation, a hard attempt cap, and a refusal to act when
+`docker inspect` fails. Evidence that the vbus reset has *never* resolved a stall would demote
+it entirely rather than merely bound it. And a no-LNA regime that trips `WU_RF_MIN_PCT` routinely
+would move that threshold — not this escalation logic.
+
+### Related — checked and cleared, same session
+
+ERR-0005 first logged what looked like a **campaign-A abort near-miss**: the apparatus declared
+"did not produce records" at 00:08:21 while loop data flowed at 71% and a RapidFire record
+published at 00:08:22. Since that check runs unattended for 8 days once campaign B starts, it was
+resolved before B rather than after.
+
+**It was not a near-miss — the abort was correct.** `health_ok()` waits for a new *archive* record
+(`Added record` in `weewx.log`). The last one before the abort was **00:04:20**; the next was
+**01:24:24**, eighty minutes later. `HEALTH_TRIES=36` (~180 s) ran its full budget against a
+genuine absence. RapidFire loop publications are not archive records: the ~56 s reception island
+was too short and too late to close a 60 s archive interval and clear the write lag. DEC-0061's
+budget arithmetic holds and needs no change.
+
+The lesson is about *reading* the evidence, not the apparatus: loop-level publications and archive
+records are different things, and conflating them made a correct abort look like a defect.
+
+---
+
+## DEC-0066 — Campaign B is HELD until the instrument is trusted
+
+**Status:** Accepted · **Date:** 2026-08-02 (S62) · **Defers** DEC-0064's execution (design
+unchanged) · **caused by** ERR-0005 and two further outages the same day · owner's call, on a
+recommendation that reversed twice during the evening as evidence arrived
+
+### What this settles
+
+Campaign B was prepared to launch the night of 08-02 — LNA already out, schedule shifted −4 days,
+image built and verified, apparatus and tests green. It is **held, not cancelled.** Nothing about
+DEC-0064's design changes; only the timing, and the bar that must be met first.
+
+### The evidence
+
+Three outages on 2026-08-02, on a station that had run clean for weeks:
+
+| Window | Duration | Cause |
+|---|---|---|
+| 00:05–01:50 | 105 min | **unexplained** (ERR-0005). Driver alive, zero packets, 9 USB resets ineffective; fixed by a full container recreate |
+| 13:47–13:49 | 3 min | **unexplained.** No engine shutdown, no DB error, driver never faulted. Self-recovered |
+| 19:45–19:56 | 10 min | `database is locked`, aggravated by three uploader threads refusing to shut down |
+
+### Why hold — and which argument actually carries it
+
+Two arguments were raised. Only the second is load-bearing.
+
+**The weaker one: abort risk.** Campaign A died on 08-02 because an outage coincided with an arm
+swap — `health_ok()` waits ~180 s for an archive record, and there was none. Campaign B performs
+**32 unattended swaps over 8 days**. Two unexplained outages in a day implies a real chance of
+recurrence during one of them. But an abort is a *safe* failure: the apparatus restores baseline
+and emails. Losing a campaign to an abort costs time, not correctness.
+
+**The stronger one: the instrument is not trusted.** Campaign B measures reception percentage. A
+receiver that intermittently loses 50–100% of its packets for reasons nobody has explained does not
+produce a null result — it produces **noise that is shaped like a result**. Arms would differ, means
+would compute, and a difference could be entirely an artifact of when the deafness happened to fall.
+That is strictly worse than an abort, because an abort announces itself and a contaminated dataset
+does not. Campaign A's data survives only because it ran clean for three days before it died.
+
+An experiment whose instrument is behaving unpredictably should not be run on the grounds that the
+apparatus around it is well built. The apparatus was never the doubt.
+
+### The cost of holding, stated honestly
+
+The schedule slips again (it had already moved up 4 days). The `SCHEDULE=` literals now sit in the
+past, so a future launch must regenerate them — an `install` against stale dates would jump straight
+into the middle of the square, which is a trap worth naming loudly in `BOOT.md`.
+
+Against that: prod stays LNA-out either way, so the accidental **H-hold data keeps accruing** — and
+per unit time it is currently worth more than a campaign that aborts on day three. As of the S62
+close: n=1106 windows, mean **72.0%**, versus campaign A's pooled LNA-in 72.4%. Still not a clean
+comparison (A pools the gain-207 arms and is biased low), and still not adoption evidence.
+
+### What would change this
+
+Any of: an established cause for the two unexplained outages; a bound on them tight enough that
+their contribution to an 8-day mean is provably negligible; or several days of clean LNA-out running
+that makes 08-02 look like a single bad day rather than a new regime. The DB-lock/thread-hang defect
+should be fixed regardless — it is independent of the RF question and converts any future momentary
+error into a multi-minute outage.
+
+**Do not treat "the apparatus is ready" as the launch condition.** It has been ready since S61. The
+condition is that the receiver's behavior is understood.
+
+## DEC-0067 — The recurring dropouts are process freezes, not RF loss, and the driver's own watchdog proves it
+
+**Status:** Accepted · **Date:** 2026-08-03 (S63) · **Reclassifies** the evidence behind DEC-0066 ·
+**partially answers** DEC-0066's "explain the two unexplained outages" gate · **corrects** ERR-0005's
+framing of the 13:47 event · does **not** change DEC-0064's design
+
+### What this settles
+
+The "unexplained reception dropouts" that held campaign B are **not reception dropouts**. They are
+freezes of the weewx process. The receiver was working the whole time. Two different phenomena had
+been filed under one name.
+
+### The proof — the driver's 150 s watchdog is a discriminator, and it was there all along
+
+`genLoopPackets()` (`rtldavis.py`) is a loop:
+
+```
+while self._mgr.running():
+    if int(time.time()) - time_last_received > 150:
+        raise weewx.WeeWxIOError("rtldavis process stalled")
+    for lines in self._mgr.get_stderr():   # returns after at most 10 s
+        ...
+        time_last_received = int(time.time())   # only on an actual packet
+```
+
+`get_stderr()` is bounded at 10 s by construction. So a **running** main thread that hears no RF
+returns to the top of the `while` within 10 s and raises at the 150 s mark. That is not a theory —
+it is what happened 21 times during ERR-0005.
+
+Therefore, for any output gap longer than 150 s:
+
+| Gap ends with `rtldavis process stalled` | Meaning |
+|---|---|
+| **yes** | the main thread was executing and genuinely heard nothing → **RF loss** |
+| **no** | the main thread was **not executing** → **process freeze**; RF is irrelevant |
+
+The silent gaps of 208–218 s never raised it. The main thread was not running.
+
+### The measurement
+
+| Day | Driver-detected RF stalls | Silent process freezes |
+|---|---|---|
+| 2026-07-30 | 0 | 1 (08:04, 218 s) — **LNA still in** |
+| 2026-07-31 | 0 | 0 |
+| 2026-08-01 | 0 | 0 (but one `database is locked` restart, 15:08) |
+| 2026-08-02 | **21** — all inside ERR-0005 | 1 (13:46, 209 s) |
+| 2026-08-03 | 0 | 1 (02:59, 208 s) |
+
+**Genuine RF loss is confined entirely to ERR-0005.** Every other day measured zero. The freezes are
+independent of it, recur at roughly one per day, and last ~3.5 minutes.
+
+### Three consequences
+
+**1. The standing watch is answered: the freezes are not new to the no-LNA regime.** One occurred on
+07-30 with the LNA still installed. Removing the LNA did not cause them. That watch can close; what
+replaces it is a watch on the freeze itself.
+
+**2. The monitor's reception metric cannot tell the two apart.** It counts published output, so a
+frozen process and a deaf receiver both read `WINDOW: 0/21 (0%)`. Every "unexplained dropout" in the
+standing watch was scored by an instrument that cannot make the distinction the watch was about.
+The log rule above **can**, and costs nothing to apply.
+
+**3. A freeze does not merely lose data — it misdates the data it recovers.** Packets are stamped at
+*parse* time (`pkt['dateTime'] = int(time.time() + 0.5)`), not receive time, so everything buffered
+during a freeze collapses onto the resume instant. On 2026-08-03 the record for 03:00 was written at
+03:03:24, 03:01–03:03 have no records at all, and the following record absorbed ~3.5 minutes of
+packets. **This distorts exactly the counters campaign B measures** — first downward across the
+frozen windows, then upward in the one that follows.
+
+### What this means for campaign B (DEC-0066)
+
+DEC-0066's hold was correct, and its stated bar — *"an established cause for the two unexplained
+outages, or a bound on them tight enough that their contribution is provably negligible"* — is now
+partly met and partly reframed:
+
+- The recurring class is **explained in kind** (process freeze, RF unaffected), **bounded**
+  (~1/day, ~3.5 min, ~0.4 % of wall-clock), and **pre-dates the LNA removal**.
+- ERR-0005 remains unexplained, but it is now demonstrably a **single incident**, not the tip of a
+  recurring pattern — the 21 detections that day and zero on every other day are the evidence.
+- The load-bearing risk has moved. It is no longer "the receiver is unreliable"; it is
+  "**the instrument conflates a software freeze with deafness**". A ~3.5 min freeze inside a 6 h arm
+  block moves that block's mean by roughly 0.8 pts against a 2 pt adoption threshold — material, and
+  removable by excluding freeze-affected windows rather than by waiting for clean weather.
+
+**Campaign B stays held** — this decision does not launch it. But the condition for launching is now
+a concrete, mechanical one (detect and exclude freezes) instead of an open-ended one.
+
+### Ruled out, with evidence rather than reasoning
+
+| Hypothesis | Killed by |
+|---|---|
+| NAS-wide I/O stall | influxdb's retention timer fired at 07:01:06.576 Z **mid-freeze**, sub-ms consistent with every other check |
+| The S37/DEC-0036 stdout pipe wedge | live `weewx.conf` `[Logging]` has **only** a file handler — no console handler exists |
+| Container CPU-quota throttling | DSM's 4.4 kernel exposes **no `cpu.cfs_quota_us` and no `cpu.stat`** — only `cpu.shares`. CFS bandwidth control is not in play |
+| `pressure_service`'s HTTP call blocking the loop | 82 completed fetches, slowest **8.99 s**, zero abandoned |
+| The monitor's 6-hourly archive read holding the lock | summaries run at HH:00; the freezes do not |
+| The HH:04 six-hourly gap cluster | campaign A arm swaps at HH:05:02 — deliberate restarts, benign |
+
+### What is still open
+
+**Why the process freezes.** All threads stop together and nothing is logged — consistent with one
+thread blocking inside a write to the bind-mounted log volume while holding the shared logging lock,
+which would silence every other thread at its next log call. The box is chronically I/O-bound
+(**18.6 % cumulative iowait**, load average 6/13/15 on four cores), which makes a multi-second — even
+multi-minute — write stall plausible. **Not proven.** The discriminating observation is the thread
+state during a freeze: `D` (uninterruptible I/O) versus `S`. A read-only watcher exists to capture it.
+
+Upstream saw this and worked around it without diagnosing it — `get_stderr()`'s own comment reads
+*"When a lot rtldavis packets are read, a hangup will occur regularly, sometimes of more than a
+minute."* The 10 s cap in that function is that workaround.
+
+**Separately, the driver's stall detection is structurally blind to this failure mode** and should
+not be "fixed" by shortening the 150 s threshold — the threshold is correct for what it was built to
+catch. A freeze is not the driver's to detect; it needs an external observer.
+
+### Lesson
+
+The evidence that separated two phenomena had been in the logs since before campaign A, and the
+component that distinguishes them — a 150 s watchdog whose firing and *non-firing* are both
+informative — was already deployed and already working correctly. What was missing was reading its
+silence as data. **A watchdog that does not fire is telling you something.** Compare DEC-0035's
+structurally blind test and DEC-0045's passing test with the wrong assertion: three variants of the
+same mistake, which is trusting an instrument without asking what it is physically able to observe.
+
+## DEC-0068 — Coffee-radar is a confirmed contributor to some process freezes, not a full explanation
+
+**Status:** Accepted · **Date:** 2026-08-05 (S65) · **Extends** DEC-0067's open "why it freezes"
+question · does **not** change DEC-0064's design · Campaign B's DEC-0066 gates are unchanged
+
+### What this settles
+
+Direct, measured evidence — not a timestamp inference — that coffee-radar's scheduled batch job
+coincided with one weewx process freeze on 2026-08-04. This NAS runs three of the owner's projects
+as containers (`weewx-rtldavis-v2`, `hyperlocal-forecast-api`, `coffee-radar`), and hyperlocal-
+forecast has its own well-measured incident class on this same box (its own DEC-0162: coffee-radar's
+scheduled runs are a confirmed cause of severe page-cache-eviction stalls there). The question asked
+this session was whether that shared-NAS mechanism also explains weewx's freezes. The answer is:
+sometimes, confirmed once, not always.
+
+### The measurement
+
+An overnight watcher (`ops/freeze_watch.sh`, this session — polls `weewx.log`'s size, captures a
+paired 12-thread `S`/`D`/`R` sample 20 s apart on a stall, plus a `nasctl ps` container snapshot)
+caught two distinct freezes the night of 2026-08-04:
+
+| | Freeze #1 | Freeze #2 |
+|---|---|---|
+| Time (EDT) | 17:48:59–17:52:37 (~4 min) | 19:13:43–19:15:41 (~2 min) |
+| loadavg at detection | 0.67 / 0.74 / 0.66 | **12.39 / 12.18 / 8.17** |
+| coffee-radar running | No | **Yes — confirmed** |
+| Thread states | all `S`, three isolated single-sample `R` blips | all `S` except `pid=30506 (rtldavis)`, which read `R` in **both** 20s-apart samples |
+| `weewxd` main thread | `S` throughout | `S` throughout |
+
+Coffee-radar's presence during freeze #2 was confirmed with `nasctl inspect`, not a name match:
+its scheduled command (`docker run --rm --env-file … coffee-radar node src/index.js --parallel 3`)
+never passes `--name`, so the running container gets a Docker-random name (`dreamy_merkle` on the
+night in question) with its real identity visible only in the `IMAGE` field. Grepping `docker ps`
+output for the literal string `coffee-radar` — the check this session ran first, against freeze #1
+— structurally cannot match such a container; `ops/freeze_watch.sh`'s own coffee-radar detection had
+the same bug and is fixed as part of committing it (greps the whole `nasctl ps` line, not just the
+`NAMES` column). `nasctl inspect` showed the container had started **19:00:16 EDT**, 13m27s before
+detection, and was still running well after recovery — a start time that lines up almost exactly
+with coffee-radar's own documented 19:00 daily scheduled run. That schedule is **local time (EDT)**,
+not UTC — a unit mismatch in this session's own first pass at comparing freeze timestamps against
+it, corrected here.
+
+### What this does NOT settle
+
+- **Not the sole cause.** Freeze #1, the same night, shows the identical symptom (all `S`, brief `R`
+  ticks, `weewxd` never `D`) with coffee-radar not running and loadavg normal. Either freezes have
+  more than one trigger, or coffee-radar's presence is a contributing-but-not-necessary condition.
+- **n=1 coincidence.** One correlated instance out of three total captured freezes (S64's 08-03
+  23:23 one plus these two) is suggestive, not a base rate. The 4 historical freeze timestamps
+  (07-30 08:04, 08-02 13:46, 08-03 02:59, 08-03 23:23) were re-checked against coffee-radar's
+  corrected local-time schedule (07:00/19:00 main, 6-hourly watchlist, Monday 14:00 prodigal) and
+  show no clean match for any of them — but a documented-schedule comparison is weaker evidence than
+  a direct `docker ps`/`inspect` observation, and DSM's own coffee-radar run history, if it logs
+  one, has not been checked.
+- **Mechanism unconfirmed.** `weewxd`'s own main thread reads `S`, never `D`, even during the
+  load-12 freeze — not literal I/O-blocking in the classic sense. CPU scheduling contention, page-
+  cache eviction (the mechanism behind HLF's own DEC-0162 on this box), and memory pressure are all
+  still plausible and undistinguished by the current instrumentation.
+
+### Consequences
+
+Campaign B's gates (DEC-0066) are unchanged: make the campaign metric freeze-aware, fix the DB lock.
+This finding doesn't newly block or unblock B — freezes already needed exclusion from the campaign
+metric regardless of cause. `ops/freeze_watch.sh` is now a committed, reusable diagnostic instead of
+a scratchpad script rebuilt from session-transcript archaeology three sessions running (S63, S64,
+S65) — any future freeze investigation, or a check that this is resolved, starts from a working tool
+instead of a rebuild.
+
+### Lesson
+
+A one-shot container launched without `--name` is invisible to any check that greps `docker ps` by
+name — its real identity is in `IMAGE`, not `NAMES`. This is a general NAS-ops gotcha, not specific
+to coffee-radar: any future "is container X running" check on this shared box should grep the whole
+`docker ps`/`nasctl ps` line, not assume a container's own image name is also its runtime name.
+
+## DEC-0069 — The campaign metric moves to per-minute `rxCheckPercent`, and freeze exclusion is structural
+
+**Status:** Accepted · **Date:** 2026-08-05 (S66) · **Closes** DEC-0066's second launch gate ·
+**corrects** DEC-0067's "down then up" and BOOT.md's ~0.8-point impact estimate ·
+design of DEC-0064 untouched · tool `ops/campaign_analyze.py`
+
+### What this settles
+
+DEC-0066 held campaign B on two gates, of which the real one was: make the campaign metric
+freeze-aware. This settles *how*, and — unexpectedly — *how much it was ever worth*.
+
+The answer has two halves. The larger half is a **source change**: the campaign was reading a
+5-minute aggregate, and the same measurement exists at 1-minute resolution in the archive DB. The
+smaller half is an **exclusion rule**, which turns out to be worth ~0.03 points once the source is
+right.
+
+### The defect, measured
+
+`ops/rx_experiment.sh`'s `harvest()` scrapes the monitor's 5-minute `RECEPTION: NN%` line. A freeze
+lands inside one of those buckets and drags the whole bucket down — **measured 16 % and 27 %** on
+2026-08-04 against a ~72 % neighbourhood — so one bad minute destroys four good ones. Across a 6 h
+arm block (72 such samples) that is `(72−16)/72 ≈ 0.78` points, which is where BOOT.md's ~0.8 figure
+came from. **That figure was right, but only for that metric.**
+
+The archive DB carries the driver's own `rxCheckPercent` — good CRC-decoded packets over theoretical
+max, which S31 established as the honest metric — **per archive record, i.e. per minute**. At that
+resolution the same freeze damages *one* record: `(75−10.31)/360 ≈ 0.18` points on the same block,
+and ~0.05 pooled across an arm. Changing the source is ~4× of the fix before any exclusion logic
+runs.
+
+### The freeze signature in the archive
+
+Scanned 2026-07-29 → 2026-08-05: **10 988 records, 33 gaps**. Every gap falls into one of three
+classes, and they do not overlap:
+
+| Class | `rx` before the gap | `rx` after the gap | n | Identification |
+|---|---|---|---|---|
+| **Process freeze** | anomalously low (4.0–17.2) | normal, non-NULL | ~10 | matches every freeze in the DEC-0067/0068 record |
+| **Arm swap** | normal (63–85) | **NULL** | 12 | the HH:04 cluster — campaign A's own swaps |
+| **Lock / outage** | normal | **NULL** | 4 | the two `database is locked` events, and ERR-0005 |
+
+Population baseline for scale: median **75.0**, p05 **61.9**, p01 **56.5**. The freeze records at
+4–17 sit far below p01 — they are not bad RF minutes, they are artifacts.
+
+**The contaminated record is the one ADJACENT to the gap, not the minutes inside it.** Those minutes
+are simply *absent rows* and need no handling at all — this is the finding that shrank the whole
+design, because BOOT.md had assumed they scored as zeros. WeeWX assembles the freeze-start record
+from a truncated accumulation period but still divides by the full nominal interval; `interval`
+stays `1`, so **the row cannot identify itself as contaminated** and detection must be structural.
+
+Worked example, 2026-08-04 (`Added record` write-lag in brackets; normal lag is 15–20 s):
+
+```
+17:47  rx=72.73  [19s]        19:12  rx=70.00  [16s]
+17:48  rx=10.31  [232s]  <--  19:13  rx= 4.29  [153s]  <--
+17:49  ABSENT                 19:14  ABSENT
+17:50  ABSENT                 19:15  ABSENT
+17:51  ABSENT                 19:16  rx=73.33  [17s]
+17:52  rx=87.50  [15s]        19:17  rx=80.95  [17s]
+```
+
+### The rule
+
+Three independent exclusions, deliberately not collapsed into one so each can be argued with
+separately:
+
+1. **Gap-adjacent** — drop the record immediately before *and* after any spacing gap. Symmetric, so
+   it catches truncation and absorption without having to know which occurred.
+2. **NULL `rxCheckPercent`** — the restart artifact; already treated as a gap by
+   `summarize_reception_rows()`.
+3. **Non-physical (`rx > 100`)** — an independent backstop; see below.
+
+Plus a settle window (default 600 s, matching `rx_experiment.sh`'s `SETTLE_SECS`) after each swap.
+Total cost on campaign A: **152 records excluded of 4 285 in-block, ~3.5 %.**
+
+### Why not a magnitude threshold
+
+"Drop anything under 20 %" is simpler and is **wrong**. The campaign exists to *measure* reception;
+a rule keyed on magnitude discards genuine deep fades and biases every arm upward — precisely the
+confound the Latin square was built to remove. Structure identifies artifacts; magnitude does not.
+This is asserted as a positive control in `tests/test_campaign_analyze.py`, which proves both that
+the structural rule keeps a real 30 % fade and that a magnitude rule destroys it.
+
+### The 200 % record — DEC-0067's "up" is real, and rarer than stated
+
+2026-07-29 03:10 carries `rxCheckPercent = 200.0`: a record that absorbed a 2-minute span while
+still stamped `interval=1`. This is exactly the post-freeze inflation DEC-0067 predicted. **An
+initial reading of two freezes found no inflation and concluded there was none; the 8-day scan
+found this one.** So DEC-0067's "down then up" stands — with the correction that the "up" is
+*conditional*, not routine (weewx usually advances past the gap and starts a fresh accumulator
+instead), and appears once in 8 days against roughly ten freezes.
+
+It matters out of proportion to its rarity: `summarize_reception_rows()` applies **no cap**, so such
+a record contributes twice its expected packets — an *upward* push of ~0.35 points on a 6 h block,
+larger than the downward push of the freeze that caused it.
+
+### Campaign A, recomputed
+
+12 blocks, 2026-07-30 00:05 → 2026-08-02 00:05, balanced:
+
+| Arm | Settings | n | Mean | sd | vs. uncleaned |
+|---|---|---|---|---|---|
+| A | gain 372 ex 0 | 1038 | **74.81 %** | 8.22 | −0.02 |
+| C | gain 372 ex 50 | 1044 | 74.37 % | 8.10 | +0.00 |
+| D | gain 207 ex 50 | 1044 | 74.17 % | 8.22 | −0.03 |
+| B | gain 207 ex 0 | 1038 | 73.87 % | 8.28 | +0.03 |
+
+**The freeze-aware correction is ±0.03 points** against a 2.0-point adoption bar — real, but ~60×
+smaller than the estimate that made it a launch gate. Total arm spread is **0.94 points**; no arm
+approaches adoption. Gain 372 beats 207 in both `ex` pairings but marginally; `ex` shows no
+consistent effect.
+
+**Cross-metric check:** BOOT.md records campaign A pooled at 72.4 % from the monitor scrape; this
+reads ~74.3 % from `rxCheckPercent`. The ~1.9-point offset matches `weewx_monitor.py`'s own
+documented "runs ~1–2 pts optimistic" note (the driver floor-divides the period, S31). Two
+independent metrics agreeing on the offset is a real validation of both — **and it means A-vs-B must
+be compared on the same metric**, which is now guaranteed because both are recomputed by the same
+tool from the same source.
+
+**Sealing note (honest disclosure):** DEC-0066 recorded that A's arm winner stays sealed until after
+B. Validating this tool against real data necessarily computed it, and the numbers above are now
+known before B runs. Pre-registration protects the *analysis plan* — DEC-0064 locked B's arms, and
+DEC-0059 locked the adoption bar, both before any of this — so the design is not compromised. But
+the unsealing was a side effect of tooling, not a decision anyone took deliberately, and it is
+recorded here rather than left implicit.
+
+### Two defects found while building the tool
+
+Both would have produced confident wrong numbers rather than an error:
+
+- **Pooled campaign attempts.** Campaign A aborted 2026-07-29 and restarted clean on 07-30. A bare
+  run pooled the aborted 75-minute arm-B block with the campaign proper, giving arm B ~60 extra
+  records — an unbalanced Latin square, printed as a tidy four-row table with nothing to indicate
+  it. Fixed mechanically: the tool now detects multiple attempts in one apparatus log and says so
+  (DEC-0040 — a docstring warning would not have executed).
+- **Unbounded fetch.** Deriving the query's lower bound locally meant asking the NAS for
+  `dateTime >= 0` and dragging the entire archive across ssh — measured: does not finish inside
+  120 s. The bound is now resolved on the NAS from the apparatus log's first timestamp, before the
+  query runs.
+
+Also corrected: the report header named a window wider than the one actually analyzed when `--since`
+excluded early blocks. Provenance a reader would have to verify by hand is provenance that lies.
+
+### Consequences
+
+- **DEC-0066's second gate is closed.** The remaining gate is the `database is locked` defect (try
+  WAL mode first).
+- `ops/rx_experiment.sh` is **unchanged** — the unattended, prod-writing apparatus was not touched
+  to close this, and `harvest()` keeps producing its independent cross-check.
+- Campaign B's readout runs `ops/campaign_analyze.py --campaign B`; the A-vs-B LNA contrast runs the
+  same tool over both windows.
+
+### Lesson
+
+The instrument's *resolution* was a bigger error term than the artifact everyone was chasing. Five
+sessions went into explaining why the process freezes; the metric defect it was supposed to be
+corrupting was mostly an artifact of averaging the measurement into 5-minute buckets before storing
+it. **Check what resolution a number was recorded at before designing a correction for it.**
+
+## DEC-0070 — The DB lock is a 5-second timeout with a 10-minute penalty; WAL is the fix and a cross-repo mount blocks it
+
+**Status:** Accepted · **Date:** 2026-08-05 (S66) · **Addresses** DEC-0066's last launch gate ·
+**bounded, not closed** — the real fix is filed as ops#141 · **applies** DEC-0046 (mounted layer)
+
+### What this settles
+
+The `database is locked` defect is not mysterious and not a weewx bug. It is a **default**:
+`weedb/sqlite.py:136` reads `timeout = to_int(argv.get('timeout', 5))`, the live config set none,
+and the archive runs `journal_mode=delete` where a reader's SHARED lock blocks the writer. So a
+reader holding the lock for **six seconds** produces `CRITICAL Database OperationalError`, weewx's
+hardcoded **120 s** wait, and a restart — **5–10 minutes of outage**. The penalty is three orders of
+magnitude larger than the cause.
+
+Measured on 2026-08-02 (the CRITICAL lands *after* the teardown, because weewx shuts services down
+in the exception path before logging):
+
+```
+19:47:16  ERROR Unable to shut down OWM thread
+19:47:22  OWM: Published record 19:44:00      <- uploaders 3 min behind
+19:47:42  rtldavis with pid 15 killed
+19:47:44  CRITICAL Database OperationalError exception: database is locked
+19:47:44  CRITICAL     ****  Waiting 2 minutes then retrying...
+```
+
+Live state at diagnosis: `journal_mode=delete`, `synchronous=2`, `page_size=4096`, DB **29.1 MB**,
+SQLite **3.46.1**, WeeWX **5.4.0**.
+
+### What shipped now
+
+`timeout = 30` added to `[DatabaseTypes][[SQLite]]` in the **live** `weewx.conf`. A reader that takes
+seven seconds now costs a seven-second delay instead of a ten-minute outage. 30 s, not 60 s,
+deliberately: it stays under the 60 s archive interval so records cannot pile up behind a wait.
+
+Verified in the running system, not in the artifact (DEC-0046):
+
+```
+resolved database_dict : {'database_name': 'weewx.sdb', 'driver': 'weedb.sqlite',
+                          'SQLITE_ROOT': '/opt/weewx-data/archive', 'timeout': '30'}
+timeout weedb will use : 30 seconds (default was 5)
+```
+
+Restart healthy: new archive record **106 s** after `kill`→`start`, inside DEC-0061's documented
+~115 s worst case.
+
+**Honest cost:** weewx now *blocks* up to 30 s instead of erroring. That trades a 5–10 min outage
+for a ≤30 s stall — a good trade (a stall loses one record; a restart loses ten minutes) but it is a
+new behaviour. Such a stall is indistinguishable from a DEC-0067 process freeze to
+`ops/freeze_watch.sh`, and `ops/campaign_analyze.py` will exclude it via the gap-adjacent rule.
+Both are correct; neither is a bug to chase.
+
+### Why WAL is not shipped, and what actually blocks it
+
+WAL removes the cause outright — readers stop blocking writers. It is blocked by a **cross-repo
+mount contract**: `hyperlocal-forecast-api` bind-mounts the archive DB as a **single file**
+(`SRC=…/archive/weewx.sdb DST=/data/weewx/weewx.sdb RW=false`). WAL needs `weewx.sdb-wal` and
+`weewx.sdb-shm` beside the database; with a single-file mount those siblings can never appear in
+that container.
+
+**The initial reading of this was wrong and the correction matters.** The first assumption was that
+the mount would also have to become writable, because a WAL reader needs to create the `-shm` index
+— which would have meant granting a read-only consumer write access to weewx's archive directory,
+a real regression. Tested instead of asserted, on the container's own SQLite 3.46.1, with a live
+writer holding data in the WAL:
+
+| Scenario | `mode=ro` reader |
+|---|---|
+| Directory mount, writable | OK |
+| Directory mount, **read-only**, `-shm` present | OK |
+| Directory mount, **read-only**, `-shm` absent | **OK** |
+| **Single-file mount (today's HLF)** | **`OperationalError: no such table: archive`** |
+
+SQLite's read-only WAL fallback handles the read-only case, so `RW=false` can stay and the fix is
+*only* file → directory. HLF's in-container path stays `/data/weewx/weewx.sdb` either way, so **no
+HLF code or config change is needed.** Note also that HLF's own
+`observations/weewx.py::_connect_read_only` sets no busy timeout, so it takes Python's 5 s default
+and is exposed to the same contention from the other side.
+
+Filed as **ops#141** (`repo:hlf`, `tier:mid`) with the staged order: change the mount and verify HLF
+under the *existing* `delete` journal first, so a failure there is unambiguously about the mount;
+only then flip WAL, which is reversible via `PRAGMA journal_mode=DELETE`.
+
+### The drift risk this creates
+
+`weewx.conf` is the **mounted** layer (DEC-0046) and is never committed (DEC-0012). So this change
+exists **only on the NAS**, in a file with no repo artifact and no CI. A future container recreate
+from a stock config would silently revert it and nobody would know until the next ten-minute
+outage. Recorded as a `CONSTANTS.md` row for exactly that reason — the deviation from stock has to
+live somewhere a session actually reads.
+
+### Guard finding, recorded because it is load-bearing
+
+The NAS mutation that wrote the live production config **did not trip the Class C guard**. The
+command was `ssh <nas> "python3 -" < script.py`: the guard pattern-matches the ssh command *string*,
+which here says only `python3 -`, while the mutating code arrives over **stdin**. Any NAS mutation
+can be laundered through this shape — and it is the shape `docs/CONVENTIONS.md` actively recommends
+("batch remote work into a single `bash -s` session"). The owner had authorized this specific action
+in chat, so nothing improper occurred; the point is that the mechanism did not enforce it.
+
+The asymmetry is the sharp part: in the same session the *read* guard fired three times on `grep` or
+`tail` appearing anywhere in a command string, including against files carrying no secrets, while
+the high-risk mutation path had a straightforward bypass. Belongs to eaglehunt-ops (OPS-DEC-0060 —
+a repo session may not edit the machine-wide floor).
+
+### Consequences
+
+- Campaign B's last gate is **bounded, not closed**. Outages are capped at ~30 s instead of ~10 min,
+  which is enough to stop the defect contaminating a campaign; the cause is removed when ops#141
+  lands and WAL is flipped.
+- DEC-0067's reader list needs a correction: it named "the dashboard" as an archive-DB reader. A
+  scan of every container mounting a weewx path finds only `hyperlocal-forecast-api` (the DB file),
+  `eh-proxy` (the parent directory, read-only), and weewx itself. The dashboard reaches this data by
+  another route.
+
+### Lesson
+
+Two defaults, five seconds apart, cost ten minutes each time they met. Neither was chosen — one was
+weedb's fallback, the other was SQLite's journal mode — and the config that could have overridden
+either was simply silent. **Before designing a fix, check what the untouched defaults actually are**;
+the answer here was a one-line config change, not an architecture.
+
+## DEC-0071 — WAL was tried and rolled back: the mount was never the only blocker, and my test that said otherwise was structurally blind
+
+**Status:** Accepted · **Date:** 2026-08-06 (S66) · **Bounds** DEC-0070's WAL recommendation ·
+**corrects** a test this session published as evidence · ops#141
+
+### What this settles
+
+DEC-0070 said WAL was the real fix for the `database is locked` defect, blocked only by
+hyperlocal-forecast-api's single-*file* bind mount. HLF shipped the directory mount (its S235). WAL
+was flipped at 06:56 EDT and **rolled back at 07:24**. It is not viable as scoped, for a reason that
+was present all along and that this repo's own evidence missed.
+
+### The test that was wrong
+
+DEC-0070 published a four-scenario table, run on the container's own SQLite 3.46.1, concluding that
+a **read-only directory mount works** with WAL and therefore `RW=false` could stay. That conclusion
+was wrong because the test did not reproduce the condition it claimed to:
+
+```python
+os.chmod(tmp, stat.S_IRUSR | stat.S_IXUSR)   # the DIRECTORY only
+```
+
+It made the *directory* read-only. The files inside kept their read-write permissions, so SQLite
+could still open `weewx.sdb-shm` for writing. **A Docker `:ro` bind mount makes the files read-only
+too.** A WAL reader must write the `-shm` index to join the WAL; HLF cannot, so it silently falls
+back to the main database alone — which in WAL mode stops advancing except at auto-checkpoints.
+Result: HLF froze on a stale snapshot within minutes, exactly the failure DEC-0070 predicted for the
+*single-file* mount and then declared solved.
+
+This is DEC-0035's lesson recurring: **a passing test proves nothing if it is structurally blind to
+the thing it is testing.** The scenario labels said "read-only"; the mechanism under test never was.
+
+### The second blocker, which no mount change can fix
+
+```
+weewx.sdb       0777  root
+weewx.sdb-wal   0555  root      <- read-only for everyone
+weewx.sdb-shm   0777  root
+```
+
+SQLite creates the `-wal` here mode **0555**. Even a read-write mount would not let a non-root reader
+write it. Any future WAL attempt must solve file permissions, not just mount granularity. This also
+explains why a non-root SSH user could not checkpoint the WAL at all
+(`attempt to write a readonly database`).
+
+### Rolling back was the hard part
+
+`PRAGMA journal_mode=DELETE` needs an **exclusive** lock; weewx holds a persistent connection, so it
+failed with `database is locked`, and with the container stopped there is no `docker exec` to run it
+in either. Resolved by making weewx do it: `[[[pragmas]]] journal_mode = DELETE` under `[[SQLite]]`,
+which weedb applies on every connection (`weedb/sqlite.py:141-143`) as root, at startup, when it is
+the only connection. **The pragma is left in place deliberately** — it re-pins `delete` on every
+start, so an accidental WAL flip can never again silently strand a reader.
+
+### Self-inflicted outage, recorded because the shape recurs
+
+The pragma was first written as the scalar `pragmas = journal_mode = DELETE`. weedb iterates
+`pragmas` as a **mapping**, so configobj requires a subsection; the scalar parses as a string,
+iterating it yields characters, and weewxd crash-looped on
+`TypeError: string indices must be integers`. **Prod lost ~6 minutes of collection** (CRITICALs at
+07:18:58 and 07:20:22). Two process failures behind it, both this session's own:
+
+1. The first rollback attempt opened with `SELECT COUNT(*) FROM archive` — a full scan of a 30 MB
+   table under a live writer that **had already timed out once earlier the same session**. Repeating
+   a known-slow query on an incident path cost a 120 s timeout at the worst moment.
+2. The config shape was assumed from the field name rather than checked against the consumer, even
+   though the consuming code had been read and quoted in DEC-0070 an hour earlier.
+
+### Consequences
+
+- **WAL is not viable as scoped.** Do not retry until both the mount *and* the `-wal` permission
+  story are designed. ops#141 carries the detail.
+- **The DB-lock defect stays bounded, not cured** — DEC-0070's `timeout = 30` caps outages at ~30 s
+  against the old 5–10 min. That is most of the practical benefit WAL offered, at none of this risk.
+- **HLF did not self-recover.** weewx and the DB were healthy and current within minutes; HLF stayed
+  anchored on a `reference_time` from the crash-loop window with every core field in
+  `missing_fields`. It needs a container restart, left to an HLF session (ops#141, relabelled
+  `repo:hlf`). Whether a read failure can permanently poison that cached anchor is an HLF robustness
+  question this incident exposed.
+- **Campaign B is unaffected.** Its metric gate (DEC-0069) and its bounded lock gate (DEC-0070) both
+  stand; nothing here changes the launch decision.
+
+### Lesson
+
+Two of the three failures in this sequence were *repeats of lessons already written down in this
+repo* — a structurally blind test (DEC-0035) and a config assumed rather than verified against its
+consumer (DEC-0031/0046). Having the lesson on file is not the same as applying it under time
+pressure on an incident path. **When a change is going badly, stop and re-read the consuming code
+before the next attempt** — every one of these was cheaper to check than to undo.
+
+---
+
+## DEC-0072 — The MANIFEST indexes classes, and that makes each script's header a load-bearing artifact
+
+**Status:** Accepted · **Date:** 2026-08-06 (S67) · **Amends** DEC-0063's tier-file structure ·
+**applies** eaglehunt-ops STANDARD rule 9 (OPS-DEC-0098) · ops#145
+
+### What this settles
+
+`MANIFEST.md` had one row per artifact. That shape cannot hold a fixed cap: the row count tracks a
+population that only grows — one row per ops script, per runbook, per handoff — so the file crosses
+any cap by construction rather than by neglect. Measured at S67: 1948 tokens against a 1000 cap,
+197% — the worst of the four member repos in the ops sweep.
+
+The fix is not a bigger cap and not fewer artifacts. **Where every member of a set shares a
+load-time convention, the index carries one row naming the set and the convention, and the instances
+self-describe at their source.** `ops/*` + `scripts/*` collapsed from five per-artifact rows to one:
+*the script's header comment is its manual — read it before using or extending one.*
+
+### Why this was safe here, and how that was checked
+
+Rule 9 is only sound if the convention actually holds. It was verified before being relied on, not
+assumed: the headers of `soak_check.sh`, `rx_experiment.sh`, `campaign_analyze.py`,
+`find_duplicate_frames.py`, `freeze_watch.sh` and `check_secrets.sh` already state why each exists
+and which lying symptom it was built to catch — **richer than the MANIFEST rows that duplicated
+them.** That is STANDARD rule 5 applied to the index itself: the row was the second copy.
+
+Coverage went **up**, not down. The old index carried rows for 5 of the 11 harness scripts; six
+(`backfill_container.py`, `backfill_influx.py`, `find_duplicate_frames.py`, `usb_watchdog.sh`,
+`wxcheck.py`, `wxcheck.sh`) had no row at all. One class row covers all eleven.
+
+### The obligation this creates — the reason this is a DEC and not a chore
+
+A class row is a **promise about every present and future member of the set.** From now on:
+
+- **A new script in `ops/` or `scripts/` must ship with a header that answers "why does this exist,
+  and when would I load it?"** A script with a bare shebang silently falsifies the index. The index
+  will not notice; nothing will fail; a future session simply will not find what it needs.
+- **A fact that is true of one script belongs in that script, not in the MANIFEST.** Four such facts
+  were moved back at S67: campaign A needs `--since` (`campaign_analyze.py`); campaign B is the
+  loaded schedule and `install` refuses a stale one (`rx_experiment.sh`); `EXPECT_IMAGE` must track
+  the deployed tag (`soak_check.sh`). Each had drifted into the index because the index was the
+  thing being read.
+
+This is the trade: the index gets cheap and stays cheap, and the cost moves to a discipline that has
+to be maintained at the source. It is the right trade only while the headers stay honest.
+
+### What was NOT done
+
+The `docs/` rows were left per-artifact. Their "when to load" genuinely cannot be inferred from name
+or location — `ASSESSMENT.md` needs its "read as a dated audit of S23" caveat, `ROADMAP.md` needs
+its same-session DEC-0057 rule — which is exactly the exception rule 9 reserves.
+
+### Result
+
+`BOOT.md` 3734 → 2161 tokens (cap 2500); `MANIFEST.md` 1948 → 970 (cap 1000). Verified by running
+`checks/tier-sweep.sh` itself against fixtures rather than by hand arithmetic — the tool that files
+the issue is the tool that confirms the fix. MANIFEST landed at 3% headroom, deliberately not at
+100% of cap: the dashboard's S193 diet hit exactly the cap with zero headroom and was over again
+within a session, which is the failure this leaves room against.
+
+---
+
+## DEC-0073 — Supervise the USB watchdog, make its absence loud, and model its resets before campaign B
+
+**Status:** Accepted (design; implementation follows) · **Date:** 2026-08-06 (S67) ·
+**gates** campaign B · **extends** DEC-0069's gap taxonomy · **re-proves** DEC-0035
+
+### What this settles
+
+`ops/usb_watchdog.sh` was deployed 2026-05-22, hand-started once, and never ran again. Nothing
+supervised it: no crontab entry, no pidfile, no boot task. It died no later than the 2026-07-08 NAS
+reboot and was absent for three qualifying stalls on 2026-08-06. For ~2.5 months `BOOT.md` recorded
+it as "deployed and live." Evidence: `BACKLOG.md` §USB watchdog.
+
+Two defects, and fixing only the first would leave the more important one:
+
+1. **It is not supervised.** A hand-started `tail -F | while read` loop cannot survive a reboot.
+2. **Its absence is invisible.** A watchdog that is not running writes exactly the same log as one
+   running with nothing to do: nothing. No observation distinguishes them, so the failure could only
+   ever be found by accident — which is how it was found.
+
+Defect 2 is the one worth deciding about. Supervision without observability just moves the silence.
+
+### Decision
+
+**(a) Supervise it the way the monitor is supervised.** `weewx_monitor.py:102-115` has run reliably
+for months on a PID guard — read pidfile, exit 0 if `/proc/<pid>` exists, else claim it and release
+via `atexit` — plus a scheduled task that re-launches every 5 minutes. The guard makes re-launch
+idempotent, so the scheduler carries no state. Give `usb_watchdog.sh` the same guard and cadence.
+Proven in this exact environment, no new dependency, survives reboots because the scheduler does.
+
+**(b) Give it a heartbeat.** Touch a liveness file on each loop tick, so liveness is an mtime
+comparison rather than an inference. Deliberately not a periodic "still alive" log line: that grows
+the log without bound and buries the real events.
+
+**(c) Make `ops/soak_check.sh` assert it — the structural half.** That script exists to answer "is
+the station actually healthy, or does it just look Up?", and a dead watchdog is exactly that
+question, which it did not ask. Add a criterion: heartbeat mtime within 2× the tick interval, else
+red. Without this we fix one instance and leave the class, and the next unsupervised helper dies the
+same silent way.
+
+**(d) Treat a rising reset rate as a signal.** The watchdog treats a symptom. A watchdog that
+silently papers over a degrading dongle is worse than none, so resets stay logged with reasons and a
+rising rate should reach the monitor's alert path.
+
+### The campaign-B interaction, and the call made
+
+`ops/campaign_analyze.py` sorts every archive gap into three non-overlapping classes — **freeze**
+(rx before 4–17 %, rx after normal and non-NULL), **arm swap** (rx before normal, rx after NULL) and
+**lock/outage** (same shape as a swap) — validated over 2026-07-29 → 08-05, 10 988 records, 33 gaps.
+
+**The watchdog was dead for the whole of that window.** A USB-reset gap is therefore a fourth class
+the taxonomy has never observed. By shape — reception degrades into the stall, the dongle
+power-cycles, reception returns — a reset would most likely be absorbed into **freeze** and silently
+excluded. That may even be the right treatment, but it would be right *by accident*, and this repo
+has been burned twice by precisely that (DEC-0035, DEC-0071): a test blind to the condition it tests
+proves nothing about it. Enabling the watchdog also changes the apparatus of a pre-registered
+experiment (DEC-0048), which must not happen implicitly.
+
+**Chosen (owner call, S67): watchdog ON for campaign B, and `campaign_analyze.py` taught a fourth
+gap class** that reads the watchdog log and excludes reset-adjacent minutes explicitly. Rejected:
+leaving resets unmodelled (reintroduces the DEC-0035 shape, and B's headline number could be quietly
+shaped by an intervention nobody accounted for), and disabling the watchdog for the campaign (an
+unattended multi-night run with no USB recovery is the exact scenario it exists for). The change is
+small because the apparatus already excludes gaps — this adds a source of truth, not a mechanism.
+
+### Verified before deciding
+
+- **The dongle has not moved:** `/sys/bus/usb/devices/1-3/` still reads `idVendor 0bda`,
+  `idProduct 2838` (Realtek RTL2838), and `syno_vbus_reset` is present. Worth checking, because a
+  silently wrong path would make every future reset a no-op that logs success.
+- **The script is sound.** On 2026-05-22 it detected 3 stalls, fired 2 resets and correctly skipped
+  the middle one for its 300 s cooldown. NAS copy byte-identical to repo (sha256 `fc65a0d7…`).
+- **The monitor's guard was read, not remembered** — `weewx_monitor.py:102-115`.
+
+### What this does NOT do
+
+- It does not explain **why** the stalls happen. This is mitigation. The 08-06 burst — three in 40
+  minutes, then ten hours of nothing — stays unexplained and is not closed here.
+- It does not change the reset mechanism or the 300 s cooldown; both worked as designed.
+- It does not touch the driver or the deployed image.
+
+### Consequences
+
+- Campaign B gains a pre-launch gate: the watchdog verified **running**, by heartbeat, not by a sha.
+- `soak_check.sh` gains a criterion, so this class of silent death is caught by the tool whose job
+  that already was.
+- Installing the scheduled task is a NAS mutation: **Class C, owner-run.**
+- **Lesson, and the reason this is a DEC rather than a chore: a sha match proves the FILE, never the
+  PROCESS.** "Deployed and live — NAS copy matches repo byte-for-byte, zero resets since" was true in
+  both its sub-claims and wrong in its conclusion. For anything long-running, liveness needs its own
+  evidence.
+
+---
+
+## DEC-0074 — Retire `ops/usb_watchdog.sh`: the monitor IS the watchdog, and DEC-0073 solved a problem that did not exist
+
+**Status:** Accepted · **Date:** 2026-08-07 (S67) · **Supersedes DEC-0073** ·
+**corrects** the S67 blocker-4 finding · **re-proves** DEC-0031 against its own author
+
+### What this settles
+
+DEC-0073 concluded that the USB watchdog was dead and that three stalls on 2026-08-06 "went
+unhandled". **The second half was false.** `weewx_monitor.py` — pid 5015, alive, log seconds old —
+carries `reset_dongle()` (line 342) and `watchdog_stall()` with escalation (line 354), wired to
+`'rtldavis process stalled'` at line 692. It handled all three stalls within seconds:
+
+```
+09:53:40 STALL detected → RESET: triggering syno_vbus_reset → done, idVendor=0bda
+10:11:13 STALL detected → RESET → done
+10:32:52 STALL detected → RESET → done
+```
+
+`ops/usb_watchdog.sh` is a **superseded standalone predecessor**. Its function was absorbed first
+into `weewx_monitor.sh` (which still carries a `reset_dongle()` and is itself dead — it references
+the pre-v2 container name) and then into `weewx_monitor.py`, which does strictly more: it verifies
+whether a reset actually *worked* (`RESET_VERIFY_S`), escalates after `RESET_MAX_TRIES`
+consecutive ineffective resets, distinguishes 'stalled' from 'not running', and records that a USB
+reset does not fix the latter and may have caused ERR-0005.
+
+**So the script is retired, not deployed.** Deploying it would have put a second, uncoordinated
+resetter on the same dongle with an unshared cooldown, next to a monitor whose own source records
+the 2026-08-02 incident of **nine resets in 75 minutes**. That is a regression, not a fix.
+
+### How the wrong conclusion was reached, since the shape recurs
+
+The evidence for "not running" was sound and is unchanged: the script logs `Watchdog started`
+unconditionally, its whole 845-byte log holds one such line from 2026-05-22, nothing supervises it,
+and NAS uptime bounded it anyway. What was never checked was **whether anything else was doing the
+job.** Three sources were consulted — the watchdog's log, `weewx.log`, and the process table — and
+all three are silent about the monitor. `weewx_monitor.log` was never read, and it holds the answer
+in plain text.
+
+This is DEC-0031's lesson turned on its author: *the artifact in front of you being wrong does not
+establish that the system is broken.* "This component is dead" and "this capability is missing" are
+different claims requiring different evidence, and DEC-0073 conflated them.
+
+### What survives from DEC-0073
+
+- **"A sha match proves the FILE, never the PROCESS."** Still exactly right, and it is what found the
+  dead script in the first place. Now generalized: liveness needs its own evidence, and so does
+  *absence of function* — check the whole system, not the one component you are looking at.
+
+  ⚠️ **AMENDED 2026-08-09 (S68b, #147) — the lesson stands; the INSTRUMENT this DEC reached for does
+  not.** The check written down here and in the deploy notes was *"process start time after the file
+  mtime, via `nasctl ls /proc/<newpid>`"*. Measured on the NAS: `stat -c %y /proc/<pid>` reported an
+  `rtldavis` as **17 seconds old** when `/proc/<pid>/stat` field 22 against `/proc/uptime` put it at
+  **2.88 days**, corroborated by a container up 3 days with unbroken output. That directory's mtime
+  tracks **access**, so anything that reads `status`/`cmdline`/`fd` underneath it first — as a
+  liveness check naturally does — sees "just now".
+
+  There is an irony worth keeping rather than smoothing away: this DEC exists because months of logs
+  named an operation that never ran, and the probe it adopted in response would have reported a
+  restart that never happened. *Replacing a bad signal with an unverified one repeats the error at
+  one remove.*
+
+  **What actually holds** — and what carried both the S67 and S68 verifications in practice, though
+  neither said so at the time:
+  1. a **startup line in the log** (`Monitor started`) timestamped after the file mtime;
+  2. `/proc/<pid>/stat` **field 22** against `/proc/uptime` (HZ confirmed, not assumed);
+  3. a **new pid** with the **old pid gone** (`/proc/<oldpid>` absent).
+
+  Best used together. `ops/usb_forensics.sh` uses (2) and records the proc-dir mtime only under an
+  explicit "ACCESS time, NOT start" label.
+- **The `soak_check.sh` criterion**, repointed. It now asserts the **monitor's** liveness (live pid
+  plus a log younger than 300 s — its poll is 30 s, and a live pid with a stale log means *wedged*,
+  which is not the same as dead), because that is the process whose death would leave stalls
+  unhandled and unalerted.
+- **What DEC-0073 got right about the class:** this script had no criterion in `soak_check.sh`, and
+  neither did the monitor. Now the monitor does.
+
+### The real defect, which DEC-0073 walked past
+
+All three resets on 08-06 **failed**:
+
+```
+09:56:45  RESET ineffective (1/3); bad windows still 8
+10:14:16  RESET ineffective (1/3); bad windows still 10
+10:36:23  RESET ineffective (1/3); bad windows still 15
+```
+
+Three stalls, three resets, zero recoveries, and the bad-window count climbing 8 → 10 → 15. The
+monitor is working correctly and reporting that **the remedy does not work**. `soak_check.sh` now
+carries a criterion for exactly this (`USB RESETS INEFFECTIVE`), because a watchdog that fires is
+not the same as a watchdog that helps. This is open and unexplained.
+
+### Consequence for campaign B, which is larger than DEC-0073 thought
+
+DEC-0073 framed USB-reset gaps as a *new* class that enabling the watchdog would introduce. Wrong
+again, and in the more expensive direction: the monitor has been firing resets all along — **nine on
+2026-08-02, inside the 2026-07-29 → 08-05 window that `campaign_analyze.py`'s three-class taxonomy
+was validated against.** So reset-adjacent gaps are already in campaign A's recomputed numbers,
+classified as freeze or swap or lock. The fourth-class question is therefore not a pre-launch
+nicety for B; it is a question about a result already published in DEC-0069. Still open.
+
+### Consequences
+
+- `ops/usb_watchdog.sh` and `tests/test_usb_watchdog.sh` deleted. Recoverable from git history if
+  the standalone form is ever wanted; it should not be.
+- **No NAS change was made, and none was needed.** Blocker 4's "deploy" gate on campaign B is void.
+- `soak_check.sh` asserts monitor liveness and reset effectiveness.
+- Two things stay open: why the resets do not work, and whether reset gaps have already skewed the
+  campaign-A figures.
+
+## DEC-0075 — Photograph the reset instead of reasoning about it: capture from inside the sudo grant, host-side through `/proc`
+
+**Status:** Accepted · **Date:** 2026-08-08 (S68) · **advances** DEC-0074's open blocker 4 ·
+**applies** DEC-0040 (prose does not execute) · **leaves DEC-0065 untouched**
+
+### What this settles
+
+The USB resets fire and do not work — 3/3 on 2026-08-06, 9/9 on 2026-08-02 — and the standing
+hypothesis is explicitly *not* established: the reset may be treating the **device** while the fault
+is the **consumer's grip** on it. `usb_reset.sh` is a driver unbind/rebind, not a power cycle, so the
+dongle stays enumerated and nothing makes the stalled `rtldavis` inside the container drop its open
+libusb handle.
+
+That predicts two observable things, and `ops/usb_forensics.sh` is built to see either:
+
+- **stale container view** — the host's `/dev/bus/usb/001/` gains a new `devnum` after the rebind
+  while the container still shows the old node; or
+- **surviving grip** — `rtldavis` still holds an fd on the pre-reset device node afterwards.
+
+If both look clean across a real stall, **the stall is not a USB fault at all** and the reset is
+treating the wrong thing entirely. That is a real answer too, and the capture is designed to be able
+to return it.
+
+### Why it had to be built before the evidence existed
+
+The decisive capture needs a live stall: ~1/day, unpredictable, and gone by the time anyone looks.
+There has been **no stall since the corrected reset code went live at 2026-08-07 19:28** (checked at
+S68 open: zero `RESET` and zero `stalled` lines in the 08-07 and 08-08 monitor logs, both greps
+positive-controlled against 1440/521-hit `WINDOW` counts). So there was nothing to read
+retroactively and no way to harvest this after the fact — the apparatus has to exist first.
+
+### The three design calls
+
+**1. Host-side `/proc`, not `docker exec`.** The container's view is reachable as
+`/proc/<pid>/root/dev/bus/usb/001/` and its handles as `/proc/<pid>/fd`. This fires *during a stall*,
+and a wedged container can block an exec indefinitely — the capture would hang on exactly the event
+it exists to record. `/proc` reads cannot. One pid, discovered by `comm`, yields every piece of
+evidence, and `rtldavis` being **absent** is itself a finding (the 'not running' mode, a different
+fault).
+
+**2. Pre/post fire from inside `usb_reset.sh`, not from the monitor.** Both decisive reads are
+root-only, and `weewx_monitor.py` runs as the unprivileged `weewx-monitor` user — which is *why* it
+shells the reset out through sudo. The sudoers grant is scoped to `usb_reset.sh` alone (README Setup
+step 4). Capturing from there therefore needs **no new sudoers grant** and lands the evidence at the
+only two moments that matter. The monitor fires only the `+RESET_VERIFY_S` capture, host-side and
+**self-labelled DEGRADED** — an unreadable fd section must never be mistaken for a released handle,
+which is the same absence-is-not-evidence trap DEC-0074 cost 2.5 months to.
+
+**3. Capture-only. The escalation ladder is unchanged.** DEC-0065 declined to automate the container
+recreate while ERR-0005's cause was unknown; that reasoning is untouched. Mixing a remedy change into
+the measurement meant to justify it would confound both. Three failed resets still produce an alert
+and no further action — deliberately, and still open.
+
+### The escalation this introduced, and closed
+
+Having `usb_reset.sh` execute a helper means **the helper runs as root under the NOPASSWD grant**. On
+this NAS mode 777 is common, so a helper writable by `weewx-monitor` would have converted that narrow
+grant into arbitrary root execution — precisely what the dedicated-user design exists to prevent.
+
+`usb_reset.sh` now verifies the helper is root-owned and root-only-writable before running it, and
+**refuses loudly** otherwise while still performing the reset; `do_reset()` logs the script's output
+on a zero exit so that refusal cannot become a silent no-op. Checked rather than documented, because
+prose does not execute (DEC-0040). Positive-controlled by neutering the check and watching the
+helper execute.
+
+**Evidence is never load-bearing over the watchdog it observes:** a missing, broken or refused
+capture always leaves the reset intact, proven by running the real script against a helper that exits
+non-zero and asserting the unbind/rebind still happened.
+
+### Status
+
+**Deployed and verified 2026-08-09**, from merged tip `ad7e5a4`. `usb_forensics.sh` and
+`usb_reset.sh` installed `root:root 755` (the ownership the guard depends on), `weewx_monitor.py` as
+the service account; monitor restarted 3870 → 8810, proven by its own startup log line rather than a
+sha. Smoke-tested live: pid discovery by `comm` works, the dongle is `1-3` / `0bda:2838` /
+`devnum=5`, and the root-only sections self-labelled `DEGRADED` when run unprivileged.
+
+**The smoke test immediately earned itself back**, which is the argument for running a capture script
+on the real box rather than only where every `/proc` read fails by design. It reported `rtldavis` as
+17 seconds old when the process had been up **2.88 days** — `/proc/<pid>` directory mtime is
+**access** time, and the script reads files under that directory moments earlier. In a stall capture
+that field would have asserted a restart that never happened: a fabricated event, in the one artifact
+built to settle a question whose hypothesis is deliberately unsettled. Fixed in PR #146 (field 22 vs
+`/proc/uptime`, HZ=100 confirmed not assumed).
+
+⚠️ **This flaw is not confined to this script.** DEC-0074's own replacement for "a sha match proves
+the FILE, never the PROCESS" is `nasctl ls /proc/<newpid>` against the file mtime — the same unsound
+probe. The **lesson** stands untouched; only the instrument was wrong. What actually carried both the
+S67 and the S68 verification was a **startup line in the log** timestamped after the file mtime.
+Tracked as **#147**; also usable: `/proc/<pid>/stat` field 22 vs `/proc/uptime`, and new-pid-with-old-
+pid-gone. Best used together.
+
+---
+
+## DEC-0076 — The secret gate missed `GMAIL_PASS`-shaped keys: the fifth hole, and the first found by routine control rather than by audit
+
+**Status:** Accepted · **Date:** 2026-08-08 (S68) · **extends** DEC-0039/DEC-0045 ·
+**closes** a future hole, not a live one
+
+### What this settles
+
+The gate's key list held `password` and `passcode` but nothing for the `_PASS` abbreviation, so
+`GMAIL_PASS = "..."` was **undetected in every spelling** — spaced, unspaced, colon-separated.
+`GMAIL_PASS` is the exact variable name `weewx_monitor.py` uses for its Gmail credential, so the hole
+sat squarely under this repo's own secret.
+
+**Nothing was ever leaked through it.** The tracked tree carries no `_PASS` literal (the sole match is
+README's documented `NOPASSWD:` sudoers line) and no `GMAIL_PASS = "<literal>"` was ever added on any
+ref in the full history. This closed a future hole.
+
+### How it was found — the part worth keeping
+
+Not by an audit. By the **routine positive control before an unrelated commit** (DEC-0045's standing
+rule): a planted payload carried both an `api_key` line and a `GMAIL_PASS` line, the gate reported
+only the first, and the asymmetry was visible for free. The rule that costs one command per commit is
+what found the fifth instance of this gate being wrong.
+
+### The fix, and why it is two detectors
+
+- **bare `pass` in the key list.** Deliberately *not* `passwd`, which matches README's
+  `NOPASSWD: /volume1/...` and reports the binary path as a credential. Bare `pass` cannot: the
+  detector requires `[:=]` immediately after the key and `NOPASSWD` has `WD` there — the same reason
+  Python's `pass` statement and `passed = True` do not trip it.
+- **a literal matcher for the four-group app-password form.** It slips past the assignment detector
+  *even with* `pass` in the key list, because that detector needs 8+ **consecutive** value characters
+  and the four-group form breaks every 4. That is the shape Google displays and people paste.
+
+Each was proven necessary by removing it and watching its own payloads leak.
+
+### The false-positive half, which nearly shipped
+
+`PASS` is listed separately from `pass` because **detection is case-insensitive and the allow-list
+deliberately is not** — that asymmetry is what distinguishes a constant reference from a literal
+(bug class 1). Without the uppercase spelling, widening the key list made the gate report
+`weewx_monitor.py`'s own `os.environ` lookup and README's placeholder as credentials, and the
+tracked-tree check failed.
+
+**The harness caught that before it shipped.** A gate that cries wolf on a repo's own source gets
+switched off, so the false-positive direction is not a nicety — it is half the fix. Harness: 41 → 51
+cases, tracked tree still clean.
+
+## DEC-0077 — Reset gaps do NOT contaminate campaign A's figures: the exclusion is class-independent, and the outage left no rows to mis-average
+
+**Status:** Accepted · **Date:** 2026-08-09 (S68d) · **closes** blocker 5 ·
+**bounds** DEC-0074's concern · **amends** DEC-0069's taxonomy completeness claim ·
+**corrects** ERR-0005 / DEC-0065's reset count
+
+### What this settles
+
+DEC-0074 raised blocker 5: the monitor fired resets on 2026-08-02, **inside** the 07-29 → 08-05
+window `campaign_analyze.py`'s three-class gap taxonomy was validated against, so reset-adjacent gaps
+were sorted into freeze / arm-swap / lock-outage in the figures DEC-0069 published. It called this "a
+question about an existing result, not a pre-launch nicety." Correct to raise. The answer is **no
+contamination**, and the reasoning matters more than the verdict.
+
+### The measurement
+
+Every rotated monitor log spanning campaign A (`.11` = 07-29 through `.4` = 08-05) grepped for
+resets. **11 resets, all on 08-02**, 00:11:23 → 01:27:20. Seven of the eight days are empty, which
+independently corroborates DEC-0067's "0 detections on every other day measured".
+
+Archive rows across the incident (`rxCheckPercent`, `interval`, 08-01 23:00 → 08-02 03:30):
+
+| Time (EDT) | Row |
+|---|---|
+| 00:04 | **72.73%** — normal, and the last row before the outage |
+| 00:05 → 01:23 | **80 rows absent** |
+| 01:24 | **NULL** |
+| 01:25 → 01:50 | **25 rows absent** |
+| 01:51 | **NULL** |
+| 01:52 | 57.14% — back inside the population |
+
+### Why the figures are unaffected
+
+That shape is precisely the **lock/outage** signature the tool already documents: *rx BEFORE normal,
+rx AFTER NULL*. So the taxonomy classified it, and — the load-bearing point — **classification is
+descriptive; exclusion is structural.** DEC-0069's rule drops the record on either side of **any**
+gap, plus every NULL, plus `rx > 100`, without consulting the class. 00:04, 01:24 and 01:51 were all
+excluded. The 105 absent minutes contribute nothing: absent rows are not zeros, which the tool's own
+header already established and which is why the design shrank at DEC-0069.
+
+**The feared mode did not occur.** The real exposure was never mislabeling — it was a reset outage
+producing *present but low* rows, which nothing would exclude, because the tool refuses magnitude
+thresholds on purpose (a threshold discards genuine deep fades and biases every arm upward). No such
+rows exist here. The transition is normal → absent → NULL → normal with nothing low-but-present at
+either edge.
+
+### What IS wrong, narrowly
+
+DEC-0069's taxonomy says "every gap falls into one of three classes, and they do not overlap". That
+still holds as a statement about *shapes*. It is wrong as a statement about *causes*: a USB reset
+outage is a fourth cause producing the lock/outage shape. Since treatment keys on shape, **no
+analyzer change is warranted** — recorded so campaign B's reading does not re-open it.
+
+### Residuals, both bounded, neither gating
+
+- **01:52 (57.14%) survives the rule**, because it neighbours a NULL *row*, not a gap. It sits just
+  above the population p01 of 56.5, so it is plausible as real. Worst case it is one truncated
+  record: ≈ (72−57)/360 ≈ **0.04 pts** on a 6 h block, against a 0.94-pt observed spread and a 2.0-pt
+  adoption bar.
+- **105 minutes vanished from one arm's block** — ~2.4% of the campaign's 12 × 6 h. This costs
+  **precision, not bias**: during a receiver outage the arm's true RF performance is unmeasurable, and
+  a USB failure is not a property of the arm, so excluding it is the correct treatment rather than a
+  concession. Which arm is identifiable from the apparatus log if it is ever worth knowing; it does
+  not change the verdict.
+
+### A correction to the record
+
+The monitor log shows **11 resets**, not nine. ERR-0005 and DEC-0065 both state "nine resets in 75
+minutes" and refer to "reset #10 at 01:27:17"; that event is the **11th**, and the span is 76 min.
+Nothing downstream depended on the count — DEC-0065's argument is about unbounded retry, which 11
+makes marginally stronger — but the figure appears in two decision entries and should be right.

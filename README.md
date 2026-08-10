@@ -3,7 +3,7 @@
 An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](https://weewx.com/) plus a **patched** version of Luc Heijst's [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver. It intercepts a Davis Vantage station off the air with an RTL-SDR USB dongle and uploads to multiple weather services — no proprietary Davis hardware required.
 
 > **This is not stock upstream.** The driver shipped here is a fork of rtldavis v0.20 and reports
-> itself as `0.20+ws.3`. It carries a rain-counter glitch filter, a decode-layer sensor plausibility
+> itself as `0.20+ws.4`. It carries a rain-counter glitch filter, a decode-layer sensor plausibility
 > filter, and five bug fixes that do not exist upstream — see
 > **[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)** for every divergence, why it is there, and
 > whether it is headed upstream.
@@ -13,12 +13,19 @@ An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](htt
 
 📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
 ```bash
-docker pull weatheredscientist/weewx-rtldavis:v2.0.9   # or :latest
+docker pull weatheredscientist/weewx-rtldavis:v2.0.12   # or :latest
 ```
-Pin a version tag (`:v2.0.9`) for reproducible deploys; `:latest` always tracks the newest release.
+Pin a version tag (`:v2.0.12`) for reproducible deploys; `:latest` always tracks the newest release.
 
-> **Current version:** v2.0.9 — **upgrade if you are on any earlier tag.**
-> **New in v2.0.9:** frame-level co-rejection in the decode-layer sensor filter. Davis frames carry
+> **Current version:** v2.0.12 — **upgrade if you are on any earlier tag.**
+> **New in v2.0.12:** a `BIAS_TEE` environment variable (default `1`, so behavior is unchanged if
+> you do nothing) — set `BIAS_TEE=0` when no inline LNA is in circuit, and the entrypoint drives the
+> RTL-SDR v3 bias tee explicitly off rather than trusting the power-on default. Also fixes a driver
+> logging bug that discarded rtldavis's own error output when the process failed to start: the
+> "process is not running" path formatted a Python generator's repr instead of the error text, so
+> the one message explaining *why* the decoder died never reached the log. Driver → `0.20+ws.4`.
+>
+> **From v2.0.9:** frame-level co-rejection in the decode-layer sensor filter. Davis frames carry
 > wind in every packet plus one rotating sensor payload, and a corrupt frame can pass CRC (multi-bit
 > errors). Previously each field was checked independently, so a frame whose humidity decoded to an
 > impossible 144.9% could still contribute a phantom 39 mph wind gust from its wind bytes — which is
@@ -43,6 +50,46 @@ Pin a version tag (`:v2.0.9`) for reproducible deploys; `:latest` always tracks 
 > **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3
 > **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.4.0
 > **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)
+
+---
+
+## Versioning — two numbers, because there are two things
+
+You will see two different version numbers in this project. They are deliberately separate and
+neither claims to supersede the other.
+
+**The image version — `v2.0.12`.** This versions *this distribution*: the Docker image, its base
+OS, the uploaders and services packaged with it. The **major digit tracks the base OS / Python
+generation**, which is the real compatibility boundary for a container — anyone who layers their
+own image on top, pins a Python wheel, or compiles against system libraries is broken by a base
+change. Hence `v1.0-ubuntu22` (Ubuntu 22.04 / Python 3.10) → `v2.0-ubuntu26` (Ubuntu 26.04 /
+Python 3.14). Patch releases within a major are ordinary fixes and features.
+
+**The driver version — `0.20+ws.4`.** This is a
+[PEP 440 local version identifier](https://peps.python.org/pep-0440/#local-version-identifiers),
+the Python-native way to say "upstream's release, plus our local patches":
+
+| Part | Meaning |
+|------|---------|
+| `0.20` | **upstream's** version — Luc Heijst's rtldavis v0.20. Ours to point at, not to claim. It moves only if we rebase onto a new upstream release. |
+| `ws` | **W**eathered**S**cientist — this fork's maintainer, matching the GitHub org and Docker Hub namespace. |
+| `4` | our patch level on top of that upstream release. |
+
+Two rules follow, and we hold ourselves to both:
+
+1. **`ws.N` increments whenever the file's behavior changes.** The startup banner is how you tell
+   which driver is actually running, so a release that changed the driver must be distinguishable
+   in the log. (Until 2026-07-13 this driver logged a bare `0.20` while carrying a rain filter and
+   five bug fixes — anyone debugging from those logs was misled. That is the mistake this rule
+   exists to prevent.)
+2. **Each patched file carries its own `ws.N`.** `rtldavis.py` is at `ws.4` while `influx.py` is at
+   `ws.1`, because they are different upstream works with different patch lineages. A shared counter
+   would imply changes that never happened.
+
+**We never renumber into upstream's space.** Bumping the driver to `0.21` would collide with a
+version Luc may yet publish, and two different things called `weewx-rtldavis 0.21` is precisely the
+confusion this scheme avoids. Full provenance for every borrowed component is in
+**[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)**.
 
 ---
 
@@ -309,8 +356,12 @@ The monitor needs to reset the USB dongle, which requires root access to `/sys/b
 
 The Task Scheduler script (which runs as root on boot) adds the narrow sudoers rule, then drops privileges to run the monitor as `weewx-monitor`. This means:
 - A bug or exploit in the monitor cannot affect the rest of the NAS
-- The only escalation possible is running `usb_reset.sh` — which only does the USB bind/unbind
+- The only escalation possible is running `usb_reset.sh` — the USB bind/unbind, plus the read-only capture below
 - `usb_reset.sh` is owned by root and not writable by `weewx-monitor`
+
+`usb_reset.sh` also runs `usb_forensics.sh` before and after the reset, to record what the USB bus and the SDR process looked like on either side of it. That capture is read-only and optional — if the script is absent, the reset proceeds unchanged.
+
+Because it is invoked from inside the sudo grant, `usb_forensics.sh` runs as root too. So it must be owned by root and not writable by anyone else, on exactly the same reasoning as `usb_reset.sh`: a helper that `weewx-monitor` could rewrite would turn the narrow grant into arbitrary root execution. `usb_reset.sh` checks this itself and refuses to run a helper that fails it, reporting the refusal to the monitor log rather than skipping quietly.
 
 > Note: Synology DSM may overwrite `/etc/sudoers` on system updates. The Task Scheduler script recreates the sudoers rule on every boot, so it survives updates automatically.
 
@@ -348,7 +399,13 @@ rm -f /volume1/docker/weewx-rtldavis/logs/weewx_monitor.pid
 sudo -u weewx-monitor -E python3 -u /volume1/docker/weewx-rtldavis/weewx_monitor.py >> /volume1/docker/weewx-rtldavis/logs/weewx_monitor.log 2>&1 &
 ```
 
-> **Note:** The USB device path `1-3` in `usb_reset.sh` is specific to the DS918+. Check your path with `lsusb` and update accordingly.
+5. **Install the reset forensics** (optional; skip it and the reset still works):
+```bash
+sudo install -o root -g root -m 755 usb_forensics.sh /volume1/docker/weewx-rtldavis/usb_forensics.sh
+```
+Root-owned and root-only-writable is not a style preference here — see the Security Note above.
+
+> **Note:** The USB device path `1-3` is specific to the DS918+, and appears in both `usb_reset.sh` and `usb_forensics.sh` (as `USB_RESET_PORT`). Check your path with `lsusb` and update both, or the capture will document a different port from the one being reset.
 
 ### Log Rotation (weewx_monitor.log)
 

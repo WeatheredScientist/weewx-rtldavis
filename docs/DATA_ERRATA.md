@@ -276,3 +276,124 @@ cap — and the proof that would have caught it was already computed, in the sam
 different field of the same frame. Evidence available at the choke point must be applied to the whole
 frame, not per-field (DEC-0054). Also: 14:57–14:59 have no archive rows (the decode outage) — an
 honest 3-minute gap, no backfill warranted.
+
+---
+
+## ERR-0005 — 2026-08-02 receiver outage, ~1h45m gap (two segments)
+
+**Window:** 2026-08-02 00:05:05 → 01:50:13 EDT (1 h 45 m 08 s) · **Logged:** 2026-08-02 (S62)
+**Cause:** not a sensor or decode fault — an **RF/receiver outage of unestablished origin**, compounded
+mid-incident by the monitor's own USB watchdog. Resolved by a full container recreate.
+
+### Structure — not one gap, but two, with brief islands of life
+
+| Segment | Span | Duration |
+|---|---|---|
+| Gap 1 | 00:05:05 → 00:07:26 | 2 m 21 s |
+| *island* | 00:07:26 → 00:08:22 | ~56 s — reception **71%** |
+| **Gap 2 (the main one)** | 00:08:22 → 01:23:56 | **1 h 15 m 34 s** |
+| *island* | 01:23:56 → 01:24:32 | ~36 s — reception **43%**; PWSWeather, CWOP, AWEKAS and WOW all recovered, so an archive record landed |
+| Gap 3 | 01:24:32 → 01:50:13 | **25 m 41 s** |
+
+Approximately **102 one-minute archive records missing**. Reception was `0/21` on every window across
+both gaps — a total loss on all channels, not a degradation.
+
+### Timeline of causes
+
+| Time | Event |
+|---|---|
+| 00:05:03 | Campaign A ticks `swapping B -> D` (gain 207, `-ex 50`); container restarts. Reception → 0 |
+| 00:07:26–00:08:22 | Loop data flows again at **71%** — arm D *was* working |
+| 00:08:21 | Apparatus declares `ABORT: container did not produce records after swapping to arm D`; restores baseline, drops STOP sentinel |
+| 00:08:33 | Restore restarts the container. Reception → 0 and stays there for 75 minutes |
+| 00:11–01:10 | Monitor watchdog fires **9 USB unbind/rebind resets**. None restore reception |
+| ~01:23 | Owner physically reseats the dongle → ~36 s of reception, then dead again |
+| 01:27:17 | Watchdog reset **#10** |
+| 01:28:03 | Failure mode **changes**: `rtldavis process is not running` — the binary now exits immediately, retrying every 60 s |
+| ~01:33 | Owner removes the LNA (bypass). Reception stays 0 — the LNA was **not** the blocker |
+| 01:48:41 | **Full container recreate** (`kill` → `rm` → `run`, v2.0.11, config derived from `docker inspect`) |
+| 01:50:13 | Data flows. Stable since — 468 windows, zero faults, through 09:40 |
+
+**Was anything cached?** **No** — same as ERR-0003. weewx read no loop packets during the gaps, so
+nothing was buffered and nothing was lost in the restarts; the data was never captured at all. Uploads
+(WU RapidFire, CWOP, InfluxDB, and the other seven sinks) did not run either.
+
+### Two findings this incident earns
+
+**1. The abort was CORRECT — checked and cleared (S62).** It first looked like a near-miss of the
+DEC-0061 class: the apparatus declared "did not produce records" at 00:08:21 while loop data was
+flowing at 71% and a RapidFire record published at 00:08:22. It was not. The health check waits for a
+new **archive** record (`Added record` in `weewx.log`), and the log is unambiguous:
+
+| Last archive record before the abort | Next archive record |
+|---|---|
+| **00:04:20** | **01:24:24** (80 minutes later) |
+
+`HEALTH_TRIES=36` (~180 s) ran its full budget against a genuine absence. RapidFire loop publications
+are **not** archive records — the ~56 s reception island was both too short and too late to close a
+60 s archive interval and clear the write lag. The DEC-0061 budget arithmetic holds. **The check is
+sound and will not spuriously abort campaign B.**
+
+**2. The auto-remediation made things worse.** Nine USB unbind/rebind resets accomplished nothing
+across 75 minutes, and reset #10 at 01:27:17 preceded, by 46 seconds, a *new and worse* failure mode in
+which the RTL-SDR still enumerated for `rtl_biast` (device found, R820T tuner found, bias-tee command
+returning success) while `rtldavis` could no longer claim it for streaming. The stall-recovery loop had
+also killed and respawned `rtldavis` ~18 times to no effect. What resolved it was the container
+recreate — a strictly larger hammer than anything the watchdog can swing.
+**Addressed in [DEC-0065](DECISIONS.md)**: the watchdog now verifies its own remedy, stops after
+3 ineffective attempts, and escalates to a human rather than acquiring a bigger hammer. Auto-recreate
+was deliberately *not* built — see that decision for why n=1 does not meet the "proven fix" bar.
+
+### Correction status
+
+- **local-archive:** ⬜ **no correction applied.** This is an honest gap, not bad data — there is
+  nothing to null. Records simply do not exist for the window.
+- **influxdb:** ⬜ same — an honest gap.
+- **external:** ⛔ immutable, and in this case immaterial: nothing wrong was published, because nothing
+  was published at all. CWOP/NOAA-MADIS will not accept retroactive data, so the gap is permanent there
+  regardless.
+
+**Backfill APPROVED (S62), not yet applied.** The co-located Davis WeatherLink Live console receives
+the same ISS and uploads to Weather Underground independently of us. That is exactly the path ERR-0003
+used to recover its 7 h 18 m gap (29 records at `interval = 15`, each flagged `backfill = 1` in
+InfluxDB). The same recovery applies here for ~1 h 45 m at 15-minute resolution — roughly **7 records**
+— and will also establish the weather conditions during the gap, currently **not characterized**.
+
+Follow ERR-0003's provenance discipline exactly: these are the same physical ISS seen by a **different
+receiver at a coarser cadence**, so they are recorded honestly as `interval = 15` (not our usual 1) and
+carry the in-band `backfill = 1` flag in InfluxDB. Back up the archive DB first. Anyone analyzing this
+window must know the resolution differs — hence the flag and this entry. **This row updates to ✅ with
+the record count and backup filename once applied.**
+
+**Lesson:** the two failure modes were distinguishable in the logs the whole time — `stalled` means the
+process runs and yields nothing; `not running` means it dies on start — and telling them apart was what
+finally pointed at the container rather than the hardware. But the driver **swallowed the one piece of
+evidence that would have shortened this**: `user.rtldavis ERROR err: <generator object
+ProcManager.get_stderr at 0x...>` logs the *repr of a generator* instead of iterating it, discarding
+rtldavis's actual stderr at the exact moment it was needed. **Fixed S62** (`drain_stderr()`); the
+fix is baked into the image, so it lands with the v2.0.12 rebuild, not before.
+
+### Addendum (S63, 2026-08-03) — ERR-0005 is confirmed a GENUINE RF loss, and is a single incident
+
+[DEC-0067](DECISIONS.md) established a log-level discriminator between a real receiver outage and a
+freeze of the weewx process: `genLoopPackets()` raises `rtldavis process stalled` at 150 s **only if
+the main thread is executing**. Applied to ERR-0005 it fires **21 times on 2026-08-02** — so the main
+thread was running throughout and genuinely heard nothing. **This erratum is correctly filed as an RF
+outage.**
+
+Applied to every other day measured (07-30, 07-31, 08-01, 08-03): **zero** detections. ERR-0005 is
+therefore a *single incident*, not the first of a series — which is a materially different thing to
+carry forward than "the receiver is intermittently unreliable". Its root cause is still
+unestablished.
+
+**The 3-minute event at 13:47 the same day is NOT of this kind** and should not be read as a smaller
+ERR-0005. Its 209 s gap raised no stall exception, so the receiver was fine and the *process* was
+frozen. That class is recurring (~1/day), pre-dates the LNA removal, and is not an RF fault at all.
+
+**Data-integrity note for anyone analyzing a freeze window.** Packets are stamped at *parse* time,
+not receive time, so packets buffered during a freeze all collapse onto the resume instant. The
+minutes inside a freeze have **no records at all**, and the first record after it absorbs the whole
+backlog — its packet counts and `rxCheckPercent` are inflated. Both artifacts are software, not
+weather, and neither is corrected in the archive. Treat freeze-adjacent records as suspect rather
+than nulling them: the underlying observations are real, only their timestamps are wrong. Known
+freezes so far: **2026-07-30 08:04 (218 s), 2026-08-02 13:46 (209 s), 2026-08-03 02:59 (208 s)**.

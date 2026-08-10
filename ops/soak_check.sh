@@ -17,6 +17,14 @@
 #   ops/soak_check.sh              # check since the container started
 #   ops/soak_check.sh 3600         # check only the last N seconds
 #
+# EXPECT_IMAGE (below) must name the tag actually deployed RIGHT NOW, not the one
+# being prepared. It was set to :v2.0.12 from S62 until S67 while prod ran :v2.0.11
+# -- bumped in ANTICIPATION of a release that never deployed, so the identity check
+# would have gone red on a perfectly healthy station for five sessions. Nobody ran
+# it, which is the only reason it went unnoticed. The mirror-image failure is worse:
+# left too high after a rollback, it goes GREEN on the wrong image. Bump it as part
+# of the deploy, never before and never after.
+#
 # Exit 0 = all green. Exit 1 = something needs a human.
 set -uo pipefail
 
@@ -32,7 +40,14 @@ case "${NAS_PORT}${NAS_USER}${NAS_HOST}" in (*'<'*)
 esac
 WINDOW="${1:-0}"          # seconds; 0 = since container start
 CONTAINER=weewx-rtldavis-v2
-EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.10}"
+EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.11}"
+# The DEC-0031 canary. Same rule as EXPECT_IMAGE above: this is what prod is
+# running NOW, not what the repo is on. rtldavis.py went to 0.20+ws.4 at S62
+# (2026-08-02) for the unshipped v2.0.12, but prod is v2.0.11, built 2026-07-28,
+# which ships ws.3 -- so this was bumped in the same anticipatory commit and for
+# five sessions the canary reported a mismatch on a correct deployment. Bump both
+# variables as part of the deploy that ships them (DEC-0046).
+EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.3}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }
@@ -73,7 +88,7 @@ ln=\$(grep -n \"^\$(date -d \"@\$t0\" '+%Y-%m-%d %H' 2>/dev/null)\" \"\$L\" | he
 win=\$(tail -n +\$ln \"\$L\")
 
 echo \"banner=\$(printf '%s' \"\$win\" | grep -c 'weewxd .*Initializing weewxd version')\"
-echo \"drv_ok=\$(printf '%s' \"\$win\" | grep -c 'driver version is 0.20+ws.1')\"
+echo \"drv_ver=\$(printf '%s' \"\$win\" | grep -o 'driver version is [^ ]*' | tail -1 | sed 's/.* //')\"
 echo \"qc_ok=\$(printf '%s' \"\$win\" | grep -c 'sensor_qc True')\"
 echo \"hraw_on=\$(printf '%s' \"\$win\" | grep -c 'log_humidity_raw True')\"
 echo \"hraw_n=\$(printf '%s' \"\$win\" | grep -c 'humidity_raw=')\"
@@ -91,6 +106,22 @@ echo \"record_age_s=\$((now - lt))\"
 
 # --- reception ---
 echo \"window_pct=\$(grep 'WINDOW:' \"\$M\" | tail -1 | grep -oE '\([0-9]+%\)' | tr -d '()%')\"
+
+# --- the monitor IS the USB watchdog (DEC-0074) ---
+# weewx_monitor.py carries reset_dongle()/watchdog_stall() as well as alerting, so
+# its liveness is the watchdog's liveness. If it dies, stalls go unhandled AND
+# unalerted, and nothing in weewx.log says so.
+MP=/volume1/docker/weewx-rtldavis/logs/weewx_monitor.pid
+ML=/volume1/docker/weewx-rtldavis/logs/weewx_monitor.log
+mp=\$(cat \$MP 2>/dev/null)
+echo \"mon_proc=\$([ -n \"\$mp\" ] && [ -d /proc/\$mp ] && echo alive || echo dead)\"
+mlog=\$(stat -c %Y \$ML 2>/dev/null || echo 0)
+echo \"mon_log_age=\$([ \"\$mlog\" -gt 0 ] && echo \$((now - mlog)) || echo -1)\"
+# Both the current log and the previous one: weewx_monitor.log rotates daily at
+# 00:05, so a check run just after midnight would otherwise report 0 resets while
+# yesterday's sit one file away -- a silent window exactly when a bad night ended.
+echo \"mon_resets=\$(cat \$ML \$ML.1 2>/dev/null | grep -c 'RESET: triggering')\"
+echo \"mon_reset_bad=\$(cat \$ML \$ML.1 2>/dev/null | grep -c 'RESET ineffective')\"
 
 # --- phantom rain: the DEC-0042 signature, auto-detected ---
 # A raw rainRate>0/rain=0 row is NOT itself the signature: the ISS's own rain-rate message
@@ -140,7 +171,19 @@ sl=$(get stdout_lines)
 [ "$(get banner)" != "0" ] && ok "weewxd startup banner in weewx.log" "(DEC-0043)" || note "no startup banner in window" "(only expected right after a restart)"
 
 # 4. Driver identity (DEC-0031 — the stock-driver trap)
-[ "$(get drv_ok)" != "0" ] && ok "patched driver 0.20+ws.1" "(DEC-0031)" || note "driver banner not in window" "(only logged at startup)"
+# Report the version the driver ACTUALLY announces, rather than grepping for an
+# expected one. The old form grepped a hardcoded '0.20+ws.1' and fell through to
+# a soft note on mismatch -- so from v2.0.10 onward it silently verified nothing,
+# and "wrong version" was indistinguishable from "banner not in this window"
+# (S62). Three distinct states now, and a mismatch is a FAILURE.
+_dv="$(get drv_ver)"
+if [ -z "$_dv" ]; then
+  note "driver banner not in window" "(only logged at startup — version UNVERIFIED)"
+elif [ "$_dv" = "$EXPECT_DRIVER" ]; then
+  ok "patched driver $EXPECT_DRIVER" "(DEC-0031 canary)"
+else
+  bad "DRIVER VERSION MISMATCH" "running $_dv, want $EXPECT_DRIVER — is the baked driver the one you built? (DEC-0031)"
+fi
 [ "$(get qc_ok)" != "0" ] && ok "sensor_qc enabled" || note "sensor_qc not seen in window" ""
 [ "$(get hraw_on)" != "0" ] && ok "log_humidity_raw ACTIVE" "(DEC-0044 instrument)" || note "log_humidity_raw not seen" ""
 
@@ -163,7 +206,25 @@ if [ -n "$wp" ] && [ "$wp" -ge 80 ] 2>/dev/null; then ok "reception window" "${w
 elif [ -n "$wp" ]; then note "reception window low" "${wp}%"
 else note "no reception window reported" ""; fi
 
-# 9. The two free experiments this soak is really for
+# 9. The monitor, which IS the USB watchdog (DEC-0074).
+# This script exists to ask "healthy, or does it just look Up?" and had never asked
+# it of the process that handles USB stalls. Its 30 s poll makes a 300 s log age
+# generous; a live pid with a stale log means wedged, which is not the same as dead.
+mpr=$(get mon_proc); mla=$(get mon_log_age)
+if [ "$mpr" = "alive" ] && [ -n "$mla" ] && [ "$mla" -ge 0 ] && [ "$mla" -le 300 ] 2>/dev/null; then
+  ok "monitor/watchdog alive" "log ${mla}s ago"
+elif [ "$mpr" = "alive" ]; then
+  bad "MONITOR LOG STALE" "pid alive but log ${mla}s old — wedged, so stalls go unhandled"
+else
+  bad "MONITOR/WATCHDOG DEAD" "no live pid — USB stalls go unhandled AND unalerted"
+fi
+# The remedy's own effectiveness. S67: three stalls, three resets, all ineffective,
+# bad windows climbing 8 -> 10 -> 15. A firing watchdog is not a working one.
+mrb=$(get mon_reset_bad)
+if [ "${mrb:-0}" -eq 0 ]; then ok "USB resets effective" "$(get mon_resets) fired, 0 ineffective"
+else bad "USB RESETS INEFFECTIVE" "${mrb} logged ineffective of $(get mon_resets) — the remedy is not working"; fi
+
+# 10. The two free experiments this soak is really for
 echo
 echo "── THE TWO OPEN EXPERIMENTS ────────────────────────────────────────────"
 hn=$(get hraw_n)

@@ -13,8 +13,8 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 | SSH / SCP | `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` · `scp -P <SSH_PORT> -O` (capital `-P`, `-O` for the legacy protocol) |
 | Real values | gitignored `docs/LOCAL_INFRA.md` (this repo is public — placeholders only in committed docs, DEC-0012) |
 | Docker binary | `/usr/local/bin/docker` (no sudo needed; not on the default PATH) |
-| Container | `weewx-rtldavis-v2` · **prod runs `:v2.0.10`** (rollback: `:v2.0.9`) |
-| Published image | **`:v2.0.10` + `:latest`** — matches prod, no drift (S55). |
+| Container | `weewx-rtldavis-v2` · **prod runs `:v2.0.11`** (rollback: `:v2.0.10`) |
+| Published image | **`:v2.0.11` + `:latest`** — matches prod, no drift (S55c). |
 | Driver location | **BAKED** in the image venv (`site-packages/user/rtldavis.py`) — *not* `weewx-data/bin/user/`. Never bind-mount it (DEC-0031); a driver change needs a rebuild. |
 | Project root (NAS) | `/volume1/docker/weewx-rtldavis/` |
 | Live config | `.../weewx-data/weewx.conf` (bind-mounted; gain/ppm edits need only a restart) |
@@ -51,6 +51,14 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - Remote note: origin is the lowercase URL; GitHub redirects to canonical `WeatheredScientist/`
   (backlogged to fix).
+- **⚠️ `Closes #N` / `Fixes #N` DO NOT WORK on this repo's normal flow.** GitHub auto-closes only on
+  a merge to the **default branch**, which here is `main` — and `main` advances only at a
+  prod-baseline release, typically weeks behind. Work merged to `dev` with a `Closes #N` trailer
+  leaves the issue **open indefinitely**, and the trailer reads to everyone (including the next
+  session) as though it were handled. Found S68d, having done exactly that to #147 and then written
+  "✅ #147 closed" into `BOOT.md`. **Close the issue explicitly** (`gh issue close N -c "landed in
+  PR #M"`) once the PR merges, or say "addressed in #M" and leave it open on purpose. Keep the
+  trailer only as a cross-reference, never as the mechanism.
 
 ## Secrets (the public-repo rule — DEC-0012)
 
@@ -67,11 +75,35 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 
 ## Python / validation (DEC-0015)
 
-- Before considering `.py` work done: `python -m ruff check .` · `python -m ruff format` ·
-  `python -m mypy` · `python -m pytest` (as applicable). Enforced by `.pre-commit-config.yaml` + CI.
-  *(On the macOS dev box the interpreter is `python3` — there is no bare `python`; pre-commit and CI
-  supply their own. Run the secret gate standalone with `bash scripts/check_secrets.sh` — it now
-  passes cleanly with no staged files rather than erroring.)*
+- Before considering `.py` work done, run these three **from the repo venv** (as applicable).
+  Enforced by `.pre-commit-config.yaml` + CI:
+
+  ```
+  .venv/bin/python -m ruff check .
+  .venv/bin/python -m pytest
+  .venv/bin/python -m mypy --ignore-missing-imports --no-strict-optional $(git ls-files '*.py')
+  ```
+
+  **`.venv/bin/python` is the only interpreter on this box that has the tooling** (verified S59).
+  Neither of the obvious alternatives works: bare `python` is a pyenv shim (3.12.12) and `python3`
+  is Homebrew 3.14 — **both lack pytest, mypy and ruff entirely**, so following a bare
+  `python -m pytest` gets you `No module named pytest`, not a green gate. pre-commit and CI supply
+  their own environments and are unaffected.
+
+  **mypy needs the flags and the file list spelled out**: this repo has no mypy config at all (no
+  `pyproject.toml`, no `mypy.ini`, no `setup.cfg` — only `ruff.toml`), so a bare `python -m mypy`
+  exits `Missing target module, package, files, or command`. The invocation above is what
+  `.pre-commit-config.yaml` passes, and it reproduces CI locally.
+
+  **`ruff format` is NOT a gate — do not run it (DEC-0027).** It was listed here as one until S59.
+  It would reformat 30 of 33 files against the deliberate column alignment DEC-0027 exists to
+  protect. The same contradiction reached `.pre-commit-config.yaml` and was removed there at S43;
+  this line was the surviving copy.
+
+  *(Secret gate, standalone: `bash scripts/check_secrets.sh`. **It prints nothing and exits 0 on a
+  clean pass — and also exits 0 with `SECRET-SCAN: nothing to scan` when no files are staged.**
+  Those look alike and are not alike: the second scanned nothing. `git add` first, then scan, and
+  positive-control any clean result by staging a planted payload — DEC-0039/DEC-0045.)*
 - **A local `pre-commit run mypy --all-files` "Passed" is not proof CI will pass.** mypy's
   incremental cache (`.mypy_cache/`, gitignored) persists between runs and can silently mask real
   errors on files nothing else touched (S49, issue #67 follow-up: a stale cache hid 2 real errors

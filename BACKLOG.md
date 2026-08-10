@@ -1,8 +1,176 @@
 # Backlog — weewx-rtldavis
 
-Unordered ideas and durable findings not yet scheduled. Scheduled work lives in ROADMAP.md;
-in-flight work in docs/STATUS.md. Carried forward from the pre-governance NAS `BACKLOG.md`; the
-open items from the retired root `cleanup_backlog.md` were folded in here (S27, S23 tail).
+Unordered near-term ideas and durable findings not yet scheduled, **plus long-term/uncalendared
+direction** (its own section below, moved here from ROADMAP.md's old P4 + "Longer horizon" at
+DEC-0058, S56 — keeps ROADMAP.md down to the actively-sequenced P0–P3 plan). Scheduled work lives
+in ROADMAP.md; in-flight work in `BOOT.md`. Carried forward from the pre-governance NAS
+`BACKLOG.md`; the open items from the retired root `cleanup_backlog.md` were folded in here (S27,
+S23 tail). **The "Open threads" and "Needs a check" sections below moved here verbatim from the
+retired `docs/STATUS.md` at S60 (DEC-0063)** — they were never in-flight work, and `BOOT.md` is
+capped for what is.
+
+## Open threads — none of these block anything (moved from STATUS.md, S60)
+
+- **Monitor alert on the new rejection signature (S33 follow-up #1)** — extend `weewx_monitor.py`'s
+  rain-glitch email to SensorQC rejections; needs its own pattern + a rate cap so a flapping sensor
+  can't spam. Only worth doing once we see the real rejection rate.
+- **`DewpointCacher` × `SensorQC` interaction (S36, undecided).** The cacher carries `outTemp`/
+  `outHumidity`/`radiation`/`UV` forward for up to 300 s, so a value SensorQC *rejects* gets refilled
+  with the last good reading (~40 s old) rather than left null. The bad value never propagates either
+  way — so this did **not** block v2.0.4 — but a rejected reading is currently indistinguishable from an
+  absent one in the data (the rejection is still logged loudly). Decide whether that's right.
+- **Errata → dashboard contract (cross-repo, dash S69 Q3).** The owner wants corrected points visibly
+  asterisked on the water-balance chart. **Half-solved:** InfluxDB corrected points now carry a sparse
+  `rain_qc = 1` flag (DEC-0032, documented in INTERFACES.md), so the dashboard can render the marker
+  straight from the data with no parallel list. The dashboard side still has to *read* it.
+- **Unported from the dashboard:** its `.claude/agents/` routing definitions (its DEC-0093).
+
+**Resolved, kept as one-liners so nobody re-opens them** (STANDARD rule 1 — the full reasoning is in
+the DEC, do not re-derive it):
+
+- ✅ **rainRate** — ISS-side condensation artifact, hardware inspected and clean. DEC-0042, bounded
+  by DEC-0049. A third event on the next calm, saturated, cooling night is a free test; the sharp
+  prediction is that **the tip counter still will not advance**.
+- ✅ **Cross-sensor coupling filter** — parked, deliberately not built. Its premise failed on our own
+  data; **the mechanism is the open question, not the threshold**. DEC-0044.
+- ✅ **Gain 372 interim** — absorbed into the designed RX experiment; do not tune gain or
+  `receiveWindow` by feel. DEC-0017 → DEC-0048 → DEC-0059.
+- ✅ **`loopdata.py` + `ops/reception_service.py` removed** (S47) — both vestigial, files renamed
+  aside on the NAS in case of rollback. DEC-0005, CHANGELOG `[S47]`.
+
+## Standing watches — read-only, none of these block anything (moved from BOOT.md, S67)
+
+They live here rather than in `BOOT.md` because a watch is not in-flight work: it fires or it
+doesn't, and until it fires there is nothing to do. Check them when something looks odd, or when a
+trigger below is plainly satisfied.
+
+- **Co-rejection grep** (DEC-0054): **0 hits through 08-01 18:30**. Single-token pattern
+  `co-rejecting` — *multi-word `nasctl grep` patterns silently match nothing*; positive-control any
+  zero before believing it.
+- **Humidity-spike watch** — unfired. **Method and arithmetic are in DEC-0044 — do not re-derive.**
+- **DEC-0049 phantom-rainRate** — unfired. The next calm, saturated, cooling night is a free test.
+- **First frost** — the signed decode's negative branch gets its first live air test.
+- **DEC-0056 revisit trigger** — a rain-rejection email on a genuinely *wet* day.
+- **Upstream replies** — four open threads (lheijst #22/#23, issue #15, david-lutz#1).
+  `docs/UPSTREAM-THREADS.md` holds the state and the etiquette.
+- **Dependabot** may open a deps PR — review it, never auto-merge.
+
+✅ **Dropouts watch is CLOSED (DEC-0067)**, replaced by the process-freeze blocker. **Never re-open
+it on a `WINDOW: 0/21` reading**: that metric cannot tell a freeze from deafness, which was the whole
+problem. The rule is a >150 s gap **with** `rtldavis process stalled` = RF; silent = freeze.
+
+✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
+— the abort was correct, DEC-0061's budget holds).
+
+## Why USB resets fire but never work — evidence and the decisive test (S67)
+
+Open. `BOOT.md` blocker 4 carries the summary; this is the working material.
+
+> ✅ **RESOLVED 2026-08-07 (S67) — deployed and verified.** Finding 1's fix is live: the NAS runs
+> `97fe334` at the time, matching the then-current `dev` tip, and the monitor restarted as pid 3870 at 19:28 — **two
+> hours after** the file landed at 17:10, which is what proves the running process loaded the new
+> code rather than merely that the file on disk is right. (A sha match alone proves neither, and
+> believing otherwise is what cost this repo 2.5 months — DEC-0074.)
+>
+> **So reset lines logged from 2026-08-07 19:28 onward are trustworthy.** Anything earlier says
+> `RESET: triggering syno_vbus_reset`, an operation that never ran — **when reading historical logs
+> for this investigation, treat every pre-19:28 reset line as naming the wrong mechanism.** That
+> misdirection is what sent S67 down the wrong path.
+>
+> The corrected line will not actually appear until the next stall, which may be days out. Nothing
+> is pending; the code is right and the process is running it.
+
+**Finding 1 — the log line names an operation that does not happen.** `reset_dongle()`
+(`weewx_monitor.py:347`) logs `RESET: triggering syno_vbus_reset`, but it never touches that node.
+It shells out to `usb_reset.sh`, which is a **driver unbind/rebind, not a power cycle**:
+
+```sh
+echo '1-3' > /sys/bus/usb/drivers/usb/unbind ; sleep 3 ; echo '1-3' > /sys/bus/usb/drivers/usb/bind
+```
+
+The retired `usb_watchdog.sh` genuinely did `echo 1 > syno_vbus_reset`. When the logic moved into the
+monitor the *action* changed and the *message* did not, so every reset line in every log for months
+has named the wrong operation. Fix the message before anyone reasons from it again.
+
+**Hypothesis (NOT established) — the reset treats the device while the fault is the consumer's grip
+on it.** Unbind/rebind re-probes the driver without power-cycling the port, so the dongle stays
+enumerated (still `devnum 5`, `/dev/bus/usb/001/005`). The stalled consumer is `rtldavis` inside a
+privileged container holding an open libusb handle, and nothing in the reset path makes it drop that
+handle or restarts it. Consistent with: 3/3 failures 08-06, 9/9 on 08-02, ERR-0005 (host could see
+the dongle while `rtldavis` could not claim it), and DEC-0065's note that a container **recreate**
+fixed ERR-0005 where `kill`+`start` had not.
+
+> ✅ **The decisive test is BUILT, S68 — see DEC-0075, and do not re-derive its design here.**
+> `ops/usb_forensics.sh` brackets every reset with the host USB tree, the container's view via
+> `/proc/<pid>/root`, and `rtldavis`'s open fds. **LIVE since 2026-08-09**, deployed and verified
+> from merged tip `ad7e5a4`, smoke-tested on the NAS. Blocked on the event alone now (~1/day), so
+> the reading of it is genuinely the next session's work, not this material's.
+
+**Also worth deciding:** the escalation ladder tops out at "email a human that the ineffective thing
+was ineffective." It never tries the intervention that has actually worked (container recreate).
+DEC-0065 declined to automate that while ERR-0005's cause was unknown — coherent, but it means three
+failed resets currently produce no further action.
+
+## USB watchdog: not running since 2026-05-22 — the evidence (S67)
+
+> ⚠️ **Read DEC-0074 first. The conclusion drawn from this evidence was wrong.** Everything below
+> about `ops/usb_watchdog.sh` being dead is accurate and still stands — but it did **not** mean the
+> watchdog *function* was missing. `weewx_monitor.py` carries it and handled every stall. The script
+> was a superseded predecessor and is now retired; kept here because the *method* is reusable and
+> the failure of reasoning is worth not repeating: nobody checked whether something else did the job.
+
+- **How it was established.** `ops/usb_watchdog.sh` logs `Watchdog started` unconditionally at
+  line 32, *before* its `tail -F | while read` loop — so every start writes that line. The complete
+  log is **845 bytes** and contains exactly **one**, dated `2026-05-22 16:00:00`. The deployed
+  script's mtime is `May 22 16:00`, the same minute: hand-started once, from a shell.
+- **Nothing supervises it.** No `/etc/crontab` entry matching watchdog/weewx/rtldavis, and no
+  pidfile beside `weewx_monitor.pid` (the monitor has one; this doesn't).
+- **NAS uptime 29.6 days** at the check (booted ~2026-07-08), so a loop started in May could not
+  have survived regardless. Dead since 07-08 at the very latest.
+- **It went unnoticed because its failure is silent by construction** — a watchdog that isn't
+  running produces exactly the same log (nothing) as one running with nothing to do.
+- **The script is not the problem.** On 2026-05-22 it performed correctly: 3 stalls detected, 2
+  resets fired, the middle one properly skipped for the 300 s cooldown. NAS copy is byte-identical
+  to the repo — sha256 `fc65a0d7f3fd30a0efd94371bf107a02e63198043b62ff19157f988d03141818`, 1238
+  bytes both. **Only supervision is missing.**
+- **The claim that hid it:** BOOT read *"deployed and live — NAS copy matches repo tip
+  byte-for-byte, zero resets since."* Both literal sub-claims were true and re-verified. The
+  conclusion was still wrong: zero resets because nothing was listening, not because nothing needed
+  resetting. **A sha match answers "is the file right", never "is the process alive."**
+- **Open design call before it can be fixed:** how to supervise it. `weewx_monitor.py` uses
+  esynoscheduler with a pidfile and is respawned within ~5 min — the obvious precedent. Restarting
+  it is a NAS mutation (Class C, owner-run).
+
+## Needs a check / housekeeping (moved from STATUS.md, S60)
+
+- **⚠️ The freeze MECHANISM is still open (DEC-0036) — but the trigger and the fuel are both gone.**
+  We never proved exactly which write blocked, and the evidence is gone. Do **not** invent one. What we
+  now know for certain: the **trigger** (a bare `docker logs`) is blocked by a hook in both the agent and
+  the shell; the **fuel** (StdPrint, ~25 MB/day to stdout) is removed (DEC-0041); and Synology's `db` log
+  driver **cannot be size-capped** — it accepts `max-size` and ignores it (measured, and confirmed
+  against the literature). If it ever recurs, capture `/proc/1/task/*/wchan` and `/proc/1/fd/*` **before**
+  restarting anything.
+- **The `db` log driver is uncapped and always will be.** All containers still run on it. That is now an
+  accepted risk, not an oversight: the trigger is guarded, weewx's stdout is silent, and `influxdb`
+  (~0.5 MB/day) plus HLF/eh-proxy (tens of KB) are not credible wedge candidates. Switching a container
+  to `json-file` is the only way to bound its log, and it costs that container's DSM log tab. **Revisit
+  only if a container starts generating real stdout volume.**
+- **One `rtldavis process stalled` at the v2.0.7 startup (S41) — has not recurred across 2 further
+  recreates.** Most likely the USB dongle being re-acquired while the old container was still releasing
+  it. S47 added a 3 s `sleep` between `rm` and `run` and came back clean. **Not a blocker** — treat a
+  future stall as a one-off unless it shows up on consecutive restarts.
+- **NAS boot task fragility (S32):** after the next DSM update/reboot, verify the `weewx_monitor`
+  scheduler task still runs as root (symptom: `sudo: a terminal is required` spam, no pidfile).
+- **Docker Hub README auto-sync:** add repo secrets `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` to
+  activate `.github/workflows/dockerhub-description.yml` (green no-op until then). Owner action.
+- **Snow / freezing / no heating tape** — parked, owner's future thread. 2026 = learning year.
+- **Security follow-ups are tracked in the gitignored local-infra doc, not here.** This repo is
+  public; operational security state does not belong in it.
+- ✅ **No real credential has ever been committed to any of the three repos.** S40 scanned all 333
+  blobs for commented credentials (zero); S41 scanned every live config value against the full
+  history of all refs in all three repos (zero). One scare — a password apparently in
+  `weewx.conf.example` since S16 — was the example's own placeholder. False positive, caught by
+  re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
 - **Tuning infrastructure (owner idea, S34) — control panel and/or designed sweep plan.** Two
@@ -28,8 +196,9 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
   indistinguishable from a never-corrected one — the derived store is better provenanced than the
   system of record. Only `DATA_ERRATA.md` records it. Not urgent; a schema change isn't justified yet.
 - Credential hygiene follow-ups — tracked in the gitignored local-infra doc, not here (this repo is public). Secrets belong in `monitor.env` as env vars, never inline (DEC-0012, DEC-0047).
-- Set `STATION_NAME` in the NAS `monitor.env` — the monitor's alert/summary emails currently fall back
-  to the default "My PWS" (env var unset), so they're unbranded. Cosmetic, one-line fix (observed S27).
+- ~~Set `STATION_NAME` in the NAS `monitor.env`~~ — **already done, S31** (`STATION_NAME=
+  "Eagle Hunt PWS"`, live-verified S56). This note was stale since S31 (dated "observed S27,"
+  before the fix); see CHANGELOG-ARCHIVE `[S31]`. Pruned S56.
 - Verify OWM (OpenWeatherMap) measurements propagate into their API over time — a post-integration
   sanity check that the uploader's values actually land.
 - Long-term stability watch (uptime / reception drift / memory) — no formal monitor yet.
@@ -42,14 +211,79 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
 
 ## Durable RF findings (from 2026-06-01 tuning sweeps — keep; these guide P2)
 
+**What campaign A says about the LNA — hold it loosely (moved from BOOT.md, S67):**
+- **Recomputed at S66 on per-minute `rxCheckPercent` (DEC-0069):** arm A (372/ex0) **74.81%** ·
+  C (372/ex50) 74.37 · D (207/ex50) 74.17 · B (207/ex0) 73.87. Spread **0.94 pts** — no arm anywhere
+  near the 2-pt adoption bar.
+- **Campaign B's 372 anchor must be read against arm A's 74.81%, on the same tool and metric.**
+  `ops/campaign_analyze.py` is what guarantees that. The older 72.4% figure is a monitor-scrape and
+  runs ~1.9 pts low — **never mix the two**.
+- ~14 h of LNA-out at gain 372 gave 72.6% with no hour-07 notch. **Suggestive only — do not conclude
+  futility from it.**
+- A's winner was meant to stay sealed until after B; S66's tool validation unsealed it as a side
+  effect of validating the tool, not as a decision (DEC-0069 sealing note).
+
+**Site has a reproducible twice-daily reception notch at hours 07 and 19 (S58, 2026-08-01):**
+- **The observation.** Archive `rxCheckPercent` binned by local hour, 07-24→07-29 (pre-campaign,
+  n≈355/hour): **hr 07 = 72.6%, hr 19 = 72.7%**, against **74.2–75.6%** for every other hour.
+  During the campaign the morning notch deepens to hours 07–09 at ~2–3.5 pts down, and it produced
+  the campaign's single worst minute so far (07-30 08:00, `rxCheckPercent` **min 4.9%** — the same
+  event the monitor logged as a 26% 5-minute sample, so **two independent metrics corroborate it**).
+- **It predates the campaign**, so it is a property of the site/hardware, not of any experimental arm.
+  This is what amends DEC-0059's "no detectable diurnal cycle" (true at 6 h resolution, false at 1 h).
+- **Three explanations tested and FALSIFIED — do not re-propose them without new evidence:**
+  - *Dew / wet vegetation* — backwards. The dewiest hours (temp−dewpoint spread 2.4–4.0 °F
+    overnight) carry the **best** reception (~75%).
+  - *Solar RF noise* — backwards. Radiation peaks midday (750–950 W/m²) where reception is normal;
+    the notch sits at 35–144 W/m².
+  - *Wind / foliage movement* — the **deepest** notch (07-31) occurred on a **zero-wind** morning.
+- **`freqError` thermal drift is REAL but is NOT the mechanism.** Measured on our own hardware via
+  the archive's remapped freqError columns: it tracks temperature strongly and inversely —
+  **~2400–2600 at 65–69 °F → ~900–1200 at 77–84 °F**. But hour 06 has excellent reception (~75%)
+  at the *highest* freqError, so the AFC is evidently absorbing the offset; reception tracks neither
+  the level nor the rate of change monotonically. Useful characterization of the dongle, not an
+  explanation of the notch.
+- **Leading untested hypothesis:** a 915 MHz ISM-band neighbour on a human schedule — smart-meter
+  reporting windows, garage/vehicle remotes on a commute cycle. A **07:00 and 19:00** pair that is
+  temperature-independent and stable for weeks looks behavioural rather than physical. Testing it
+  needs a spectrum capture during the window, which we have no instrument for today.
+- **Does NOT threaten the RX campaign:** the notch is time-of-day-linked and arm-independent, and
+  the Latin square gives every arm the same exposure to it. It inflates variance, it does not bias
+  the comparison.
+
 **CLI timing sweep (baseline, -ex 25/50/75/100, -maxmissed 25, combos):**
 - All clustered ~63–66%; no material improvement over baseline.
 - `-maxmissed 15` caused repeated 0/24 windows — **do not use**.
 
-**receiveWindow:**
+**receiveWindow — and `-ex` is the SAME AXIS (S56, DEC-0059):**
+- **`-ex N` ≡ `receiveWindow 300 + N`.** Upstream sums them — `int64((receiveWindow + ex) * 1000000)`
+  — and `receiveWindow` appears nowhere else in `main.go` (verified in lheijst/rtldavis master, S56).
+  So the window axis is reachable from the **mounted** `weewx.conf`, with no image rebuild. The
+  `rw250/rw350/rw400` images were not merely misnamed (DEC-0048) — they were **redundant**.
+- That also means the two findings below are one axis measured twice, and they agree: the CLI sweep's
+  `-ex 100` and the `rw400` image are the same configuration, and both landed ~63%. Independent
+  corroboration of the equivalence.
 - rw400-test (300ms → 400ms): ~63%, **worse** than baseline ~65%.
-- Larger receiveWindow is not supported by evidence so far; rw350 is the next candidate to test
-  properly (24 h averaged), and must be reconciled against the running image tag (ARCHITECTURE §6).
+- Larger receiveWindow is not supported by evidence so far. **Untested direction: narrower than 300**,
+  which needs negative `-ex` (unvalidated — could produce a negative loop period) or a rebuild.
+- **Caveat on provenance (S56):** the equivalence was read from upstream *master*. The deployed binary
+  is built from weewx-contrib's bundled `src.tgz` and is demonstrably older — it lacks master's
+  startup settings line (`tr=… gain=… ex=… receiveWindow=…`), which is absent from both `weewx.log`
+  and the container stdout. The deployed source has not been read directly.
+
+**Gain, from the retired sweeps (kept because the scripts are gone, S56):**
+- `fc_sweep.sh` held gain at 207, its header recording it as "confirmed best from gain sweep" — a
+  pre-governance, unaveraged result, and the only surviving trace of that claim now the scripts are
+  deleted. Consistent with DEC-0017 (207 optimal *with* the preamp). Weak evidence, but it is the
+  directional prior the DEC-0059 campaign tests properly.
+
+**FreqError — re-checked S56, still not visible.** Grepped the live `weewx.log` and the container
+stdout for `FreqError` at the current `debug_rtld = 1`: **zero hits**, positive-controlled (a
+`duplicate` grep on the same file returns hits). So the S21 observation below is not reproducible at
+the current debug level. DEC-0059's Phase 0 raises `debug_rtld` to 2 for a few hours to settle
+whether the telemetry exists at all — if it does, `ppm`/`fc` get set by *measurement* rather than by
+sweeping; if it does not, that axis is dropped. Note AFC is on by default upstream (`-noafc`
+defaults false), which likely absorbs offset anyway.
 
 **FreqError / ppm-fc telemetry gap — SUPERSEDED by live evidence (S21):**
 - ~~The compiled Go binary emits neither `ChannelIdx` nor `FreqError`.~~ **Contradicted:** the
@@ -66,8 +300,10 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
   `lheijst/rtldavis` to understand which version is actually deployed.
 
 ## Data integrity
-- May monthly rain totals were noted as compromised by dev restarts; reconcile against the Davis
-  WeatherLink Live gold standard once the rain-spike fix lands — don't compound the error.
+- ~~May monthly rain totals were noted as compromised by dev restarts; reconcile against the Davis
+  WeatherLink Live gold standard once the rain-spike fix lands.~~ — **done S48:** the console
+  cross-check corroborated both ERR-0001 and ERR-0002, residual 0.01″ (DATA_ERRATA.md). Same fact
+  also corrected in ROADMAP.md this session (S56); this was the last stale copy. Pruned S56.
 - ~~[PRIORITIZED — owner, S30] Bad-packet root cause for temp/humidity/radiation/UV spikes~~ —
   **DONE (S33, DEC-0029):** root cause confirmed from the archive (bit-flip corruption passing CRC,
   same class as rain; 18 humidity spikes + impossible UV 16.29; loop-JSON path unfiltered) and fixed
@@ -75,3 +311,22 @@ open items from the retired root `cleanup_backlog.md` were folded in here (S27, 
   The S30 `MAX_WIND_DELTA` unit-mismatch lead was disproven (post-StdConvert = mph). Ships with the
   v2.0.4 rebuild. Follow-ups live in DEC-0029/STATUS: cross-sensor consistency checks (UV↔radiation),
   monitor alert on the new rejection signature.
+
+## Long-term direction (moved from ROADMAP.md's P4 + "Longer horizon", DEC-0058, S56)
+
+Uncalendared or aspirational — direction, not scheduled work. Nothing here needs attention now;
+pull an item into ROADMAP.md's P0–P3 when it's actually about to be worked.
+
+- **Credential hygiene follow-ups** — tracked in the gitignored local-infra doc, not here (this repo
+  is public). Secrets belong in `monitor.env` as env vars, never inline (DEC-0012, DEC-0047). (Also
+  listed under "Open ideas" above — same item, not duplicated content.)
+- **Multi-source adaptability** (PRINCIPLES §1): keep the driver re-pointable so non-Davis WeeWX and
+  eventually CumulusMX can rely on the same data contract. Record a DEC before any code depends on it.
+- **Generic project-template harvest** (separate buildout): once the Governance Standard is proven
+  here and propagated once, harvest it into a versioned GitHub *template repository* for all future
+  projects (ASSESSMENT.md §5). Copy-not-link; tracked as its own effort, not part of this repo's
+  release path.
+- **Winter 2027 sky-state instrumentation** ([ops#110](https://github.com/WeatheredScientist/eaglehunt-ops/issues/110),
+  opened S56): IR sky sensor alongside the lightning detector, targeted for the Jan–Feb 2027 winter
+  build. Cross-repo with the dashboard (`repo:dashboard, repo:weewx, tier:frontier`). Planning
+  horizon only — not scheduled.
