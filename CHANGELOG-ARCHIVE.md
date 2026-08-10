@@ -8,6 +8,74 @@ Nothing here is rewritten — text moves, history stays greppable.
 ---
 
 
+## [S69] — 2026-08-09 — Tier files back under cap (ops#152)
+
+- **BOOT.md 10,617 → 7,557 chars (cap 10,000); MANIFEST.md 4,055 → 3,936 (cap 4,000)** — the
+  tier-sweep filing folded into a session close, as the filing prescribes. BOOT per STANDARD rule 1:
+  the blocker-5 closure was told three times, the forensics deploy-and-verify story twice, and the
+  footer re-told the whole body — each now once, reasoning left in DEC-0075/0077. Three gotchas
+  deleted as second copies of canonical docs: the secret gate's "nothing to scan" (CONVENTIONS),
+  "which layer wins in prod" (CONSTANTS), session-number authority (CLAUDE.md). MANIFEST per rule 9:
+  teaching parentheticals compressed; no row deleted.
+- **No stall capture yet** (blocker 4) — `logs/usb-forensics/` holds only the 08-09 smoketest and
+  verify files, so the S70 job is unchanged: the event is the only thing left.
+- S66 rolled to `CHANGELOG-ARCHIVE.md` verbatim (the ~3-session window).
+
+---
+## [S68c–d] — 2026-08-09 — Blocker 5 closed on measurement (DEC-0077); DEC-0074's probe corrected (#147)
+
+- **DEC-0077 — reset gaps do NOT contaminate campaign A.** Blocker 5, answered by measurement rather
+  than argument. Every rotated monitor log spanning campaign A (`.11`=07-29 … `.4`=08-05) grepped:
+  **11 resets, all on 08-02** (00:11:23 → 01:27:20), seven of eight days empty — independently
+  corroborating DEC-0067's "0 detections on every other day". The archive across the incident reads
+  **00:04 = 72.73% normal → 80 rows absent → 01:24 NULL → 25 rows absent → 01:51 NULL → 01:52 back in
+  range**: exactly the tool's documented **lock/outage** shape.
+- **Why that settles it: classification is descriptive, exclusion is structural.** DEC-0069 drops the
+  record either side of *any* gap plus every NULL, never consulting the class — so the reset-adjacent
+  records were already excluded, and the 105 absent minutes contribute nothing because absent rows
+  are not zeros. DEC-0074's framing (gaps "sorted into freeze/swap/lock") was the wrong thing to
+  worry about. **The real exposure was present-but-low rows**, which nothing excludes because the
+  tool refuses magnitude thresholds by design — and there are none.
+- **Narrow amendment:** DEC-0069's taxonomy is complete for *shapes*, not *causes* — a USB reset is a
+  fourth cause of the lock/outage shape. Treatment keys on shape, so no analyzer change.
+- **Two bounded residuals, neither gating:** 01:52 (57.14%) survives the rule because it neighbours a
+  NULL *row* rather than a gap — ≈0.04 pts on a 6 h block against a 2.0-pt bar; and 105 min vanished
+  from one arm's block, costing precision rather than bias, since a receiver outage is not a property
+  of the arm.
+- **Correction to the record:** the log shows **11** resets, not nine. ERR-0005 and DEC-0065 both say
+  "nine in 75 minutes" and call 01:27:17 "reset #10"; it is the 11th, span 76 min. Nothing downstream
+  depended on it — DEC-0065's argument is about unbounded retry, which 11 strengthens.
+- **DEC-0074's liveness probe corrected where it is documented (#147).** Its body, index row and the
+  ROADMAP watchdog item all cited `/proc/<pid>` mtime, which S68b measured as access time. Amended in
+  place rather than superseded: no decision changed, only its instrument. The lesson stands; the
+  three checks that hold are a startup log line after the file mtime, `/proc/<pid>/stat` field 22 vs
+  `/proc/uptime`, and new-pid-with-old-pid-gone.
+- **Staleness sweep, again.** BOOT's blocker 4 still read "not yet deployed", its monitor row cited
+  the pre-deploy sha, and the campaign-B paragraph still gated on blocker 5. All corrected, plus an
+  internal contradiction BOOT had acquired (9/9 vs 11).
+- **`Closes #N` does not work on this repo's flow.** #147 was still open while BOOT claimed it
+  closed: GitHub auto-closes only on a merge to the **default branch, `main`**, which advances only
+  at a prod-baseline release. `git log --grep` shows the pattern used on `dev` before, so this is not
+  a one-off. Recorded in `docs/CONVENTIONS.md` §Git workflow — close explicitly, or say "addressed in
+  #M" and leave it open on purpose; keep the trailer as a cross-reference, never the mechanism.
+- **BOOT was a second copy of the runbook it points at.** It exceeded the DEC-0072 cap four times in
+  one day and each overrun was paid for by shaving words — which DEC-0072 explicitly rejects. The
+  cause was structural: six campaign-B launch steps sat directly under a line saying
+  `docs/CAMPAIGN-B-RUNBOOK.md` governs the night. Verified absent from the runbook first, then
+  **moved** there verbatim (not deleted) as a new "Release mechanics" section. BOOT 2516 → **~2332**,
+  ~7% headroom rather than the 0.2% shaving bought.
+- **Forensics reinstalled and the fix verified on hardware (S68e).** The `/proc`-mtime fix from
+  #146 is now the deployed copy (`dc7912ae`, root-owned), and a live capture confirms it:
+  `age=259633s` (3.0 days, matching container uptime) beside `proc-dir-mtime` labelled "ACCESS
+  time, NOT start". The two fields visibly disagree in the artifact, with the right one marked.
+  Verified rather than assumed, since the earlier smoke test is what found the defect at all.
+  **#147 closed by hand**, #148 merged. Nothing pending deployment.
+- **The session's recurring shape, worth naming:** three distinct staleness classes — the deploy
+  state, DEC-0074's probe, the `Closes #N` trailer — all the same defect. *A claim that was true when
+  written, with nothing that would fail when it stopped being true.*
+
+---
+
 ## [S68b] — 2026-08-09 — Forensics deployed and verified live; the smoke test then found a defect in them
 
 - **Deployed from the merged tip `ad7e5a4` and verified.** `usb_forensics.sh` + `usb_reset.sh` as
