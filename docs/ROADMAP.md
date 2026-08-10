@@ -133,7 +133,7 @@ bound and done via reversible live hot-swap with an instant rollback path.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P2 — RF optimization, done honestly (PRINCIPLES §3) — **A COMPLETE, B READY BUT HELD**
+## P2 — RF optimization, done honestly (PRINCIPLES §3) — **A COMPLETE, B LAUNCHED (S70)**
 DEC-0048 (S41) deferred this into one designed experiment; the apparatus (`ops/rx_experiment.sh` +
 `tests/test_rx_experiment.py`, S56/DEC-0059) is now deployed and executing. The seven
 pre-governance sweep scripts are deleted; two of them were silently broken.
@@ -150,26 +150,23 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       characterization (922 samples, mean 72.4) and the multi-day drift error bar. **Arm winner
       stays sealed until after B.** Settles DEC-0017 (**absorbed**). Tracked at
       [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
-- [ ] **v2.0.12 release carrying DEC-0062 + `BIAS_TEE` env — BUILT, NOT PUBLISHED.** *(Status
-      corrected S66: this said "BUILDING 2026-08-02" for four sessions. S62's local build is **gone**,
-      Docker Hub still carries `:v2.0.11` + `:latest`, and prod runs v2.0.11. **Rebuild from the
-      merged tip when campaign B launches** — the build is a launch step, not a pending task.)*
-      `entrypoint.sh` reads `BIAS_TEE` (default 1 — published image unchanged; all
-      four branches verified S62). Also carries S62's driver stderr fix (**`0.20+ws.4`**, ERR-0005)
-      and the README version banner, which was three releases stale. Push `:v2.0.12`, deploy with
-      `-e BIAS_TEE=0`, then move `:latest` only after our own station proves it. Carry DEC-0046
-      into the release: verify in the **running system**, never in the artifact — and the DEC-0031
-      canary in `ops/soak_check.sh` now actually fails on a version mismatch (S62), which is what
-      makes that verification real.
-- [ ] **Campaign B — LNA physically removed — PREPARED, then HELD (DEC-0066).** The LNA came out at
-      ~01:33 on 08-02 during the ERR-0005 diagnosis, so the swap night's physical step is done, and
-      the schedule was shifted −4 days to launch 08-03. **Held instead:** prod went deaf three times
-      that day (105 min, 3 min, 10 min) and two remain unexplained. An 8-day unattended reception
-      experiment run across intermittent unexplained deafness yields data that *looks* like results,
-      and B's 32 swaps each expose it to the abort that already killed campaign A. Apparatus, tests,
-      runbook and image are all ready; only the timing is open. **Schedule dates are now in the past
-      — regenerate before any `install`.**
-      **ALL GATES NOW CLEARED (S66) — the hold is a judgment call, not a work item.**
+- [x] **v2.0.12 release — DEPLOYED to prod 2026-08-10 (S70); Hub push PENDING.** Promoted via
+      PR #151 (`main` = `7b6fd42`), built **natively on the NAS** (`9db5c1ddaac3` — the arm64
+      laptop can no longer cross-build linux/amd64, DEC-0078), deployed with `-e BIAS_TEE=0` and
+      verified in the **running system** per DEC-0046: ws.4 banner in the live log, bias-tee-off
+      startup line, DEC-0062 redaction line, soak identity canaries green (16 pass / 1 warn / 0
+      fail). `EXPECT_*` bumped in the same deploy, honoring its own header rule. **Remaining:**
+      `docker save` → laptop → `docker push :v2.0.12` (Hub lags prod until then — DEC-0078);
+      `:latest` only after the station proves the release.
+- [ ] **Campaign B — LNA physically removed — LAUNCHED AND ARMED (S70, 2026-08-10).** DEC-0066's
+      hold released on its own terms: the gates were closed on measurement (DEC-0069/0070), A's
+      figures confirmed clean (DEC-0077), and the "instrument trusted" condition met. The first
+      launch night (08-09) was scrubbed at 00:58 on a dead VPN — the runbook's postpone-24h
+      contingency, prod untouched. Deployed 08-10 morning: campaign A archived (`.campaignA`),
+      B's script sha-verified from the merged tip, container swapped, `install` clean. **Pilot
+      08-11T00:35–04:20 (first honest no-LNA measurement), square 08-12 → 08-20T00:05**; GATE 2
+      pilot readout Tuesday daytime. Read only via `ops/campaign_analyze.py --campaign B`
+      (DEC-0069); A's anchor is arm A **74.81%** on the same tool.
       *Explain the outages* — substantially met at DEC-0067: the recurring class is **process
       freezes, not RF loss**, bounded (~1/day, ~3.5 min) and pre-dating the LNA removal, while
       ERR-0005 is a **single incident**. *Watchdog* — done (S63). *Metric freeze-aware* — **done

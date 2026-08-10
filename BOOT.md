@@ -25,17 +25,16 @@ the two predicted signatures: **DEC-0075** — don't re-derive them.
 smoketest + verify files in `logs/usb-forensics/`). Read the `pre`/`post` pair together. **Both
 clean means the stall is not a USB fault at all** — a real answer, not a null result.
 
-**Campaign B is GO — launch in flight (S70).** v2.0.12 promoted (#151, `main` = `7b6fd42`); image
-**built natively on the NAS** (`9db5c1ddaac3`, explicit `BUILD-EXIT=0`) — the arm64 laptop can no
-longer cross-build it (tar ENOSYS under emulation); NAS-native is the v2.0.3-precedent path. The
-08-09 night was **scrubbed at 00:58** (VPN died with the 00:35 row passed — the runbook's
-postpone-24h contingency, prod untouched). Schedule regenerated +1 day: **pilot 08-11T00:35,
-square 08-12 → 08-20T00:05**. Remaining: archive A artifacts (incl. root-owned STOP) → deploy B's
-`rx_experiment.sh` from the **merged** dev tip → swap to v2.0.12 with `BIAS_TEE=0` (one nohup'd
-batch, VPN-drop-safe) → verify → `install` before 00:35. Hub push of `:v2.0.12` deferred
-(docker save → laptop → push from home); `:latest` only after prod proves it. `EXPECT_*` in
-`soak_check.sh` still v2.0.11/ws.3 **on purpose** — the bump rides the deploy. An unattended run
-still has **no working dongle recovery** — not a gate, but don't launch expecting a rescue.
+**Campaign B is LIVE — deployed and armed 2026-08-10 morning (S70).** Prod swapped to
+**v2.0.12/ws.4 with `BIAS_TEE=0`**, verified in the running system (banner, bias-tee-off line,
+DEC-0062 redaction, loop flowing, reception back at 70% after the swap dip); `install` clean at
+09:40. **Pilot 08-11T00:35–04:20, then H hold; square 08-12 → 08-20T00:05.** GATE 2 = the pilot
+readout with the owner, Tuesday daytime (settle rule: drop each block's first 2 samples). Track
+via tick log + `rx_experiment_data.log`; read results **only** with `ops/campaign_analyze.py
+--campaign B`; A's anchor is arm A **74.81%** on that tool. Abort floor 50%; every failure path
+restores baseline and emails. An unattended run still has **no working dongle recovery** — don't
+expect a rescue. **Hub push of `:v2.0.12` still pending** (save → laptop → push, DEC-0078) —
+Hub lags prod until it lands; `:latest` only after the station proves the release.
 
 Two things not to re-derive: **`weewx_monitor.py` IS the watchdog** (DEC-0074), and **every reset
 line before 2026-08-07 19:28 names `syno_vbus_reset`, an operation that never ran** — prod is right
@@ -51,13 +50,13 @@ never one written down** — a remembered sha ships a green checkmark on a silen
 
 | Thing | State |
 |---|---|
-| Prod | **v2.0.11**, driver **ws.3**, LNA **out**, gain 372, ~70–80%. Emitting live |
+| Prod | **v2.0.12**, driver **ws.4**, `BIAS_TEE=0`, LNA **out**, gain 372. Swapped + verified 08-10 09:05; emitting live |
 | Live-config deviations | `timeout = 30` + `[[[pragmas]]] journal_mode = DELETE`, both verified in the running `weewx.conf`. Table in `CONSTANTS.md` |
-| `weewx_monitor.py` | **alive, supervised, current** — NAS matches merged tip `ad7e5a4`, pid **8810** since 08-09. It **is** the USB watchdog (DEC-0074) |
-| Branches | steady state: exactly `dev` + `main`. `dev` ~90 ahead of `main` |
-| `:v2.0.12` image | **BUILT on the NAS 08-10** (`9db5c1ddaac3`, from `7b6fd42`). NOT on Hub yet — save→push deferred |
-| Campaign B apparatus | schedule regenerated (pilot **08-11T00:35**); script **NOT on the NAS yet** (its `rx_experiment.sh` is still campaign A's) |
-| Campaign A | **STOPped, sentinel in place.** Do not clear it |
+| `weewx_monitor.py` | **alive, supervised, current** — pid 8810 era continued through the swap; soak "monitor alive" green 08-10. It **is** the USB watchdog (DEC-0074) |
+| Branches | steady state: exactly `dev` + `main`. `main` = `7b6fd42` = prod; `dev` slightly ahead (post-release docs) |
+| `:v2.0.12` image | **DEPLOYED**. NAS-built `9db5c1ddaac3`; **Hub push pending** (save→push, DEC-0078) |
+| Campaign B | **ARMED** — installed 08-10 09:40, baseline snapshotted, first tick starts it. Pilot **08-11T00:35** |
+| Campaign A | **archived** — five artifacts under `.campaignA` suffixes (incl. the STOP sentinel), 08-10 |
 | Reset forensics | **LIVE, armed** (DEC-0075); awaiting a stall |
 
 ### DEC-0066 gates — closed; reasoning lives in the DECs
@@ -118,6 +117,7 @@ deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
 - **`secret-read-guard.sh` matches by basename**, so it blocks the repo's clean `ops/wxcheck.sh`
   (which uses `${WU_API_KEY}`). Read it with `readconf`. Guard fix is ops-owned.
 
-_Last updated: 2026-08-10 morning (S70, in flight) — campaign B GO: v2.0.12 merged + built on the
-NAS, first night scrubbed on a dead VPN (runbook contingency, prod untouched), schedule +1 day.
-Tonight: deploy + swap + install before 00:35. Blocker 4 unchanged — no stall capture yet._
+_Last updated: 2026-08-10 (S70 close) — **campaign B deployed, verified and armed**: prod on
+v2.0.12/ws.4 + BIAS_TEE=0, A archived, install clean, pilot 08-11T00:35. DEC-0078 (NAS-native
+builds; Hub push pending). Blocker 4 unchanged — no stall capture yet. S71: pilot readout
+(GATE 2, with the owner), then track the square._
