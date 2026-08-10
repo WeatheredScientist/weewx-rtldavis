@@ -5,6 +5,38 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S71] — 2026-08-10 — ops#148/#7 closed; ERR-0005 backfilled; solar diode-floor traced and designed
+
+- **ops#148 closed.** `MANIFEST.md`'s `CHANGES-FROM-UPSTREAM.md` row widened to name all 9
+  uncovered files — it already documents each one's provenance (4 vendored forks, 5 original), so
+  this was a one-line widen, not a new row. Verified against the sweep's own bare-filename matching.
+- **DEC-0079 — opted into `.claude/transient-state` (ops#113).** Tracked file created (force-added
+  past the local `.git/info/exclude`, same precedent as `settings.json`), convention documented in
+  `CONVENTIONS.md`. Left empty — no current state meets the motivating shape that isn't already
+  prominent in `BOOT.md`.
+- **`BOOT.md` ordered backlog resequenced:** `#144` (console pressure / `pressure_service.py` field
+  collision) then `ops#141` (HLF archive-directory mount) queued for after GATE 2, each flagged with
+  why it's design work rather than mechanical execution.
+- **ERR-0005 backfilled.** 7 records at `interval=15` inserted into the archive (backed up first:
+  `weewx.sdb.bak-S71-preBackfill-20260810-124656`), daily summary rebuilt, matching InfluxDB points
+  written flagged `backfill=1.0`. **Both machine history APIs failed first** — WU's `v2/pws/history/all`
+  401'd, WeatherLink v2's `v2/historic/{id}` (same credentials `pressure_service.py` uses hourly)
+  returned an empty `{}` with a 200 — neither carries historical-read entitlement on this account.
+  Sourced from a manual WeatherLink/WU website read instead; recorded in `DATA_ERRATA.md` so a future
+  backfill skips straight to that.
+- **Solar radiation diode-floor bias — diagnosed, fix designed, not yet applied.** Owner recalled a
+  prior fix; traced via the owner's own claude.ai search (this repo's git history and archive both
+  start 2026-05-19, so nothing here predates it) to a June 2026 dashboard-only presentation-layer
+  filter. Verified against the *current* dashboard: still correct for live numeric displays, but the
+  24h chart panel (`eh-charts.js`) queries InfluxDB raw with no filter — regressed during the
+  dashboard's July supercard refactor, the second time a per-path filter has been dropped on
+  refactor. Decision: fix at the source here instead of patching the dashboard a third time. Two
+  designs drafted and compared (`StdCalibrate` magnitude-match vs. a `weewx.almanac`-based
+  elevation-gated service); full brief for the next session in
+  [`docs/handoffs/S71-radiation-floor-design.md`](docs/handoffs/S71-radiation-floor-design.md).
+- Green gate re-run clean throughout (185 tests).
+
+---
 ## [S70] — 2026-08-10 — v2.0.12 promoted and built; campaign B GO, first launch night scrubbed on a dead VPN
 
 - **Campaign B: GO.** Assessed against DEC-0066's hold: both gates closed on measurement
@@ -115,71 +147,5 @@ under [Pre-S16].
 - **The session's recurring shape, worth naming:** three distinct staleness classes — the deploy
   state, DEC-0074's probe, the `Closes #N` trailer — all the same defect. *A claim that was true when
   written, with nothing that would fail when it stopped being true.*
-
----
-## [S68b] — 2026-08-09 — Forensics deployed and verified live; the smoke test then found a defect in them
-
-- **Deployed from the merged tip `ad7e5a4` and verified.** `usb_forensics.sh` + `usb_reset.sh` as
-  **root:root 755** (ownership is load-bearing — `usb_reset.sh` refuses a helper it does not own),
-  `weewx_monitor.py` as the service account, 644; monitor 3870 → **8810**, `Monitor started`,
-  polling normally, ~3.5 min gap inside the esynoscheduler window.
-- **The sudo half is owner-run and cannot be batched.** The `nas-admin` alias lands on an
-  unprivileged account with no NOPASSWD, and an agent session has no TTY: `-t` fails to allocate one, `-tt` forces a pty and then
-  hangs on a live `Password:`. Leading the remote script with `set -e` made the failed attempt a
-  clean no-op — verified afterwards: prod shas unchanged, zero `.bak` files created.
-- **Smoke-tested on the real box, which is the point.** Pid discovery by `comm` works; dongle
-  confirmed `1-3` / `0bda:2838` / `devnum=5`; the two root-only sections correctly self-labelled
-  `DEGRADED … UNREADABLE, not empty` rather than looking like a released handle.
-- **And it caught a defect in what had just shipped.** The capture reported `rtldavis` as 17 seconds
-  old; it had been up **2.88 days** (`/proc/<pid>/stat` field 22 vs `/proc/uptime`, corroborated by
-  the container Up 3 days and unbroken `weewx.log` output). `/proc/<pid>` **mtime is access time**,
-  and the script reads files under that directory moments earlier. In a stall capture it would have
-  asserted a restart that never happened — a fabricated event in the one artifact built to settle a
-  question whose hypothesis is deliberately unsettled. Fixed in **PR #146**; HZ=100 confirmed, not
-  assumed (250 or 1000 both date `rtldavis` before the container that spawned it).
-- **This undercuts DEC-0074's own probe — [#147](https://github.com/WeatheredScientist/weewx-rtldavis/issues/147).**
-  Its documented liveness check is `nasctl ls /proc/<newpid>` vs the file mtime: the same unsound
-  signal. The **lesson** stands — liveness needs process evidence — but the probe must become a
-  startup line in the log after the file mtime (what actually carried both the S67 and S68
-  verifications), field 22 vs `/proc/uptime`, and new-pid-plus-old-pid-gone.
-
----
-## [S68] — 2026-08-08 — Reset forensics built and armed (DEC-0075); secret gate's fifth hole closed (DEC-0076)
-
-- **DEC-0075 — the next stall photographs itself.** `ops/usb_forensics.sh` brackets every reset with
-  the host USB tree and the dongle's `devnum`, the **container's** view of `/dev/bus/usb` via
-  `/proc/<pid>/root`, and whether the stalled `rtldavis` still holds an fd on the device. Those last
-  two are the decisive pair: a stale view or a surviving handle confirms the hypothesis, and both
-  clean means the stall is **not a USB fault** and the reset treats the wrong thing entirely.
-  Read host-side through `/proc` rather than via `docker exec`, because this fires *during* a stall
-  and a wedged container can block an exec indefinitely — the capture would hang on the very event it
-  records. Pre/post fire from inside `usb_reset.sh`, the only root context, needing **no new sudoers
-  grant**; the monitor fires only the `+RESET_VERIFY_S` capture and **labels it DEGRADED**, so an
-  unreadable fd section can never be misread as a released handle. **Capture-only — DEC-0065's
-  escalation ladder is untouched.**
-- **An escalation introduced and closed in the same change.** Executing a helper from `usb_reset.sh`
-  runs it as root under the NOPASSWD grant, and mode 777 is common on this NAS — a helper writable by
-  `weewx-monitor` would have turned that narrow grant into arbitrary root execution. The script now
-  verifies the helper is root-owned and root-only-writable, refuses **loudly** otherwise while still
-  resetting, and `do_reset()` logs its output on a zero exit so the refusal cannot go silent.
-  Checked, not documented (DEC-0040), and positive-controlled by neutering the check.
-- **Why it was built before the evidence:** no stall since the corrected reset code went live
-  2026-08-07 19:28 — zero `RESET`/`stalled` lines across the 08-07 and 08-08 monitor logs, both greps
-  positive-controlled against 1440/521-hit `WINDOW` counts. Nothing to read retroactively, and the
-  event is ~1/day and unpredictable, so the apparatus has to exist first.
-- **DEC-0076 — the secret gate missed `GMAIL_PASS`-shaped keys.** The key list held `password` and
-  `passcode` but nothing for the `_PASS` abbreviation, so `GMAIL_PASS = "..."` was undetected in
-  every spelling — and that is the exact variable `weewx_monitor.py` uses for its Gmail credential.
-  **Nothing was ever leaked through it** (no `_PASS` literal in the tracked tree; none on any ref in
-  the full history). Found by DEC-0045's routine positive control before an *unrelated* commit, not
-  by an audit. Two detectors, each proven necessary by removing it and watching its payloads leak:
-  bare `pass` (not `passwd`, which would flag README's `NOPASSWD:` sudoers line), and a literal
-  matcher for the four-group app-password form that slips past the 8-consecutive-character value
-  rule. `PASS` is listed separately because detection is case-insensitive and the allow-list
-  deliberately is not — without it the gate flagged this repo's own source. Harness **41 → 51** cases.
-- **ROADMAP reconciliation:** blocker 4 had **no P0 line at all** — DEC-0074 raised it at S67 and no
-  item was opened, so the sequenced plan did not carry its own top blocker. Added.
-- Tests **169 → 184**. `usb_reset.sh` now also documented in README's Security Note and Setup, since
-  its escalation surface changed.
 
 ---

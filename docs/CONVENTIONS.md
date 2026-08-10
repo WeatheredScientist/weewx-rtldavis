@@ -60,6 +60,16 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
   PR #M"`) once the PR merges, or say "addressed in #M" and leave it open on purpose. Keep the
   trailer only as a cross-reference, never as the mechanism.
 
+## Transient prod state (DEC-0079)
+
+- This repo opts into the ops-wide `.claude/transient-state` convention (ops#113): a tracked,
+  one-line-per-entry file — `<revert-by-epoch> <tracking-ref> <description>` — for anything
+  intentionally put into a non-default, reversible mode (a debug flag, a verbose log level) with
+  a planned revert. SessionStart surfaces overdue entries; **deleting the line is the whole close
+  mechanism**, nothing to fall out of sync with reality.
+- `.claude/` is locally gitignored (`.git/info/exclude`); this file and `settings.json` are the
+  two force-added (`git add -f`) exceptions that stay tracked despite that.
+
 ## Secrets (the public-repo rule — DEC-0012)
 
 - **The repo is PUBLIC.** `weewx.conf`, `monitor.env`, `proxy.env`, anything with a credential →

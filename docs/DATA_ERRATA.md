@@ -346,24 +346,27 @@ was deliberately *not* built — see that decision for why n=1 does not meet the
 
 ### Correction status
 
-- **local-archive:** ⬜ **no correction applied.** This is an honest gap, not bad data — there is
-  nothing to null. Records simply do not exist for the window.
-- **influxdb:** ⬜ same — an honest gap.
-- **external:** ⛔ immutable, and in this case immaterial: nothing wrong was published, because nothing
-  was published at all. CWOP/NOAA-MADIS will not accept retroactive data, so the gap is permanent there
-  regardless.
+- **local-archive:** ✅ **applied 2026-08-10 (S71)** — 7 records inserted at `interval = 15`
+  (`dateTime` 1785644100–1785649500, i.e. 00:15–01:45 EDT), backed up first:
+  `weewx.sdb.bak-S71-preBackfill-20260810-124656`. `weectl database rebuild-daily --date=2026-08-02`
+  (local date) run immediately after. **Source: read manually off the WeatherLink/WU history table
+  for the station** (owner-supplied) — **both machine paths failed first**: WU's
+  `v2/pws/history/all` returned `401 Unauthorized` with the station's own upload key (the same key
+  `wxcheck.sh`'s *current-conditions* query uses successfully), and WeatherLink v2's
+  `v2/historic/{id}` — tried next, using the `[DavisPressure]` credentials `pressure_service.py`
+  itself uses hourly in prod — returned an empty `{}` with a 200 status. Neither credential carries
+  historical-read entitlement on this account, even though both work for current-conditions reads;
+  the website UI does (a common API-tier split). **A future backfill should expect the same and go
+  straight to a manual read** rather than re-trying either API.
+- **influxdb:** ✅ **applied 2026-08-10 (S71)** — same 7 points, `record,binding=archive`, each
+  carrying the in-band **`backfill = 1.0`** flag (the DEC-0032 `rain_qc` pattern), written via the
+  `proxy.env` InfluxDB token (the same token weewx's own uploader writes with — `POST
+  /api/v2/write`, HTTP 204).
+- **external:** ⛔ unchanged — immaterial, nothing was ever published for this window.
 
-**Backfill APPROVED (S62), not yet applied.** The co-located Davis WeatherLink Live console receives
-the same ISS and uploads to Weather Underground independently of us. That is exactly the path ERR-0003
-used to recover its 7 h 18 m gap (29 records at `interval = 15`, each flagged `backfill = 1` in
-InfluxDB). The same recovery applies here for ~1 h 45 m at 15-minute resolution — roughly **7 records**
-— and will also establish the weather conditions during the gap, currently **not characterized**.
-
-Follow ERR-0003's provenance discipline exactly: these are the same physical ISS seen by a **different
-receiver at a coarser cadence**, so they are recorded honestly as `interval = 15` (not our usual 1) and
-carry the in-band `backfill = 1` flag in InfluxDB. Back up the archive DB first. Anyone analyzing this
-window must know the resolution differs — hence the flag and this entry. **This row updates to ✅ with
-the record count and backup filename once applied.**
+**Conditions during the gap, now characterized:** calm and dry throughout — 76.1°F cooling to
+75.5°F, dewpoint 68–70°F, humidity 77–82%, wind ≤1 mph from W/SW, pressure steady 29.97–29.98 inHg,
+zero rain, zero solar (fully overnight). A featureless night, same character as ERR-0003's gap.
 
 **Lesson:** the two failure modes were distinguishable in the logs the whole time — `stalled` means the
 process runs and yields nothing; `not running` means it dies on start — and telling them apart was what
