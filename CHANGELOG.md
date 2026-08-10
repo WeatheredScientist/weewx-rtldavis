@@ -41,6 +41,13 @@ under [Pre-S16].
   `push`, only after prod proof — Hub lags prod until pushed, documented in CONSTANTS). CI
   builds noted as the structural fix, backlogged. `EXPECT_*` flipped to v2.0.12/ws.4 in the same
   deploy; ROADMAP P2 reconciled (DEC-0057): release item closed, campaign B item now LAUNCHED.
+- **`:v2.0.12` pushed to Docker Hub at S70 close, digest-verified end to end:** the Hub
+  manifest's config digest is the NAS build id (`9db5c1…`) — what the public pulls is provably
+  what prod runs. One recorded blemish: the save→load→push path re-pushed the layers
+  near-uncompressed (283 MB vs ~120 MB typical; same 8 layers, each ~2.2×) — content-identical,
+  harmless, tightening deferred to DEC-0078's CI-build follow-up. `:latest` deliberately still
+  v2.0.11 until the station proves the release (GATE 2). ops#152 closed on the measured green
+  sweep.
 
 ---
 ## [S69] — 2026-08-09 — Tier files back under cap (ops#152)

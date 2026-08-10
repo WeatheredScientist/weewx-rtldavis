@@ -4143,4 +4143,4 @@ green-checkmark trap, caught because the tar noise was distrusted and the log re
   construction, so the load never lands mid-square.
 - v2.0.12 deployed 2026-08-10 from NAS build `9db5c1ddaac3` (tip `7b6fd42`), verified in the
   running system (ws.4 banner, bias-tee-off line, soak identity canaries green). Hub push
-  pending at time of writing.
+  landed the same day (S70 close): config digest on Hub verified identical to the NAS build; layers rode the transfer path near-uncompressed (283 MB vs ~120 MB typical) — content-identical, tightening belongs to the CI-build follow-up.
