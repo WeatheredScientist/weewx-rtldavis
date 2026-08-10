@@ -40,14 +40,13 @@ case "${NAS_PORT}${NAS_USER}${NAS_HOST}" in (*'<'*)
 esac
 WINDOW="${1:-0}"          # seconds; 0 = since container start
 CONTAINER=weewx-rtldavis-v2
-EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.11}"
+EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.12}"
 # The DEC-0031 canary. Same rule as EXPECT_IMAGE above: this is what prod is
-# running NOW, not what the repo is on. rtldavis.py went to 0.20+ws.4 at S62
-# (2026-08-02) for the unshipped v2.0.12, but prod is v2.0.11, built 2026-07-28,
-# which ships ws.3 -- so this was bumped in the same anticipatory commit and for
-# five sessions the canary reported a mismatch on a correct deployment. Bump both
-# variables as part of the deploy that ships them (DEC-0046).
-EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.3}"
+# running NOW, not what the repo is on. Bumped to v2.0.12 / ws.4 on 2026-08-10
+# (S70) IN the deploy that shipped them -- the swap was verified in the running
+# system (banner + soak canaries) before this edit landed, per DEC-0046 and this
+# header's own rule: as part of the deploy, never before and never after.
+EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.4}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }
