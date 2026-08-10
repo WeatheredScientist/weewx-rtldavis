@@ -1,0 +1,7 @@
+# .claude/transient-state — this repo opts in (ops#113, DEC-0079).
+# One line per entry, nothing else: <revert-by-epoch> <tracking-ref> <description>
+# epoch computed ONCE when filed (date -v+3H +%s / date -d '+3 hours' +%s) — the hook does
+# only integer arithmetic against `date +%s`, never date-string parsing.
+# SessionStart flags anything past its epoch as OVERDUE. Deleting the line is the whole
+# close mechanism — no separate "mark done" step.
+# A line that doesn't parse (non-integer epoch, missing ref) is silently skipped, not guessed.
