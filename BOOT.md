@@ -25,10 +25,17 @@ the two predicted signatures: **DEC-0075** — don't re-derive them.
 smoketest + verify files in `logs/usb-forensics/`). Read the `pre`/`post` pair together. **Both
 clean means the stall is not a USB fault at all** — a real answer, not a null result.
 
-Then **decide campaign B** (below). The DEC-0066 gates are closed and blocker 5 is closed
-(DEC-0077 — campaign A uncontaminated), so nothing stands between B and being read against A. An
-unattended run still has **no working dongle recovery** — true all along, so not a gate, but don't
-launch expecting a rescue.
+**Campaign B is GO — launch in flight (S70).** v2.0.12 promoted (#151, `main` = `7b6fd42`); image
+**built natively on the NAS** (`9db5c1ddaac3`, explicit `BUILD-EXIT=0`) — the arm64 laptop can no
+longer cross-build it (tar ENOSYS under emulation); NAS-native is the v2.0.3-precedent path. The
+08-09 night was **scrubbed at 00:58** (VPN died with the 00:35 row passed — the runbook's
+postpone-24h contingency, prod untouched). Schedule regenerated +1 day: **pilot 08-11T00:35,
+square 08-12 → 08-20T00:05**. Remaining: archive A artifacts (incl. root-owned STOP) → deploy B's
+`rx_experiment.sh` from the **merged** dev tip → swap to v2.0.12 with `BIAS_TEE=0` (one nohup'd
+batch, VPN-drop-safe) → verify → `install` before 00:35. Hub push of `:v2.0.12` deferred
+(docker save → laptop → push from home); `:latest` only after prod proves it. `EXPECT_*` in
+`soak_check.sh` still v2.0.11/ws.3 **on purpose** — the bump rides the deploy. An unattended run
+still has **no working dongle recovery** — not a gate, but don't launch expecting a rescue.
 
 Two things not to re-derive: **`weewx_monitor.py` IS the watchdog** (DEC-0074), and **every reset
 line before 2026-08-07 19:28 names `syno_vbus_reset`, an operation that never ran** — prod is right
@@ -48,8 +55,8 @@ never one written down** — a remembered sha ships a green checkmark on a silen
 | Live-config deviations | `timeout = 30` + `[[[pragmas]]] journal_mode = DELETE`, both verified in the running `weewx.conf`. Table in `CONSTANTS.md` |
 | `weewx_monitor.py` | **alive, supervised, current** — NAS matches merged tip `ad7e5a4`, pid **8810** since 08-09. It **is** the USB watchdog (DEC-0074) |
 | Branches | steady state: exactly `dev` + `main`. `dev` ~90 ahead of `main` |
-| `:v2.0.12` image | S62's local build is **gone**. Rebuild from the merged tip at launch |
-| Campaign B apparatus | schedule shifted in-repo; **NOT on the NAS** (its `rx_experiment.sh` is still campaign A's) |
+| `:v2.0.12` image | **BUILT on the NAS 08-10** (`9db5c1ddaac3`, from `7b6fd42`). NOT on Hub yet — save→push deferred |
+| Campaign B apparatus | schedule regenerated (pilot **08-11T00:35**); script **NOT on the NAS yet** (its `rx_experiment.sh` is still campaign A's) |
 | Campaign A | **STOPped, sentinel in place.** Do not clear it |
 | Reset forensics | **LIVE, armed** (DEC-0075); awaiting a stall |
 
@@ -111,6 +118,6 @@ deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
 - **`secret-read-guard.sh` matches by basename**, so it blocks the repo's clean `ops/wxcheck.sh`
   (which uses `${WU_API_KEY}`). Read it with `readconf`. Guard fix is ops-owned.
 
-_Last updated: 2026-08-09 (S69) — tier-file trim (ops#152): BOOT and MANIFEST back under their caps;
-duplicates of DEC bodies and canonical docs deleted per STANDARD rules 1/9. No stall capture yet.
-S70's job: **read the first stall capture** — the event is the only thing gating blocker 4._
+_Last updated: 2026-08-10 morning (S70, in flight) — campaign B GO: v2.0.12 merged + built on the
+NAS, first night scrubbed on a dead VPN (runbook contingency, prod untouched), schedule +1 day.
+Tonight: deploy + swap + install before 00:35. Blocker 4 unchanged — no stall capture yet._
