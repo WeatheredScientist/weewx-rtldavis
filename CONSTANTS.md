@@ -61,10 +61,12 @@ these.** Re-apply and re-verify after any recreate.
 
 | Thing | Value |
 |-------|-------|
-| Published image | `:v2.0.11` + `:latest` — matches prod, no drift |
-| Rollback | `:v2.0.10`, still on the NAS and Docker Hub |
-| Prod baseline tag | `prod-baseline-20260728b` (`main` == this) |
-| Driver banner | **prod runs `0.20+ws.3`** (shipped in `:v2.0.11`, built 2026-07-28). The repo is on `0.20+ws.4` — bumped at S62 for the **unshipped** `:v2.0.12`. Don't read the repo's value as prod's |
+| Prod image | **`:v2.0.12`**, deployed 2026-08-10 (S70), NAS-built `9db5c1ddaac3` from `7b6fd42` |
+| Docker Hub | **lags prod** — still `:v2.0.11` + `:latest`; the `:v2.0.12` push is pending (`save` → laptop → `push`, DEC-0078). `:latest` moves only after the station proves the release |
+| Rollback | `:v2.0.11`, on the NAS and Docker Hub |
+| Prod baseline tag | `prod-baseline-20260810` (`main` = `7b6fd42` == prod) |
+| Driver banner | **prod runs `0.20+ws.4`** (shipped in `:v2.0.12`) |
+| Build host | **the NAS, natively** (DEC-0078) — the arm64 laptop's linux/amd64 cross-build fails (tar ENOSYS under emulation). Verify builds by the explicit `BUILD-EXIT` marker in `build.log`, never a pipeline exit |
 | Release mechanics | no git on the NAS; the `docker-compose.yml` there is stale/decorative — always `docker inspect` the live container. `kill` → `rm` → `sleep 3` → `run`, never `compose up` |
 
 ## Hardware / site
