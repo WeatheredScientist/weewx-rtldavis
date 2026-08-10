@@ -27,6 +27,20 @@ under [Pre-S16].
   (39 rows, S62's constant-offset method): **pilot 08-11T00:35, square 08-12 → 08-20T00:05**.
 - No stall overnight (blocker 4 still waiting); prod healthy through the NAS build (v2.0.11,
   Up 4 days).
+- **Deploy executed 08-10 morning, campaign B ARMED.** Campaign A archived (five artifacts →
+  `.campaignA`, including the root-owned STOP sentinel the runbook's list omitted — a tick
+  refuses while it exists); B's `rx_experiment.sh` deployed from merged tip `b7a07e1` and
+  sha-verified (`6a99c949`); container swapped in one nohup'd batch (VPN-drop-safe after the
+  previous night's lesson), `SWAP-EXIT=0`. Verified in the running system per DEC-0046: ws.4
+  banner, `Bias-tee disabled (BIAS_TEE=0)` line, DEC-0062 redaction line, loop-JSON advancing,
+  reception 70% → 57/59% through the swap dip → **70% [OK]** recovered. `install` clean at
+  09:40: baseline snapshotted, **pilot 08-11T00:35, square 08-12 → 08-20T00:05**. Soak with the
+  new expectations: **16 pass / 1 warn (settling reception) / 0 fail**.
+- **DEC-0078 — image builds move to the NAS.** The laptop failure above is deterministic, so the
+  NAS-native path is now the release mechanic, with Hub publication decoupled (`save` → laptop →
+  `push`, only after prod proof — Hub lags prod until pushed, documented in CONSTANTS). CI
+  builds noted as the structural fix, backlogged. `EXPECT_*` flipped to v2.0.12/ws.4 in the same
+  deploy; ROADMAP P2 reconciled (DEC-0057): release item closed, campaign B item now LAUNCHED.
 
 ---
 ## [S69] — 2026-08-09 — Tier files back under cap (ops#152)
