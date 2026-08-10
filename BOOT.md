@@ -12,20 +12,24 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S70)
+## ▶ Resume here (S71)
 
-### ▶▶ THE JOB: read the first stall capture (blocker 4)
+### ▶▶ THE JOB: solar radiation diode-floor fix — design decision (suggested Fable / escalated session)
 
-The apparatus is **deployed, verified and armed** (DEC-0075) — `usb_forensics.sh` `dc7912ae`,
-root-owned, re-verified on the box 08-09 after the `/proc`-mtime fix. Do **not** re-deploy — that
-is the S60b/S63 trap, BOOT telling the next session to redo finished work. Design, hypothesis and
-the two predicted signatures: **DEC-0075** — don't re-derive them.
+Full self-contained brief: **`docs/handoffs/S71-radiation-floor-design.md`** — written to be read
+cold, no transcript needed. Problem is fully diagnosed (a real, quantized ~1.758 W/m² diode
+dark-current floor, traced to a June 2026 dashboard fix that's since regressed at the chart layer).
+Two designs are drafted and compared — a `StdCalibrate` magnitude-match (ready to apply, config-only)
+vs. a `weewx.almanac`-based elevation-gated service (more correct at the dawn/dusk edge, costs new
+code + tests + a rebuild). **Neither is implemented — the choice is the open work.** This is judgment
+work, not execution of a locked design; the owner asked for it deliberately in a fresh, escalated
+session.
 
-**Wait for the event.** ~1/day, unpredictable; none since 08-07 19:28 (checked S69 — only the
-smoketest + verify files in `logs/usb-forensics/`). Read the `pre`/`post` pair together. **Both
-clean means the stall is not a USB fault at all** — a real answer, not a null result.
+Also open but event-driven, neither blocking the job above — the stall apparatus (blocker 4, detail
+there) and Campaign B's GATE 2, which doesn't exist until the pilot runs tonight:
 
-**Campaign B is LIVE — deployed and armed 2026-08-10 morning (S70).** Prod swapped to
+**Campaign B is LIVE — deployed and armed 2026-08-10 morning (S70), unchanged this session.** Prod
+swapped to
 **v2.0.12/ws.4 with `BIAS_TEE=0`**, verified in the running system (banner, bias-tee-off line,
 DEC-0062 redaction, loop flowing, reception back at 70% after the swap dip); `install` clean at
 09:40. **Pilot 08-11T00:35–04:20, then H hold; square 08-12 → 08-20T00:05.** GATE 2 = the pilot
@@ -41,11 +45,8 @@ Two things not to re-derive: **`weewx_monitor.py` IS the watchdog** (DEC-0074), 
 line before 2026-08-07 19:28 names `syno_vbus_reset`, an operation that never ran** — prod is right
 now, the *history* still lies, and that is what sent S67 down the wrong path.
 
-### ▶▶ Campaign B — the launch sequence
-
-**`docs/CAMPAIGN-B-RUNBOOK.md` governs the night and carries the release mechanics.** The one thing
-worth repeating because it has bitten twice: **take the build sha from `git rev-parse origin/dev`,
-never one written down** — a remembered sha ships a green checkmark on a silently incomplete image.
+`docs/CAMPAIGN-B-RUNBOOK.md` governs the night and carries the release mechanics, if a relaunch is
+ever needed — already armed, not needed right now.
 
 ### Current state (S69)
 
@@ -92,16 +93,33 @@ never one written down** — a remembered sha ships a green checkmark on a silen
 
 1. **Read the first stall capture** (blocker 4) — apparatus live and verified; **the event is the
    only thing left.**
-2. **Launch campaign B** — or decide not to, deliberately.
-3. **WeatherLink Live backfill for ERR-0005** — approved, not applied. ~7 records at `interval = 15`
-   + `backfill = 1`, ERR-0003's path. Back up the DB first.
-4. Post-campaign: **LNA-in vs LNA-out grand comparison (A × B)** via `ops/campaign_analyze.py` over
+2. Post-campaign: **LNA-in vs LNA-out grand comparison (A × B)** via `ops/campaign_analyze.py` over
    both windows, one metric on both sides. Then the final call on whether the LNA goes back in.
-5. **`ppm`/`fc` measurement-by-value** — deferred, not forgotten (DEC-0060's recipe is minutes-long).
-6. **`WU_RF_MIN_PCT = 60` may need retuning for the no-LNA regime** — fired on a dew dip at 03:15.
+3. **`ppm`/`fc` measurement-by-value** — deferred, not forgotten (DEC-0060's recipe is minutes-long).
+4. **`WU_RF_MIN_PCT = 60` may need retuning for the no-LNA regime** — fired on a dew dip at 03:15.
    Wants B's data, not a guess.
-7. **Consider `.claude/transient-state`** (ops#113). Opt-in is this repo's call.
-8. Keep-a-Changelog headings + DECISIONS entry-skeleton convergence (proposed S25, never picked up).
+5. Keep-a-Changelog headings + DECISIONS entry-skeleton convergence (proposed S25, never picked up).
+
+**After GATE 2** (Campaign B's pilot readout takes the next session; this queue does not compete
+with it), two sessions of non-campaign, cross-repo focused work, in order:
+
+6. **`#144`** — console pressure reads ~+0.03 inHg high vs METAR MSLP; `pressure_service.py`
+   writes the sea-level value into all three fields (`pressure`/`barometer`/`altimeter`, bit-
+   identical, should differ by ~0.6 inHg at 550 ft); hourly sample-and-hold staleness
+   (`fetch_interval = 3600`, a 60-min staircase). File-don't-fix courtesy report from HLF
+   (hlf#302) — item 1 (console/WeatherLink elevation setting) is **owner-only**, not
+   automatable. Items 2–3 need a design decision first (inject-only-`barometer` vs. compute the
+   inverse reduction; polling cadence within WeatherLink v2 rate limits) — `pressure_service.py`
+   is **baked into the image** (CONSTANTS.md deploy layers), so any fix needs a NAS-native
+   rebuild + prod deploy, not just a commit. Discuss the approach before coding.
+7. **`ops#141`** (`hyperlocal-forecast-api`) — mount the weewx archive **directory**, not the
+   single `.sdb` file. **Scope this before touching anything**, not mechanical execution: DEC-0071
+   already tried this exact shape once — HLF shipped the directory mount, WAL went live, and it
+   was rolled back 28 minutes later after HLF froze on a stale snapshot. The issue as currently
+   written may already be partially done, partially reverted, or superseded — check HLF's
+   *current* mount state first. WAL itself is separately blocked (`weewx.sdb-wal` mode 0555, no
+   mount change fixes that), so "closing #141" may mean something narrower than the issue's own
+   suggested order implies.
 
 ROADMAP reconciled at S66; next check **by S76**. Standing watches live in `BACKLOG.md`.
 
@@ -118,7 +136,6 @@ deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
 - **`secret-read-guard.sh` matches by basename**, so it blocks the repo's clean `ops/wxcheck.sh`
   (which uses `${WU_API_KEY}`). Read it with `readconf`. Guard fix is ops-owned.
 
-_Last updated: 2026-08-10 (S70 close) — **campaign B deployed, verified and armed**: prod on
-v2.0.12/ws.4 + BIAS_TEE=0, A archived, install clean, pilot 08-11T00:35. DEC-0078 (NAS-native
-builds; Hub push landed, digest-verified). Blocker 4 unchanged — no stall capture yet. S71: pilot readout
-(GATE 2, with the owner), then track the square._
+_Last updated: 2026-08-10 (S71 close) — ops#148 + DEC-0079 closed, ERR-0005 backfilled
+(`DATA_ERRATA.md`), `#144`/`ops#141` sequenced for after GATE 2. **Next job: the radiation-floor
+design handoff above.** Campaign B and blocker 4 unchanged from S70/S69._
