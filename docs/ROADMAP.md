@@ -155,9 +155,11 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       laptop can no longer cross-build linux/amd64, DEC-0078), deployed with `-e BIAS_TEE=0` and
       verified in the **running system** per DEC-0046: ws.4 banner in the live log, bias-tee-off
       startup line, DEC-0062 redaction line, soak identity canaries green (16 pass / 1 warn / 0
-      fail). `EXPECT_*` bumped in the same deploy, honoring its own header rule. **Remaining:**
-      `docker save` → laptop → `docker push :v2.0.12` (Hub lags prod until then — DEC-0078);
-      `:latest` only after the station proves the release.
+      fail). `EXPECT_*` bumped in the same deploy, honoring its own header rule. **Hub push landed at S70
+      close** — config digest verified identical to the NAS build (`9db5c1…`); layers rode the
+      save→load→push path near-uncompressed (~283 MB vs ~120 MB typical), content-identical,
+      compression tightening rides the CI-build follow-up (DEC-0078). **Remaining:** move
+      `:latest` once the station proves the release (decide at GATE 2).
 - [ ] **Campaign B — LNA physically removed — LAUNCHED AND ARMED (S70, 2026-08-10).** DEC-0066's
       hold released on its own terms: the gates were closed on measurement (DEC-0069/0070), A's
       figures confirmed clean (DEC-0077), and the "instrument trusted" condition met. The first

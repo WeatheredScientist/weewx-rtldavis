@@ -33,8 +33,9 @@ readout with the owner, Tuesday daytime (settle rule: drop each block's first 2 
 via tick log + `rx_experiment_data.log`; read results **only** with `ops/campaign_analyze.py
 --campaign B`; A's anchor is arm A **74.81%** on that tool. Abort floor 50%; every failure path
 restores baseline and emails. An unattended run still has **no working dongle recovery** — don't
-expect a rescue. **Hub push of `:v2.0.12` still pending** (save → laptop → push, DEC-0078) —
-Hub lags prod until it lands; `:latest` only after the station proves the release.
+expect a rescue. **Hub carries `:v2.0.12`** (pushed at S70 close;
+config digest verified = NAS build). `:latest` stays on v2.0.11 **on purpose** — move it once the
+station proves the release; decide at GATE 2.
 
 Two things not to re-derive: **`weewx_monitor.py` IS the watchdog** (DEC-0074), and **every reset
 line before 2026-08-07 19:28 names `syno_vbus_reset`, an operation that never ran** — prod is right
@@ -54,7 +55,7 @@ never one written down** — a remembered sha ships a green checkmark on a silen
 | Live-config deviations | `timeout = 30` + `[[[pragmas]]] journal_mode = DELETE`, both verified in the running `weewx.conf`. Table in `CONSTANTS.md` |
 | `weewx_monitor.py` | **alive, supervised, current** — pid 8810 era continued through the swap; soak "monitor alive" green 08-10. It **is** the USB watchdog (DEC-0074) |
 | Branches | steady state: exactly `dev` + `main`. `main` = `7b6fd42` = prod; `dev` slightly ahead (post-release docs) |
-| `:v2.0.12` image | **DEPLOYED**. NAS-built `9db5c1ddaac3`; **Hub push pending** (save→push, DEC-0078) |
+| `:v2.0.12` image | **DEPLOYED + on Hub** (config digest = NAS build `9db5c1ddaac3`). `:latest` still v2.0.11 pending pilot proof |
 | Campaign B | **ARMED** — installed 08-10 09:40, baseline snapshotted, first tick starts it. Pilot **08-11T00:35** |
 | Campaign A | **archived** — five artifacts under `.campaignA` suffixes (incl. the STOP sentinel), 08-10 |
 | Reset forensics | **LIVE, armed** (DEC-0075); awaiting a stall |
@@ -119,5 +120,5 @@ deploy-layer table in **`CONSTANTS.md`**. Only what those do not say:
 
 _Last updated: 2026-08-10 (S70 close) — **campaign B deployed, verified and armed**: prod on
 v2.0.12/ws.4 + BIAS_TEE=0, A archived, install clean, pilot 08-11T00:35. DEC-0078 (NAS-native
-builds; Hub push pending). Blocker 4 unchanged — no stall capture yet. S71: pilot readout
+builds; Hub push landed, digest-verified). Blocker 4 unchanged — no stall capture yet. S71: pilot readout
 (GATE 2, with the owner), then track the square._
