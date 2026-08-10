@@ -4099,3 +4099,48 @@ The monitor log shows **11 resets**, not nine. ERR-0005 and DEC-0065 both state 
 minutes" and refer to "reset #10 at 01:27:17"; that event is the **11th**, and the span is 76 min.
 Nothing downstream depended on the count — DEC-0065's argument is about unbounded retry, which 11
 makes marginally stronger — but the figure appears in two decision entries and should be right.
+
+
+## DEC-0078 — Image builds move to the NAS: the arm64 laptop can no longer cross-build linux/amd64
+
+**Status:** Accepted · **Date:** 2026-08-10 (S70) · **amends** release mechanics
+(`docs/CAMPAIGN-B-RUNBOOK.md` §Release mechanics, `CONSTANTS.md` §Release) · **applies** the
+v2.0.3 NAS-build precedent
+
+### Context
+
+Every prior release was built on the dev laptop. For v2.0.12, `docker build --platform
+linux/amd64` on the Apple-Silicon machine fails deterministically inside the first `tar zxf` of
+the upstream `src.tgz`: every entry errors `Cannot open: Function not implemented` (ENOSYS from
+the emulation layer) and the RUN step exits 2. Not flaky — reproduced identically. The failure
+initially hid behind a `| tail` pipeline whose exit 0 was read as the build's own — the repo's
+green-checkmark trap, caught because the tar noise was distrusted and the log read back.
+
+### Decision
+
+1. **Release images build natively on the NAS** (amd64 — the deploy target): `git archive` the
+   merged tip → scp the tarball → extract to `build-vX.Y.Z/` → `nohup docker build` writing
+   `build.log` ending in an explicit `BUILD-EXIT=$?` marker. Success is that marker plus the
+   `Successfully tagged` line — never a pipeline exit.
+2. **The deploy consumes the NAS-local image directly** — no Hub round-trip on the deploy path.
+3. **Docker Hub publication is decoupled and follows prod proof**: `docker save` on the NAS →
+   scp to the laptop → `docker load` → `docker push :vX.Y.Z`; `:latest` moves only after the
+   station proves the release. Until the push lands, **Hub lags prod** — the reverse of the
+   historical drift direction; `CONSTANTS.md` documents the window so nobody reads Hub as prod.
+
+### Alternatives rejected
+
+- **Toggle Docker Desktop's Rosetta/QEMU emulation** — the setting key is not even present in
+  this version's settings store, the experiment is a global Docker Desktop behavior change for
+  one repo's need, and the NAS path removes emulation instead of switching its flavor.
+- **Build in CI (native amd64 GitHub runner)** — the structural fix, but it needs Hub
+  credentials as repo secrets and a workflow design; deliberately not improvised the night it
+  was discovered. Backlogged.
+
+### Consequences
+
+- NAS CPU absorbs builds (~10 min for v2.0.12); campaign-adjacent builds are pre-launch by
+  construction, so the load never lands mid-square.
+- v2.0.12 deployed 2026-08-10 from NAS build `9db5c1ddaac3` (tip `7b6fd42`), verified in the
+  running system (ws.4 banner, bias-tee-off line, soak identity canaries green). Hub push
+  pending at time of writing.
