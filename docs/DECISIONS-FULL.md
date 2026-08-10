@@ -4144,3 +4144,60 @@ green-checkmark trap, caught because the tar noise was distrusted and the log re
 - v2.0.12 deployed 2026-08-10 from NAS build `9db5c1ddaac3` (tip `7b6fd42`), verified in the
   running system (ws.4 banner, bias-tee-off line, soak identity canaries green). Hub push
   landed the same day (S70 close): config digest on Hub verified identical to the NAS build; layers rode the transfer path near-uncompressed (283 MB vs ~120 MB typical) — content-identical, tightening belongs to the CI-build follow-up.
+
+---
+
+## DEC-0079 — Opt into the ops-wide `.claude/transient-state` convention (ops#113)
+
+**Status:** Accepted · **Date:** 2026-08-10 (S71) · **adopts** ops#113 (commit `e5094a4`,
+OPS-DEC-0067)
+
+### Context
+
+ops#113 proposed, and a later ops session built, a generic repo-opt-in mechanism for tracking
+intentionally non-default, reversible prod/shared state — a debug flag flipped for a few hours, a
+verbose log level, a temporary monitoring hook — so the revert doesn't depend entirely on a
+session or the owner remembering to come back to it. Motivating case: this repo's own
+`debug_rtld=2` prod flip (ops#112), tracked only by a STATUS.md note and a manually-filed ops
+issue at the time. This repo's `BOOT.md` ordered backlog carried "Consider
+`.claude/transient-state` (ops#113). Opt-in is this repo's call" since around S69 — this closes
+that.
+
+### Decision
+
+Opt in. A repo registers a state with one line in a tracked `.claude/transient-state`:
+`<revert-by-epoch> <tracking-ref> <description>`. The epoch is computed **once**, by whoever
+files the entry (`date -v+3H +%s` / `date -d '+3 hours' +%s`), so the SessionStart hook does only
+integer arithmetic against `date +%s` — never date-string parsing. Anything past its epoch is
+flagged OVERDUE at the next session start. A line that doesn't parse (non-integer epoch, missing
+ref) is silently skipped rather than guessed — a false "is this overdue" read would be worse than
+an invisible malformed line. **Deleting the line is the whole close mechanism.**
+
+`.claude/` is locally excluded via `.git/info/exclude` (not a committed `.gitignore`), so the file
+needed `git add -f` to become tracked — the same precedent already set for `.claude/settings.json`.
+
+**Left empty at creation.** No state active right now meets the motivating shape (a short,
+easily-forgotten flip) that isn't already carried prominently in `BOOT.md`/`CONSTANTS.md` — for
+example the `:latest` tag deliberately still pointing at v2.0.11 pending GATE 2 is a real
+deliberate-non-default state, but it's already the lead item in `BOOT.md`'s active thread, so a
+second copy here would be redundant rather than a safety net. The first real entry waits for the
+next genuine short-lived, revert-planned flip — the ops#112 shape, not a multi-day campaign (which
+already has its own dedicated tracking apparatus).
+
+### Alternatives rejected
+
+- **Decline to opt in** — rejected on cost: the mechanism is built, proven (ops's own test suite),
+  warn-only (mirrors the draft-PR hygiene hook from #107, not a gate), and this repo's own
+  governance history (stale ROADMAP/BOOT entries going unnoticed between sessions) is the same
+  "nobody came back to it" failure shape, just applied to a different kind of artifact.
+- **Backfill entries for existing non-default state** (the `:latest` pin, `BIAS_TEE=0`) —
+  rejected: both are already tracked, prominently, in the tier-1 docs this session reads every
+  time. Duplicating them here trades one drift risk (forgetting to revert) for another (two copies
+  disagreeing).
+
+### Consequences
+
+- The next short-lived prod/shared-state flip in this repo gets a cheap, mechanical tripwire
+  instead of relying on session memory or prose alone.
+- `.claude/` stays locally gitignored for everything else; this file and `settings.json` remain
+  the two tracked exceptions.
