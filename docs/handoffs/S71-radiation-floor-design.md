@@ -8,6 +8,10 @@ below; the decision between them is the open work. This is judgment work (a real
 locked design to execute) — the owner asked for it to be picked up in a fresh session, deliberately
 on a higher-tier model.
 
+> **RESOLVED S72 — this handoff is now historical.** DEC-0080 chose **option A** (exact-code
+> `StdCalibrate` zero, now versioned in `weewx.conf.example`); option B declined, design preserved
+> below. NAS apply deferred to post-GATE 2 — live steps in `BOOT.md`.
+
 ---
 
 ## The problem
