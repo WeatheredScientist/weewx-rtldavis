@@ -56,13 +56,14 @@ these.** Re-apply and re-verify after any recreate.
 |---|---|---|
 | `[DatabaseTypes][[SQLite]]` → `timeout` | **30** | weedb defaults to **5 s** (`weedb/sqlite.py:136`). At 5 s a reader holding the lock six seconds cost a CRITICAL + weewx's hardcoded 120 s wait + restart ≈ **5–10 min outage**. 30 s stays under the 60 s archive interval so records can't pile up. **Permanent** — WAL was tried and abandoned (DEC-0071), so this is the fix, not an interim |
 | `[DatabaseTypes][[SQLite]]` → `[[[pragmas]]] journal_mode = DELETE` | **subsection, not a scalar** | Re-pins `delete` on every connection so an accidental WAL flip can never again silently strand a reader on a stale snapshot (DEC-0071). **weedb iterates `pragmas` as a MAPPING** — the scalar spelling `pragmas = journal_mode = DELETE` parses as a string, and iterating it raises `TypeError: string indices must be integers`, which crash-loops weewxd. It cost ~6 min of prod on 2026-08-06 |
+| `[StdCalibrate][[Corrections]]` → `radiation` exact-code zero | DEC-0080 line, verbatim from `weewx.conf.example` | Zeros the VP2+ diode floor (`sr_raw=1` ≈ 1.758 W/m²) every dark minute. Applied 2026-08-11 (S73), **also written into `weewx.conf.rx-baseline`** — `restore_baseline` copies that snapshot over the live conf at every campaign abort/end, so a live-conf-only apply would be silently wiped (hazard found at apply; BOOT's original steps missed it). Verify after any recreate from stock **and** confirm dark hours read 0 (if 3.516 shows, extend per-code) |
 
 ## Release / rollback
 
 | Thing | Value |
 |-------|-------|
 | Prod image | **`:v2.0.12`**, deployed 2026-08-10 (S70), NAS-built `9db5c1ddaac3` from `7b6fd42` |
-| Docker Hub | `:v2.0.12` pushed (config digest = the NAS build — verified). **`:latest` still points at v2.0.11** until the station proves the release; decide at GATE 2 |
+| Docker Hub | `:v2.0.12` + `:latest` both point at the prod build — **moved `:latest` at GATE 2 (S73, 2026-08-11)** after 24 h live incl. a stall + abort + clean recovery. Config digest `9db5c1…` verified identical across both tags; their *manifest* digests differ (S70c's save→load push vs S73's daemon push — compression only, not content) |
 | Rollback | `:v2.0.11`, on the NAS and Docker Hub |
 | Prod baseline tag | `prod-baseline-20260810` (`main` = `7b6fd42` == prod) |
 | Driver banner | **prod runs `0.20+ws.4`** (shipped in `:v2.0.12`) |

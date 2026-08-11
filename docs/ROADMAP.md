@@ -3,8 +3,8 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-06 (S66 — **full reconciliation**, see the guardrail below for what it
-caught). Prior structural change: 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
+**Last updated:** 2026-08-11 (S73 — targeted DEC-0057 pass: GATE 2 outcomes into the campaign-B,
+v2.0.12 and USB-reset rows). Prior structural change: 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
 "Long-term direction" section, per DEC-0058 — this file is now P0–P3 only, the actively sequenced
 plan, so it doesn't get cluttered by uncalendared/aspirational items. Earlier same-session pass:
 folded the old P1 + P1.5 sections into one continuous data-integrity arc covering v2.0.3–v2.0.11;
@@ -158,8 +158,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       fail). `EXPECT_*` bumped in the same deploy, honoring its own header rule. **Hub push landed at S70
       close** — config digest verified identical to the NAS build (`9db5c1…`); layers rode the
       save→load→push path near-uncompressed (~283 MB vs ~120 MB typical), content-identical,
-      compression tightening rides the CI-build follow-up (DEC-0078). **Remaining:** move
-      `:latest` once the station proves the release (decide at GATE 2).
+      compression tightening rides the CI-build follow-up (DEC-0078). ✅ **`:latest` moved to
+      v2.0.12 at GATE 2 (S73)** — config digest `9db5c1…` verified identical across both tags
+      (manifest digests differ by push-path compression only). Nothing remains on this item.
 - [ ] **Campaign B — LNA physically removed — LAUNCHED AND ARMED (S70, 2026-08-10).** DEC-0066's
       hold released on its own terms: the gates were closed on measurement (DEC-0069/0070), A's
       figures confirmed clean (DEC-0077), and the "instrument trusted" condition met. The first
@@ -169,6 +170,22 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       08-11T00:35–04:20 (first honest no-LNA measurement), square 08-12 → 08-20T00:05**; GATE 2
       pilot readout Tuesday daytime. Read only via `ops/campaign_analyze.py --campaign B`
       (DEC-0069); A's anchor is arm A **74.81%** on the same tool.
+      **GATE 2 PASSED (S73, 2026-08-11): arms {372, 496} confirmed; square running 08-12 →
+      08-20T00:05.** The pilot itself aborted at 02:11 after two of five arms — P496 75.56 %
+      (n=33) ≥ P449 72.65 % (n=15), so the curve is not peaking below 449 and the high arm
+      stands; the low arms fed no decision the square doesn't answer itself. The abort cause was
+      **not reception**: a zombie-stall (see the USB-reset row below) dragged the monitor's
+      30-min aggregate to 39 % while per-minute archive reception stayed ~72 %. **DEC-0080's
+      radiation correction applied same day, to the live conf AND `weewx.conf.rx-baseline`** (a
+      live-only apply would be wiped by `restore_baseline` — hazard caught at apply). The 08:55
+      re-arm then exposed a second `health_ok` budget bug — 180 s never modeled RF acquisition
+      (~127 s measured this boot vs ~0 s on P449's) and aborted a healthy, publishing driver by
+      seconds; `HEALTH_TRIES` 36 → 60 with the four-term arithmetic pinned in tests (S57's
+      regression class, one term deeper). Known cosmetic: `rx_experiment_data.log`
+      rows tagged P449 between 01:23 and 08:55 include the stall + baseline morning —
+      `campaign_analyze.py` is unaffected (it reads swap-time blocks, not harvest tags). Minor
+      apparatus defect found: tick and guard raced each other's restarts at 02:05 (no lock);
+      converged safely via the sticky STOP; lockfile is post-campaign work.
       *Explain the outages* — substantially met at DEC-0067: the recurring class is **process
       freezes, not RF loss**, bounded (~1/day, ~3.5 min) and pre-dating the LNA removal, while
       ERR-0005 is a **single incident**. *Watchdog* — done (S63). *Metric freeze-aware* — **done
@@ -208,9 +225,20 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       carry its own top blocker. **Apparatus LIVE since 2026-08-09 (DEC-0075)** — deployed from
       merged tip `ad7e5a4` and verified; `ops/usb_forensics.sh` brackets every reset with host and
       in-container USB state plus `rtldavis`'s open handles, so the next stall answers the question
-      instead of repeating it. **Hypothesis explicitly unestablished** — a stale container view or a
-      surviving fd confirms it; both clean means the stall is not a USB fault at all. **Blocked on
-      the event alone now** (~1/day, none since 08-07 19:28), not on tooling. Minor: the deployed
+      instead of repeating it. ✅ **EVENT CAPTURED 2026-08-11 (S73): the mechanism is neither of
+      DEC-0075's two hypotheses.** The 01:52 pre-capture shows `rtldavis` as a **zombie** —
+      `State: Z`, `wchan=do_exit`, zero open fds, no replacement process — dead since mid-block
+      with a parent that neither reaped nor respawned it. A USB reset cannot resurrect a dead
+      consumer, which is why every reset "fails"; the abort's container `kill`+`start` is what
+      actually clears it (fresh process tree). Three full capture sets banked, including an
+      **effective** reset at 23:56 (during the HLF-promotion/coffee-radar load spike, 15-min
+      loadavg ~25) to diff against the two ineffective ones. Reset #2 also **timed out after
+      15 s** — new failure mode. Open questions → **S74 deep-read** (staged in `BOOT.md` with the
+      subagent fan-out): why did the child die; why didn't the driver's own 150 s respawn watchdog
+      act (its silence looks like DEC-0067's freeze cousin); does this retroactively explain
+      ERR-0005's recreate-fixed-what-restart-didn't; what remedy — monitor auto-recreate
+      (re-opens DEC-0065's decline, now with mechanism evidence), a driver respawn fix
+      (upstreamable), or both. Minor: the deployed
       copy's `started=` field is unreliable until PR #146 is merged and that one file re-installed
       (#147) — the decisive signatures are unaffected. ✅ **Blocker 5 CLOSED (DEC-0077):** reset gaps
       do not contaminate campaign A. 11 resets (not nine), all 08-02; the archive went normal → 105
