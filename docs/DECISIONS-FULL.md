@@ -4288,3 +4288,83 @@ Option A — one `StdCalibrate` correction, exact-window and None-guarded:
 - **Ops note filed:** eaglehunt-ops#154 (dashboard `eh-ui.js` filter vestigial).
 - Dark-hours-read-0 verification due S74 (first corrected night 2026-08-11 → 12); the
   `sr_raw=2` / 3.516 extend-per-code rule above stands.
+
+## DEC-0081 — The stall class is RF-dead episodes: resets demoted, events self-classify, episodes ledgered
+
+**Status:** Accepted · **Date:** 2026-08-11 (S73) · **supersedes** DEC-0074's open question and
+DEC-0075's hypothesis set · **vindicates** DEC-0065 · **amends** DEC-0073 · **relates to**
+DEC-0067/0068, ERR-0005
+
+### Context
+
+DEC-0074 (S67) established that USB resets fire but never work — 11/11 failed on 08-02, 3/3 on
+08-06 — and DEC-0075 built a forensics apparatus around two hypotheses: (a) a stale container
+view of a re-enumerated device, or (b) a surviving file-descriptor grip. The 08-10/11 night
+delivered three full capture sets (one effective-looking reset at 23:56, two ineffective at
+01:52/01:59) and aborted the campaign-B pilot. The S73 differential — Sub-A collating all 11
+capture files, Sub-B extracting the night timeline from three logs, Sub-C correlating HLF and
+coffee-radar activity, main thread synthesizing against the driver source — answered the
+question with a mechanism nobody had on the board.
+
+### What the evidence established
+
+1. **Neither DEC-0075 hypothesis occurred.** The device never re-enumerates (devnum 5 and node
+   mtime unchanged since Aug 2 across every reset — driver unbind/rebind does not re-enumerate,
+   so the stale-devnum prediction was a measurement-design error, not a finding), and the dead
+   children hold zero fds.
+2. **The driver's watchdog and respawn machinery work.** All three stalls show the identical
+   healthy sequence: 150 s silence → `Caught WeeWxIOError: rtldavis process stalled` → pidof
+   SIGKILL → ~60 s weewx retry wait → fresh child with the correct arm cmdline. The earlier
+   "frozen parent / no respawn" reading was log-blindness: driver re-inits log `startup
+   process`, not `Starting up weewx`.
+3. **The stall class is RF-dead episodes.** Two that night: 23:52→00:01 (~9 min) and
+   01:49→02:14 (~25 min). During the second, four fresh children across three gain configs
+   (449, 449, 402) all produced nothing; recovery came gradually at ~02:14, minutes after the
+   baseline revert — time-correlated, not action-correlated. The 23:56 "effective" reset was
+   the same event shape whose episode happened to end while the monitor was watching.
+4. **Resets are theater for this class.** ~17 attempts, zero demonstrable fixes; ERR-0005
+   suspects reset #10 caused the strictly-worse dies-on-startup mode. ERR-0005's
+   recreate-fixed-it (105-min episode, 21 driver detections = the same serial-respawn
+   signature) now reads as coincidence with episode end — DEC-0065's refusal to automate the
+   recreate was correct for the right reason before the reason was known.
+5. **One real process bug: kill-without-wait.** ProcManager kills via pidof + `os.kill` and
+   never reaps; the engine builds a fresh ProcManager per retry, so no instance holds its
+   predecessor's handle. Three zombies stacked under one weewxd, forensically captured.
+6. **External load is a contributor to at most one episode.** The 23:52 onset sits inside a
+   real congestion window (coffee-radar ad-hoc ~23:58, HLF maintenance chain 00:10, measured
+   15-min loadavg ~25 — extends DEC-0068's n). The campaign-killing 01:49 episode has no
+   confirmed external correlate.
+
+### Decision
+
+- **Demote the resets:** `RESET_MAX_TRIES` 3 → 1. One hedge per episode for the genuine dongle
+  wedge that has never yet been captured; the second stall escalates to the human (email still
+  carries the built recreate command). The `not running` path stays no-reset (S62).
+- **Make every event self-classify at the source (ws.5):** `STALL DIAGNOSIS` at the 150 s
+  raise — `raw_stderr_lines=0` is a mute child (process/USB class, the only signature that
+  would ever again justify USB-level remedies); `>0` is an emitting child (RF class) — plus a
+  10-line `drain_stderr` tail. The RF-quiet mode (hops flowing, nothing decoding) never trips
+  the 150 s watchdog because hop packets reset it, so a paced `DATA DROUGHT` line covers it.
+- **Reap children (ws.5):** every spawn registers module-wide; shutdown waits on its kill;
+  startup reaps predecessors. Upstreamable with the diagnosis lines (CHANGES rows 12–13).
+- **Ledger episodes (monitor):** one row per ALERT→RECOVERY in `logs/episodes.log`
+  (`onset|recovery|duration_s|stalls|resets|respawns|droughts|worst_avg|last_cmd`). This is
+  the pre-registered LNA-verdict datum: does episode susceptibility differ LNA-in vs LNA-out —
+  the owner's reportable result for similar sites (~50–70 m, trees, walls, non-ideal siting).
+- **Accept guard aborts during episodes as designed protection.** No auto-restart rung:
+  restarts show the same evidence pattern as resets (every "recovery after restart" is equally
+  explained by episode end). An episode night costs a block; morning STOP-clear resumes;
+  structural exclusion keeps the data honest.
+- **Leave the episode root cause open, deliberately** — interference vs no-LNA front-end
+  margin vs site is a post-campaign characterization question, to be answered with A×B data
+  plus the ledger (episodes predate the LNA removal: 08-02 and 08-06 were LNA-in).
+- `soak_check.sh` ineffective-reset criterion FAIL → WARN with the class-aware message — a
+  criterion that fails on expected behavior trains people to skip the check (ops#147 item 6).
+
+### Deployed (same day, before the 08-12T00:05 square start)
+
+v2.0.13 NAS-built from merged tip `1530971` (`BUILD-EXIT=0`), swapped mid-H-hold with
+identical mounts/devices/env + `BIAS_TEE=0`, ws.5 banner + DEC-0031 canary verified in the
+running log, records within 35 s, soak 15/2/0. `:v2.0.13` on Hub; `:latest` stays v2.0.12
+until proven. Monitor scp'd + sha-verified; its respawn needs the owner's path-scoped-sudo
+kill (uid-1031 process). PR #159; tests 185 → 203.
