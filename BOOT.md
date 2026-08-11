@@ -12,91 +12,93 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S73 → S74)
+## ▶ Resume here (S74 → S75)
 
-### What S73 settled (do not re-derive)
+### What's settled (do not re-derive)
 
-**GATE 2 passed; arms {372, 496} confirmed; square runs 08-12T00:05 → 08-20T00:05 on v2.0.13.**
-Pilot gave P496 75.56% ≥ P449 72.65% (aborted at 2 of 5 arms on a stall — the abort became the
-day's biggest win). DEC-0080 radiation fix applied (live conf **and** rx-baseline snapshot — a
-live-only apply is wiped by `restore_baseline`), `health_ok` budget fixed (missing RF-acquire
-term, 36→60 tries — the old budget would have coin-flipped every square swap), `:latest` →
-v2.0.12 at GATE 2.
+**GATE 2 passed; v2.0.13/ws.5 shipped and promoted to `main` (`prod-baseline-20260811`).** DEC-0081
+(RF-dead episodes, not USB faults) shipped with child reaping + stall self-classification + episode
+ledger (`logs/episodes.log`). Monitor respawned clean: pid **22206** (was 8810), `Monitor started`
+15:29:02 — confirmed via DEC-0074 process evidence, not a sha. DEC-0080 radiation fix live (both
+live conf and rx-baseline snapshot).
 
-**DEC-0081 — the stall class is RF-DEAD EPISODES, not USB faults.** Same-day forensics
-differential (3 capture sets, night timeline, HLF/coffee-radar correlation): the device never
-re-enumerates, the driver's watchdog/respawns work, silent children recur across gain configs and
-recovery is time-correlated, never action-correlated. Resets are theater (~17 attempts, 0 fixes);
-ERR-0005's recreate-fix = episode-end coincidence; DEC-0065 vindicated. Shipped same day:
-**v2.0.13/ws.5** (child reaping — three stacked zombies captured; `STALL DIAGNOSIS` mute-vs-
-emitting at every 150s raise; paced `DATA DROUGHT` for the RF-quiet mode that never trips the
-watchdog) + **monitor** (`RESET_MAX_TRIES` 3→1 hedge; `episodes.log` ledger, one row per
-ALERT→RECOVERY — **the pre-registered LNA-verdict datum**). Soak criterion reframed FAIL→WARN.
-Episode ROOT CAUSE deliberately open — post-campaign characterization with A×B + ledger.
+**S74 — the day's second guard abort, root-caused and cleared.** (First was the pilot's zombie-child
+stall, cleared 08:55 per S73.) This one tripped `30-min mean reception 46% < 50% floor (arm H)` at
+09:55:03. Reconstructed the exact 6-sample mean from `weewx_monitor.log` — 70/30/70/71/20/16 → 46,
+matching the abort message exactly. Traced to a real RF-dead episode (09:33–10:04, pre-ws.5): a USB
+reset was attempted and logged **ineffective**; recovery was uncorrelated with the reset — the
+DEC-0081 signature, not a new failure mode. STOP cleared (owner-confirmed in chat, Class C mint);
+verified stable through a **second live episode** (17:52–17:59, also self-recovered, also non-mute:
+`raw_stderr_lines=7`, "RF class") without re-tripping. Square proceeds on schedule, 08-12T00:05.
 
-### ▶▶ S74 JOB LIST (short, verification-shaped)
+`ops/soak_check.sh`: 14 pass / 2 warn / **1 FAIL — repeated rtldavis stalls: 2** since the v2.0.13
+container start (16:37, 17:52). Both non-mute, both self-recovered <7 min, both consistent with
+DEC-0081's still-open characterization — but the frequency (2 in ~3h) is itself a new, unexplained
+data point. Watch the rate as the square runs; don't re-litigate root cause mid-campaign over it.
 
-1. **DEC-0080 dark-hours verify**: overnight 08-11→12 `radiation` must read 0 (if 3.516 /
-   `sr_raw=2` shows, extend per-code, never a loose window). First corrected night.
-2. **Square health**: first blocks swapped clean under the 300s budget (tick log); reception
-   plausible; any overnight guard abort = clear STOP in the morning and resume — **an episode
-   abort is the system working, not a campaign failure (DEC-0081)**.
-3. **ws.5 first-contact checks**: any `STALL DIAGNOSIS` / `DATA DROUGHT` lines overnight — each
-   one self-classifies; a **mute-class** diagnosis (raw_stderr_lines=0) is the only signature
-   that would re-open the USB theory. `episodes.log` gets its first rows on the next episode.
-4. **Monitor respawn confirm** (if the owner's kill has run): new pid ≠ 8810 in
-   `logs/weewx_monitor.pid` + fresh `Monitor started` line **after** the file mtime (DEC-0074:
-   process evidence, never a sha). Until then prod runs the old monitor — new code sits staged.
-5. **Promotion bookkeeping if not done at S73 close**: `dev` → `main` PR + `prod-baseline-20260811`
-   (CONSTANTS release table flags it pending).
-6. Daily square watch (cheap, ~5 min): STOP absent · state matches schedule · soak (now 15/2/0
-   baseline) · reception plausible.
+Condensation floated as a candidate cause (humid, dewpoint spread 11.7°F at check time) — plausible
+for the one **overnight** episode (01:50) only; doesn't explain the two daytime ones. Adds a fourth
+candidate to DEC-0081's open list (interference / no-LNA margin / site / **condensation**), not an
+answer.
 
-**Upstream follow-up staged (post-campaign, not urgent):** CHANGES rows 12–13 (reaping +
-self-classification) → PR to lheijst alongside the existing open threads (`UPSTREAM-THREADS.md`).
-**Dependabot PR #158 (weewx 5.4.0→5.5.0) deliberately open** — no base-platform bump
-mid-campaign; evaluate post-campaign with the v2.0.14 cycle.
+**Dependabot PR #158 (weewx 5.4.0→5.5.0) reconfirmed deliberately open** — no base-platform bump
+mid-campaign (the square hasn't run a single block yet); its `tests` check is also currently
+failing regardless. Revisit post-campaign with the v2.0.14 cycle.
 
-### Current state (S73 close)
+### ▶▶ S75 JOB LIST
+
+1. **DEC-0080 dark-hours verify, for real this time**: S74 confirmed the correction is live but
+   couldn't check results — dark hours hadn't happened yet at check time. Check last night's
+   (08-11→12) archive data: `radiation` must read 0 across the dark window. If 3.516 / `sr_raw=2`
+   shows, extend per-code, never a loose window.
+2. **Square health, block 1**: A-arm swap at 08-12T00:05 — tick log shows `swapping H -> A` and
+   `arm A live and healthy`; reception plausible. Any guard abort gets the same treatment as S74's
+   (reconstruct from `weewx_monitor.log` before clearing, not reflexively).
+3. **Repeated-stall rate watch**: 2 episodes in ws.5's first 3h. Is this settling toward DEC-0081's
+   historical baseline or running hot? `episodes.log` has 2 rows now — read it directly rather than
+   re-deriving from raw logs each time.
+4. Daily square watch (cheap, ~5 min): `ops/soak_check.sh`, STOP absent, state matches schedule,
+   reception plausible.
+
+**ops#153 open**: this repo's own `MANIFEST.md` is over its documented cap (4,334/4,000) — not
+addressed this session, owner's call on timing.
+
+### Current state (S74 close)
 
 | Thing | State |
 |---|---|
-| Prod | **v2.0.13**, driver **ws.5**, `BIAS_TEE=0`, LNA out, gain 372 (H hold). Swapped 15:02 EDT mid-H, verified live (banner, canary, records 35s, soak 15/2/0) |
-| Campaign B | **H hold live**, square starts 08-12T00:05, self-terminates 08-20T00:05. Guard floor 50%; every failure path restores baseline + emails |
+| Prod | **v2.0.13**, driver **ws.5**, up since 15:02 EDT 08-11. `soak_check.sh`: 14 pass / 2 warn / 1 fail (repeated-stall count, see above) |
+| Campaign B | **H hold live, STOP cleared** — square starts 08-12T00:05 as scheduled. Sticky-abort-until-cleared behavior confirmed working as designed (tripped once this cycle, held ~8h until diagnosed + cleared) |
 | Live-config deviations | three: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero (also in rx-baseline snapshot). Table in `CONSTANTS.md` |
-| `weewx_monitor.py` | **new code deployed + sha-verified (`f9e7d88d…`), respawn PENDING the owner's `ssh -t nas-admin 'sudo kill 8810'`** — uid-1031 process, path-scoped sudo. Old code keeps running (fires old-policy resets) until then — harmless |
-| Hub | `:v2.0.13` pushed; `:latest` = v2.0.12 until the square proves ws.5 |
-| Branches | `dev` + `main`; `main`/tag one release behind (item 5 above) |
-| episodes.log | does not exist yet — created on the first episode close |
+| `episodes.log` | 2 rows (16:34–16:40, 350s; 17:52–17:59, 410s) — both self-recovered, both non-mute |
+| Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
+| Branches | `dev` + `main` in sync — promotion PR #161 merged, `prod-baseline-20260811` tagged |
 
 ## Blockers
 
 1. **weewx process freezes ~once/day (DEC-0067/0068) — unchanged, separate phenomenon** from
-   DEC-0081's episodes. Load contributor pattern got a second instance (23:52 episode onset in
-   the coffee-radar/HLF-maintenance window, loadavg ~25). Gates nothing.
+   DEC-0081's episodes. Gates nothing.
 2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open): interference vs no-LNA
-   front-end margin vs site. Episodes predate LNA removal (08-02, 08-06 LNA-in). The ledger +
-   self-classification + A×B campaign data are the instruments; characterization is
-   post-campaign work.
-3. **ERR-0005** — largely explained by DEC-0081 (same serial-respawn signature, 105-min episode;
-   recreate coincided with episode end). Not fully closed: its 21-detection day remains the
+   front-end margin vs site vs **condensation (new S74 candidate, unconfirmed)**. The ledger +
+   self-classification + A×B campaign data are the instruments; characterization is post-campaign.
+3. **ERR-0005** — largely explained by DEC-0081; not fully closed, its 21-detection day remains the
    longest episode on record.
 4. `ppm`/`fc` unmeasured, deliberately unchanged for B.
 
 ## Gotchas that survive here because they are NOT in the canonical docs
 
 - **A file match proves the FILE, never the PROCESS** (DEC-0074) — liveness = startup line after
-  file mtime, `/proc/<pid>/stat` field 22 vs `/proc/uptime`, new pid + old gone. Applies to the
-  pending monitor respawn (item 4 above).
+  file mtime, `/proc/<pid>/stat` field 22 vs `/proc/uptime`, new pid + old gone.
 - **`secret-read-guard.sh` matches by basename** — read `ops/wxcheck.sh` / any `weewx.conf` with
   `readconf`.
 - **`rx_experiment_data.log` P449-tagged rows 01:23→08:55 on 08-11 are contaminated** (stall +
   baseline morning under one tag). `campaign_analyze.py` is immune (reads swap-time blocks).
-- `campaign_analyze.py --campaign B` will warn "multiple attempts pooled" (the pilot abort split
-  the log) — for B the pooling is correct; informational only.
 - **Driver re-inits log `startup process`, never `Starting up weewx`** — a boot-marker grep that
-  misses this reads respawns as absent (S73's own log-blindness, cost half a differential).
+  misses this reads respawns as absent.
+- **`nasctl` is read-only by design (mutations refused by the box)** — clearing `rx_experiment.STOP`
+  needs the mutating NAS path (Class C, `nas-admin`): confirm the exact command in chat first, mint,
+  re-run identical. Worked cleanly S74.
 
-_Last updated: 2026-08-11 (S73 close) — GATE 2 passed, DEC-0080 applied, DEC-0081 decided +
-shipped (v2.0.13/ws.5 + monitor demotion + episode ledger), health budget fixed, `:latest`
-moved. Square starts tonight on the new stack._
+_Last updated: 2026-08-11 (S74 close) — day's second reception-floor abort root-caused and cleared,
+square proceeding on schedule, soak_check flags a repeated-stall rate to watch, weewx 5.5 bump
+reconfirmed deferred._
