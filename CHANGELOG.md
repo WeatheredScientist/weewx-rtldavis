@@ -5,6 +5,49 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S73] — 2026-08-11 — GATE 2 passed; the stall mechanism captured (zombie child); DEC-0080 applied; `:latest` → v2.0.12
+
+- **Pilot night: 2 of 5 arms, then a stall-abort — and the abort is the session's biggest win.**
+  P496 ran clean (75.56 %, n=33), P449 ran (72.65 %, n=15) until a **USB-stall killed it**: the
+  01:52 forensics pre-capture shows `rtldavis` a **zombie** (`Z`, `wchan=do_exit`, zero fds, no
+  replacement) — the child died mid-block and the driver neither reaped nor respawned it, so both
+  USB resets were structurally futile (a device reset cannot resurrect a dead consumer). That is a
+  **third mechanism**, neither of DEC-0075's two hypotheses. Three capture sets banked incl. an
+  *effective* 23:56 reset (during the HLF/coffee-radar load spike, loadavg ~25) for contrast;
+  reset #2 also hit a new **15 s sudo timeout** failure mode. Guard abort at 02:05 (30-min mean
+  39 % — dead air, not reception; per-minute archive stayed ~72 %), tick raced it at the same
+  second (no lock — minor apparatus defect, post-campaign fix), sticky STOP converged it safely.
+- **GATE 2 (owner, Fable-escalated): arms {372, 496} confirmed** — 496 ≥ 449 answers the only
+  question the pilot had to answer (curve not peaking below 449); missing low arms feed no
+  decision the square doesn't make itself. **STOP cleared 08:55, H hold resumed, square runs
+  08-12T00:05 → 08-20T00:05 unchanged.**
+- **DEC-0080 APPLIED** — the exact-code radiation zero into the live `weewx.conf` **and**
+  `weewx.conf.rx-baseline`, activated by the H-swap's own restart (zero extra downtime). The
+  both-files requirement was a hazard found at apply: `restore_baseline` copies the snapshot over
+  the live conf at every abort/campaign-end, so a live-only apply would have been silently wiped
+  — BOOT's original apply steps missed it. Third `CONSTANTS.md` deviations row added. Dark-hours
+  = 0 verification due tonight (S74). Ops note filed: dashboard `eh-ui.js` floor filter now
+  vestigial.
+- **`:latest` moved to v2.0.12 on Docker Hub** (GATE 2 decision): config digest `9db5c1…`
+  verified byte-identical across both tags via the registry API; manifest digests differ
+  (S70c save→load push vs S73 daemon push — compression, not content).
+- **A second budget bug found and fixed the same morning (S57's lesson, one term deeper):** the
+  08:55 H re-swap was aborted at 08:58:14 as "no records" while the driver was alive and
+  publishing — `health_ok`'s 180 s budget never modeled **RF acquisition** (measured ~127 s on
+  this boot vs ~0 s on P449's). First archive record was due ~08:58:15; the budget missed a
+  healthy swap by seconds, and would have coin-flipped every square swap. `HEALTH_TRIES` 36 → 60
+  (~300 s vs the corrected ~245 s worst case: boot 25 + rf-acquire 130 + interval 60 + lag 30);
+  the regression test now asserts the four-term arithmetic. The 02:11 P402 abort likely shared
+  this mechanism beneath the guard race (S74 confirms). Third abort email of the day is this one.
+  Also fixed in passing: `test_current_schedule_is_installable_today` went red the morning the
+  campaign legitimately launched (first row in the past ≠ stale) — renamed
+  `…is_not_fully_stale`, asserting the **self-terminator** hasn't passed instead.
+- **S74 staged as the stall deep-read** with a three-subagent read-only fan-out + frontier main
+  thread (BOOT); S75 remedy candidates named (monitor auto-recreate re-opening DEC-0065, driver
+  respawn fix, tick/guard lockfile). ROADMAP campaign-B/v2.0.12/USB-reset rows reconciled
+  (DEC-0057, same session).
+
+---
 ## [S72] — 2026-08-10 — DEC-0080: the diode-floor fix is decided — StdCalibrate exact-code zero, config layer
 
 - **DEC-0080 — solar radiation diode-floor correction: option A** (escalated session, per the S71
