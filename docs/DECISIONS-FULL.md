@@ -4273,3 +4273,18 @@ Option A — one `StdCalibrate` correction, exact-window and None-guarded:
 - The dashboard's surviving `eh-ui.js` narrow-window filter becomes vestigial after cutover;
   retiring it is dashboard-repo work (DEC-0010) — ops-tracker note to be filed at apply. The
   regressed chart path needs no dashboard fix at all: post-cutover data arrives clean.
+
+### Applied — 2026-08-11 (S73), post-GATE 2 as planned
+
+- **Both files, not one:** the apply step surfaced that `restore_baseline` (in
+  `ops/rx_experiment.sh`) copies `weewx.conf.rx-baseline` over the live conf at every campaign
+  abort and at self-termination — a live-conf-only apply would be silently reverted by the next
+  restore. The line went into **the live `weewx.conf` AND the rx-baseline snapshot**, identical
+  and verbatim from `weewx.conf.example`. The durable statement lives in the `CONSTANTS.md`
+  live-config deviations table (the DEC-0070 mechanism, as this entry required).
+- **Runtime-verified the same morning:** weewx 5.4.0 booted clean with the line twice (08:55:17
+  and 08:58:23 restarts) and published normally — the config-typo crash-loop this entry deferred
+  around did not occur. Activated by the campaign's own restart path; zero added downtime.
+- **Ops note filed:** eaglehunt-ops#154 (dashboard `eh-ui.js` filter vestigial).
+- Dark-hours-read-0 verification due S74 (first corrected night 2026-08-11 → 12); the
+  `sr_raw=2` / 3.516 extend-per-code rule above stands.

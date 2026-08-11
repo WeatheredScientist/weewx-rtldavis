@@ -279,26 +279,30 @@ def test_load_env_reports_failure_when_envfile_missing(tmp_path):
 
 
 def test_health_check_budget_covers_a_full_archive_interval():
-    """REGRESSION (S57). The health check's 18 tries (~90s) was too small BY
-    CONSTRUCTION and aborted a live campaign 3 seconds early.
+    """REGRESSION (S57, extended S73). The health check's 18 tries (~90s) was too
+    small BY CONSTRUCTION and aborted a live campaign 3 seconds early (S57:
+    weewxd init 12:11:46, first record 12:13:30 = 104s, abort at 12:13:27).
 
-    A restart cannot produce an archive record faster than boot + up to a full
-    archive interval + the post-boundary write lag. The arithmetic is asserted
-    here rather than the bare number, so lowering the budget fails the test with
-    the reason attached. Measured on the real failure: weewxd init 12:11:46,
-    first record 12:13:30 = 104s, abort at 12:13:27.
+    S73 found the corrected model STILL missing a term: RF ACQUISITION. After
+    "Starting main packet loop" the driver can take ~0s to ~127s (measured, the
+    2026-08-11 08:55 H swap) to sync the hop pattern and decode a first frame —
+    no packets, no archive record, regardless of archive boundaries. The 180s
+    budget expired seconds before a healthy driver's first record, aborting a
+    live campaign. Again. The arithmetic is asserted here rather than the bare
+    number, so lowering the budget fails the test with the reason attached.
     """
     src = SCRIPT.read_text()
     tries = int(re.search(r"^HEALTH_TRIES=(\d+)", src, re.M).group(1))
     sleep_s = int(re.search(
         r'for i in \$\(seq 1 "\$HEALTH_TRIES"\); do\s*\n\s*sleep (\d+)', src, re.M).group(1))
 
-    boot_s, archive_interval_s, write_lag_s = 25, 60, 30   # observed on this station
-    worst_case = boot_s + archive_interval_s + write_lag_s  # ~115s
+    boot_s, rf_acquire_s, archive_interval_s, write_lag_s = 25, 130, 60, 30
+    worst_case = boot_s + rf_acquire_s + archive_interval_s + write_lag_s  # ~245s
 
     assert tries * sleep_s >= worst_case, (
         f"health budget {tries * sleep_s}s cannot cover the {worst_case}s worst case "
-        f"(boot {boot_s} + archive interval {archive_interval_s} + write lag {write_lag_s})"
+        f"(boot {boot_s} + rf acquire {rf_acquire_s} + archive interval "
+        f"{archive_interval_s} + write lag {write_lag_s})"
     )
 
 
@@ -348,12 +352,24 @@ def test_install_refuses_a_started_schedule(tmp_path):
     assert "REFUSING to install" in (r.stdout + r.stderr)
 
 
-def test_current_schedule_is_installable_today():
-    """Guards the guard: the shipped schedule must not already be stale, or the
-    next launch hits the refusal instead of running."""
+def test_current_schedule_is_not_fully_stale():
+    """Guards the guard: a shipped schedule whose SELF-TERMINATOR has passed is
+    dead weight — the next launch hits `install`'s refusal instead of running.
+
+    S73 correction: the original assertion ("first row in the future") went red
+    the morning the campaign legitimately launched and would have stayed red for
+    all 9 days of it — conflating "campaign in flight" with "schedule stale."
+    In flight (first row past, terminator future) is exactly the state the
+    DEC-0066 refusal exists to protect; only a fully-elapsed window is stale.
+    """
     import datetime
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M")
-    assert _call_schedule_started(now).returncode == 1, (
-        f"shipped SCHEDULE first row {_first_row_time()} is not in the future "
-        f"(now {now}) -- regenerate it"
+    src = SCRIPT.read_text()
+    body = re.search(r'SCHEDULE="\n(.*?)"', src, re.S).group(1)
+    rows = [ln for ln in body.strip().split("\n") if ln]
+    last_time, last_arm = rows[-1].split("|")
+    assert last_arm == "BASELINE", "schedule must end with the self-terminator"
+    assert last_time > now, (
+        f"shipped SCHEDULE is fully elapsed (terminator {last_time} < now {now}) "
+        f"-- regenerate it before the next launch"
     )
