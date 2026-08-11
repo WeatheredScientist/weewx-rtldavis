@@ -16,7 +16,7 @@ It exists for three reasons:
 2. **Honesty.** Until S37 the driver logged `driver version is 0.20` — the stock upstream version —
    while carrying a rain filter, a sensor plausibility filter and five bug fixes that do not exist
    upstream. Anyone debugging from our logs (including us, and including anyone we try to help on an
-   upstream issue) was being misled. It now logs `0.20+ws.4`.
+   upstream issue) was being misled. It now logs `0.20+ws.5`.
 3. **It is the checklist for shrinking the fork.** Every row below is either something to upstream or
    something to justify keeping. A fork with no inventory only grows.
 
@@ -51,7 +51,7 @@ suffix: upstream's base version, `+ws`, our revision.
 
 | File | Upstream version | Ours |
 |------|------------------|------|
-| `rtldavis.py` | `0.20` | `0.20+ws.4` |
+| `rtldavis.py` | `0.20` | `0.20+ws.5` |
 | `influx.py` | `0.20` | `0.20+ws.1` |
 
 The suffix sorts after the base version and is unambiguous about its parent. `rtldavis.py` also logs
@@ -92,7 +92,8 @@ count at `cd49214`, and the S37 commit that recorded it added the fork-identity 
 | 5 | **Per-packet logging at INFO** | 2026-07-05 | `RAW_CHANNEL_PAYLOAD`, `Hop:` and `ChannelIdx:` lines were logged at INFO on every frequency hop, flooding `weewx.log`. Moved behind `debug_rtld` levels. |
 | 10 | **Outside temperature decoded UNSIGNED** — `parse_raw`, message type 8 | 2026-07-28 | Davis encodes the 12-bit digital temperature as **two's complement**; upstream divides the raw value by 10 with no sign handling, so every sub-0 °F reading decodes to ~+400 °F. On this station that trips the SensorQC bounds and (since DEC-0054) co-rejects the whole frame, i.e. real winter reads as RF corruption. Upstream also lacks the second no-sensor sentinel `0xFF8` that the sibling weewx-meteostick driver checks; both are fixed here. We use `temp_raw - 0x1000`, **not** meteostick's `-(temp_raw ^ 0xFFF)` — the latter is one's complement and is 0.1 °F warm on every negative reading. [DEC-0055] |
 
-Numbers 1–4 and 10 are real defects in upstream that any US Davis user hits — 10 bites any
+| 12 | **Killed child processes are never reaped** — `ProcManager` | 2026-08-11 | `startup()` and `shutdown()` kill rtldavis by `pidof` + `SIGKILL` and never `wait()`; the engine builds a fresh `ProcManager` on every `WeeWxIOError` retry, so no instance holds a handle to its predecessor's corpse. Every stall-respawn cycle therefore leaks one zombie — three stacked under a single weewxd were forensically captured on 2026-08-11. Spawned children are now registered module-wide and reaped (`poll()`) on shutdown and before each startup. Any user of the stock driver whose RF drops long enough to trip the 150 s stall watchdog accumulates zombies the same way. |
+Numbers 1–4, 10 and 12 are real defects in upstream that any US Davis user hits — 10 bites any
 cold-climate user of the stock driver. They are the intended content of an upstream contribution
 (see [Upstreaming](#upstreaming) below).
 
@@ -106,6 +107,7 @@ cold-climate user of the stock driver. They are the intended content of an upstr
 | 9 | Lint / dead code | 2026-07-08 | Dropped unused imports (`timegm`, `fnmatch`, `string`), the dead `_fmt()`, and the unused `parse_readings()`. Bare `except:` → `except Exception:`. [DEC-0027] |
 | 11 | **Frame-level co-rejection** — a bounds failure condemns the whole frame | 2026-07-27 | Extends 6, which vetted each field independently — so a frame carrying *positive proof* of corruption could still have its other fields trusted. On 2026-07-27 one CRC-valid frame decoded humidity to 144.9 %RH (out of spec, rejected) and a wind byte to 39 mph from dead calm (in spec, under the delta cap, accepted) — the phantom became the archive interval's gust max and went out to ten external networks (ERR-0004). Every weather field rides the same 8-byte frame, so a **bounds** failure on any one of them now nulls all of them (`FRAME_WEATHER_KEYS`), skips the rain counter *without* resyncing `last_rain_count`, and moves no delta baselines. Diagnostics (battery flags, supercap, freqError, `pct_good`) deliberately survive: they describe the link, not the weather. A **delta** trip never co-rejects — a large step can be genuine weather; an impossible value cannot. Zero fitted parameters, so nothing can drift. Shipped in v2.0.9 (S52). [DEC-0054] |
 
+| 13 | **Stall/drought self-classification** — `STALL DIAGNOSIS` + `DATA DROUGHT` log lines | 2026-08-11 | Seven sessions (S67–S73) could not tell outage classes apart after the fact: a mute child (process/USB fault), a child emitting but decoding nothing (RF-quiet), and genuine reception collapse all looked identical in the logs, and USB resets were fired blind at all three. The driver now counts raw stderr lines and hop-only packets since the last real data packet: the 150 s stall raise is preceded by a `STALL DIAGNOSIS` line (raw count 0 = mute; >0 = emitting), and a paced `DATA DROUGHT` line covers the RF-quiet case, which never trips the stall watchdog because hop packets reset it. Plus a 10-line stderr tail via `drain_stderr()` at every stall. |
 ### Why these filters exist: the corruption mechanism
 
 Items 1 and 6 both exist because **corrupt sensor readings arrive with a valid CRC**. The cause is now

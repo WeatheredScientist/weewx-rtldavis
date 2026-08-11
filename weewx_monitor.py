@@ -30,7 +30,15 @@ REPEAT   = 7200
 # the problem -- RECEPTION ALERT fired at 00:13, eight minutes in. What was
 # missing was any notion of whether the remedy WORKED.
 RESET_VERIFY_S  = 180   # seconds after a reset before judging it effective
-RESET_MAX_TRIES = 3     # consecutive ineffective resets before we stop and escalate
+# S73 (2026-08-11): demoted 3 -> 1. Across every forensically-captured event
+# (08-02 x11, 08-06 x3, 08-10/11 x3) no USB reset ever demonstrably fixed a
+# stall, and every full-fidelity capture shows the same non-USB mechanism: the
+# rtldavis child goes silent/dies while the device stays enumerated (devnum
+# unchanged since Aug 2). The stall class is RF-dead episodes, which resets
+# cannot touch, and ERR-0005 suspects reset #10 CAUSED the worse
+# process-not-running mode. One reset is kept as a hedge for a genuine (never
+# yet observed) dongle wedge; retries are evidence-free churn.
+RESET_MAX_TRIES = 1     # ineffective resets before we stop and escalate (was 3, see above)
 
 # --- What a "reset" actually IS (S67, DEC-0074) ---
 # Named here ONCE, and used for both the subprocess call and every log line about
@@ -58,6 +66,16 @@ USB_RESET_ACTION = 'USB driver unbind/rebind'
 USB_FORENSICS_SCRIPT = os.environ.get(
     'USB_FORENSICS_SCRIPT', '/volume1/docker/weewx-rtldavis/usb_forensics.sh')
 CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
+
+# --- Episode ledger (S73) ---
+# One pipe-delimited row per reception episode (RECEPTION ALERT -> RECOVERY),
+# written at recovery so post-campaign analysis and the LNA verdict read ONE
+# file instead of re-deriving episodes from three logs. Fields:
+#   onset_iso|recovery_iso|duration_s|stalls|resets|respawns|droughts|worst_avg_pct|last_cmd
+# 'stalls' counts driver 'rtldavis process stalled' raises; 'respawns' counts
+# 'startup process' lines; 'droughts' counts the driver's ws.5 'DATA DROUGHT'
+# self-classification lines (receiver alive, no decodes -> RF-quiet class).
+EPISODES_LOG = os.environ.get('EPISODES_LOG', f'{BASE_DIR}/logs/episodes.log')
 DOCKER_BIN = os.environ.get('DOCKER_BIN', '/usr/local/bin/docker')
 
 # Env names whose VALUES must never reach an email or a log (DEC-0062). The
@@ -416,6 +434,13 @@ def watchdog_stall(wu_bad_windows):
     Unbounded retry is what ERR-0005 measured failing: 9 resets, 0 successes,
     and harm on the 10th. After RESET_MAX_TRIES ineffective resets we stop
     resetting entirely and hand it to a human.
+
+    S73: RESET_MAX_TRIES is now 1. The forensics record (see the constant's
+    comment) shows the stall class is RF-dead episodes -- the child goes
+    silent while the device stays enumerated -- which a USB reset cannot fix.
+    The single remaining reset is a hedge for a genuine dongle wedge, a mode
+    never yet captured. The driver's own ws.5 'STALL DIAGNOSIS' / 'DATA
+    DROUGHT' lines now classify each event at the source.
     """
     if WD['tries'] >= RESET_MAX_TRIES:
         if not WD['escalated']:
@@ -478,6 +503,49 @@ def watchdog_recovered():
     WD['tries'] = 0
     WD['escalated'] = False
     WD['check_at'] = 0.0
+
+# Episode state (S73). Opened by the RECEPTION ALERT transition, closed by
+# RECOVERY; counters fed by the main dispatch loop. Module-global like WD.
+EP = {
+    'onset': 0.0,       # epoch of the ALERT transition; 0.0 = no open episode
+    'stalls': 0,        # driver 'rtldavis process stalled' raises seen
+    'resets': 0,        # USB resets actually fired during the episode
+    'respawns': 0,      # driver 'startup process' lines seen
+    'droughts': 0,      # driver 'DATA DROUGHT' self-classifications seen
+    'worst_avg': 100.0, # lowest reported window average
+    'last_cmd': '',     # cmd from the most recent 'startup process' line
+}
+
+
+def episode_open(avg, now):
+    EP['onset'] = now
+    EP['stalls'] = EP['resets'] = EP['respawns'] = EP['droughts'] = 0
+    EP['worst_avg'] = avg
+    EP['last_cmd'] = ''
+
+
+def episode_note_avg(avg):
+    if EP['onset'] and avg < EP['worst_avg']:
+        EP['worst_avg'] = avg
+
+
+def episode_close(now):
+    """Write the ledger row and clear. No-op if no episode is open."""
+    if not EP['onset']:
+        return
+    row = "%s|%s|%d|%d|%d|%d|%d|%.0f|%s\n" % (
+        datetime.fromtimestamp(EP['onset']).strftime('%Y-%m-%d %H:%M:%S'),
+        datetime.fromtimestamp(now).strftime('%Y-%m-%d %H:%M:%S'),
+        int(now - EP['onset']), EP['stalls'], EP['resets'], EP['respawns'],
+        EP['droughts'], EP['worst_avg'], EP['last_cmd'])
+    try:
+        with open(EPISODES_LOG, 'a') as f:
+            f.write(row)
+        log(f"EPISODE closed: {row.strip()}")
+    except OSError as e:
+        log(f"EPISODE ledger write failed: {e}")
+    EP['onset'] = 0.0
+
 
 def wu_pct(count):
     """Reception % = records received / records the ISS physically transmitted
@@ -666,6 +734,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
                 td = int(now - wu_alert_sent_at)
                 avg = wu_pct(sum(wu_period_counts) / len(wu_period_counts))
                 log(f"RECEPTION RECOVERY: {avg:.0f}% avg after {td//60}min")
+                episode_close(now)
                 send_email(
                     f"{STATION_NAME}: RF reception RECOVERED",
                     f"WU-RF reception recovered after {td//60}min.\n"
@@ -680,6 +749,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             wu_repeat_sent_at = now
             avg = (sum(wu_period_counts[-WU_RF_SUSTAIN:]) / (WU_RF_SUSTAIN * WU_RF_EXPECTED)) * 100
             log(f"RECEPTION ALERT: {wu_bad_windows} consecutive windows below {WU_RF_MIN_PCT}%, avg {avg:.0f}%")
+            episode_open(avg, now)
             send_email(
                 f"{STATION_NAME}: RF reception LOW",
                 f"WU-RF reception below {WU_RF_MIN_PCT}% for {wu_bad_windows} consecutive minutes.\n"
@@ -689,6 +759,7 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
         elif wu_in_alert and (now - wu_repeat_sent_at) >= REPEAT:
             wu_repeat_sent_at = now
             avg = (sum(wu_period_counts[-WU_RF_SUSTAIN:]) / (WU_RF_SUSTAIN * WU_RF_EXPECTED)) * 100
+            episode_note_avg(avg)
             td = int(now - wu_alert_sent_at)
             log(f"RECEPTION REPEAT: still low {avg:.0f}% after {td//60}min")
             send_email(
@@ -755,12 +826,27 @@ def main():
             for line in lines:
                 if 'rtldavis process stalled' in line:
                     log("STALL detected")
+                    EP['stalls'] += 1
+                    _reset_before = WD['last_reset']
                     watchdog_stall(wu_bad_windows)
+                    if WD['last_reset'] != _reset_before:
+                        EP['resets'] += 1
                 elif 'rtldavis process is not running' in line:
                     # A DIFFERENT fault from a stall -- the binary dies on
                     # startup. Never reset here (S62, ERR-0005).
                     log("DRIVER NOT RUNNING detected")
                     watchdog_not_running(wu_bad_windows)
+                elif 'startup process' in line:
+                    # Driver (re)spawned its child -- episode respawn counter
+                    # plus the cmd it ran, for the ledger row (S73).
+                    EP['respawns'] += 1
+                    m = re.search(r"startup process '([^']*)'", line)
+                    if m:
+                        EP['last_cmd'] = m.group(1)
+                elif 'DATA DROUGHT' in line:
+                    # Driver ws.5 self-classification: receiver emitting,
+                    # nothing decoding -- the RF-quiet class (S73).
+                    EP['droughts'] += 1
                 g = parse_rain_glitch(line)
                 if g and now - last_glitch_alert > RAIN_GLITCH_CD:
                     ts, detail, phantom_in = g
