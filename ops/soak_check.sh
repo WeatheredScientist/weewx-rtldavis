@@ -217,11 +217,19 @@ elif [ "$mpr" = "alive" ]; then
 else
   bad "MONITOR/WATCHDOG DEAD" "no live pid — USB stalls go unhandled AND unalerted"
 fi
-# The remedy's own effectiveness. S67: three stalls, three resets, all ineffective,
-# bad windows climbing 8 -> 10 -> 15. A firing watchdog is not a working one.
+# The remedy's own effectiveness — REFRAMED at S73. The original FAIL ("the
+# remedy is not working") presumed resets are supposed to fix stalls; the S73
+# differential established the stall class as RF-dead episodes, which no USB
+# reset can touch, and demoted the watchdog to ONE hedge reset per episode
+# (RESET_MAX_TRIES=1). An ineffective hedge during an RF episode is now the
+# EXPECTED outcome, not an alarm — a FAIL here would cry wolf on every episode
+# and train people to skip the soak (the ops#147 item-6 anti-pattern). The
+# genuinely alarming signature is now visible elsewhere: a 'STALL DIAGNOSIS'
+# line with raw_stderr_lines=0 (child mute -> a REAL process/USB fault) in
+# weewx.log, and the episodes.log ledger row counts.
 mrb=$(get mon_reset_bad)
-if [ "${mrb:-0}" -eq 0 ]; then ok "USB resets effective" "$(get mon_resets) fired, 0 ineffective"
-else bad "USB RESETS INEFFECTIVE" "${mrb} logged ineffective of $(get mon_resets) — the remedy is not working"; fi
+if [ "${mrb:-0}" -eq 0 ]; then ok "USB resets: none ineffective" "$(get mon_resets) fired"
+else note "USB hedge reset ineffective" "${mrb} of $(get mon_resets) — expected for RF-dead episodes (S73); check STALL DIAGNOSIS class in weewx.log"; fi
 
 # 10. The two free experiments this soak is really for
 echo
