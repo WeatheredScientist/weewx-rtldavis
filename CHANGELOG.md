@@ -42,10 +42,28 @@ under [Pre-S16].
   Also fixed in passing: `test_current_schedule_is_installable_today` went red the morning the
   campaign legitimately launched (first row in the past ≠ stale) — renamed
   `…is_not_fully_stale`, asserting the **self-terminator** hasn't passed instead.
-- **S74 staged as the stall deep-read** with a three-subagent read-only fan-out + frontier main
-  thread (BOOT); S75 remedy candidates named (monitor auto-recreate re-opening DEC-0065, driver
-  respawn fix, tick/guard lockfile). ROADMAP campaign-B/v2.0.12/USB-reset rows reconciled
-  (DEC-0057, same session).
+- **The stall deep-read ran the same afternoon (owner pulled it forward) and re-diagnosed the
+  class — DEC-0081.** Three read-only subagents (capture collation / night timeline / HLF +
+  coffee-radar cross-correlation) + main-thread differential against the driver source: the
+  device never re-enumerates, the driver's watchdog and respawns work, and the stalls are
+  **RF-dead episodes** — resets are theater (~17 attempts, 0 fixes), ERR-0005's recreate-fix
+  reads as episode-end coincidence, DEC-0065 vindicated. The first-draft remedy
+  (auto-kill+start) was **rejected by its own differential** — restarts show the same
+  evidence pattern as resets — and replaced with: reset demotion (`RESET_MAX_TRIES` 3→1),
+  driver child-reaping (three stacked zombies captured; the one real process bug),
+  `STALL DIAGNOSIS` / `DATA DROUGHT` self-classification, and the `episodes.log` ledger as
+  the pre-registered LNA-verdict datum (owner reports for ~50–70 m/trees/walls sites).
+- **v2.0.13 / ws.5 shipped same day, mid-H-hold, before the square's first block** (PR #159,
+  merged tip `1530971`): NAS build `BUILD-EXIT=0`, container swap with identical
+  mounts/devices/env + `BIAS_TEE=0`, ws.5 banner + DEC-0031 canary verified live, records in
+  35 s, soak 15/2/0 after the ineffective-reset criterion reframe (FAIL→WARN — a criterion
+  failing on now-expected behavior is the ops#147 item-6 anti-pattern). `:v2.0.13` on Hub;
+  `:latest` holds at v2.0.12 until proven. Monitor deployed + sha-verified; respawn pends the
+  owner's path-scoped-sudo kill (uid-1031 process — the day's one genuinely owner-run step).
+  Tests 185 → 203 (+18: reap, diagnosis/drought, ledger; escalation test re-pinned to the
+  single-hedge policy). CHANGES-FROM-UPSTREAM rows 12–13 (both upstreamable). Dependabot
+  PR #158 (weewx 5.4.0→5.5.0) deliberately left open — no base-platform bump mid-campaign.
+  ROADMAP campaign-B/v2.0.12/USB-reset rows reconciled (DEC-0057, same session).
 
 ---
 ## [S72] — 2026-08-10 — DEC-0080: the diode-floor fix is decided — StdCalibrate exact-code zero, config layer

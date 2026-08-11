@@ -3,8 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-11 (S73 — targeted DEC-0057 pass: GATE 2 outcomes into the campaign-B,
-v2.0.12 and USB-reset rows). Prior structural change: 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
+**Last updated:** 2026-08-11 (S73, two passes — GATE 2 outcomes into the campaign-B/v2.0.12 rows,
+then the **USB-reset P0 row CLOSED by DEC-0081** same day: stall class re-diagnosed as RF-dead
+episodes, remedies shipped in v2.0.13/ws.5). Prior structural change: 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
 "Long-term direction" section, per DEC-0058 — this file is now P0–P3 only, the actively sequenced
 plan, so it doesn't get cluttered by uncalendared/aspirational items. Earlier same-session pass:
 folded the old P1 + P1.5 sections into one continuous data-integrity arc covering v2.0.3–v2.0.11;
@@ -225,20 +226,23 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       carry its own top blocker. **Apparatus LIVE since 2026-08-09 (DEC-0075)** — deployed from
       merged tip `ad7e5a4` and verified; `ops/usb_forensics.sh` brackets every reset with host and
       in-container USB state plus `rtldavis`'s open handles, so the next stall answers the question
-      instead of repeating it. ✅ **EVENT CAPTURED 2026-08-11 (S73): the mechanism is neither of
-      DEC-0075's two hypotheses.** The 01:52 pre-capture shows `rtldavis` as a **zombie** —
-      `State: Z`, `wchan=do_exit`, zero open fds, no replacement process — dead since mid-block
-      with a parent that neither reaped nor respawned it. A USB reset cannot resurrect a dead
-      consumer, which is why every reset "fails"; the abort's container `kill`+`start` is what
-      actually clears it (fresh process tree). Three full capture sets banked, including an
-      **effective** reset at 23:56 (during the HLF-promotion/coffee-radar load spike, 15-min
-      loadavg ~25) to diff against the two ineffective ones. Reset #2 also **timed out after
-      15 s** — new failure mode. Open questions → **S74 deep-read** (staged in `BOOT.md` with the
-      subagent fan-out): why did the child die; why didn't the driver's own 150 s respawn watchdog
-      act (its silence looks like DEC-0067's freeze cousin); does this retroactively explain
-      ERR-0005's recreate-fixed-what-restart-didn't; what remedy — monitor auto-recreate
-      (re-opens DEC-0065's decline, now with mechanism evidence), a driver respawn fix
-      (upstreamable), or both. Minor: the deployed
+      instead of repeating it. ✅ **CLOSED at S73 (DEC-0081) — the deep-read ran same-day and
+      re-diagnosed the class.** The differential (3 capture sets, full night timeline,
+      cross-repo load correlation; three read-only subagents + main-thread synthesis) found:
+      the device never re-enumerates (DEC-0075's stale-devnum prediction was a
+      measurement-design error — unbind/rebind doesn't re-enumerate), the driver's watchdog
+      and respawns **work** (my earlier "no respawn" reading was log-blindness — re-inits log
+      `startup process`, not `Starting up weewx`), and the stalls are **RF-dead episodes**:
+      serially-silent children across multiple gain configs, recovery time-correlated, never
+      action-correlated. Resets are theater for this class (~17 attempts, 0 fixes, 1 suspected
+      harm — ERR-0005's recreate-fix now reads as episode-end coincidence, vindicating
+      DEC-0065). **Shipped same day (v2.0.13/ws.5 + monitor, before the square's first
+      block):** resets demoted to one hedge (`RESET_MAX_TRIES=1`), child reaping (the one real
+      process bug — kill-without-wait stacked three zombies under one weewxd), `STALL
+      DIAGNOSIS` + `DATA DROUGHT` self-classification at the source, and the `episodes.log`
+      ledger (the LNA-verdict datum). **What remains open is the episode root cause**
+      (interference vs no-LNA margin vs site — episodes predate the LNA removal), a
+      post-campaign characterization question riding the A×B readout. Minor: the deployed
       copy's `started=` field is unreliable until PR #146 is merged and that one file re-installed
       (#147) — the decisive signatures are unaffected. ✅ **Blocker 5 CLOSED (DEC-0077):** reset gaps
       do not contaminate campaign A. 11 resets (not nine), all 08-02; the archive went normal → 105
