@@ -161,45 +161,45 @@ arm_cmd() {
 # structure, hold placement and terminator.
 # LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
 SCHEDULE="
-2026-08-10T00:35|P496
-2026-08-10T01:20|P449
-2026-08-10T02:05|P402
-2026-08-10T02:50|P372
-2026-08-10T03:35|P328
-2026-08-10T04:20|H
-2026-08-11T00:05|A
-2026-08-11T06:05|B
-2026-08-11T12:05|C
-2026-08-11T18:05|D
-2026-08-12T00:05|B
-2026-08-12T06:05|C
-2026-08-12T12:05|D
-2026-08-12T18:05|A
-2026-08-13T00:05|C
-2026-08-13T06:05|D
-2026-08-13T12:05|A
-2026-08-13T18:05|B
-2026-08-14T00:05|D
-2026-08-14T06:05|A
-2026-08-14T12:05|B
-2026-08-14T18:05|C
-2026-08-15T00:05|A
-2026-08-15T06:05|B
-2026-08-15T12:05|C
-2026-08-15T18:05|D
-2026-08-16T00:05|B
-2026-08-16T06:05|C
-2026-08-16T12:05|D
-2026-08-16T18:05|A
-2026-08-17T00:05|C
-2026-08-17T06:05|D
-2026-08-17T12:05|A
-2026-08-17T18:05|B
-2026-08-18T00:05|D
-2026-08-18T06:05|A
-2026-08-18T12:05|B
-2026-08-18T18:05|C
-2026-08-19T00:05|BASELINE
+2026-08-11T00:35|P496
+2026-08-11T01:20|P449
+2026-08-11T02:05|P402
+2026-08-11T02:50|P372
+2026-08-11T03:35|P328
+2026-08-11T04:20|H
+2026-08-12T00:05|A
+2026-08-12T06:05|B
+2026-08-12T12:05|C
+2026-08-12T18:05|D
+2026-08-13T00:05|B
+2026-08-13T06:05|C
+2026-08-13T12:05|D
+2026-08-13T18:05|A
+2026-08-14T00:05|C
+2026-08-14T06:05|D
+2026-08-14T12:05|A
+2026-08-14T18:05|B
+2026-08-15T00:05|D
+2026-08-15T06:05|A
+2026-08-15T12:05|B
+2026-08-15T18:05|C
+2026-08-16T00:05|A
+2026-08-16T06:05|B
+2026-08-16T12:05|C
+2026-08-16T18:05|D
+2026-08-17T00:05|B
+2026-08-17T06:05|C
+2026-08-17T12:05|D
+2026-08-17T18:05|A
+2026-08-18T00:05|C
+2026-08-18T06:05|D
+2026-08-18T12:05|A
+2026-08-18T18:05|B
+2026-08-19T00:05|D
+2026-08-19T06:05|A
+2026-08-19T12:05|B
+2026-08-19T18:05|C
+2026-08-20T00:05|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -330,13 +330,21 @@ restart_container() {
 # and aborted a live campaign 3 seconds early. A restart cannot produce a record
 # faster than: weewx boot (~25s to "Starting main packet loop") + up to a full
 # ARCHIVE_INTERVAL (60s) until the next archive boundary + the write lag after
-# that boundary (~15-30s observed). Worst case ~115s; 90s could not cover it, so
-# the check was a coin flip that arm B won and arm C lost. Measured on the real
-# failure: weewxd init 12:11:46, first record 12:13:30 = 104s, abort at 12:13:27.
-# 36 tries (~180s) clears the worst case with margin. Do not lower this without
-# redoing that arithmetic — and note the loop is ALSO slower than its nominal
-# sleep, because each pass greps a multi-MB log.
-HEALTH_TRIES=36
+# that boundary (~15-30s observed). Measured on the real failure: weewxd init
+# 12:11:46, first record 12:13:30 = 104s, abort at 12:13:27.
+#
+# S73 (2026-08-11): the S57 model was STILL missing a term — RF ACQUISITION.
+# After "Starting main packet loop" the driver can take ~0s (P449, health passed
+# in 83s) or ~127s (the 08:55 H swap: main loop 08:55:17, first decoded packet
+# 08:57:24) to sync the frequency-hop pattern and decode its first frame; no
+# packets means no archive record regardless of boundaries. The 36-try (~180s)
+# budget expired at 08:58:14 while the driver was ALIVE and publishing — first
+# archive record due ~08:58:15-30. A healthy swap was aborted by seconds, again.
+# Worst case is now boot 25 + rf-acquire ~130 + interval 60 + lag 30 ≈ 245s;
+# 60 tries (~300s) clears it with margin. tests/test_rx_experiment.py asserts
+# this arithmetic. Do not lower this without redoing it — and note the loop is
+# ALSO slower than its nominal sleep, because each pass greps a multi-MB log.
+HEALTH_TRIES=60
 health_ok() {
   say_dry "health check" && return 0
   local before after i

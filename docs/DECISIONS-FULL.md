@@ -4099,3 +4099,272 @@ The monitor log shows **11 resets**, not nine. ERR-0005 and DEC-0065 both state 
 minutes" and refer to "reset #10 at 01:27:17"; that event is the **11th**, and the span is 76 min.
 Nothing downstream depended on the count — DEC-0065's argument is about unbounded retry, which 11
 makes marginally stronger — but the figure appears in two decision entries and should be right.
+
+
+## DEC-0078 — Image builds move to the NAS: the arm64 laptop can no longer cross-build linux/amd64
+
+**Status:** Accepted · **Date:** 2026-08-10 (S70) · **amends** release mechanics
+(`docs/CAMPAIGN-B-RUNBOOK.md` §Release mechanics, `CONSTANTS.md` §Release) · **applies** the
+v2.0.3 NAS-build precedent
+
+### Context
+
+Every prior release was built on the dev laptop. For v2.0.12, `docker build --platform
+linux/amd64` on the Apple-Silicon machine fails deterministically inside the first `tar zxf` of
+the upstream `src.tgz`: every entry errors `Cannot open: Function not implemented` (ENOSYS from
+the emulation layer) and the RUN step exits 2. Not flaky — reproduced identically. The failure
+initially hid behind a `| tail` pipeline whose exit 0 was read as the build's own — the repo's
+green-checkmark trap, caught because the tar noise was distrusted and the log read back.
+
+### Decision
+
+1. **Release images build natively on the NAS** (amd64 — the deploy target): `git archive` the
+   merged tip → scp the tarball → extract to `build-vX.Y.Z/` → `nohup docker build` writing
+   `build.log` ending in an explicit `BUILD-EXIT=$?` marker. Success is that marker plus the
+   `Successfully tagged` line — never a pipeline exit.
+2. **The deploy consumes the NAS-local image directly** — no Hub round-trip on the deploy path.
+3. **Docker Hub publication is decoupled and follows prod proof**: `docker save` on the NAS →
+   scp to the laptop → `docker load` → `docker push :vX.Y.Z`; `:latest` moves only after the
+   station proves the release. Until the push lands, **Hub lags prod** — the reverse of the
+   historical drift direction; `CONSTANTS.md` documents the window so nobody reads Hub as prod.
+
+### Alternatives rejected
+
+- **Toggle Docker Desktop's Rosetta/QEMU emulation** — the setting key is not even present in
+  this version's settings store, the experiment is a global Docker Desktop behavior change for
+  one repo's need, and the NAS path removes emulation instead of switching its flavor.
+- **Build in CI (native amd64 GitHub runner)** — the structural fix, but it needs Hub
+  credentials as repo secrets and a workflow design; deliberately not improvised the night it
+  was discovered. Backlogged.
+
+### Consequences
+
+- NAS CPU absorbs builds (~10 min for v2.0.12); campaign-adjacent builds are pre-launch by
+  construction, so the load never lands mid-square.
+- v2.0.12 deployed 2026-08-10 from NAS build `9db5c1ddaac3` (tip `7b6fd42`), verified in the
+  running system (ws.4 banner, bias-tee-off line, soak identity canaries green). Hub push
+  landed the same day (S70 close): config digest on Hub verified identical to the NAS build; layers rode the transfer path near-uncompressed (283 MB vs ~120 MB typical) — content-identical, tightening belongs to the CI-build follow-up.
+
+---
+
+## DEC-0079 — Opt into the ops-wide `.claude/transient-state` convention (ops#113)
+
+**Status:** Accepted · **Date:** 2026-08-10 (S71) · **adopts** ops#113 (commit `e5094a4`,
+OPS-DEC-0067)
+
+### Context
+
+ops#113 proposed, and a later ops session built, a generic repo-opt-in mechanism for tracking
+intentionally non-default, reversible prod/shared state — a debug flag flipped for a few hours, a
+verbose log level, a temporary monitoring hook — so the revert doesn't depend entirely on a
+session or the owner remembering to come back to it. Motivating case: this repo's own
+`debug_rtld=2` prod flip (ops#112), tracked only by a STATUS.md note and a manually-filed ops
+issue at the time. This repo's `BOOT.md` ordered backlog carried "Consider
+`.claude/transient-state` (ops#113). Opt-in is this repo's call" since around S69 — this closes
+that.
+
+### Decision
+
+Opt in. A repo registers a state with one line in a tracked `.claude/transient-state`:
+`<revert-by-epoch> <tracking-ref> <description>`. The epoch is computed **once**, by whoever
+files the entry (`date -v+3H +%s` / `date -d '+3 hours' +%s`), so the SessionStart hook does only
+integer arithmetic against `date +%s` — never date-string parsing. Anything past its epoch is
+flagged OVERDUE at the next session start. A line that doesn't parse (non-integer epoch, missing
+ref) is silently skipped rather than guessed — a false "is this overdue" read would be worse than
+an invisible malformed line. **Deleting the line is the whole close mechanism.**
+
+`.claude/` is locally excluded via `.git/info/exclude` (not a committed `.gitignore`), so the file
+needed `git add -f` to become tracked — the same precedent already set for `.claude/settings.json`.
+
+**Left empty at creation.** No state active right now meets the motivating shape (a short,
+easily-forgotten flip) that isn't already carried prominently in `BOOT.md`/`CONSTANTS.md` — for
+example the `:latest` tag deliberately still pointing at v2.0.11 pending GATE 2 is a real
+deliberate-non-default state, but it's already the lead item in `BOOT.md`'s active thread, so a
+second copy here would be redundant rather than a safety net. The first real entry waits for the
+next genuine short-lived, revert-planned flip — the ops#112 shape, not a multi-day campaign (which
+already has its own dedicated tracking apparatus).
+
+### Alternatives rejected
+
+- **Decline to opt in** — rejected on cost: the mechanism is built, proven (ops's own test suite),
+  warn-only (mirrors the draft-PR hygiene hook from #107, not a gate), and this repo's own
+  governance history (stale ROADMAP/BOOT entries going unnoticed between sessions) is the same
+  "nobody came back to it" failure shape, just applied to a different kind of artifact.
+- **Backfill entries for existing non-default state** (the `:latest` pin, `BIAS_TEE=0`) —
+  rejected: both are already tracked, prominently, in the tier-1 docs this session reads every
+  time. Duplicating them here trades one drift risk (forgetting to revert) for another (two copies
+  disagreeing).
+
+### Consequences
+
+- The next short-lived prod/shared-state flip in this repo gets a cheap, mechanical tripwire
+  instead of relying on session memory or prose alone.
+- `.claude/` stays locally gitignored for everything else; this file and `settings.json` remain
+  the two tracked exceptions.
+
+---
+
+## DEC-0080 — Solar diode-floor correction: exact-code `StdCalibrate` zero at the config layer
+
+**Status:** Accepted · **Date:** 2026-08-10 (S72) · **resolves** the S71 radiation-floor handoff ·
+**relates to** DEC-0029 · **applies** DEC-0070 at apply time
+
+### Context
+
+At true zero irradiance the VP2+ solar sensor's diode dark current decodes to **exactly**
+`sr_raw=1 × 1.757936 ≈ 1.758 W/m²` (`rtldavis.py` message type 6): near zero, only 0, 1.758 and
+3.516 are representable at all. The floor flows into the archive, InfluxDB and all nine RESTful
+uploads every dark minute — ~76 kJ/m²/day of phantom energy (12 h × 1.758). The June 2026 fix was
+dashboard-only and presentation-layer; it regressed at the chart layer during the July supercard
+refactor — the second time a per-path filter was dropped on refactor. The owner decided at S71 to
+fix at the source; the full diagnosis and both drafted designs are in
+`docs/handoffs/S71-radiation-floor-design.md` (verified there: radiation passes SensorQC's bounds
+unrejected per DEC-0029, and `StdCalibrate` runs ahead of `LoopJsonWriter` and every RESTful
+service in the live config, so one correction reaches every consumer).
+
+### Decision
+
+Option A — one `StdCalibrate` correction, exact-window and None-guarded:
+
+    radiation = radiation if radiation is None else (0 if 1.75 < radiation < 1.77 else radiation)
+
+- **Exact-code matching, not a tolerance.** The window brackets `1.757936` alone; 0 and 3.516 pass
+  untouched. Range form because only `math.*` is confirmed in `StdCalibrate`'s eval namespace;
+  None-guard because radiation is absent from most packets (ISS message rotation) and nullable
+  after QC rejection.
+- **Where it lives is the actual fix.** (1) The live NAS `weewx.conf` — the layer that wins in
+  prod (DEC-0046). (2) `weewx.conf.example` — the **versioned, public artifact**; the June fix
+  regressed precisely because it existed nowhere versioned. A reprovision from the example now
+  carries the correction, and downstream users of the published extension get it documented in the
+  WeeWX-idiomatic place for per-station sensor calibration. (3) A `CONSTANTS.md` live-config
+  deviations row (DEC-0070) — **added at apply time, not before**: CONSTANTS records what IS live,
+  and until the NAS edit lands the deviation does not exist.
+- **Apply deferred to post-GATE 2.** Campaign B's pilot runs tonight unattended with no working
+  dongle recovery; a config typo is a crash-loop-into-the-pilot risk (the `pragmas` scalar spelling
+  cost ~6 min of prod, attended). The artifact is months old; one more night is free.
+
+### Alternatives rejected
+
+- **Option B — almanac elevation-gated service** (drafted in the handoff): the only design that
+  distinguishes a genuine `sr_raw=1` twilight reading from the artifact. Rejected on three counts:
+  it **also** needs a live-config edit (`process_services`), so it escapes none of the config
+  fragility while adding image surface; it bakes one station's sensor calibration into the public
+  image's default service set (dark current varies unit-to-unit — wrong layer for a published
+  tool); and the edge it buys is a few minutes/day at one quantization step (~1.76 W/m², ~0.4
+  kJ/m²/day) — **below the instrument's own resolution** — for a new service, tests and a NAS
+  rebuild. Design preserved in the handoff; it could ride the #144 pressure rebuild if the edge is
+  ever wanted.
+- **Driver-layer zero** (`rtldavis.py` maps `sr_raw=1 → 0`): same collision as A but baked (a
+  rebuild to change), and it ships one station's floor as decode truth to every user of the
+  published driver.
+- **Patch the dashboard chart a second time:** rejected at S71 (owner) — a third per-consumer
+  filter is the exact shape that has now regressed twice.
+
+### Consequences
+
+- ~99%+ of the artifact removed at every consumer at once. Residual: a genuine twilight reading
+  that quantizes to `sr_raw=1` reads 0 for a few minutes/day — accepted, below sensor resolution.
+- Step-change in the historical series at cutover (night 1.758 → 0), accepted at S71; no
+  retroactive rewrite. Dark rows before cutover keep the floor — any future retro-correction is an
+  ERR entry (DEC-0025), currently not requested.
+- **Verify at apply:** the first corrected night must read 0 through the dark hours. If 3.516
+  (`sr_raw=2`) appears at night, the floor wanders one code — extend **per-code** (a second exact
+  band), never a loose threshold.
+- The dashboard's surviving `eh-ui.js` narrow-window filter becomes vestigial after cutover;
+  retiring it is dashboard-repo work (DEC-0010) — ops-tracker note to be filed at apply. The
+  regressed chart path needs no dashboard fix at all: post-cutover data arrives clean.
+
+### Applied — 2026-08-11 (S73), post-GATE 2 as planned
+
+- **Both files, not one:** the apply step surfaced that `restore_baseline` (in
+  `ops/rx_experiment.sh`) copies `weewx.conf.rx-baseline` over the live conf at every campaign
+  abort and at self-termination — a live-conf-only apply would be silently reverted by the next
+  restore. The line went into **the live `weewx.conf` AND the rx-baseline snapshot**, identical
+  and verbatim from `weewx.conf.example`. The durable statement lives in the `CONSTANTS.md`
+  live-config deviations table (the DEC-0070 mechanism, as this entry required).
+- **Runtime-verified the same morning:** weewx 5.4.0 booted clean with the line twice (08:55:17
+  and 08:58:23 restarts) and published normally — the config-typo crash-loop this entry deferred
+  around did not occur. Activated by the campaign's own restart path; zero added downtime.
+- **Ops note filed:** eaglehunt-ops#154 (dashboard `eh-ui.js` filter vestigial).
+- Dark-hours-read-0 verification due S74 (first corrected night 2026-08-11 → 12); the
+  `sr_raw=2` / 3.516 extend-per-code rule above stands.
+
+## DEC-0081 — The stall class is RF-dead episodes: resets demoted, events self-classify, episodes ledgered
+
+**Status:** Accepted · **Date:** 2026-08-11 (S73) · **supersedes** DEC-0074's open question and
+DEC-0075's hypothesis set · **vindicates** DEC-0065 · **amends** DEC-0073 · **relates to**
+DEC-0067/0068, ERR-0005
+
+### Context
+
+DEC-0074 (S67) established that USB resets fire but never work — 11/11 failed on 08-02, 3/3 on
+08-06 — and DEC-0075 built a forensics apparatus around two hypotheses: (a) a stale container
+view of a re-enumerated device, or (b) a surviving file-descriptor grip. The 08-10/11 night
+delivered three full capture sets (one effective-looking reset at 23:56, two ineffective at
+01:52/01:59) and aborted the campaign-B pilot. The S73 differential — Sub-A collating all 11
+capture files, Sub-B extracting the night timeline from three logs, Sub-C correlating HLF and
+coffee-radar activity, main thread synthesizing against the driver source — answered the
+question with a mechanism nobody had on the board.
+
+### What the evidence established
+
+1. **Neither DEC-0075 hypothesis occurred.** The device never re-enumerates (devnum 5 and node
+   mtime unchanged since Aug 2 across every reset — driver unbind/rebind does not re-enumerate,
+   so the stale-devnum prediction was a measurement-design error, not a finding), and the dead
+   children hold zero fds.
+2. **The driver's watchdog and respawn machinery work.** All three stalls show the identical
+   healthy sequence: 150 s silence → `Caught WeeWxIOError: rtldavis process stalled` → pidof
+   SIGKILL → ~60 s weewx retry wait → fresh child with the correct arm cmdline. The earlier
+   "frozen parent / no respawn" reading was log-blindness: driver re-inits log `startup
+   process`, not `Starting up weewx`.
+3. **The stall class is RF-dead episodes.** Two that night: 23:52→00:01 (~9 min) and
+   01:49→02:14 (~25 min). During the second, four fresh children across three gain configs
+   (449, 449, 402) all produced nothing; recovery came gradually at ~02:14, minutes after the
+   baseline revert — time-correlated, not action-correlated. The 23:56 "effective" reset was
+   the same event shape whose episode happened to end while the monitor was watching.
+4. **Resets are theater for this class.** ~17 attempts, zero demonstrable fixes; ERR-0005
+   suspects reset #10 caused the strictly-worse dies-on-startup mode. ERR-0005's
+   recreate-fixed-it (105-min episode, 21 driver detections = the same serial-respawn
+   signature) now reads as coincidence with episode end — DEC-0065's refusal to automate the
+   recreate was correct for the right reason before the reason was known.
+5. **One real process bug: kill-without-wait.** ProcManager kills via pidof + `os.kill` and
+   never reaps; the engine builds a fresh ProcManager per retry, so no instance holds its
+   predecessor's handle. Three zombies stacked under one weewxd, forensically captured.
+6. **External load is a contributor to at most one episode.** The 23:52 onset sits inside a
+   real congestion window (coffee-radar ad-hoc ~23:58, HLF maintenance chain 00:10, measured
+   15-min loadavg ~25 — extends DEC-0068's n). The campaign-killing 01:49 episode has no
+   confirmed external correlate.
+
+### Decision
+
+- **Demote the resets:** `RESET_MAX_TRIES` 3 → 1. One hedge per episode for the genuine dongle
+  wedge that has never yet been captured; the second stall escalates to the human (email still
+  carries the built recreate command). The `not running` path stays no-reset (S62).
+- **Make every event self-classify at the source (ws.5):** `STALL DIAGNOSIS` at the 150 s
+  raise — `raw_stderr_lines=0` is a mute child (process/USB class, the only signature that
+  would ever again justify USB-level remedies); `>0` is an emitting child (RF class) — plus a
+  10-line `drain_stderr` tail. The RF-quiet mode (hops flowing, nothing decoding) never trips
+  the 150 s watchdog because hop packets reset it, so a paced `DATA DROUGHT` line covers it.
+- **Reap children (ws.5):** every spawn registers module-wide; shutdown waits on its kill;
+  startup reaps predecessors. Upstreamable with the diagnosis lines (CHANGES rows 12–13).
+- **Ledger episodes (monitor):** one row per ALERT→RECOVERY in `logs/episodes.log`
+  (`onset|recovery|duration_s|stalls|resets|respawns|droughts|worst_avg|last_cmd`). This is
+  the pre-registered LNA-verdict datum: does episode susceptibility differ LNA-in vs LNA-out —
+  the owner's reportable result for similar sites (~50–70 m, trees, walls, non-ideal siting).
+- **Accept guard aborts during episodes as designed protection.** No auto-restart rung:
+  restarts show the same evidence pattern as resets (every "recovery after restart" is equally
+  explained by episode end). An episode night costs a block; morning STOP-clear resumes;
+  structural exclusion keeps the data honest.
+- **Leave the episode root cause open, deliberately** — interference vs no-LNA front-end
+  margin vs site is a post-campaign characterization question, to be answered with A×B data
+  plus the ledger (episodes predate the LNA removal: 08-02 and 08-06 were LNA-in).
+- `soak_check.sh` ineffective-reset criterion FAIL → WARN with the class-aware message — a
+  criterion that fails on expected behavior trains people to skip the check (ops#147 item 6).
+
+### Deployed (same day, before the 08-12T00:05 square start)
+
+v2.0.13 NAS-built from merged tip `1530971` (`BUILD-EXIT=0`), swapped mid-H-hold with
+identical mounts/devices/env + `BIAS_TEE=0`, ws.5 banner + DEC-0031 canary verified in the
+running log, records within 35 s, soak 15/2/0. `:v2.0.13` on Hub; `:latest` stays v2.0.12
+until proven. Monitor scp'd + sha-verified; its respawn needs the owner's path-scoped-sudo
+kill (uid-1031 process). PR #159; tests 185 → 203.

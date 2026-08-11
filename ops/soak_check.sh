@@ -40,14 +40,13 @@ case "${NAS_PORT}${NAS_USER}${NAS_HOST}" in (*'<'*)
 esac
 WINDOW="${1:-0}"          # seconds; 0 = since container start
 CONTAINER=weewx-rtldavis-v2
-EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.11}"
+EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.13}"
 # The DEC-0031 canary. Same rule as EXPECT_IMAGE above: this is what prod is
-# running NOW, not what the repo is on. rtldavis.py went to 0.20+ws.4 at S62
-# (2026-08-02) for the unshipped v2.0.12, but prod is v2.0.11, built 2026-07-28,
-# which ships ws.3 -- so this was bumped in the same anticipatory commit and for
-# five sessions the canary reported a mismatch on a correct deployment. Bump both
-# variables as part of the deploy that ships them (DEC-0046).
-EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.3}"
+# running NOW, not what the repo is on. Bumped to v2.0.12 / ws.4 on 2026-08-10
+# (S70) IN the deploy that shipped them -- the swap was verified in the running
+# system (banner + soak canaries) before this edit landed, per DEC-0046 and this
+# header's own rule: as part of the deploy, never before and never after.
+EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.5}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }
@@ -218,11 +217,19 @@ elif [ "$mpr" = "alive" ]; then
 else
   bad "MONITOR/WATCHDOG DEAD" "no live pid — USB stalls go unhandled AND unalerted"
 fi
-# The remedy's own effectiveness. S67: three stalls, three resets, all ineffective,
-# bad windows climbing 8 -> 10 -> 15. A firing watchdog is not a working one.
+# The remedy's own effectiveness — REFRAMED at S73. The original FAIL ("the
+# remedy is not working") presumed resets are supposed to fix stalls; the S73
+# differential established the stall class as RF-dead episodes, which no USB
+# reset can touch, and demoted the watchdog to ONE hedge reset per episode
+# (RESET_MAX_TRIES=1). An ineffective hedge during an RF episode is now the
+# EXPECTED outcome, not an alarm — a FAIL here would cry wolf on every episode
+# and train people to skip the soak (the ops#147 item-6 anti-pattern). The
+# genuinely alarming signature is now visible elsewhere: a 'STALL DIAGNOSIS'
+# line with raw_stderr_lines=0 (child mute -> a REAL process/USB fault) in
+# weewx.log, and the episodes.log ledger row counts.
 mrb=$(get mon_reset_bad)
-if [ "${mrb:-0}" -eq 0 ]; then ok "USB resets effective" "$(get mon_resets) fired, 0 ineffective"
-else bad "USB RESETS INEFFECTIVE" "${mrb} logged ineffective of $(get mon_resets) — the remedy is not working"; fi
+if [ "${mrb:-0}" -eq 0 ]; then ok "USB resets: none ineffective" "$(get mon_resets) fired"
+else note "USB hedge reset ineffective" "${mrb} of $(get mon_resets) — expected for RF-dead episodes (S73); check STALL DIAGNOSIS class in weewx.log"; fi
 
 # 10. The two free experiments this soak is really for
 echo

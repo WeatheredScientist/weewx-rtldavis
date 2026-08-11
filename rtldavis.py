@@ -40,7 +40,7 @@
 #
 #   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
 #   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
-#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.4'
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.5'
 #   so the difference is visible in the logs. Bugs here are ours, not upstream's.
 #
 #   Changes, with the date each was recorded in git. Entries dated 2026-07-04
@@ -90,6 +90,19 @@
 #               generator is gated on running(), so once the process is dead it
 #               yields nothing. New drain_stderr() reads the queue with no gate.
 #               Cost us the root cause during a 105-minute outage. (ws.3 -> ws.4)
+#   2026-08-11  child reaping + stall self-classification (ws.4 -> ws.5).
+#               ProcManager killed children by pid and never wait()ed, so every
+#               respawn cycle left an unreaped zombie (three stacked under one
+#               weewxd on 2026-08-11, forensically captured). Spawned children
+#               are now registered and reaped on shutdown and before each
+#               startup. genLoopPackets also self-classifies every outage at
+#               the source: a 'STALL DIAGNOSIS' line at the 150s raise (raw
+#               stderr count 0 = child mute -> process/USB class; >0 = child
+#               emitting -> RF class) plus a periodic 'DATA DROUGHT' line when
+#               hop packets flow but nothing decodes >=300s (RF-quiet class,
+#               which never trips the 150s watchdog because hop packets reset
+#               it). Ends the effective-vs-ineffective USB-reset ambiguity that
+#               consumed S67-S73.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   These fixes are offered upstream; this fork exists to ship them in the meantime.
@@ -181,7 +194,7 @@ DRIVER_NAME = 'Rtldavis'
 # version identifier: upstream base 0.20, WeatheredScientist revision 1. Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.4'
+DRIVER_VERSION = '0.20+ws.5'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
@@ -691,6 +704,31 @@ class AsyncReader(threading.Thread):
         self._running = False
 
 
+# Every child this weewxd ever spawned, across ProcManager instances (S73).
+# The engine builds a FRESH ProcManager on each WeeWxIOError retry, so a
+# per-instance handle cannot reap the previous instance's child: kills went
+# through pidof + os.kill with no wait(), and every respawn cycle left one
+# more unreaped zombie (three stacked under one weewxd on 2026-08-11,
+# forensically captured). Module-level so each new instance can reap its
+# predecessors' corpses. poll() both detects and reaps; no waitpid(-1) --
+# that could steal exits belonging to other weewx components.
+_SPAWNED_CHILDREN: "list[subprocess.Popen]" = []
+
+
+def reap_spawned_children():
+    """poll() every child we ever spawned; drop the reaped. Returns count."""
+    reaped = 0
+    for p in list(_SPAWNED_CHILDREN):
+        try:
+            if p.poll() is not None:
+                _SPAWNED_CHILDREN.remove(p)
+                reaped += 1
+        except Exception:
+            _SPAWNED_CHILDREN.remove(p)
+            reaped += 1
+    return reaped
+
+
 class ProcManager():
 
     def __init__(self):
@@ -713,6 +751,11 @@ class ProcManager():
                 loginf("rtldavis with pid %s killed" % pid)
         except Exception:
             pass
+        # Reap anything the kills above (or a prior instance) left behind --
+        # SIGKILL without wait() is where the zombies came from (S73, ws.5).
+        n = reap_spawned_children()
+        if n:
+            loginf("reaped %d prior rtldavis child process(es)" % n)
 
         self._cmd = cmd
         loginf("startup process '%s'" % self._cmd)
@@ -726,6 +769,7 @@ class ProcManager():
                                              env=env,
                                              stderr=subprocess.PIPE,
                                              stdout=subprocess.PIPE)
+            _SPAWNED_CHILDREN.append(self._process)
             self.stderr_reader = AsyncReader(
                 self._process.stderr, self.stderr_queue, 'stderr-thread')
             self.stderr_reader.start()
@@ -744,6 +788,14 @@ class ProcManager():
         for pid in pid_list:
             os.kill(int(pid), signal.SIGKILL)
             loginf("rtldavis with pid %s killed" % pid)
+        # Reap our own child so the kill above does not strand a zombie
+        # (S73, ws.5). wait() cannot hang >5s on a SIGKILLed process.
+        if self._process is not None:
+            try:
+                self._process.wait(timeout=5)
+            except Exception:
+                pass
+        reap_spawned_children()
 
     def running(self):
         return self._process.poll() is None
@@ -770,6 +822,28 @@ class ProcManager():
             except queue.Empty:
                 yield lines
                 lines = []
+
+    # ── Stall/drought self-classification (S73, ws.5) ────────────────────────
+    # Pure helpers so tests can pin the classification logic without a live
+    # process. Two complementary signals, because the 150s stall watchdog is
+    # reset by ANY parsed line including hop-only packets:
+    #   - stall raise fires only on TOTAL child silence -> diagnose mute vs not
+    #   - hop packets flowing while nothing decodes never trips it -> drought
+    @staticmethod
+    def stall_diagnosis(raw_lines, hop_pkts):
+        klass = ("child mute -- process/USB class" if raw_lines == 0
+                 else "child emitting -- RF class")
+        return ("STALL DIAGNOSIS: raw_stderr_lines=%d hop_packets=%d since "
+                "last data packet -> %s" % (raw_lines, hop_pkts, klass))
+
+    DROUGHT_S = 300
+
+    @staticmethod
+    def drought_due(now, last_data_ts, last_logged_ts, threshold=300):
+        """True when a DATA DROUGHT line is due: no decoded data packet for
+        `threshold` seconds, and we have not logged one within `threshold`."""
+        return (now - last_data_ts > threshold
+                and now - last_logged_ts >= threshold)
 
     def drain_stderr(self, max_lines=50):
         # Post-mortem drain, for use AFTER the process has exited (S62).
@@ -1367,6 +1441,12 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
     def genLoopPackets(self):
         packet = dict()
         time_last_received = int(time.time())
+        # Self-classification state (S73, ws.5): raw stderr lines and hop-only
+        # packets seen since the last real DATA packet, plus drought pacing.
+        raw_since_data = 0
+        hop_since_data = 0
+        time_last_data = time_last_received
+        drought_logged = 0
         # change the presentation of the FrequencyErrors of the transmitters
         #  each period
         periodShowOneTransm = 2*24*3600  # 2 days
@@ -1377,11 +1457,28 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         while self._mgr.running():
             # the stalled timeout must be greater than the init period
             # init period is EU: 16 s, US, AU and NZ: 133 s
-            if int(time.time()) - time_last_received > 150:
+            _now = int(time.time())
+            if _now - time_last_received > 150:
+                # Classify before raising (S73, ws.5): raw_since_data == 0
+                # means the child went totally mute (process/USB class);
+                # anything else means it was emitting but nothing decoded.
+                logerr(ProcManager.stall_diagnosis(raw_since_data,
+                                                   hop_since_data))
+                for _dw in self._mgr.drain_stderr(10):
+                    loginf("STALL DIAGNOSIS stderr tail: %s" % _dw)
                 raise weewx.WeeWxIOError("rtldavis process stalled")
+            if ProcManager.drought_due(_now, time_last_data, drought_logged,
+                                       ProcManager.DROUGHT_S):
+                drought_logged = _now
+                loginf("DATA DROUGHT: raw_stderr_lines=%d hop_packets=%d "
+                       "since last data packet %ds ago -- receiver alive, "
+                       "nothing decoding (RF-quiet class)"
+                       % (raw_since_data, hop_since_data,
+                          _now - time_last_data))
             # program main.go writes its data to stderr
             for lines in self._mgr.get_stderr():
                 for _line in lines:
+                    raw_since_data += 1
                     if self._stderr_sample_count < 20:
                         # bounded startup sample; debug_rtld=2 (S24 M3)
                         dbg_rtld(2, "RAW_RTL_STDERR_SAMPLE: %s" % _line.strip())
@@ -1400,9 +1497,15 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     if data:
                         time_last_received = int(time.time())
                         if 'curr_cnt0' in data:
+                            # A real DATA packet -- reset the classification
+                            # counters (S73, ws.5).
+                            time_last_data = time_last_received
+                            raw_since_data = 0
+                            hop_since_data = 0
                             self._update_stats(data['curr_cnt0'], data['curr_cnt1'], data['curr_cnt2'], data['curr_cnt3'])
                             self._merge_pending_freq_fields(data)
                         else:
+                            hop_since_data += 1
                             # DEC-0024 Layer B (S43): a channel-hop packet --
                             # dateTime + usUnits, and freqError{n} when this
                             # hop matches the transmitter being tracked.
