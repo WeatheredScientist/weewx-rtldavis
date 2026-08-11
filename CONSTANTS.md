@@ -56,15 +56,18 @@ these.** Re-apply and re-verify after any recreate.
 |---|---|---|
 | `[DatabaseTypes][[SQLite]]` → `timeout` | **30** | weedb defaults to **5 s** (`weedb/sqlite.py:136`). At 5 s a reader holding the lock six seconds cost a CRITICAL + weewx's hardcoded 120 s wait + restart ≈ **5–10 min outage**. 30 s stays under the 60 s archive interval so records can't pile up. **Permanent** — WAL was tried and abandoned (DEC-0071), so this is the fix, not an interim |
 | `[DatabaseTypes][[SQLite]]` → `[[[pragmas]]] journal_mode = DELETE` | **subsection, not a scalar** | Re-pins `delete` on every connection so an accidental WAL flip can never again silently strand a reader on a stale snapshot (DEC-0071). **weedb iterates `pragmas` as a MAPPING** — the scalar spelling `pragmas = journal_mode = DELETE` parses as a string, and iterating it raises `TypeError: string indices must be integers`, which crash-loops weewxd. It cost ~6 min of prod on 2026-08-06 |
+| `[StdCalibrate][[Corrections]]` → `radiation` exact-code zero | DEC-0080 line, verbatim from `weewx.conf.example` | Zeros the VP2+ diode floor (`sr_raw=1` ≈ 1.758 W/m²) every dark minute. Applied 2026-08-11 (S73), **also written into `weewx.conf.rx-baseline`** — `restore_baseline` copies that snapshot over the live conf at every campaign abort/end, so a live-conf-only apply would be silently wiped (hazard found at apply; BOOT's original steps missed it). Verify after any recreate from stock **and** confirm dark hours read 0 (if 3.516 shows, extend per-code) |
 
 ## Release / rollback
 
 | Thing | Value |
 |-------|-------|
-| Published image | `:v2.0.11` + `:latest` — matches prod, no drift |
-| Rollback | `:v2.0.10`, still on the NAS and Docker Hub |
-| Prod baseline tag | `prod-baseline-20260728b` (`main` == this) |
-| Driver banner | **prod runs `0.20+ws.3`** (shipped in `:v2.0.11`, built 2026-07-28). The repo is on `0.20+ws.4` — bumped at S62 for the **unshipped** `:v2.0.12`. Don't read the repo's value as prod's |
+| Prod image | **`:v2.0.13`**, deployed 2026-08-11 (S73, mid-H-hold), NAS-built from `1530971` (ws.5: child reaping + stall self-classification, DEC-0081) |
+| Docker Hub | `:v2.0.13` pushed at deploy. **`:latest` stays on `:v2.0.12`** until the station proves v2.0.13 (same rule as every release); move it at the next prod touch once the square has run clean on it |
+| Rollback | `:v2.0.12` (config digest `9db5c1…`), on the NAS and Docker Hub |
+| Prod baseline tag | `prod-baseline-20260810` (`main` = `7b6fd42`) — **stale by one release**: v2.0.13 promotion to `main` + `prod-baseline-20260811` pending at S73 close |
+| Driver banner | **prod runs `0.20+ws.5`** (shipped in `:v2.0.13`) |
+| Build host | **the NAS, natively** (DEC-0078) — the arm64 laptop's linux/amd64 cross-build fails (tar ENOSYS under emulation). Verify builds by the explicit `BUILD-EXIT` marker in `build.log`, never a pipeline exit |
 | Release mechanics | no git on the NAS; the `docker-compose.yml` there is stale/decorative — always `docker inspect` the live container. `kill` → `rm` → `sleep 3` → `run`, never `compose up` |
 
 ## Hardware / site
