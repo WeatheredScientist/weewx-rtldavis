@@ -97,13 +97,18 @@ def test_first_stall_resets_and_notifies():
         assert h.resets[0][1] is True        # first reset emails
 
 
-def test_repeat_resets_are_log_only():
-    """Nine identical emails is how the real alarm got buried (ERR-0005)."""
+def test_second_stall_after_ineffective_escalates_not_resets():
+    """S73 policy: RESET_MAX_TRIES is 1. Across every forensically-captured
+    event (08-02 x11, 08-06 x3, 08-10/11 x3) no reset ever demonstrably fixed
+    a stall -- the class is RF-dead episodes, which resets cannot touch. One
+    hedge reset per outage; the next stall goes straight to escalation.
+    (Until S73 this test asserted a silent SECOND reset; that retry is
+    exactly the evidence-free churn the demotion removes.)"""
     with _Harness() as h:
-        h.cycle(bad_windows=5)               # ineffective -> tries=1
+        h.cycle(bad_windows=5)               # ineffective -> tries=1 == MAX
         wm.watchdog_stall(5)
-        assert len(h.resets) == 2
-        assert h.resets[1][1] is False       # second reset is silent
+        assert len(h.resets) == 1            # no second reset, ever
+        assert len(h.escalations) == 1       # handed to the human instead
 
 
 def test_cooldown_blocks_a_second_reset_before_its_verdict():
