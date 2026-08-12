@@ -144,6 +144,15 @@ def stamps(lines: list[str]) -> list[datetime]:
     return sorted(out)
 
 
+def window_start(files: list[str], stalls: list[datetime]) -> datetime:
+    """Left-censored at the oldest surviving log rotation -- the retention
+    policy, not the onset of the phenomenon. Shared with ops/freeze_baseline.py
+    so both tools agree on where history starts (STANDARD rule 5)."""
+    dated = sorted(f for f in files if f != "weewx.log")
+    return (datetime.strptime(dated[0].split(".")[-1], "%Y-%m-%d")
+            if dated else stalls[0])
+
+
 def cluster(ts: list[datetime], gap_min: int) -> list[list[datetime]]:
     if not ts:
         return []
@@ -178,9 +187,7 @@ def main() -> int:
     # stall. Anchoring on the last event guarantees the window contains it and
     # makes the check read hot immediately after every episode, which is the
     # exact bias this script exists to remove.
-    dated = sorted(f for f in files if f != "weewx.log")
-    win_start = datetime.strptime(dated[0].split(".")[-1], "%Y-%m-%d") \
-        if dated else stalls[0]
+    win_start = window_start(files, stalls)
     win_end = max(stalls + notrun)
     if now_lines:
         try:

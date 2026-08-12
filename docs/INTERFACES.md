@@ -1,7 +1,7 @@
 # Interfaces — weewx-rtldavis
 
 **Status:** Source of truth (the contract consumers depend on)
-**Last updated:** 2026-07-04 (S17)
+**Last updated:** 2026-08-12 (S77)
 
 This repo's real product is **data**, not weewx internals. Two published surfaces make up the
 contract; changing either can break downstream consumers (currently: the Eagle Hunt dashboard, dev
@@ -38,6 +38,16 @@ headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's
   - **2 × `[DavisPressure] fetch_interval`** (7200 s at the shipped hourly setting) for
     `barometer_inHg`, which comes from the WeatherLink API fetch, *not* the ISS rotation. Derived
     from that service's own config so the two cannot drift apart.
+- **`barometer_inHg` is a corrected-upstream passthrough, not an ISS decode (S77).** The VP2+ ISS
+  never transmits pressure over 915 MHz. `pressure_service.py`'s `DavisPressureFetcher` polls
+  `api.weatherlink.com/v2/current/<station_id>` directly and prefers `bar_sea_level` — **already
+  sea-level-corrected by WeatherLink's own cloud side**. This repo applies no correction of its own;
+  it relays that value as-is. Unlike `rain`/`rainRate`, **no `_qc` flag marks this** (§2's mechanism
+  covers only those two fields today), so a consumer cannot tell from the packet alone that
+  `barometer_inHg`'s correction happened entirely upstream, unlike every RF-derived field beside it.
+  The same fetched value also backfills the internal `pressure` and `altimeter` loop-packet keys when
+  those are null (`pressure_service.py:92-97`) — neither is part of this published contract, but
+  they do not mean their usual distinct things here.
 
   Past its TTL a field is **omitted rather than frozen**, and the writer logs a `WARNING` naming the
   field. Before S48 the cache was unbounded, so a dead or SensorQC-rejected sensor emitted its last
