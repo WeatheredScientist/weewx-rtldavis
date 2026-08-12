@@ -3,9 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-11 (S73, two passes — GATE 2 outcomes into the campaign-B/v2.0.12 rows,
-then the **USB-reset P0 row CLOSED by DEC-0081** same day: stall class re-diagnosed as RF-dead
-episodes, remedies shipped in v2.0.13/ws.5). Prior structural change: 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
+**Last updated:** 2026-08-12 (S75 — Campaign B square dates corrected for the DEC-0082 recovery
+shift, 08-12→08-20 to 08-13→08-21). Prior: 2026-08-11 (S73, two passes — GATE 2 outcomes into the
+campaign-B/v2.0.12 rows, then the **USB-reset P0 row CLOSED by DEC-0081** same day: stall class
+re-diagnosed as RF-dead episodes, remedies shipped in v2.0.13/ws.5). Prior structural change: 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
 "Long-term direction" section, per DEC-0058 — this file is now P0–P3 only, the actively sequenced
 plan, so it doesn't get cluttered by uncalendared/aspirational items. Earlier same-session pass:
 folded the old P1 + P1.5 sections into one continuous data-integrity arc covering v2.0.3–v2.0.11;
@@ -200,6 +201,12 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       no hour-07 notch, against campaign A's pooled 72.4%. Treat that as suggestive only: A's
       figure pools all four arms including gain 207, so it is biased low, and the clean comparison
       is B's 372 anchor against A's — which is exactly why 372 is in both campaigns.
+      **S75 (2026-08-12): a third same-day RF-dead episode (18:05, 08-11) left the square stalled
+      on H overnight, missing the 00:05 A-arm swap entirely — the sticky STOP blocked every tick
+      through the whole window, unattended. DEC-0082 recovered it by shifting the entire remaining
+      schedule +24h (preserving the balanced-Latin-square design rather than accepting a
+      permanently lost block); deployed and STOP cleared same session. Square now runs
+      **08-13 → 08-21T00:05**, not the originally-planned 08-12 → 08-20T00:05 above.
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,

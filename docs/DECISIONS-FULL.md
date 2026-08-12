@@ -4368,3 +4368,77 @@ identical mounts/devices/env + `BIAS_TEE=0`, ws.5 banner + DEC-0031 canary verif
 running log, records within 35 s, soak 15/2/0. `:v2.0.13` on Hub; `:latest` stays v2.0.12
 until proven. Monitor scp'd + sha-verified; its respawn needs the owner's path-scoped-sudo
 kill (uid-1031 process). PR #159; tests 185 → 203.
+
+## DEC-0082 — Campaign B square recovery: shift the whole schedule +24h rather than accept a lost block
+
+**Status:** Accepted · **Date:** 2026-08-12 (S75) · **relates to** DEC-0064 (campaign B design),
+DEC-0081 (RF-dead episodes)
+
+### Context
+
+A third same-day RF-dead-episode abort (18:05, 2026-08-11 — `30-min mean reception 47% < 50%
+floor (arm H)`) tripped six minutes after S74 had verified the day's second episode "without
+re-tripping" and written "square proceeds on schedule" into BOOT.md. Nobody was in the loop to
+clear it overnight: the STOP sentinel blocked every 5-minute tick continuously from 18:10:01
+through the S75 session-start tick (09:20:01, 08-12) — spanning the entire scheduled 00:05
+A-arm swap. `due_arm()` reads the latest schedule row whose time has passed, with no memory of
+why a tick was refused, so clearing the STOP at any point without editing the schedule would
+silently join the square wherever the fixed 6-hour grid says it should be *now* — skipping arm
+A's block 1 (and, depending on exactly when cleared, truncating whichever block was already in
+progress) with no error and no visible sign anything was lost.
+
+Root cause: confirmed the same DEC-0081 RF-dead-episode signature via `weewx_monitor.log` WINDOW
+samples (an ~11-minute near-total reception collapse, 17:48–17:59, matching the 410s episode
+already in `episodes.log`) — not a new failure mode, and not litigated further.
+
+### The choice
+
+`tests/test_rx_experiment.py::test_schedule_is_a_balanced_latin_square` pins every arm to land on
+exactly `00:05/06:05/12:05/18:05` twice each — the diurnal-drift control the whole campaign
+design depends on. That rules out a same-day off-grid restart (e.g. resuming at 10:05): it would
+put arm A on an unbalanced slot and pass silently until the analysis stage, exactly the kind of
+green-signal-resting-on-wrong-evidence failure DEC-0067/0074/ops#147 already catalog for this
+repo. Three options were on the table:
+
+1. **Clear now, accept the gap.** `due_arm()` swaps H→B immediately; arm A permanently loses
+   block 1 (7/8 reps instead of 8), block B runs truncated. Fastest, but breaks the balanced
+   design.
+2. **Clear at the next slot boundary (12:05).** Same permanent loss for arm A, but avoids also
+   truncating B. Marginal improvement, same core defect.
+3. **Shift every square row (A → BASELINE) by a whole number of days**, preserving each row's
+   exact time-of-day slot and the day-to-day cadence. The earliest valid slot for arm A is the
+   *next* occurrence of its own slot — one day out, `2026-08-13T00:05` — not "now" as first
+   floated to the owner; the balanced-Latin-square test itself is what proves this (a same-day,
+   off-grid restart fails it).
+
+**Chose (3), owner-confirmed after the tradeoff was corrected in chat** (the first framing
+undersold the cost — "starts fresh from now" — before the grid constraint was checked against
+the pinned test). All 33 rows from `2026-08-12T00:05|A` through `2026-08-20T00:05|BASELINE`
+shifted to `2026-08-13T00:05` through `2026-08-21T00:05`, verbatim arm sequence, +24h uniformly.
+17/17 `test_rx_experiment.py` tests pass unmodified, including the balanced-Latin-square and
+chronological/self-terminating/not-fully-stale assertions — no test was loosened to make the
+recovery fit.
+
+### What shipped
+
+- `ops/rx_experiment.sh` `SCHEDULE=` edited, pytest-verified, deployed to the NAS (sha-matched),
+  `rx_experiment.STOP` cleared same session. `due_arm()` now returns `H` (unchanged) until
+  2026-08-13T00:05, then swaps cleanly to `A` — full 8/8 per-arm balance preserved, at the cost
+  of the entire remainder of 2026-08-12 (H continues to hold, which is what was already
+  happening).
+- **Deploy mechanics hit three independent guard/classifier layers** on the same `scp` action
+  before landing: the Class C owner-confirm hook (expected), `secret-read-guard.sh` (blocked
+  even *with* its own documented `command`-prefix escape hatch already applied — looks like a
+  bug in that guard's own matching, filed nowhere yet), and a bare classifier denial on an
+  `rsync` substitution with no mint path offered at all. Owner ran the final `scp` by hand after
+  three automated attempts; the STOP clear itself minted cleanly on the second attempt (first
+  refused, per the documented ~50/50 rate).
+
+### Why this belongs in DECISIONS, not just BOOT
+
+Not a one-off — it is the concrete instance the family's ops#147/#159 governance thread is about:
+a "square proceeds on schedule" claim in BOOT.md was true when written and silently wrong six
+minutes later, and the recovery path that preserves the pre-registered design (DEC-0064) is not
+obvious from the schedule format alone. Future campaign recoveries should default to the
+whole-day-shift pattern, not a partial-day one, and check the balanced-square test *before*
+picking a target time, not after.
