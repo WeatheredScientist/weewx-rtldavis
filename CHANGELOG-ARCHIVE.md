@@ -8,6 +8,28 @@ Nothing here is rewritten — text moves, history stays greppable.
 ---
 
 
+## [S72] — 2026-08-10 — DEC-0080: the diode-floor fix is decided — StdCalibrate exact-code zero, config layer
+
+- **DEC-0080 — solar radiation diode-floor correction: option A** (escalated session, per the S71
+  handoff's ask). One exact-window `StdCalibrate` line (`0 if 1.75 < radiation < 1.77`,
+  None-guarded) zeroes the `sr_raw=1` dark-current code; added to `weewx.conf.example` as the
+  versioned, public artifact — the anti-regression mechanism the June dashboard-only fix never
+  had. Option B (almanac elevation-gated service) declined: it also needs a `process_services`
+  live-config edit so it escapes no config fragility, it would bake one station's calibration into
+  the public image, and its dawn/dusk benefit is below the sensor's own resolution — design
+  preserved in the handoff, can ride the #144 rebuild if ever wanted.
+- **NAS apply deliberately deferred to post-GATE 2** (unattended pilot tonight, no dongle
+  recovery, config-typo crash-loop precedent) — apply steps + verification (incl. the `sr_raw=2`
+  check) in `BOOT.md`.
+- **PR #155 merged** (S71 close). **ops#148 closed on the tracker** — S71's commit subject said
+  closed, but the explicit `gh issue close` was missed (CONVENTIONS' `Closes #N` lesson, adjacent
+  form); closed with a pointer at S72 open.
+- S69 + S68c–d rolled to `CHANGELOG-ARCHIVE.md` verbatim (~3-session window). `MANIFEST.md`
+  handoffs row de-counted (a literal "three" had gone stale). Green gates clean on pickup (ruff,
+  185 tests, mypy 39 files).
+
+*(S71, S70 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+
 ## [S71] — 2026-08-10 — ops#148/#7 closed; ERR-0005 backfilled; solar diode-floor traced and designed
 
 - **ops#148 closed.** `MANIFEST.md`'s `CHANGES-FROM-UPSTREAM.md` row widened to name all 9
