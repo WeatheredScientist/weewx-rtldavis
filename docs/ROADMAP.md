@@ -3,8 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-12 (S75 — Campaign B square dates corrected for the DEC-0082 recovery
-shift, 08-12→08-20 to 08-13→08-21). Prior: 2026-08-11 (S73, two passes — GATE 2 outcomes into the
+**Last updated:** 2026-08-12 (S76 — **scheduled full reconciliation, tripwire fired on time**:
+freeze rate replaced with the measured DEC-0083 figures, USB-reset checkbox ticked to match a body
+that had said CLOSED since S73). Prior: 2026-08-12 (S75 — Campaign B square dates corrected for the
+DEC-0082 recovery shift, 08-12→08-20 to 08-13→08-21). Prior: 2026-08-11 (S73, two passes — GATE 2 outcomes into the
 campaign-B/v2.0.12 rows, then the **USB-reset P0 row CLOSED by DEC-0081** same day: stall class
 re-diagnosed as RF-dead episodes, remedies shipped in v2.0.13/ws.5). Prior structural change: 2026-07-28 (S56 — split: P4 + "Longer horizon" moved out to BACKLOG.md's new
 "Long-term direction" section, per DEC-0058 — this file is now P0–P3 only, the actively sequenced
@@ -24,11 +26,20 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S76** (~10 sessions out). If the session counter is
-  at or past S76 and this line still says S76, that itself is the signal it's overdue — run the
-  same pass as S56 and S66 did (diff every open/pending item here against DECISIONS.md,
+- **Next scheduled reconciliation check: by S86** (~10 sessions out). If the session counter is
+  at or past S86 and this line still says S86, that itself is the signal it's overdue — run the
+  same pass as S56, S66 and S76 did (diff every open/pending item here against DECISIONS.md,
   CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S66, 2026-08-06** — all 8 open items diffed. Four were stale and
+- Last full reconciliation: **S76, 2026-08-12** — the tripwire fired on schedule and the pass ran.
+  Two stale items fixed: the freeze row carried "~2-4 min, roughly once a day" for ~13 sessions
+  and is now the measured 1.49/day, median 240 s (DEC-0083); and the **USB-reset P0 row was still
+  an unticked checkbox while its own body had said "✅ CLOSED at S73" since S73** — the identical
+  shape S66 caught on the tiering row, which is the second time this specific failure has appeared,
+  so *check the box in the same edit that writes CLOSED into the body*. Verified current, no change
+  needed: campaign B (launched/armed, S75 schedule shift already recorded), the DB-lock row
+  (bounded, DEC-0070), `receiveWindow` (narrowed, still open), the P0.5 changelog-convergence
+  follow-on, and P3.
+- Prior full reconciliation: **S66, 2026-08-06** — all 8 open items diffed. Four were stale and
   fixed: the tiering migration was still unchecked *while its own body said "Executed S60"*; the
   v2.0.12 row had read "BUILDING 2026-08-02" for four sessions when that build no longer exists;
   campaign B's gates were listed as open after DEC-0069/0070/0071 cleared them; and the DB-lock row
@@ -189,8 +200,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       apparatus defect found: tick and guard raced each other's restarts at 02:05 (no lock);
       converged safely via the sticky STOP; lockfile is post-campaign work.
       *Explain the outages* — substantially met at DEC-0067: the recurring class is **process
-      freezes, not RF loss**, bounded (~1/day, ~3.5 min) and pre-dating the LNA removal, while
-      ERR-0005 is a **single incident**. *Watchdog* — done (S63). *Metric freeze-aware* — **done
+      freezes, not RF loss**, bounded and pre-dating the LNA removal, while ERR-0005 is a
+      **single incident**. **Bound re-measured S76 (DEC-0083): 1.49/day, median 240 s** over
+      30.3 d — the long-carried "~1/day, ~3.5 min" understated both by ~40 %. *Watchdog* — done (S63). *Metric freeze-aware* — **done
       (DEC-0069)**, and the gate turned out to be mostly a **resolution** problem: the old 5-minute
       aggregate let one frozen minute wreck four good ones (~0.8 pts), while per-minute
       `rxCheckPercent` puts the real correction at **±0.03 pts against a 2.0-pt bar**. *DB lock* —
@@ -226,7 +238,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       The 13:47 dropout fired nothing → **the receiver was fine and the process was frozen.**
       **Still open, tracked below: why it freezes.** ERR-0005's own root cause also remains
       unestablished, but it no longer gates campaign B on its own.
-- [ ] **P0 — why do the USB resets fire but never work? (DEC-0074, DEC-0075)** 3/3 failed on
+- [x] **P0 — why do the USB resets fire but never work? (DEC-0074, DEC-0075)** — ✅ **CLOSED S73**
+      (checkbox corrected S76: the body below has said CLOSED since S73 while the box stayed
+      unticked — the exact shape S66's pass caught on the tiering row). 3/3 failed on
       2026-08-06 (`RESET ineffective`, bad windows 8 → 10 → 15), 9/9 on 08-02. The watchdog works and
       is reporting that **the remedy does not**. *This line was missing until S68* — DEC-0074 raised
       the defect at S67 and no ROADMAP item was opened for it, so the repo's sequenced plan did not
@@ -256,9 +270,13 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       absent rows → NULL → normal, already excluded because DEC-0069 drops the record either side of
       *any* gap without consulting the class. No present-but-low rows — the only real exposure.
       Campaign A's figures stand.
-- [ ] **P0 — why does the weewx process freeze? (DEC-0067, DEC-0068)** ~2-4 min, roughly once a
-      day; seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59, 08-03 23:23 (262 s, S64), and two
-      more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;
+- [ ] **P0 — why does the weewx process freeze? (DEC-0067, DEC-0068)** **Rate and duration are
+      measured, not eyeballed, as of S76 (DEC-0083): 1.49/day, median 240 s, min 180 s, max 840 s**
+      — 45 silent off-slot archive gaps over 30.3 d, against the "~2-4 min, roughly once a day"
+      this line carried for ~13 sessions. *When recomputing, drop `interval != 1` rows first: the
+      S37 backfill wrote `interval=15` rows that read as 28 phantom 900 s freezes and inflate the
+      rate ~60 %.* Individual events seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59,
+      08-03 23:23 (262 s, S64), and two more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;
       `weewxd`'s own main thread reads `S`, never `D`, across every capture so far — leans against
       the original "blocked on the bind-mounted log volume" hypothesis. **DEC-0068 (S65): this NAS
       also runs coffee-radar, and it was confirmed running (via `nasctl inspect`, not a name match —
