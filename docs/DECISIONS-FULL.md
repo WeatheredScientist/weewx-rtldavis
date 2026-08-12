@@ -4357,7 +4357,13 @@ question with a mechanism nobody had on the board.
   structural exclusion keeps the data honest.
 - **Leave the episode root cause open, deliberately** — interference vs no-LNA front-end
   margin vs site is a post-campaign characterization question, to be answered with A×B data
-  plus the ledger (episodes predate the LNA removal: 08-02 and 08-06 were LNA-in).
+  plus the ledger. ⚠️ **AMENDED S76 (DEC-0083): the LNA dates in this clause were wrong.**
+  It read *"episodes predate the LNA removal: 08-02 and 08-06 were LNA-in"*. The LNA came out
+  **mid-ERR-0005, early on 08-02** (S61: no no-LNA telemetry existed yet; S62: "first honest
+  no-LNA telemetry accruing, n=1106 windows" and "the LNA was already physically out" at the
+  01:48 recreate; S70: "out since 08-02"). So **08-06 was LNA-OUT**, and 08-02 only *straddles*
+  the removal. The point this clause was making survives on 08-02 alone — that episode did begin
+  LNA-in — but do not carry the 08-06 claim into the LNA characterization.
 - `soak_check.sh` ineffective-reset criterion FAIL → WARN with the class-aware message — a
   criterion that fails on expected behavior trains people to skip the check (ops#147 item 6).
 
@@ -4442,3 +4448,181 @@ minutes later, and the recovery path that preserves the pre-registered design (D
 obvious from the schedule format alone. Future campaign recoveries should default to the
 whole-day-shift pattern, not a partial-day one, and check the balanced-square test *before*
 picking a target time, not after.
+
+## DEC-0083 — The stall rate is measured, not eyeballed: the alarm was right, its evidence was not, and the onset is 08-10
+
+**Status:** Accepted · **Date:** 2026-08-12 (S76) · **amends** DEC-0081 (LNA dates; ws.5
+attribution) · **executes** ops#160 · **answers** ops#159's weewx bullet · **relates to**
+DEC-0067/0068, ERR-0005
+
+### Context
+
+S75 read `logs/episodes.log` growing 2 → 4 rows in ~18 h and wrote "trending hot, not settling"
+into `BOOT.md`. ops#160 filed that as the exact shape ops#159 warns about — a signal escalated
+on eyeball rather than checked against its own distribution — and scoped S76 to measure it.
+
+The expected outcome was deflation. **The measurement confirmed the alarm and invalidated the
+evidence offered for it.** Both halves matter, and the second is the transferable one.
+
+### Method — and the two traps in it
+
+`ops/stall_baseline.py` (new, this session) is the executable form, because a prose rule saying
+"measure it" does not execute (DEC-0040). It pulls every `rtldavis process stalled` line from all
+31 daily rotations in one ssh round trip and clusters them.
+
+- **The unit is an EPISODE, not a stall line.** When RF goes dead the 150 s watchdog raises,
+  weewx waits ~60 s, respawns, and the fresh child hears nothing either — so one episode emits a
+  stall line every ~3 m 40 s for its whole duration. **2026-08-02 is 21 lines and one event.**
+  Counting lines would have scored a single incident as 21 and swamped every comparison.
+  Threshold sensitivity is reported on every run: 15 episodes at 30, 45 and 60 min. The
+  clustering was **validated against DEC-0081's independently-derived boundaries** for the
+  08-10/11 night (23:52→00:01 and 01:49→02:14) — both recovered exactly.
+- **`rtldavis process is not running` is a different class and is excluded** — the driver gone
+  entirely, DEC-0081/S62's no-reset path, the strictly-worse mode ERR-0005 hit after reset #10.
+  20 lines, **all on 08-02, none on any burst day**. Folding it in would merge the two failure
+  modes the DEC-0081 diagnosis exists to separate.
+
+### What the record says
+
+Window 2026-07-13 → 2026-08-12 12:42 (30.5 d, 31 files), **left-censored** — the left edge is the
+30-day retention policy, not the onset of the phenomenon. 41 stall lines → **15 episodes**.
+
+| Window ending now | Episodes | Rank among all such windows |
+|---|---|---|
+| 24 h | 3 | 96.1st pct (peak 5, off it) |
+| 36 h | 5 | 97.1st pct |
+| **48 h** | **6** | **record maximum**, 98.3rd pct |
+| **72 h** | **6** | **record maximum**, 98.2nd pct |
+
+**"Trending hot" survives measurement.** No 48 h or 72 h window anywhere in 30.5 days matches the
+current one. The 24 h figure is off its own peak, so the burst may be easing — but it is real,
+and S75 understated rather than overstated it.
+
+### Three corrections to how that conclusion was reached
+
+1. **The onset is 2026-08-10 23:56, not the ws.5 deploy.** The v2.0.13 container's `StartedAt` is
+   2026-08-11T22:05:22Z = **18:05 local** (NAS is UTC−4). **Five of the six burst episodes
+   predate it**; only 08-12 01:36 runs on ws.5. ws.5 is exonerated, and the ledger's field of
+   view — which opens at 16:34 on 08-11, mid-burst — was mistaken for the phenomenon's onset.
+2. **It is not a simple LNA effect either.** Rates: LNA-in **0.40/day** (8 ep / 20.07 d) →
+   LNA-out 08-02→08-10 **0.13/day** (1 ep / 7.92 d, the *quietest* stretch in the whole record,
+   quieter than LNA-in) → 08-10→now **2.43/day** (6 ep / 2.47 d). Whatever changed, changed eight
+   days after the LNA came out. That night is the campaign-B pilot; attribution stays open.
+3. **The stated evidence was never commensurable.** Of the 4 ledger rows, row 3 (00:49,
+   `stalls=0 droughts=10`) is drought-only, and `DATA DROUGHT` appears **zero times in every
+   pre-ws.5 rotated log** (verified). RF-quiet episodes never trip the 150 s watchdog at all —
+   hop packets keep resetting it — so they were **structurally invisible** before ws.5. Only 3 of
+   the 4 rows can be compared to anything historical. "2 → 4 rows" compared two instruments.
+
+### DEC-0081 amended on the LNA dates
+
+DEC-0081 states *"episodes predate the LNA removal: 08-02 and 08-06 were LNA-in."* Measured
+against the record: **S61 (08-01) says no honest no-LNA telemetry existed anywhere**; **S62
+(08-02) reports "first honest no-LNA telemetry accruing, n=1106 windows" and "the LNA was already
+physically out"** at the 01:48 ERR-0005 recreate; **S70 says "the LNA has been out since 08-02."**
+The LNA came out **mid-ERR-0005, in the early hours of 08-02**. So **08-06 was LNA-out**, and
+08-02 only *straddles* the removal. DEC-0081's argument survives on 08-02 alone — that episode did
+begin LNA-in — but the sentence as written is wrong and would mislead the post-campaign LNA
+characterization it was written to feed. Corrected in place, same pattern as DEC-0074's S68b
+amendment.
+
+### Why this belongs in DECISIONS
+
+**A red signal resting on the wrong evidence, which happened to be true.** Every case in the
+ops#147 catalog is a *green* signal on bad evidence, plus the dashboard's *false* red. This is the
+third variant and the most dangerous, because being right rewards the method: the same 19-hour
+look would have produced the same alarm on a station that had been perfectly healthy for a month,
+and nothing in the reading could tell those apart. **A correct conclusion is not evidence that the
+method was sound** — the sibling of DEC-0045's "a passing test is not evidence if the assertion is
+wrong". Worth stating as its own item because the failure is self-concealing: a confirmed alarm
+retires the question that would have exposed it.
+
+Follow-on, deliberately not decided here: what changed on 08-10. Candidates are the campaign-B
+pilot's high-gain arms (496/449/402 vs the 372 hold), the v2.0.12 image promoted that morning, and
+ordinary weather. The ledger plus the A×B square are the instruments; this is post-campaign
+characterization, as DEC-0081 already scoped it.
+
+### Secondary sweep — which standing watches rest on a computed baseline (ops#160 job 3)
+
+- **Freeze rate: measured 1.49/day, median 240 s** (45 freezes / 30.3 d). BOOT and DEC-0067/0068
+  carried *"~once/day, ~3.5 min"*, inherited rather than computed. It is the right order of
+  magnitude and **understates both terms by roughly 40 %**. Method: archive gaps > 150 s
+  classified by BACKLOG's own rule — gap **with** a stall within ±5 min = RF-dead (21), gap at a
+  campaign swap slot = arm swap (12), silent off-slot gap = freeze (45). *This refines the
+  characterization; unlike the stall claim it overturns nothing.*
+  **One confounder had to be removed first, and it would have inflated the answer by 60 %:** the
+  S37 backfill (2026-07-13, ERR-0003's path) wrote records at `interval=15`, which read as an
+  unbroken run of 900 s "freezes" — 28 phantom events, and the first cut of this measurement
+  counted every one. Only rows at `interval=1` are comparable; a gap is meaningful only *between
+  two genuine per-minute records*. The tell was that the run stopped dead at 07:12 next to a
+  `weewx.sdb.bak-S37-preBackfill-20260713-072441` snapshot — visible only because the individual
+  events were printed rather than just the summary rate.
+- **Co-rejection grep (DEC-0054): still 0, now verified through 2026-08-12** and
+  **positive-controlled** (the identical pipeline returns 2308 for a token known to be present).
+  BACKLOG carried *"0 hits through 08-01 18:30"* — true, and 11 days stale. A zero from this
+  pipeline is not believable without the control (single-token rule, memory of the false-zero).
+- **Phantom-rainRate (DEC-0049): already has a live instrument** — `soak_check.sh` computes it
+  every run (0 rows of `rainRate>0 while rain=0` in 998 archive rows this session). No gut-feel
+  here; nothing to fix.
+- **Humidity-spike (DEC-0044): unfired, method pinned.** Left alone deliberately — its arithmetic
+  is settled and re-deriving it is what DEC-0044 forbids.
+
+So of the four, one was gut-feel (freeze rate, now measured), one was measured-but-stale
+(co-rejection, now refreshed), one was already instrumented, and one is correctly left pinned.
+
+## DEC-0084 — Secret gate hole class 6: the app-password detector required quotes
+
+**Status:** Accepted · **Date:** 2026-08-12 (S76) · **extends** DEC-0012 · **continues**
+DEC-0039/DEC-0045/DEC-0076 · **found by** the routine pre-commit positive control
+
+### The hole
+
+`check_secrets.sh` carried two detectors that between them could not see an **unquoted** Google
+app password:
+
+- `_assign` requires **8+ consecutive** value characters. Google issues an app password as four
+  4-character groups, so the run breaks at 4 and the rule never fires.
+- `_apppw` (added S68 for exactly this shape) requires the value to sit **inside quotes**.
+
+So a `GMAIL_PASS` assigned the bare four-group form was missed in **every** spelling — spaced `=`,
+env-style `=`, and ConfigObj-style indented `gmail_pass = …` — all verified MISSED before the fix.
+(The literal is described rather than written here for the same reason `check_secrets.sh`'s own
+comment describes it: writing the example would make this entry a finding, and **a decision log
+earns no exemption** — DEC-0045. The gate proved that live, going red on the first draft of this
+paragraph.)
+
+**Unquoted is not an exotic variant; it is the native form of the two files this repo must never
+commit.** `weewx.conf` is ConfigObj, where bare values are the norm, and `monitor.env` is an env
+file. The gate would have missed this project's own credential in the format its own configuration
+writes it. `monitor.env` is gitignored (`.gitignore:5`), so the gate is the second line of defence
+and nothing was ever leaked through it — this closes a future hole, as DEC-0076 did.
+
+### Why it survived DEC-0076's fix
+
+S68 planted the **quoted** literal as holes 25/26, the harness went green, and the neighbouring
+spelling was never asked about. That is DEC-0045's lesson recurring one level down: a passing test
+is not evidence if the assertion is incomplete. **The fix certified its own blind spot** — the
+same shape as this session's DEC-0083, and the sixth time this gate has been wrong.
+
+### The fix, and why it is anchored rather than loosened
+
+    _apppw_assign="${_key}"'[[:space:]]*[:=][[:space:]]*["']?[a-z]{4}([[:space:]][a-z]{4}){3}'
+
+Quotes become optional, but the rule is **anchored on `_key` + `[:=]`**. That anchor is
+load-bearing, not decoration: four consecutive lowercase four-letter words occur in ordinary
+English, so simply dropping the quote requirement would flag prose and comments across the repo —
+a criterion that fails on healthy content trains people to skip the gate (ops#147 item 6).
+Requiring the credential key immediately before the shape cannot fire on prose.
+
+**Verified by the harness, not by inspection:** 3 new payloads (holes 27–29), 54 passed / 0
+failed, all previously-good lines still pass, real tracked tree clean.
+
+### One allow-list widening refused
+
+The new rule flagged `monitor.env.example`'s own placeholder — a `GMAIL_PASS` assigned four
+repeated-character groups in the app-password shape (again described, not written: see above).
+The tempting fix was an allow term for those groups. **Rejected:** five of this gate's six historical
+holes were allow-list defects, so widening the allow-list to accommodate a placeholder trades a
+known-good detector for a new excuse path. The placeholder moved to `YOUR_GMAIL_APP_PASSWORD`
+instead — the convention `CONSTANTS.md` already mandates — with the four-group shape documented in
+a neighbouring comment, so no information is lost and no excuse path is created.

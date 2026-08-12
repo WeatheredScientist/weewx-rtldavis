@@ -75,6 +75,17 @@ bad=(
   # detector needs 8+ consecutive value characters and this breaks every 4.
   'GMAIL_PASS = "abcd efgh ijkl mnop"'                           # (hole 25) app-password literal
   '# GMAIL_PASS = "abcd efgh ijkl mnop"'                         # (hole 26) ditto, commented
+  # --- S76: the same literal UNQUOTED (hole class 6, DEC-0084) ---
+  # Holes 25/26 pinned the QUOTED spelling and the harness stopped there, so the
+  # S68 fix certified its own blind spot. Unquoted is not an exotic variant: it is
+  # the NATIVE form of both files this repo must never commit -- weewx.conf is
+  # ConfigObj (bare values are the norm) and monitor.env is an env file. All three
+  # below were verified MISSED before the S76 fix, by the routine pre-commit
+  # positive control. Nothing was ever leaked through it; this closes a future
+  # hole, as hole 22-26 did.
+  'GMAIL_PASS = abcd efgh ijkl mnop'                             # (hole 27) unquoted, spaced =
+  '    gmail_pass = abcd efgh ijkl mnop'                         # (hole 28) unquoted, conf-style indent
+  'GMAIL_PASS=abcd efgh ijkl mnop'                               # (hole 29) unquoted, env-style
 )
 
 # --- must PASS (exit zero) ------------------------------------------------------
