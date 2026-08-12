@@ -116,3 +116,19 @@ def test_stamps_ignores_unparseable_lines() -> None:
 
 def test_cluster_handles_empty_input() -> None:
     assert sb.cluster([], 30) == []
+
+
+def test_window_start_uses_oldest_rotation() -> None:
+    """Left-censored at the oldest surviving rotation, not the newest.
+
+    Shared with ops/freeze_baseline.py (extracted S77) -- both tools must
+    agree on where history starts.
+    """
+    files = ["weewx.log", "weewx.log.2026-08-05", "weewx.log.2026-07-20"]
+    assert sb.window_start(files, [datetime(2026, 8, 1)]) == \
+        datetime(2026, 7, 20)
+
+
+def test_window_start_falls_back_to_first_stall_with_no_rotations() -> None:
+    first_stall = datetime(2026, 8, 1, 12, 0)
+    assert sb.window_start(["weewx.log"], [first_stall]) == first_stall
