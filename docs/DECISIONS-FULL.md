@@ -4626,3 +4626,117 @@ holes were allow-list defects, so widening the allow-list to accommodate a place
 known-good detector for a new excuse path. The placeholder moved to `YOUR_GMAIL_APP_PASSWORD`
 instead — the convention `CONSTANTS.md` already mandates — with the four-group shape documented in
 a neighbouring comment, so no information is lost and no excuse path is created.
+
+## DEC-0085 — The freeze-rate one-off becomes a tool: `ops/freeze_baseline.py`
+
+**Status:** Accepted · **Date:** 2026-08-12 (S77) · **completes** DEC-0083's flagged follow-up ·
+**executes** BOOT S77 job 3 / BACKLOG's "folding it in is an open follow-up" · **relates to**
+DEC-0067/0068
+
+### Context
+
+DEC-0083 (S76) measured the freeze rate at 1.49/day, median 240 s — but as a one-off derivation
+in scratch work, not a committed script. Both BOOT.md and BACKLOG.md flagged the same risk in the
+same words: "this number decays unless someone re-derives it." The stall side already had
+`ops/stall_baseline.py`; the freeze side did not.
+
+### Method — reuse, not re-derivation
+
+`ops/freeze_baseline.py` classifies archive gaps > 150 s using BACKLOG's own rule (gap **with** a
+`rtldavis process stalled` line within ±5 min = RF-dead, checked *first*; gap at a scheduled
+campaign swap slot (:05 past 00/06/12/18, confirmed against `ops/rx_experiment.sh`'s own
+`SCHEDULE`) = arm swap; silent off-slot gap = freeze). Two reuse decisions, both to avoid a second
+copy of something already correct (STANDARD rule 5):
+
+- Stall timestamps come from `stall_baseline.fetch()` / `.stamps()` directly (imported), not a
+  hand-prepared file — the prototype this replaces (found abandoned in the S76 session's own
+  scratchpad, never shipped) had loaded them from a static `all_stalls.txt`, which would go stale
+  the moment it aged past the next `weewx.log` rotation.
+- DB connection constants (`DOCKER`, `CONTAINER`, `VENV_PY`, `ARCHIVE_DB`) come from
+  `campaign_analyze.py`, the existing sanctioned archive reader, rather than a duplicate literal.
+- `window_start()` — "left-censored at the oldest surviving log rotation" — was extracted out of
+  `stall_baseline.py` into a shared function (+2 tests) so both tools agree on the same boundary
+  instead of each computing it independently and risking drift between them.
+
+Both of DEC-0083's traps carry forward unchanged: rows at `interval != 1` are dropped before gaps
+are computed (the S37 backfill trap), and every individual freeze event is printed, never just the
+summary rate.
+
+### New: rolling-window placement for the freeze side
+
+DEC-0083 placed the *stall* rate in its own history (24 h/36 h/48 h/72 h percentile ranking) but
+the freeze measurement was a flat rate + duration stats only — never placed against its own
+distribution. `ops/freeze_baseline.py` adds that section, the same technique applied to freeze
+onsets. First read, this session: 24 h = 1 (36.6th pct), 36 h = 3 (62.9th pct), 48 h = 5 (78.3rd
+pct), 72 h = 6 (66.9th pct) — **unremarkable across every window**, unlike the stall side's
+record-max reading the same day. The two phenomena are moving independently.
+
+### Validation against DEC-0083's own numbers
+
+A live run reproduces the S76 figures closely: **21 RF-dead / 12 arm-swap / 45 freeze** (exact
+match on the classification breakdown) and **median 240 s** (exact). The rate reads 1.48/day
+against the recorded 1.49/day — the small drift is the ~14 additional hours of window between the
+two runs, not a methodology difference. This is the positive control DEC-0045 asks for: the new
+tool was checked against a known answer before being trusted for the next one.
+
+### Why this belongs in DECISIONS
+
+Closes a named, cross-referenced follow-up (BOOT S77 job 3, BACKLOG's own words, ops#160's
+"secondary sweep, time permitting" scope) rather than leaving it as an implicit code change — and
+records the first-ever placement of the freeze rate in its own history, which is new information
+DEC-0083 didn't produce.
+
+## DEC-0086 — `barometer_inHg` is an unflagged, already-corrected WeatherLink passthrough
+
+**Status:** Accepted · **Date:** 2026-08-12 (S77) · **documents** `docs/INTERFACES.md` §1 ·
+**relates to** DEC-0032 (`_qc` flag mechanism), DEC-0053 (InfluxDB provenance findings)
+
+### Context
+
+Owner question: does the barometer reading carry a correction we apply and flag for the dashboard,
+or is it raw? Neither — the actual answer is a third thing, previously undocumented.
+
+### What the code does
+
+The VP2+ ISS **never transmits barometric pressure over 915 MHz** — there is no RF path for this
+field at all. `pressure_service.py`'s `DavisPressureFetcher` polls WeatherLink's own cloud API
+(`api.weatherlink.com/v2/current/<station_id>`, hourly) directly and prefers `bar_sea_level`,
+falling back to raw `bar` if absent. `bar_sea_level` is **already sea-level-corrected by
+WeatherLink's own cloud side** — this repo applies no elevation/temperature correction of its own
+to this field; it relays whatever the API returns.
+
+Two things worth recording precisely:
+
+1. **No `_qc` flag marks it.** DEC-0032's mechanism (`docs/INTERFACES.md` §2) covers only
+   `rain`/`rainRate` today. So `barometer_inHg` is indistinguishable on the wire from every
+   RF-derived field beside it in the same loop packet, even though its correction (if any)
+   happened entirely upstream and invisibly, on infrastructure this repo doesn't control.
+2. **One fetched value backfills three internal keys.** `pressure_service.py:92-97` sets
+   `barometer`, `pressure`, and `altimeter` to the *same* `self.last_pressure` when each is
+   otherwise null. Normally these are three distinct quantities (raw station pressure vs. two
+   different sea-level-correction formulas); here they collapse to one borrowed number. Only
+   `barometer_inHg` is in the published contract (`docs/INTERFACES.md` §1's fields table), so this
+   doesn't leak externally — but a future reader of the driver internals should not assume
+   `pressure`/`altimeter` mean their usual distinct things in this codebase.
+
+### Action taken
+
+Documented in `docs/INTERFACES.md` §1 (this session). Cross-posted as a heads-up, not a change
+request, to `eaglehunt-weather-dashboard#377` (that repo's own direct-heads-up channel) and
+`eaglehunt-ops#162` (cross-repo record, `repo:weewx`/`repo:dashboard`). Nothing was changed in
+`pressure_service.py` — this decision is documentation of existing, previously-unrecorded
+behavior, not a design change.
+
+### Open, deliberately not decided here
+
+Whether `barometer_inHg` ever warrants its own `_qc`-style flag, or a provenance marker
+distinguishing cloud-API-sourced fields from RF-decoded ones, is left to whoever picks up the two
+filed issues — dashboard-side UI value and flag-mechanism scope are both judgment calls this
+finding doesn't resolve on its own.
+
+### Why this belongs in DECISIONS
+
+A data-provenance fact about the published contract that was true for the life of this repo and
+had never been written down anywhere — the same class of gap DEC-0053 closed for InfluxDB station
+identity and archive correction flags. Future sessions and cross-repo consumers now have a citable
+answer instead of needing to re-read `pressure_service.py` to rediscover it.
