@@ -273,7 +273,10 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
 - [ ] **P0 — why does the weewx process freeze? (DEC-0067, DEC-0068)** **Rate and duration are
       measured, not eyeballed, as of S76 (DEC-0083): 1.49/day, median 240 s, min 180 s, max 840 s**
       — 45 silent off-slot archive gaps over 30.3 d, against the "~2-4 min, roughly once a day"
-      this line carried for ~13 sessions. *When recomputing, drop `interval != 1` rows first: the
+      this line carried for ~13 sessions. **Now a re-runnable tool, not a one-off (DEC-0085,
+      S77): `ops/freeze_baseline.py` reproduces these figures (1.48/day) and adds the
+      rolling-window placement the original one-off never did — unremarkable across 24h–72h
+      (36.6–78.3rd pct), moving independently of the same-day record-max stall reading. *When recomputing, drop `interval != 1` rows first: the
       S37 backfill wrote `interval=15` rows that read as 28 phantom 900 s freezes and inflate the
       rate ~60 %.* Individual events seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59,
       08-03 23:23 (262 s, S64), and two more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;

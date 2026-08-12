@@ -5,6 +5,30 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S77] — 2026-08-12 — Freeze rate gets its own tool (DEC-0085); barometer's WeatherLink-passthrough provenance documented (DEC-0086)
+
+- **DEC-0085 — `ops/freeze_baseline.py` ships**, completing DEC-0083's explicitly-flagged
+  follow-up (BOOT/BACKLOG both warned the freeze number would decay without it). Reuses
+  `stall_baseline`'s stall data and `campaign_analyze`'s DB constants rather than re-deriving
+  either; `window_start()` extracted out of `stall_baseline.py` (+2 tests) so both tools share the
+  same left-censoring boundary. Live run reproduces DEC-0083 almost exactly (21 RF-dead/12
+  arm-swap/45 freeze exact, median 240s exact, rate 1.48 vs. 1.49/day). New: a rolling-window
+  placement for the freeze side the original one-off never had — unremarkable across 24h–72h,
+  moving independently of the same-day record-max stall reading. 210 → 224 tests (+12 in the new
+  file, +2 for `window_start()`).
+- **DEC-0086 — `barometer_inHg` is an unflagged, already-corrected WeatherLink passthrough.** The
+  VP2+ ISS never transmits pressure over RF; `pressure_service.py` polls WeatherLink's cloud API
+  and relays its already sea-level-corrected `bar_sea_level` as-is, with no `_qc` flag distinguishing
+  it from RF-derived fields. Documented in `docs/INTERFACES.md` §1; cross-posted as a heads-up to
+  `eaglehunt-weather-dashboard#377` and `eaglehunt-ops#162`.
+- **eaglehunt-ops housekeeping:** #158 closed (duplicate of already-settled #153/#155 under
+  OPS-DEC-0101), #160 closed (scope complete — see DEC-0085 above, plus the standing-watches sweep
+  was already done per BACKLOG.md), #159 commented (weewx's open bullet answered by DEC-0083/0085).
+- **`docs/CONVENTIONS.md`:** stopped hardcoding a model name in the commit-trailer convention
+  (caught stale — said `Opus 4.8` while the session ran Sonnet 5).
+- **Housekeeping:** 10 stale, already-merged feature branches deleted (local + remote,
+  `s73`–`s76`-prefixed) — none touched `origin/dependabot/pip/weewx-5.5.0`, still deliberately open.
+
 ## [S76] — 2026-08-12 — Stall rate measured, not eyeballed (DEC-0083); secret gate's sixth hole closed (DEC-0084)
 
 - **DEC-0083 — S75's "trending hot" survives measurement, but its evidence did not.** Over 30.5 d
