@@ -68,9 +68,11 @@ the rule above to archive gaps > 150 s over the full retention window gives 21 R
 / 45 freeze. **Two traps if this is recomputed:** rows at `interval != 1` must be dropped first (the
 S37 backfill wrote `interval=15` rows that read as 28 phantom 900 s freezes and inflate the rate by
 ~60 %), and the individual events must be printed, not just the summary rate — printing them is the
-only reason that confounder was visible. Working script: `ops/stall_baseline.py` covers the stall
-half; the freeze half was a one-off and **folding it in is an open follow-up**, so today this
-number decays unless someone re-derives it.
+only reason that confounder was visible. **Working scripts: `ops/stall_baseline.py` covers the
+stall half, `ops/freeze_baseline.py` (DEC-0085, S77) now covers the freeze half — both sides are
+re-runnable and neither number decays.** First rolling-window placement for the freeze side (never
+done before, S77): unremarkable across 24h–72h (36.6–78.3rd pct), moving independently of the
+stall side's same-day record-max reading.
 
 ✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
 — the abort was correct, DEC-0061's budget holds).
