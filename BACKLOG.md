@@ -44,11 +44,14 @@ They live here rather than in `BOOT.md` because a watch is not in-flight work: i
 doesn't, and until it fires there is nothing to do. Check them when something looks odd, or when a
 trigger below is plainly satisfied.
 
-- **Co-rejection grep** (DEC-0054): **0 hits through 08-01 18:30**. Single-token pattern
+- **Co-rejection grep** (DEC-0054): **0 hits through 2026-08-12 (S76), positive-controlled** — the
+  identical pipeline returns 2308 for a token known to be present. Single-token pattern
   `co-rejecting` — *multi-word `nasctl grep` patterns silently match nothing*; positive-control any
-  zero before believing it.
+  zero before believing it, every time.
 - **Humidity-spike watch** — unfired. **Method and arithmetic are in DEC-0044 — do not re-derive.**
-- **DEC-0049 phantom-rainRate** — unfired. The next calm, saturated, cooling night is a free test.
+- **DEC-0049 phantom-rainRate** — unfired, and **already instrumented**: `soak_check.sh` computes
+  `rainRate>0 while rain=0` every run, so this watch needs no manual check. The next calm,
+  saturated, cooling night is still the free test.
 - **First frost** — the signed decode's negative branch gets its first live air test.
 - **DEC-0056 revisit trigger** — a rain-rejection email on a genuinely *wet* day.
 - **Upstream replies** — four open threads (lheijst #22/#23, issue #15, david-lutz#1).
@@ -58,6 +61,16 @@ trigger below is plainly satisfied.
 ✅ **Dropouts watch is CLOSED (DEC-0067)**, replaced by the process-freeze blocker. **Never re-open
 it on a `WINDOW: 0/21` reading**: that metric cannot tell a freeze from deafness, which was the whole
 problem. The rule is a >150 s gap **with** `rtldavis process stalled` = RF; silent = freeze.
+
+**Freeze rate is now MEASURED, not eyeballed (S76, DEC-0083): 1.49/day, median 240 s** — 45 freezes
+over 30.3 d, against the inherited "~once/day, ~3.5 min", which understates both by ~40 %. Applying
+the rule above to archive gaps > 150 s over the full retention window gives 21 RF-dead / 12 arm-swap
+/ 45 freeze. **Two traps if this is recomputed:** rows at `interval != 1` must be dropped first (the
+S37 backfill wrote `interval=15` rows that read as 28 phantom 900 s freezes and inflate the rate by
+~60 %), and the individual events must be printed, not just the summary rate — printing them is the
+only reason that confounder was visible. Working script: `ops/stall_baseline.py` covers the stall
+half; the freeze half was a one-off and **folding it in is an open follow-up**, so today this
+number decays unless someone re-derives it.
 
 ✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
 — the abort was correct, DEC-0061's budget holds).

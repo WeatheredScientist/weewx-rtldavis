@@ -120,6 +120,14 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
   in `tests/test_reception_pct.py` that CI's cache-free run caught immediately). Before trusting a
   local "0 errors" result — especially right before opening/merging a PR — `rm -rf .mypy_cache`
   first.
+- **`git ls-files` lists TRACKED files only, so the mypy gate silently skips anything new until
+  you `git add` it.** Measured S76: the gate printed `Success: no issues found in 42 source files`
+  while checking **neither** of the session's two new files; staging them first turned the same
+  command into `44 source files` and **5 real errors**. The failure is silent in the worst way —
+  the count is the only tell, and nobody reads the count. **`git add` first, then run the gate**
+  (the same ordering the secret gate already requires, and for the same reason). A green gate that
+  skipped the file you just wrote is the S67 failure class in one line: a signal resting on
+  evidence about something other than what you were asking (DEC-0083, ops#147).
 - Follow the WeeWX `RESTThread` pattern for uploaders (DEC-0007); honest nulls on rejection,
   never stale substitution (DEC-0006).
 

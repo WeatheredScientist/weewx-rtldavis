@@ -108,7 +108,28 @@ _assign="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=-]{8,}'
 # out here in prose rather than as an example, because writing the example would
 # make this comment a finding — comments earn no exemption, DEC-0045.)
 _apppw='["'"'"'][a-z]{4}([[:space:]][a-z]{4}){3}["'"'"']'
-secret_re="${_assign}|${_apppw}"
+
+# --- S76: the UNQUOTED app password (hole class 6, DEC-0084) ---
+# `_apppw` above requires quotes, and `_assign` requires 8+ CONSECUTIVE value
+# characters — which the four-group form breaks at 4. So an app password written
+# WITHOUT quotes was missed in every spelling, and unquoted is the native form of
+# the two files this repo must never commit: `weewx.conf` is ConfigObj (bare
+# values are the norm) and `monitor.env` is an env file. The gate would have
+# missed this project's own credential in the format its own config writes it.
+#
+# Found by the routine pre-commit positive control, same as hole class 5. S68's
+# harness asserted the QUOTED form and stopped there; the neighbouring spelling
+# was never asked about, so the fix certified its own blind spot (DEC-0045 again).
+#
+# Anchored on `_key` + `[:=]` rather than just dropping the quote requirement.
+# That anchor is load-bearing, not decoration: four consecutive lowercase
+# four-letter words occur in ordinary English, so a bare shape match would flag
+# prose and comments across the repo and train people to skip the gate (ops#147
+# item 6). Requiring the credential key immediately before it cannot fire on
+# prose. Quotes stay OPTIONAL here so this one rule covers both spellings.
+_apppw_assign="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[a-z]{4}([[:space:]][a-z]{4}){3}'
+
+secret_re="${_assign}|${_apppw}|${_apppw_assign}"
 
 # NOTE: there is deliberately NO "the line is a comment" allow rule. It was
 # removed in S40 (bug class 4 / DEC-0045). A comment marker is not evidence about
