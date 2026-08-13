@@ -23,6 +23,20 @@ downtime and must not inflate either count. Classification order matters:
 RF-dead is checked FIRST, so a real outage that happens to land on a swap
 slot is never misfiled as "just the swap".
 
+SWAP DETECTION ALSO COVERS AD HOC RESTARTS (S80, 2026-08-13)
+--------------------------------------------------------------
+The fixed schedule only knows the four scheduled hours -- it cannot see a
+restart rx_experiment.sh triggers itself off that schedule: an abort's
+baseline restore, a DEC-0087 pause escalating past its ceiling, or (the case
+that found this) a tick's own self-heal right after an abort clears. That
+exact gap -- 2026-08-13 10:24-10:27, the S79 recovery's own restart -- read
+as a freeze under the schedule-only check. So `classify()` also cross-
+references every `tick: swapping` / `RESTORING baseline snapshot` line
+rx_experiment.sh itself logged: ground truth that a restart happened, not a
+guess at when one might. Either signal counts as swap; RF-dead is still
+checked first, so a genuine outage landing inside a restart's health-check
+window still correctly reads as RF-dead, not swap.
+
 `rtldavis process is not running` (the driver gone entirely, ERR-0005's
 mode) is a separate class again -- stall_baseline.py never clusters it into
 RF-dead stalls, and BACKLOG's stated freeze rule names only the `stalled`
@@ -76,6 +90,11 @@ import stall_baseline as sb  # noqa: E402
 GAP_SEC = 150  # the driver's own watchdog timeout -- a fact, not a tunable
 SWAP_HOURS = (0, 6, 12, 18)  # ops/rx_experiment.sh SCHEDULE: every 6h at :05
 SWAP_SLACK_MIN = 12  # swap rows are always "<hour>:05"; a few min to complete
+RESTART_LOG_FILES = ("rx_experiment.log", "rx_experiment.log.campaignA")
+RESTART_PAD_BEFORE_MIN = 3  # last good archive record can land up to one
+    # archive interval (60s) before the restart's own log line fires; padded
+RESTART_PAD_AFTER_MIN = SWAP_SLACK_MIN  # health_ok()'s own worst-case budget
+    # is ~245s; SWAP_SLACK_MIN's 12min is already proven generous, reused here
 
 REMOTE = r"""
 set -u
@@ -119,6 +138,26 @@ def fetch_archive(query_lo: datetime) -> list[tuple[datetime, str]]:
     return rows
 
 
+def fetch_restarts() -> list[datetime]:
+    """Timestamps of every deliberate restart rx_experiment.sh itself
+    triggered: `tick: swapping` (the normal/self-heal arm-change path) and
+    `RESTORING baseline snapshot` (every baseline restore -- shared by
+    trip_abort() and campaign completion). Ground truth for "expected
+    downtime", unlike SWAP_HOURS above, which has no way to see a restart
+    landing off its fixed schedule.
+    """
+    port, user, host = sb.nas_env()
+    remote = (f'cd {sb.LOGDIR} 2>/dev/null || exit 1; '
+              f'grep -hE "tick: swapping |RESTORING baseline snapshot" '
+              f'{" ".join(RESTART_LOG_FILES)} 2>/dev/null')
+    r = subprocess.run(["ssh", "-p", port, f"{user}@{host}", remote],
+                       capture_output=True, text=True)
+    if r.returncode != 0 and not r.stdout:
+        sys.exit("freeze_baseline: ssh failed fetching restart log — "
+                 f"{r.stderr.strip()[:200]}")
+    return sb.stamps(r.stdout.splitlines())
+
+
 def per_minute(rows: list[tuple[datetime, str]]) -> tuple[list[datetime], int]:
     """Drop non-per-minute rows (interval != 1) -- the S37 backfill trap.
     Returns the clean timestamps (already sorted; the query is ORDER BY
@@ -141,13 +180,31 @@ def is_rf_dead(a: datetime, b: datetime, stalls: list[datetime],
     return any(a - pad <= s <= b + pad for s in stalls)
 
 
-def is_swap_slot(a: datetime) -> bool:
+def is_scheduled_swap_slot(a: datetime) -> bool:
     """Campaign arm swaps land at :05 past 00/06/12/18 (ops/rx_experiment.sh)."""
     return a.hour in SWAP_HOURS and a.minute <= SWAP_SLACK_MIN
 
 
+def is_logged_restart(a: datetime, restarts: list[datetime]) -> bool:
+    """True if a gap starting at `a` lines up with a restart rx_experiment.sh
+    actually logged -- catches ad hoc restarts (abort recovery, pause
+    escalation, campaign completion) the fixed schedule can't see. Padding is
+    asymmetric: a few minutes back for the last good record that could have
+    landed before the restart fired, SWAP_SLACK_MIN's already-proven-generous
+    12min forward for the restart to produce a new one.
+    """
+    before = timedelta(minutes=RESTART_PAD_BEFORE_MIN)
+    after = timedelta(minutes=RESTART_PAD_AFTER_MIN)
+    return any(r - before <= a <= r + after for r in restarts)
+
+
+def is_swap_slot(a: datetime, restarts: list[datetime]) -> bool:
+    return is_scheduled_swap_slot(a) or is_logged_restart(a, restarts)
+
+
 def classify(
-    gaps: list[Gap], stalls: list[datetime], pad_min: int,
+    gaps: list[Gap], stalls: list[datetime], restarts: list[datetime],
+    pad_min: int,
 ) -> tuple[list[Gap], list[Gap], list[Gap]]:
     """RF-dead checked first: a real outage landing on a swap slot must never
     be absorbed into "just the swap" (BACKLOG.md's classification rule)."""
@@ -158,7 +215,7 @@ def classify(
         a, b, _ = g
         if is_rf_dead(a, b, stalls, pad_min):
             rf.append(g)
-        elif is_swap_slot(a):
+        elif is_swap_slot(a, restarts):
             swap.append(g)
         else:
             freeze.append(g)
@@ -188,9 +245,10 @@ def main() -> int:
         sys.exit(f"freeze_baseline: all {len(raw)} archive rows were "
                  "non-per-minute (interval != 1) — nothing to analyze.")
 
+    restarts = fetch_restarts()
     span_d = (ts[-1] - ts[0]).total_seconds() / 86400
     gaps = find_gaps(ts, GAP_SEC)
-    rf, swap, freeze = classify(gaps, stalls, args.pad_min)
+    rf, swap, freeze = classify(gaps, stalls, restarts, args.pad_min)
 
     print("=" * 74)
     print("OBSERVATION WINDOW")
@@ -207,10 +265,14 @@ def main() -> int:
     print("=" * 74)
     print(f"GAPS > {GAP_SEC}s")
     print("=" * 74)
+    adhoc = sum(1 for a, _, _ in swap
+                if not is_scheduled_swap_slot(a) and is_logged_restart(a, restarts))
     print(f"  total: {len(gaps)}")
     print(f"  RF-dead (stall line within +-{args.pad_min}min): {len(rf):>3d}")
-    print(f"  arm-swap (scheduled slot, :05 past {SWAP_HOURS}): {len(swap):>3d}")
-    print(f"  FREEZE (silent, off-slot):                {len(freeze):>3d}")
+    print(f"  arm-swap (scheduled slot OR a logged restart):   {len(swap):>3d}"
+          f"   ({adhoc} off-schedule, matched via {len(restarts)} logged "
+          "rx_experiment.sh restarts)")
+    print(f"  FREEZE (silent, unscheduled, unlogged):    {len(freeze):>3d}")
     print()
 
     print("=" * 74)

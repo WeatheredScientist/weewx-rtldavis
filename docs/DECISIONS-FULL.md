@@ -4852,3 +4852,73 @@ singles out by name as needing "a documented cause, an alternative, a migration 
 and explicit approval" before touching — this entry is that record, including the two rejected
 alternatives (extend-block timing; keep the 30-min mean as the resume trigger) so a future session
 does not have to re-litigate why they were not chosen.
+
+## DEC-0088 — freeze_baseline.py's swap detection was schedule-only; ad hoc restarts were inflating the freeze rate
+
+**Status:** Accepted · **Date:** 2026-08-13 (S80) · **relates to** DEC-0085 (built the tool),
+DEC-0083 (the sibling stall-side measurement correction, same shape), DEC-0087 (ships the pause/
+resume mechanism that will keep producing exactly this class of restart going forward), DEC-0082
+(the earlier schedule-shift recovery, another ad hoc restart source)
+
+### Context
+
+S80 re-ran `ops/freeze_baseline.py` for its scheduled corroboration (BOOT S80 job 3, following
+S79's "one elevated window — re-run for a second reading" watch item). The 48h window S79 flagged
+(92.5th pct) had dropped back to unremarkable — but 24h and 36h had newly become elevated (95.9th/
+94.0th pct), a *different* window than the one being watched. Before reading that as a real
+short-window signal, the freshest event in the list was checked against other evidence: a 180s gap
+at 2026-08-13 10:24-10:27, which lines up almost exactly with this same session's own tick log
+(`10:25:01 tick: swapping A -> H`, `10:27:19 tick: arm H live and healthy`) — the S79 abort's own
+self-heal restart, not a process wedge.
+
+### What was wrong
+
+`classify()`'s swap detection (`is_swap_slot`, added DEC-0085) only recognized the four *scheduled*
+hours (`SWAP_HOURS = (0, 6, 12, 18)`, `:05` past each). It had no way to see a restart landing off
+that schedule — and `rx_experiment.sh` triggers restarts off-schedule routinely: every abort's
+baseline restore (`trip_abort()` → `restore_baseline()`), every DEC-0087 pause escalating past its
+120-minute ceiling, and every tick's own self-heal after a STOP clears (today's case). Each
+produces a real, expected archive gap while the container reboots and re-syncs — and the tool was
+silently counting every one of them as a freeze.
+
+**Verified against the log, not just inferred:** BACKLOG.md's own S79 entry noted the 2026-08-12
+"21:04 freeze traced separately: it landed while STOP was still present from the 19:55:35 abort" —
+without questioning whether the *other* freeze in that cluster, "19:55→20:02 (420s)", was itself
+that abort's footprint. Checking `logs/rx_experiment.log` directly confirms it was:
+`19:55:35 ABORT: 30-min mean reception 47% < 50% floor (arm H)` immediately followed by
+`19:55:36 RESTORING baseline snapshot` — the container restart this triggers is what produced the
+420s gap the old tool then miscounted as a second, independent freeze.
+
+### The fix
+
+`classify()` now also cross-references ground truth: every `tick: swapping` / `RESTORING baseline
+snapshot` line `rx_experiment.sh` itself logged (`logs/rx_experiment.log` +
+`logs/rx_experiment.log.campaignA`, the two files that between them cover the apparatus's full
+history). A gap counts as swap if it lands in the fixed schedule window **or** within a padded
+window of a logged restart (3 min before / 12 min after — `SWAP_SLACK_MIN`'s already-proven-
+generous forward pad, reused, not re-derived). RF-dead is still checked first, so a genuine outage
+overlapping a restart's health-check window still correctly reads as RF-dead, not swap — same
+precedence rule DEC-0085 established, now proven against the new path too (new test).
+
+### Effect on the live reading
+
+Re-run against the same 30.5-day window: **7 of 47 previously-counted "freezes" were actually ad
+hoc restarts** — freeze count 47 → 40, rate 1.54/day → 1.31/day. All four rolling windows flip to
+unremarkable: 24h 95.9th→65.0th pct, 36h 94.0th→67.3rd pct, 48h 85.4th→55.9th pct, 72h 89.0th→
+49.3rd pct. **This was not a one-off correction — it was live and about to get worse**: DEC-0087
+shipped this same session and guarantees more ad hoc restarts going forward (every pause/resume
+cycle, once the mechanism exercises for real), so S79's "elevated window" read a bug whose main
+contribution was still ahead of it, not behind it.
+
+5 new tests in `tests/test_freeze_baseline.py` (ad hoc restart detection, its pad boundaries, RF-
+dead precedence over the new path, and a positive control encoding the exact 10:24 event that
+found this — asserting it reads as freeze *without* the fix, matching the tool's actual prior
+behavior). 17/17 `test_freeze_baseline.py`, 238/238 full suite.
+
+### Why this belongs in DECISIONS
+
+Same shape as DEC-0083: a measurement claim ("elevated window") that rested on an instrument with
+an undocumented blind spot, this doc's own recurring lesson that a passing check proves nothing if
+the assertion — here, the classification — is wrong (DEC-0045). Also corrects a live BACKLOG.md
+watch item (S79's freeze-rate entry) that would otherwise have been read as a possible trend at
+the next check.
