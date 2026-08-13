@@ -18,11 +18,13 @@ dispatch, so what is under test is the deployed file, not a copy of its logic.
 
 Run:  python -m pytest tests/test_rx_experiment.py
 """
+import datetime
 import hashlib
 import os
 import re
 import subprocess
 import textwrap
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -373,3 +375,167 @@ def test_current_schedule_is_not_fully_stale():
         f"shipped SCHEDULE is fully elapsed (terminator {last_time} < now {now}) "
         f"-- regenerate it before the next launch"
     )
+
+
+# ── RF-dead pause/resume (S79) ────────────────────────────────────────────────
+# The guard's 30-min-mean reception floor used to go straight to trip_abort()
+# (sticky STOP, revert to baseline, email) for every cause. That is still
+# correct for a bad config write or an unhealthy post-swap check (tick's own
+# abort calls, untested end-to-end here same as before this change -- they need
+# a real docker + a real health_ok timing loop, out of scope for a fast unit
+# suite). RF-dead reception dips now PAUSE instead: no config/container touch,
+# auto-clears on weewx_monitor.py's own RECOVERY line, escalates to the
+# unchanged trip_abort() only past a ceiling with no recovery.
+
+BASELINE_FIXTURE = FIXTURE.replace("-gain 372", "-gain 207")
+assert BASELINE_FIXTURE != FIXTURE, "fixture must actually differ from the live config"
+
+
+def _rx_base(tmp_path):
+    """A minimal installed campaign: baseline snapshotted, arm A live for an
+    hour (clear of SETTLE_SECS), ready for `guard` to evaluate reception."""
+    conf = tmp_path / "weewx-data" / "weewx.conf"
+    conf.parent.mkdir(parents=True)
+    conf.write_text(FIXTURE)
+    baseline = tmp_path / "weewx.conf.rx-baseline"
+    baseline.write_text(BASELINE_FIXTURE)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    state = tmp_path / "rx_experiment.state"
+    state.write_text(f"A|{int(time.time()) - 3600}|2026-01-01 00:00:00\n")
+    return conf, baseline, logs
+
+
+def _call_guard(tmp_path):
+    env = dict(os.environ, RX_BASE=str(tmp_path))
+    return subprocess.run(["bash", str(SCRIPT), "guard"], capture_output=True, text=True, env=env)
+
+
+def _reception_lines(pct: int, n: int = 6) -> str:
+    now = datetime.datetime.now()
+    return "\n".join(
+        f"{(now - datetime.timedelta(minutes=5 * (n - i))).strftime('%Y-%m-%d %H:%M:%S')} "
+        f"RECEPTION: {pct}% avg over last 5 windows [LOW] (bad windows: {i})"
+        for i in range(n)
+    ) + "\n"
+
+
+def test_guard_pauses_instead_of_aborting_on_reception_floor(tmp_path):
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30))
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), "should pause, not silently do nothing"
+    assert not (tmp_path / "rx_experiment.STOP").exists(), "must not hard-abort on first trip"
+    assert conf.read_text() == FIXTURE, "a pause must not touch the live config"
+    xlog = (logs / "rx_experiment.log").read_text()
+    assert "PAUSE:" in xlog and "arm A" in xlog
+
+
+def test_guard_does_nothing_when_reception_is_healthy(tmp_path):
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log").write_text(_reception_lines(75))
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists()
+    assert not (tmp_path / "rx_experiment.STOP").exists()
+    assert conf.read_text() == FIXTURE
+
+
+def test_guard_resumes_when_monitor_logs_recovery(tmp_path):
+    conf, baseline, logs = _rx_base(tmp_path)
+    pause_started = datetime.datetime.now() - datetime.timedelta(minutes=5)
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(pause_started.timestamp())}|{pause_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    recovery_time = datetime.datetime.now() - datetime.timedelta(minutes=1)
+    (logs / "weewx_monitor.log").write_text(
+        f"{recovery_time.strftime('%Y-%m-%d %H:%M:%S')} RECEPTION RECOVERY: 62% avg after 9min\n"
+    )
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), "recovery must clear the pause"
+    assert not (tmp_path / "rx_experiment.STOP").exists()
+    assert conf.read_text() == FIXTURE, "resume must not touch config either"
+    assert "RESUME:" in (logs / "rx_experiment.log").read_text()
+
+
+def test_guard_does_not_resume_on_a_recovery_line_before_the_pause_started(tmp_path):
+    """The recovery must be NEWER than the pause, or a stale RECOVERY line from
+    a previous, already-handled episode could clear a pause that never actually
+    recovered."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    pause_started = datetime.datetime.now() - datetime.timedelta(minutes=5)
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(pause_started.timestamp())}|{pause_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    stale_recovery = pause_started - datetime.timedelta(minutes=30)
+    (logs / "weewx_monitor.log").write_text(
+        f"{stale_recovery.strftime('%Y-%m-%d %H:%M:%S')} RECEPTION RECOVERY: 62% avg after 9min\n"
+    )
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), "a stale recovery must not clear a live pause"
+
+
+def test_guard_escalates_to_full_abort_past_the_ceiling(tmp_path):
+    conf, baseline, logs = _rx_base(tmp_path)
+    pause_started = datetime.datetime.now() - datetime.timedelta(seconds=7300)  # > 7200s ceiling
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(pause_started.timestamp())}|{pause_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    (logs / "weewx_monitor.log").write_text("")  # no recovery ever logged
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 1
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), "escalation must clear the pause marker"
+    stop = tmp_path / "rx_experiment.STOP"
+    assert stop.exists(), "must fall through to the real sticky abort"
+    assert "exceeded" in stop.read_text() and "120min" in stop.read_text()
+    assert conf.read_text() == baseline.read_text(), "escalation restores baseline like any other abort"
+
+
+def test_guard_ignores_pause_when_stop_is_already_present(tmp_path):
+    """STOP still short-circuits before any pause logic runs -- a manual/escalated
+    halt is never silently reinterpreted as an ordinary pause."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (tmp_path / "rx_experiment.STOP").write_text("2026-01-01 00:00:00 some earlier abort\n")
+    (tmp_path / "rx_experiment.PAUSE").write_text(f"{int(time.time())}|2026-01-01 00:00:00\n")
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), "STOP exits before the pause branch is reached"
+
+
+# --- recovered_since() in isolation -------------------------------------------
+
+def _call_recovered_since(monlog: Path, since: str):
+    prog = (
+        f'source <(sed "/^# ── Modes/,\\$d" {SCRIPT}); '
+        f'MONLOG={monlog}; recovered_since "{since}"'
+    )
+    return subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+
+
+def test_recovered_since_true_when_recovery_line_is_after_pause_start(tmp_path):
+    mon = tmp_path / "mon.log"
+    mon.write_text("2026-08-13 01:51:33 RECEPTION RECOVERY: 62% avg after 9min\n")
+    assert _call_recovered_since(mon, "2026-08-13 01:40:00").returncode == 0
+
+
+def test_recovered_since_false_when_recovery_line_is_before_pause_start(tmp_path):
+    mon = tmp_path / "mon.log"
+    mon.write_text("2026-08-13 01:51:33 RECEPTION RECOVERY: 62% avg after 9min\n")
+    assert _call_recovered_since(mon, "2026-08-13 02:00:00").returncode != 0
+
+
+def test_recovered_since_false_when_monlog_has_no_recovery_line(tmp_path):
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 01:51:33 RECEPTION: 62% avg over last 5 windows [OK] (bad windows: 0)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
