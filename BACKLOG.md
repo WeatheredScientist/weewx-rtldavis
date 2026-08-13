@@ -57,6 +57,13 @@ trigger below is plainly satisfied.
 - **Upstream replies** — four open threads (lheijst #22/#23, issue #15, david-lutz#1).
   `docs/UPSTREAM-THREADS.md` holds the state and the etiquette.
 - **Dependabot** may open a deps PR — review it, never auto-merge.
+- **RF-dead pause/resume incident rate (DEC-0087, new S79)** — unfired, no data yet: the mechanism
+  needs to run for a while before there's anything to read. Once `PAUSE:`/`RESUME:`/escalation
+  lines accumulate in `rx_experiment.log`, they already carry the active arm in the message (no
+  cross-referencing the tick log needed) — a future analysis script, same shape as
+  `ops/stall_baseline.py`/`ops/freeze_baseline.py`, can correlate incident count and paused-minutes
+  against time-of-day and arm/settings. This is the tracking half of DEC-0087's original ask,
+  deliberately deferred: it only has something to analyze once the mechanism has been live a while.
 
 ✅ **Dropouts watch is CLOSED (DEC-0067)**, replaced by the process-freeze blocker. **Never re-open
 it on a `WINDOW: 0/21` reading**: that metric cannot tell a freeze from deafness, which was the whole

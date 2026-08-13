@@ -40,12 +40,17 @@
 #   5. The schedule SELF-TERMINATES into the production baseline. If everyone
 #      forgets this is running, it ends at prod-normal, not on an experimental arm.
 #   6. Every failure path restores the baseline snapshot and emails.
+#   7. RF-dead reception dips PAUSE rather than trip property #4's abort: no
+#      config/container touched, auto-clears on the monitor's own RECOVERY
+#      signal, escalates to the full sticky abort if it runs past a ceiling with
+#      no recovery. Scoped to the reception-floor check only -- a failed write
+#      or an unhealthy post-swap check still go straight through #4, unchanged.
 #
 # Usage:
 #   ops/rx_experiment.sh schedule     # print the block table and exit (review this)
 #   ops/rx_experiment.sh install      # snapshot baseline, write state, arm nothing
 #   ops/rx_experiment.sh tick         # scheduled entry point (every 5 min)
-#   ops/rx_experiment.sh guard        # abort tripwire check (every 5 min)
+#   ops/rx_experiment.sh guard        # reception check: pause/resume/abort (every 5 min)
 #   ops/rx_experiment.sh status       # where are we
 #   ops/rx_experiment.sh abort        # manual emergency stop -> restore baseline
 #   DRY_RUN=1 ops/rx_experiment.sh tick    # print actions, touch nothing
@@ -61,6 +66,7 @@ CONF="$BASE/weewx-data/weewx.conf"
 BASELINE_SNAP="$BASE/weewx.conf.rx-baseline"
 STATE="$BASE/rx_experiment.state"
 STOP="$BASE/rx_experiment.STOP"
+PAUSE="$BASE/rx_experiment.PAUSE"
 XLOG="$BASE/logs/rx_experiment.log"
 DATALOG="$BASE/logs/rx_experiment_data.log"
 MONLOG="$BASE/logs/weewx_monitor.log"
@@ -83,6 +89,12 @@ DRY_RUN="${DRY_RUN:-0}"
 ABORT_PCT=50
 ABORT_SAMPLES=6          # 6 x 5-min samples = 30 min
 SETTLE_SECS=600          # ignore the first 10 min after a swap (restart transient)
+PAUSE_CEILING_SECS=7200  # 120 min -- longest known RF-dead episode on record is
+                         # the 75.8-min ERR-0005 outlier (ops/stall_baseline.py);
+                         # this clears every known case with ~60% margin while
+                         # still escalating something genuinely novel (dongle
+                         # fault, disconnected antenna) to a human instead of
+                         # pausing silently forever.
 
 # ── The arms ──────────────────────────────────────────────────────────────────
 # CAMPAIGN B — LNA PHYSICALLY REMOVED (antenna -> coax -> dongle, bias tee OFF
@@ -167,39 +179,39 @@ SCHEDULE="
 2026-08-11T02:50|P372
 2026-08-11T03:35|P328
 2026-08-11T04:20|H
-2026-08-13T00:05|A
-2026-08-13T06:05|B
-2026-08-13T12:05|C
-2026-08-13T18:05|D
-2026-08-14T00:05|B
-2026-08-14T06:05|C
-2026-08-14T12:05|D
-2026-08-14T18:05|A
-2026-08-15T00:05|C
-2026-08-15T06:05|D
-2026-08-15T12:05|A
-2026-08-15T18:05|B
-2026-08-16T00:05|D
-2026-08-16T06:05|A
-2026-08-16T12:05|B
-2026-08-16T18:05|C
-2026-08-17T00:05|A
-2026-08-17T06:05|B
-2026-08-17T12:05|C
-2026-08-17T18:05|D
-2026-08-18T00:05|B
-2026-08-18T06:05|C
-2026-08-18T12:05|D
-2026-08-18T18:05|A
-2026-08-19T00:05|C
-2026-08-19T06:05|D
-2026-08-19T12:05|A
-2026-08-19T18:05|B
-2026-08-20T00:05|D
-2026-08-20T06:05|A
-2026-08-20T12:05|B
-2026-08-20T18:05|C
-2026-08-21T00:05|BASELINE
+2026-08-14T00:05|A
+2026-08-14T06:05|B
+2026-08-14T12:05|C
+2026-08-14T18:05|D
+2026-08-15T00:05|B
+2026-08-15T06:05|C
+2026-08-15T12:05|D
+2026-08-15T18:05|A
+2026-08-16T00:05|C
+2026-08-16T06:05|D
+2026-08-16T12:05|A
+2026-08-16T18:05|B
+2026-08-17T00:05|D
+2026-08-17T06:05|A
+2026-08-17T12:05|B
+2026-08-17T18:05|C
+2026-08-18T00:05|A
+2026-08-18T06:05|B
+2026-08-18T12:05|C
+2026-08-18T18:05|D
+2026-08-19T00:05|B
+2026-08-19T06:05|C
+2026-08-19T12:05|D
+2026-08-19T18:05|A
+2026-08-20T00:05|C
+2026-08-20T06:05|D
+2026-08-20T12:05|A
+2026-08-20T18:05|B
+2026-08-21T00:05|D
+2026-08-21T06:05|A
+2026-08-21T12:05|B
+2026-08-21T18:05|C
+2026-08-22T00:05|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -380,10 +392,23 @@ if os.path.exists(sys.argv[5]):
 PYEOF
 }
 
+# RF-dead pause recovery: has the monitor logged reception recovery since the
+# pause began? Independent of the 30-min mean (which is deliberately laggy) so
+# a genuine recovery is not held hostage by stale bad samples still sitting in
+# its window -- reuses weewx_monitor.py's own RECOVERY line instead of
+# inventing a second detector.
+recovered_since() {
+  local since="$1" last
+  last="$(grep -oE '^[0-9-]{10} [0-9:]{8} RECEPTION RECOVERY' "$MONLOG" 2>/dev/null \
+      | tail -1 | cut -d' ' -f1,2)"
+  [ -n "$last" ] && [[ "$last" > "$since" ]]
+}
+
 trip_abort() {
   local why="$1"
   log "ABORT: $why"
   say_dry "write STOP sentinel" || echo "$(date '+%F %T') $why" > "$STOP"
+  rm -f "$PAUSE"
   restore_baseline
   send_mail "ABORTED — campaign halted" \
 "The RX experiment aborted and prod was restored to the baseline config.
@@ -447,6 +472,7 @@ tick)
   [ "$want" = "$have" ] && exit 0                       # idempotent no-op
 
   log "tick: swapping $have -> $want"
+  [ -f "$PAUSE" ] && { log "tick: clearing stale pause (arm swap supersedes it)"; rm -f "$PAUSE"; }
   [ "$have" != "NONE" ] && harvest "$have" "$(last_swap_human)"
 
   if [ "$want" = "BASELINE" ]; then
@@ -477,6 +503,25 @@ guard)
   [ -f "$STOP" ] && exit 0                              # already halted; stay quiet
   [ -f "$STATE" ] || exit 0
   [ "$(current_arm)" = "NONE" ] && exit 0
+
+  # Already paused for reception? Check for recovery or a ceiling breach --
+  # the 30-min mean is deliberately NOT re-evaluated here (see recovered_since);
+  # this branch only asks whether the pause is over, one way or the other.
+  if [ -f "$PAUSE" ]; then
+    p_epoch="$(cut -d'|' -f1 "$PAUSE")"; p_human="$(cut -d'|' -f2- "$PAUSE")"
+    if recovered_since "$p_human"; then
+      log "RESUME: reception recovered after $(( ($(date '+%s') - p_epoch) / 60 ))min (arm $(current_arm))"
+      rm -f "$PAUSE"
+      exit 0
+    fi
+    if [ $(( $(date '+%s') - p_epoch )) -ge "$PAUSE_CEILING_SECS" ]; then
+      rm -f "$PAUSE"
+      trip_abort "RF-dead pause exceeded $((PAUSE_CEILING_SECS/60))min without recovery (arm $(current_arm))"
+      exit 1
+    fi
+    exit 0                                               # still paused, waiting
+  fi
+
   # Don't judge during the restart transient.
   swept="$(last_swap_epoch)"
   if [ "$swept" != "0" ]; then
@@ -490,8 +535,8 @@ guard)
   # never abort on absence of evidence.
   [ "${n:-0}" -lt "$ABORT_SAMPLES" ] && exit 0
   if [ "${mean:-100}" -lt "$ABORT_PCT" ]; then
-    trip_abort "30-min mean reception ${mean}% < ${ABORT_PCT}% floor (arm $(current_arm))"
-    exit 1
+    say_dry "write PAUSE sentinel" || echo "$(date '+%s')|$(date '+%Y-%m-%d %H:%M:%S')" > "$PAUSE"
+    log "PAUSE: 30-min mean reception ${mean}% < ${ABORT_PCT}% floor (arm $(current_arm))"
   fi
   ;;
 
@@ -499,6 +544,7 @@ status)
   echo "arm:        $(current_arm)   (since $(last_swap_human))"
   echo "due now:    $(due_arm)"
   echo "stopped:    $([ -f "$STOP" ] && cat "$STOP" || echo no)"
+  echo "paused:     $([ -f "$PAUSE" ] && cut -d'|' -f2- "$PAUSE" || echo no)"
   echo "installed:  $([ -f "$BASELINE_SNAP" ] && echo yes || echo no)"
   echo "samples:    $([ -f "$DATALOG" ] && wc -l < "$DATALOG" || echo 0)"
   ;;
