@@ -87,6 +87,19 @@ and aborted the H-hold; STOP cleared same session, well ahead of the next schedu
 freeze *rate* itself stayed unremarkable through the event — see `BOOT.md` S78 for the full
 reconstruction.
 
+✅ **S79: stall burst plateau CONFIRMED** — fourth flat reading. 48h/72h still exactly record-max
+6/6, 24h back to 1 episode (68th pct), no new episode since 2026-08-12 01:36. This is the
+confirmation the S76→S78 sequence was watching for; treat the burst as settled unless a fresh
+climb reopens it.
+
+**S79: freeze rate's first elevated rolling-window reading** — 48h at 92.5th pct (current 7,
+record-max 12), the other three windows (24h/36h/72h) stayed unremarkable. Driven by a same-day
+cluster: 4 freezes on 2026-08-12 alone (00:45, 19:46, 19:55, 21:04) landing in the same 48h window
+as 2 from 08-11. One window out of four — not a confirmed trend by this doc's own standard, but
+the same night as the S78 event above. The 21:04 freeze traced separately: it landed while STOP
+was still present from the 19:55:35 abort, so it folds into the S78 event above, not a new
+incident. Re-run `ops/freeze_baseline.py` next check for a corroborating second window.
+
 ✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
 — the abort was correct, DEC-0061's budget holds).
 
