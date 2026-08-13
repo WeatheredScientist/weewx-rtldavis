@@ -3,7 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-12 (S76 — **scheduled full reconciliation, tripwire fired on time**:
+**Last updated:** 2026-08-13 (S79 — Campaign B square dates corrected again for the DEC-0087
+recovery shift, 08-13→08-21 to 08-14→08-22, plus the new pause/resume mechanism noted inline).
+Prior: 2026-08-12 (S76 — **scheduled full reconciliation, tripwire fired on time**:
 freeze rate replaced with the measured DEC-0083 figures, USB-reset checkbox ticked to match a body
 that had said CLOSED since S73). Prior: 2026-08-12 (S75 — Campaign B square dates corrected for the
 DEC-0082 recovery shift, 08-12→08-20 to 08-13→08-21). Prior: 2026-08-11 (S73, two passes — GATE 2 outcomes into the
@@ -219,6 +221,18 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       schedule +24h (preserving the balanced-Latin-square design rather than accepting a
       permanently lost block); deployed and STOP cleared same session. Square now runs
       **08-13 → 08-21T00:05**, not the originally-planned 08-12 → 08-20T00:05 above.
+      **S79 (2026-08-13): the same failure shape recurred** — arm A's block 1 swapped in cleanly at
+      00:05:02 but aborted 1h50m later (01:55:02) on a lagging 30-min-mean trip, four minutes after
+      the underlying 11-min RF-dead episode had already self-recovered; STOP then sat unattended
+      for 7.5+ hours. DEC-0082's same recovery applied again: square now runs **08-14 →
+      08-22T00:05**, not the 08-13 → 08-21T00:05 above (PR #171). This time also produced a
+      structural fix rather than only a one-off recovery: **DEC-0087** changes the guard so an
+      RF-dead reception dip PAUSES (no config/container touched) and auto-resumes on the monitor's
+      own RECOVERY signal, escalating to the unchanged sticky abort only past a 120-min ceiling
+      with no recovery — scoped to RF-dead only, schedule slots staying fixed either way (PR #173).
+      Intended to make this class of unattended-multi-hour-halt rare going forward; whether it
+      actually does is itself now trackable (see BACKLOG's standing watches for the pause/resume
+      incident count once it starts accumulating data).
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,
