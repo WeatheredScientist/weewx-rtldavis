@@ -52,18 +52,27 @@ mid-campaign; revisit post-campaign with v2.0.14.
 10 stale merged feature branches swept, local + remote (`s73`–`s76`-prefixed) — don't re-file
 these as "detritus" again, they're gone.
 
+**S78 — guard abort mid-H-hold, reconstructed and cleared.** `rx_experiment.STOP` set 19:55:35
+local (`30-min mean reception 47% < 50% floor, arm H`). Cause: two back-to-back FREEZE events
+(`ops/freeze_baseline.py`: 19:46→19:50 240s, 19:55→20:02 420s) — no stall line, so it's correctly
+absent from `stall_baseline.py`'s episode list. First known freeze pair severe enough to trip the
+campaign floor (freezes were characterized as "gates nothing", DEC-0081/0083). Reception recovered
+to 67–84% within 10 min, healthy since. STOP cleared ~21:0x local (owner-approved in chat, Class
+C), well ahead of the 00:05 due time — no schedule shift needed this time, unlike DEC-0082. **Swap
+itself unverified as of this handoff.**
+
 ### ▶▶ S78 JOB LIST
 
-1. **Square health, block 1 (A-arm swap) — due `2026-08-13T00:05`.** Once past: tick log shows
-   `swapping H -> A` and `arm A live and healthy`; reception plausible. Any guard abort gets the
-   S73/S74/S75 treatment — reconstruct before clearing, never reflexively.
-2. **Keep watching the stall burst.** Re-run `ops/stall_baseline.py`. Two S77 checks now agree at
-   record-max for 48h/72h with no further growth — a third flat reading starts to look like a
-   plateau rather than an ongoing climb, but that's a call for S78/S79 to make on the numbers, not
-   here. A decay toward ~0.4/day bounds it as an episode; a sustained climb is a regime change
-   worth its own DEC.
-3. Daily square watch (cheap, ~5 min): `ops/soak_check.sh`, STOP absent, state matches schedule.
-   Also worth a glance now that it has a tool: `ops/freeze_baseline.py`, currently unremarkable.
+1. **Square health, block 1 (A-arm swap) — due `2026-08-13T00:05`.** **Unverified as of this
+   handoff** (see guard-abort note above — STOP is clear, H-hold live, should fire on schedule).
+   Once past: tick log shows `swapping H -> A` and `arm A live and healthy`; reception plausible.
+   A further guard abort gets the same treatment — reconstruct before clearing, never reflexively.
+2. **Stall burst: third flat reading (S76/S77/S78), now leans plateau** per S77's own threshold —
+   48h/72h still record-max 6/6, no further growth; 24h dropped to 1 episode (68th pct), acute rate
+   quiet ~19h. Keep re-running `ops/stall_baseline.py`; treat as bounded unless a fresh climb shows.
+3. Daily square watch: `ops/soak_check.sh` (S78: green, 16 pass/1 expected warn), STOP absent (S78:
+   true again after tonight's clear). `ops/freeze_baseline.py` (S78: 1.54/day, all windows
+   unremarkable except tonight's campaign-gating pair, above).
 
 ### Current state (S77 close)
 
