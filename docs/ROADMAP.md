@@ -3,7 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-13 (S79 — Campaign B square dates corrected again for the DEC-0087
+**Last updated:** 2026-08-13 (S80 — targeted line update, not a full pass: the P0 freeze-rate
+figures corrected per DEC-0088, 1.49/1.48/day → 1.31/day).
+Prior: 2026-08-13 (S79 — Campaign B square dates corrected again for the DEC-0087
 recovery shift, 08-13→08-21 to 08-14→08-22, plus the new pause/resume mechanism noted inline).
 Prior: 2026-08-12 (S76 — **scheduled full reconciliation, tripwire fired on time**:
 freeze rate replaced with the measured DEC-0083 figures, USB-reset checkbox ticked to match a body
@@ -290,7 +292,11 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       this line carried for ~13 sessions. **Now a re-runnable tool, not a one-off (DEC-0085,
       S77): `ops/freeze_baseline.py` reproduces these figures (1.48/day) and adds the
       rolling-window placement the original one-off never did — unremarkable across 24h–72h
-      (36.6–78.3rd pct), moving independently of the same-day record-max stall reading. *When recomputing, drop `interval != 1` rows first: the
+      (36.6–78.3rd pct), moving independently of the same-day record-max stall reading.
+      **Corrected again S80 (DEC-0088): the tool's swap detection was schedule-only and missed ad
+      hoc restarts (abort recovery, pause escalation) as a source of expected downtime, counting
+      7 of them as freezes. True rate 1.31/day, 40 events over 30.5 d, not 1.49/1.48 — all four
+      rolling windows read unremarkable.** *When recomputing, drop `interval != 1` rows first: the
       S37 backfill wrote `interval=15` rows that read as 28 phantom 900 s freezes and inflate the
       rate ~60 %.* Individual events seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59,
       08-03 23:23 (262 s, S64), and two more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;
