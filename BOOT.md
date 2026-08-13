@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S78 → S79)
+## ▶ Resume here (S79, in progress)
 
 ### What's settled (do not re-derive)
 
@@ -20,10 +20,19 @@ is a **separate repo** — don't make dashboard changes here.
 S75, schedule shifted +24h).** Arm **A** due `2026-08-13T00:05`; square runs through
 `08-21T00:05`. Still holding on **H** until then.
 
-**Stall burst (DEC-0083) now leans plateau** — three flat readings in a row (S76/S77/S78),
-48h/72h at record-max 6/6 with no further growth; 24h dropped to 1 episode (68th pct), acute rate
-quiet ~19h at S78's check. `ops/stall_baseline.py` / `ops/freeze_baseline.py` (DEC-0085) are the
-re-runnable readouts for both sides; neither number decays.
+**Stall burst (DEC-0083) plateau CONFIRMED** — fourth flat reading (S79): 48h/72h still exactly
+record-max 6/6 with no further growth, 24h back to 1 episode (68th pct). No new episode since
+2026-08-12 01:36. This is the confirmation DEC-0083 was waiting on, not another "leans" reading —
+treat the burst as settled unless a fresh climb reopens it. `ops/stall_baseline.py` /
+`ops/freeze_baseline.py` (DEC-0085) are the re-runnable readouts for both sides; neither number
+decays.
+
+**Freeze rate: first-ever "elevated" rolling-window reading (S79), 48h only.** 24h/36h/72h stayed
+unremarkable (68–90th pct); 48h read 92.5th pct (current 7, record-max 12) — driven by a same-day
+cluster (4 freezes on 08-12 alone: 00:45, 19:46, 19:55, 21:04) landing in the same 48h window as
+2 from 08-11. One window out of four, so not a confirmed trend by this repo's own "don't rest a
+verdict on one cut" standard — but it's the same night as the first campaign-gating freeze pair
+below. Re-run `ops/freeze_baseline.py` next check; a second elevated window would corroborate it.
 
 **S76/S77 shipped DEC-0084 (secret gate hole 6 closed), DEC-0085 (`ops/freeze_baseline.py`), and
 DEC-0086 (`barometer_inHg` is an unflagged WeatherLink passthrough, documented in
@@ -37,38 +46,43 @@ due time; first known freeze severe enough to gate the campaign** (freezes were 
 DEC-0081/0083). No schedule shift needed, unlike DEC-0082. Detail: CHANGELOG `[S78]`, BACKLOG
 freeze-rate watch. **Swap itself unverified as of this handoff** — S79 job 1.
 
+**S79: a third freeze (21:04–21:09, 300s) traced and reconciled — not a new incident.** It landed
+while STOP was still present from the 19:55:35 abort (tick log: refusals logged straight through
+21:15); STOP was cleared sometime after that with no separate log line. Folds into the S78 event,
+no fresh reconstruction needed. It's also the fourth freeze counted in the new 48h-elevated reading
+above.
+
 ### ▶▶ S79 JOB LIST
 
-1. **Verify the arm-A swap — due `2026-08-13T00:05` (NAS-local), still unconfirmed at S78 close.**
+1. **Verify the arm-A swap — due `2026-08-13T00:05` (NAS-local), still unconfirmed.**
    Tick log should show `swapping H -> A` and `arm A live and healthy`; reception plausible. A
    further guard abort gets the S74/S75/S78 treatment — reconstruct before clearing, never
    reflexively.
-2. **Keep watching the stall burst.** Third flat reading now (S76/S77/S78) leans plateau — a
-   fourth flat reading would confirm it, a fresh climb reopens the regime-change question. Re-run
-   `ops/stall_baseline.py`.
-3. Daily square watch (~5 min): `ops/soak_check.sh`, STOP absent, state matches schedule. Glance at
-   `ops/freeze_baseline.py` — S78 found the first freeze pair severe enough to gate the campaign,
-   so this one is worth more than a passive check until it's clear whether that recurs.
+2. Daily square watch (~5 min): `ops/soak_check.sh` — done this session (15 pass/2 warn/0 fail,
+   both warnings known/expected shapes), STOP absent, state matches schedule. Next check, glance at
+   `ops/freeze_baseline.py` for a second elevated 48h window — corroboration would upgrade this
+   from a watch item to a trend.
 
-### Current state (S78 close)
+### Current state (S79, mid-session)
 
 | Thing | State |
 |---|---|
-| Prod | **v2.0.13**, driver **ws.5**, untouched this session (repo/governance work only). `soak_check.sh`: 16 pass / 1 expected warn / 0 fail; reception 70–84% through the evening, healthy since the 20:02 recovery from S78's abort |
-| Campaign B | Holding on **H**; arm **A** due `2026-08-13T00:05`, square through `08-21T00:05`. STOP absent (S78: one abort fired and was cleared this session, well ahead of the due time) |
-| Stall rate | Third flat reading (S76/S77/S78), leans plateau. 48h/72h at record max, no further growth. Re-run `ops/stall_baseline.py`, don't eyeball `episodes.log` |
-| Freeze rate | Unremarkable rate-wise; S78 is the first known instance severe enough to gate the campaign (see above) |
+| Prod | **v2.0.13**, driver **ws.5**, untouched this session (repo/governance work only). `soak_check.sh` (S79 re-run): 15 pass / 2 warn / 0 fail — reception 62% (single reading; 70–84% through the S78 evening) and a USB-hedge-reset warning, both known/expected shapes, not new faults |
+| Campaign B | Holding on **H**; arm **A** due `2026-08-13T00:05`, square through `08-21T00:05`. STOP absent (S78's abort cleared, S79's third freeze reconciled into the same event — see above) |
+| Stall rate | **Plateau CONFIRMED (S79, 4th flat reading)** — 48h/72h at record max, no further growth. Re-run `ops/stall_baseline.py`, don't eyeball `episodes.log` |
+| Freeze rate | First-ever elevated single-window reading (48h, S79) — see above. Needs a second window to corroborate before calling it a trend |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | `dev` synced with `origin/dev` at PR #168's merge commit. `main` unchanged at `prod-baseline-20260811` — not in sync, no promotion due yet. Only `dependabot/pip/weewx-5.5.0` remains beyond `dev`/`main` |
+| Branches | `dev` synced with `origin/dev` at PR #168's merge commit; this session's write-up is on `s79-baseline-confirm`, PR pending. `main` unchanged at `prod-baseline-20260811` — not in sync, no promotion due yet. Only `dependabot/pip/weewx-5.5.0` remains beyond `dev`/`main` |
 
 ## Blockers
 
-1. **weewx process freezes — 1.54/day, median 240 s (S78 re-measurement via
+1. **weewx process freezes — 1.57/day, median 240 s (S79 re-measurement via
    `ops/freeze_baseline.py`), separate phenomenon** from DEC-0081's episodes. **S78: no longer
    "gates nothing"** — first known freeze pair severe enough to trip the campaign's own abort
-   floor (see above). Root cause still unproven (thread blocking on the bind-mounted log volume is
-   the leading hypothesis, DEC-0067/0068).
+   floor (see above). **S79: first-ever elevated 48h rolling-window reading**, same night as the
+   S78 event — one window, not yet a confirmed trend (see above). Root cause still unproven
+   (thread blocking on the bind-mounted log volume is the leading hypothesis, DEC-0067/0068).
 2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open): interference vs no-LNA
    front-end margin vs site vs condensation. **DEC-0083 adds a dated onset (08-10 23:56) the
    characterization should start from** — it coincides with the campaign-B pilot night and the
@@ -94,6 +108,6 @@ freeze-rate watch. **Swap itself unverified as of this handoff** — S79 job 1.
   `rx_experiment.STOP` needs the mutating NAS path (Class C, full-credential ssh): confirm the
   exact command in chat first, mint, re-run identical. Worked cleanly S74, S75, S78.
 
-_Last updated: 2026-08-12 (S78 close) — guard abort (freeze pair) reconstructed and cleared, first
-known instance to gate the campaign (PR #168); stall burst third flat reading leans plateau;
-arm-A swap verification carried to S79._
+_Last updated: 2026-08-12 (S79, mid-session) — stall burst plateau CONFIRMED (4th flat reading);
+freeze rate's first-ever elevated 48h window, same night as S78's campaign-gating pair; third
+freeze (21:04) reconciled into that same event. Arm-A swap verification still pending, due 00:05._
