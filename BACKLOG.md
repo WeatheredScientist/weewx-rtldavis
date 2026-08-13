@@ -74,6 +74,12 @@ re-runnable and neither number decays.** First rolling-window placement for the 
 done before, S77): unremarkable across 24h–72h (36.6–78.3rd pct), moving independently of the
 stall side's same-day record-max reading.
 
+**S78: first observed case of a freeze severe enough to gate the campaign.** Two back-to-back
+freezes (240s + 420s, 2026-08-12 19:46–20:02) tripped `rx_experiment.sh`'s 30-min reception floor
+and aborted the H-hold; STOP cleared same session, well ahead of the next scheduled swap. The
+freeze *rate* itself stayed unremarkable through the event — see `BOOT.md` S78 for the full
+reconstruction.
+
 ✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
 — the abort was correct, DEC-0061's budget holds).
 
