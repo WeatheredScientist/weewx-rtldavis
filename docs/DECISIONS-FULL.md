@@ -4740,3 +4740,115 @@ A data-provenance fact about the published contract that was true for the life o
 had never been written down anywhere — the same class of gap DEC-0053 closed for InfluxDB station
 identity and archive correction flags. Future sessions and cross-repo consumers now have a citable
 answer instead of needing to re-read `pressure_service.py` to rediscover it.
+
+## DEC-0087 — RF-dead reception dips PAUSE the campaign instead of hard-aborting
+
+**Status:** Accepted · **Date:** 2026-08-13 (S79) · **relates to** DEC-0081 (RF-dead episodes
+"gate nothing"), DEC-0082 (schedule-shift recovery, same underlying failure shape), DEC-0083/0085
+(freeze/stall measurement tooling), DEC-0014 (No-Rewrite Rule — this is a subsystem change to
+`ops/rx_experiment.sh`'s abort tripwire, the "most dangerous thing in this repo's ops/ directory"
+per that file's own test docstring)
+
+### Context
+
+The guard's 30-min-mean reception floor has, twice now, produced the exact failure DEC-0082 was
+supposed to have made rare: an ordinary, self-resolving RF-dead episode trips `trip_abort()`,
+which is STICKY by design (safety property #4) — sentinel, revert to baseline, halt until a human
+looks. When nobody is in the loop at that moment, the halt just sits.
+
+**S79's instance, fully reconstructed from `weewx_monitor.log`/`weewx.log`/`rx_experiment.log`:**
+arm A swapped in cleanly at `00:05:02` (`arm A live and healthy` at `00:08:24`), ran clean for
+1h20m at 66–79% reception, then a genuine RF-dead episode hit: `01:40:39` reception falling,
+`01:42:23` **RECEPTION ALERT** (5 consecutive windows below 60%, avg 0%), `01:48:28`
+`rtldavis process stalled` (the driver's own 150s watchdog), `01:51:33` **RECEPTION RECOVERY: 62%
+avg after 9min** — fully back to normal. The 30-min mean, still dragged down by the dead window,
+crossed the floor four minutes later anyway: `01:55:02` **ABORT: 30-min mean reception 43% < 50%
+floor (arm A)**. STOP then sat uncleared for 7.5+ hours (spanning the 06:05 swap slot too) —
+nobody was watching between the abort firing and this session's daily check picking it up. This is
+structurally the same shape as DEC-0082's S75 incident (STOP present, unattended, spanning a
+scheduled swap), just with a shorter unattended window that time (18:10 through the next
+session's 09:20 start tick) than this time (01:55 through 09:23).
+
+Two distinct phenomena currently funnel through the same `trip_abort()`: the guard's own
+reception-floor check (a pure "is RF currently bad" signal), and `tick`'s own abort calls on a
+failed config write or an unhealthy post-swap check (genuine operational failures, where "keep
+going" would be dangerous — a bug in a new arm's command string should not be silently tolerated).
+DEC-0081 already established that RF-dead episodes specifically are expected, noise-floor-driven,
+and "gate nothing" as a *rate* — the abort mechanism treating every instance as urgent-enough-for-
+sticky-halt was never matched to that finding.
+
+### The choice
+
+Three forks, each with a chosen answer (owner-confirmed in chat, S79):
+
+1. **Scope: RF-dead only, not freezes.** "Reception re-established" is not a meaningful resume
+   condition for a freeze — that is a process-wedge event with unproven root cause (BOOT.md
+   blocker 1), not a signal-loss event. `tick`'s own abort paths (write failure, unhealthy swap)
+   are untouched too, for the same reason: they are not RF-weather.
+2. **Timing model: fixed slots, reduced exposure — not extended blocks.** The Latin square is
+   pinned to `00:05/06:05/12:05/18:05` specifically to control diurnal RF drift
+   (`test_schedule_is_a_balanced_latin_square`); that is the actual experimental control DEC-0082
+   already protected once. Letting a paused block's end time slide by the paused duration would
+   re-drift the whole remaining schedule off that grid — the exact confound the fixed-slot design
+   exists to prevent. Instead, a paused arm simply accumulates fewer live minutes that rep,
+   captured automatically in `harvest()`'s existing reception-sample accounting (no code change
+   needed there) rather than compensated by moving clock boundaries. Whole-day shifts (DEC-0082's
+   mechanism) stay reserved for the rarer case of a block getting wiped out entirely, as happened
+   here (companion change, PR #171 / this session's schedule shift to 2026-08-14T00:05).
+3. **Resume trigger: reuse `weewx_monitor.py`'s own RECEPTION RECOVERY line.** It already exists,
+   is already proven (it fired at `01:51:33` today, four minutes before the mean-based abort even
+   tripped), and needs no new detector. The alternative (wait for the same 30-min mean to climb
+   back over the floor) was rejected as unnecessarily slow — stale bad samples keep dragging the
+   mean down well after the episode itself has ended, which is the exact lagging-indicator
+   behavior that let today's abort fire four minutes into an already-recovered station.
+
+Two supporting parameter choices, not put to a separate question but stated with reasoning and
+open to revision: a **120-minute escalation ceiling** (`PAUSE_CEILING_SECS`) — the longest RF-dead
+episode on record is the 75.8-minute ERR-0005 outlier (`ops/stall_baseline.py`), so 120 minutes
+clears every known case with ~60% margin while still escalating something genuinely novel (a
+dongle fault, a disconnected antenna) to a human rather than pausing silently forever; and **no
+email on an ordinary pause/resume** — DEC-0081 already called these "gates nothing," and paging
+the owner for something routine and self-resolving is alert fatigue with no offsetting benefit.
+The escalation path keeps its email, unchanged.
+
+### What shipped
+
+`ops/rx_experiment.sh`: a new non-sticky `rx_experiment.PAUSE` marker (`epoch|human` on one line),
+parallel to `STOP` but self-clearing. `guard`'s existing 30-min-mean check is unchanged as the
+*trigger* — the change is only in the *response*: a floor trip now writes `PAUSE` and logs `PAUSE:
+...` instead of calling `trip_abort()`. No config or container write happens on pause (nothing is
+being received during a true RF-dead episode regardless of which arm's gain is active, so there is
+nothing useful to revert). Every subsequent `guard` tick while paused checks, in order: has
+`recovered_since()` (new helper) found a `RECEPTION RECOVERY` line in `weewx_monitor.log` newer
+than the pause's start (→ log `RESUME`, delete the marker, done) — or has the pause run past
+`PAUSE_CEILING_SECS` with no recovery (→ delete the marker, call the unchanged `trip_abort()`,
+full sticky halt exactly as before). `tick`'s swap path clears any stale `PAUSE` marker when a
+scheduled swap fires regardless of pause state (a real swap supersedes it — the new arm gets its
+own clean settle window). `trip_abort()` itself also clears `PAUSE` defensively, so a stray marker
+can never linger past a real halt. `status` gained a `paused:` line.
+
+Documented as new safety property #7 in the script's own header (properties #1–#6 renumbered not
+at all — #7 is additive, referencing back to #4). 9 new tests in `tests/test_rx_experiment.py`:
+pause-not-abort on a fresh floor trip (and that the live config is provably untouched), a no-op
+regression on healthy reception, resume on a fresh recovery line, non-resume on a stale recovery
+line predating the pause (guards against a previous episode's recovery line clearing an unrelated
+later pause), escalation past the ceiling with the baseline actually verified restored, STOP still
+short-circuiting before any pause logic runs even with a stale PAUSE also present, and
+`recovered_since()` tested in isolation for all three cases (after/before/absent). 26/26
+`test_rx_experiment.py`, 233/233 full suite. `tick`'s stale-pause-clear line is deliberately left
+without a dedicated end-to-end test — exercising `tick`'s full swap path needs a real
+`health_ok()` timing loop and `docker`, infrastructure the existing suite has never built for any
+of `tick`'s other lines either (write failure, unhealthy swap) — consistent scope, not a new gap.
+
+Shipped as PR #173, on its own branch off `dev` (independent of PR #171's schedule shift — the two
+touch disjoint regions of the same file and are reviewable/mergeable in either order).
+
+### Why this belongs in DECISIONS
+
+Same class as DEC-0082: not a one-off, but the second occurrence of a named failure mode (STOP
+sitting unattended across a scheduled boundary) that the ops#147/#159 governance thread already
+tracks as a family-wide pattern. Also a subsystem behavior change to the abort tripwire DEC-0014
+singles out by name as needing "a documented cause, an alternative, a migration plan, a DEC entry,
+and explicit approval" before touching — this entry is that record, including the two rejected
+alternatives (extend-block timing; keep the 30-min mean as the resume trigger) so a future session
+does not have to re-litigate why they were not chosen.
