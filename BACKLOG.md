@@ -100,6 +100,18 @@ the same night as the S78 event above. The 21:04 freeze traced separately: it la
 was still present from the 19:55:35 abort, so it folds into the S78 event above, not a new
 incident. Re-run `ops/freeze_baseline.py` next check for a corroborating second window.
 
+✅ **S80: the "elevated window" was a measurement artifact, not a trend (DEC-0088)** — the flagged
+48h window itself had cooled to unremarkable on re-run, but 24h/36h had newly gone elevated
+instead. Before crediting that, the freshest event was checked against the tick log and turned out
+to be this same session's own abort-recovery restart, not a freeze — `freeze_baseline.py`'s swap
+check only knew the fixed 0/6/12/18 schedule, with no way to see an ad hoc restart landing off it.
+Fixed and verified directly against the log: the "19:55 freeze" noted just above **is** the
+19:55:35 abort's own `RESTORING baseline snapshot` restart, not a second independent event — one
+of 7 (of 47) miscounted the same way across the full window. Corrected reading: rate 1.54/day →
+1.31/day, all four rolling windows unremarkable (49th–67th pct). Closed — not a trend, and the
+tool is more accurate going forward (DEC-0087's pause/resume will keep producing this exact class
+of ad hoc restart).
+
 ✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
 — the abort was correct, DEC-0061's budget holds).
 
