@@ -119,7 +119,12 @@ echo \"mon_log_age=\$([ \"\$mlog\" -gt 0 ] && echo \$((now - mlog)) || echo -1)\
 # Both the current log and the previous one: weewx_monitor.log rotates daily at
 # 00:05, so a check run just after midnight would otherwise report 0 resets while
 # yesterday's sit one file away -- a silent window exactly when a bad night ended.
-echo \"mon_resets=\$(cat \$ML \$ML.1 2>/dev/null | grep -c 'RESET: triggering')\"
+# 'RESET: running' fires exactly once per attempt. The old pattern here,
+# 'RESET: triggering', was retired from the monitor at S67 (DEC-0074 renamed the
+# reset messages) and this counter silently read 0 ever after -- found S82 via
+# the impossible \"1 ineffective of 0 fired\" it printed. ops#147 item-6 class:
+# a consumer grep left behind by a message rename.
+echo \"mon_resets=\$(cat \$ML \$ML.1 2>/dev/null | grep -c 'RESET: running')\"
 echo \"mon_reset_bad=\$(cat \$ML \$ML.1 2>/dev/null | grep -c 'RESET ineffective')\"
 
 # --- phantom rain: the DEC-0042 signature, auto-detected ---
