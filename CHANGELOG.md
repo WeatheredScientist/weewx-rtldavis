@@ -5,6 +5,38 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S82] — 2026-08-14 — The state-machine audit: five apparatus fixes shipped (DEC-0090), monitor package filed
+
+- **The audit BOOT ordered ran (user's Fable 5 pick)** over `ops/rx_experiment.sh`'s
+  guard/tick/abort/pause/resume machine and `weewx_monitor.py`'s alerting/reset logic, hunting
+  the DEC-0088/0089 edge-vs-level class. Every finding verified against live logs and the
+  episode ledger before any fix was proposed; two clean checks recorded so they aren't re-derived.
+- **Five `rx_experiment.sh` defects fixed (PR #179, merged + deployed 10:38, sha `4438a2a3…`):**
+  resume aligned to the pause floor (the occupied [50,60) band could enter a pause it could never
+  exit → needless ceiling abort); `recovered_since()` + the guard's floor mean read the rotated
+  monitor log (rotates 00:05 — the exact swap minute); a due swap defers during an active pause
+  instead of swapping into the episode's health-check abort (BASELINE exempt — property #5);
+  the guard stands down after the BASELINE self-terminator (was armed forever between campaigns);
+  tick/guard/abort serialize behind a lock (the 08-11 02:05:03 guard/tick interleave was on
+  record, and a full-budget health_ok outlives the 5-min cron period).
+- **`soak_check.sh`'s reset counter was dead since S67** — it grepped `RESET: triggering`,
+  retired by DEC-0074's rename; the impossible "1 ineffective of 0 fired" on this morning's soak
+  was the tell. Now counts `RESET: running`.
+- **Monitor-side trio specced and deferred to #180 (tier:mid):** memory-only episode state (a
+  restart mid-episode loses the ledger row + RECOVERY edge), midnight rotation zeroing
+  `wu_bad_windows` and falsifying pending reset verdicts, and `do_reset`'s email-less exception
+  path (timed out live at 01:56:30 this morning).
+- **Ops lane:** #163 closed (MANIFEST carry settled — OPS-DEC-0101/ops#158 precedent), ops#165
+  filed (tier-sweep needs an exemption for decision-blessed carries), MANIFEST's self-measurement
+  de-drifted to ~1.1K.
+- **Morning square watch:** overnight STOP refusals were S81's already-resolved blockade tail;
+  both 01:55/01:59 stalls diagnosed RF-class (known DEC-0081/0083 phenomenon); reception 71%
+  within 1 sd of baseline. Holding on H all session; arm A due `08-15T00:05` on the new code —
+  its first live exercise.
+- 9 new tests (one renamed to the new semantics); 39/39 `test_rx_experiment.py`, 251/251 full
+  suite; ruff/mypy/secret gate clean, positive control caught both planted payloads.
+
+---
 ## [S81] — 2026-08-14 — DEC-0087's first live pause/resume exercise found a bug in itself, fixed as DEC-0089
 
 - **Arm A never swapped in overnight.** Session start (~08:15) found `current_arm()` still `H`
@@ -66,36 +98,4 @@ under [Pre-S16].
   write this session.
 
 ---
-## [S79] — 2026-08-13 — Arm-A abort reconstructed and recovered; DEC-0087 pause/resume ships
-
-- **Arm-A swap verified** (`00:05:02 swapping H -> A`, `00:08:24 arm A live and healthy`) — S78's
-  open item. Ran clean 1h20m at 66–79% reception before aborting.
-- **Stall burst (DEC-0083) plateau CONFIRMED** — fourth flat reading: 48h/72h still exactly
-  record-max 6/6, 24h back to 1 (68th pct), no new episode since 08-12 01:36. Freeze rate's 48h
-  window read elevated for the first time (92.5th pct) — one window, not yet a confirmed trend.
-- **Arm-A aborted at 01:55:02** (`30-min mean reception 43% < 50% floor`), fully reconstructed: a
-  clean ~11-min RF-dead episode (01:40–01:51, `RECEPTION ALERT` → `rtldavis process stalled` →
-  `RECEPTION RECOVERY: 62% avg after 9min`), the lagging 30-min mean tripping 4 minutes after
-  recovery. `rx_experiment.STOP` then sat uncleared 7.5+ hours, spanning the 06:05 slot.
-- **PR #171 — schedule shifted +1 day** (DEC-0082's exact recovery mechanism, applied again):
-  33 square rows, verbatim arm sequence, arm A's block 1 now at `2026-08-14T00:05`. 17/17
-  `test_rx_experiment.py` unmodified.
-- **DEC-0087 (PR #173) — RF-dead reception dips now PAUSE instead of hard-aborting.** Scoped to
-  the guard's reception-floor check only (not freezes, not tick's own write/health-check aborts).
-  A floor trip writes a non-sticky `PAUSE` marker — no config/container touched — and every guard
-  tick checks for `weewx_monitor.py`'s own `RECEPTION RECOVERY` line (-> auto-resume) or a
-  120-min ceiling with no recovery (-> escalate to the unchanged `trip_abort()`). Schedule slots
-  stay fixed either way — a paused arm just gets fewer live minutes that block, not a moved clock
-  boundary. 9 new tests. 224 → 233 tests.
-- **PR #170 — BOOT/BACKLOG write-up merged.** All three PRs (#170, #171, #173) merged to `dev`
-  same session; #171/#173 touch disjoint regions of `ops/rx_experiment.sh` and merged independently.
-- **Deployed and verified**: `ops/rx_experiment.sh` scp'd to the NAS (sha-matched), `STOP` cleared
-  (Class C, owner-approved). The very next tick self-healed `swapping A -> H` (the shifted schedule
-  correctly overrode the stale live-state A), `arm H live and healthy` at 10:27:19. `soak_check.sh`:
-  15 pass / 2 warn / 0 fail post-deploy, both warnings known/expected shapes.
-- Green gate: ruff clean, 233 tests, mypy clean on 48 files. `BACKLOG.md` gets a new standing
-  watch for the pause/resume incident-tracking half of the original ask, deliberately deferred
-  until the mechanism has real data.
-
----
-*(S73–S78 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S79 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*

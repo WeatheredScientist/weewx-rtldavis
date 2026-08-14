@@ -8,6 +8,39 @@ Nothing here is rewritten — text moves, history stays greppable.
 ---
 
 
+## [S79] — 2026-08-13 — Arm-A abort reconstructed and recovered; DEC-0087 pause/resume ships
+
+- **Arm-A swap verified** (`00:05:02 swapping H -> A`, `00:08:24 arm A live and healthy`) — S78's
+  open item. Ran clean 1h20m at 66–79% reception before aborting.
+- **Stall burst (DEC-0083) plateau CONFIRMED** — fourth flat reading: 48h/72h still exactly
+  record-max 6/6, 24h back to 1 (68th pct), no new episode since 08-12 01:36. Freeze rate's 48h
+  window read elevated for the first time (92.5th pct) — one window, not yet a confirmed trend.
+- **Arm-A aborted at 01:55:02** (`30-min mean reception 43% < 50% floor`), fully reconstructed: a
+  clean ~11-min RF-dead episode (01:40–01:51, `RECEPTION ALERT` → `rtldavis process stalled` →
+  `RECEPTION RECOVERY: 62% avg after 9min`), the lagging 30-min mean tripping 4 minutes after
+  recovery. `rx_experiment.STOP` then sat uncleared 7.5+ hours, spanning the 06:05 slot.
+- **PR #171 — schedule shifted +1 day** (DEC-0082's exact recovery mechanism, applied again):
+  33 square rows, verbatim arm sequence, arm A's block 1 now at `2026-08-14T00:05`. 17/17
+  `test_rx_experiment.py` unmodified.
+- **DEC-0087 (PR #173) — RF-dead reception dips now PAUSE instead of hard-aborting.** Scoped to
+  the guard's reception-floor check only (not freezes, not tick's own write/health-check aborts).
+  A floor trip writes a non-sticky `PAUSE` marker — no config/container touched — and every guard
+  tick checks for `weewx_monitor.py`'s own `RECEPTION RECOVERY` line (-> auto-resume) or a
+  120-min ceiling with no recovery (-> escalate to the unchanged `trip_abort()`). Schedule slots
+  stay fixed either way — a paused arm just gets fewer live minutes that block, not a moved clock
+  boundary. 9 new tests. 224 → 233 tests.
+- **PR #170 — BOOT/BACKLOG write-up merged.** All three PRs (#170, #171, #173) merged to `dev`
+  same session; #171/#173 touch disjoint regions of `ops/rx_experiment.sh` and merged independently.
+- **Deployed and verified**: `ops/rx_experiment.sh` scp'd to the NAS (sha-matched), `STOP` cleared
+  (Class C, owner-approved). The very next tick self-healed `swapping A -> H` (the shifted schedule
+  correctly overrode the stale live-state A), `arm H live and healthy` at 10:27:19. `soak_check.sh`:
+  15 pass / 2 warn / 0 fail post-deploy, both warnings known/expected shapes.
+- Green gate: ruff clean, 233 tests, mypy clean on 48 files. `BACKLOG.md` gets a new standing
+  watch for the pause/resume incident-tracking half of the original ask, deliberately deferred
+  until the mechanism has real data.
+
+---
+
 ## [S78] — 2026-08-12 — Guard abort reconstructed and cleared: first freeze pair to gate the campaign
 
 - **`rx_experiment.STOP` fired at 19:55 local** (`30-min mean reception 47% < 50% floor, arm H`).
