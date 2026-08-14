@@ -12,63 +12,58 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S81 → S82)
+## ▶ Resume here (S82 → S83)
 
 ### What's settled (do not re-derive)
 
-**Campaign B: v2.0.13/ws.5 in prod, `prod-baseline-20260811` tagged.** Square shifted a THIRD
-time (DEC-0082 S75, DEC-0087 S79, **DEC-0089 S81**) — runs **08-15 → 08-23T00:05**. Holding on
-**H**, confirmed live (state file, no STOP/PAUSE).
+**Campaign B: v2.0.13/ws.5 in prod, `prod-baseline-20260811` tagged.** Square runs
+**08-15 → 08-23T00:05** (third shift, DEC-0089). Holding on **H**; arm **A** due
+`2026-08-15T00:05`.
 
-**S81: DEC-0087's first live exercise found a real bug in its own resume logic — fixed as
-DEC-0089 (PR #177, merged).** Three short dips (2026-08-13 19:14–19:38) tripped `PAUSE` at
-`19:40:05` (arm H). Reception then read healthy continuously from `19:43` for ~2h, but
-`recovered_since()` only checked for a `RECEPTION RECOVERY` line — an ALERT→RECOVERY *edge* —
-which never fired again since reception never re-alerted. The pause rode the full 120-min
-ceiling into a needless `ABORT` at `21:45:01`; the resulting STOP blocked every tick for 10.5+
-hours, straight through arm-A's `00:05` swap, found next session start. **Fix:** also check the
-monitor's periodic `RECEPTION: NN% ... [OK]` line (a level signal) as an additive fallback to the
-edge check. 4 new tests, 242/242 full suite. Deployed with a third +24h schedule shift
-(sha-verified), STOP cleared after. **Post-clear silence is expected, not an incident** — see the
-new `due_arm()` gotcha below before reading it as a dead cron job.
+**S82: the state-machine audit ran (DEC-0090) and shipped five `rx_experiment.sh` fixes —
+PR #179 merged, deployed 10:38, sha `4438a2a3…` verified.** (1) A pause now resumes at the
+`ABORT_PCT` floor, not the monitor's `[OK]` tag — the occupied [50,60) band could enter a pause
+it could never exit; (2) `recovered_since()` + the guard's floor mean read the rotated `.1`
+monitor log (rotation is 00:05 — the exact swap minute); (3) a due swap **defers** while paused
+instead of swapping into the episode (BASELINE exempt); (4) the guard stands down once
+arm=BASELINE (was armed forever between campaigns); (5) tick/guard/abort serialize behind a
+mkdir lock (dead-holder break, 1800s hung-holder ceiling — the 08-11 02:05:03 interleave was
+live evidence). Plus: `soak_check.sh`'s reset counter had grepped a message retired at S67 and
+read 0 ever since ("1 of 0" was the tell) — fixed. 39/39 file, 251/251 suite.
 
-**Next session: the state-machine audit, on Fable 5.** Two sessions running (DEC-0088, DEC-0089)
-each found a "signal blind spot" bug in just-shipped campaign automation — a pattern, not a
-coincidence. Scope: `ops/rx_experiment.sh`'s full guard/tick/abort/pause/resume state machine +
-`weewx_monitor.py`'s alerting/reset logic, hunting for other edge-vs-level signal mismatches in
-the same class. Verify every finding against real log evidence before proposing a fix (both real
-bugs here were only confirmed that way). **User's explicit model choice: Fable 5** — judgment/
-investigative work per AGENT-ECONOMY.md, escalate off the Sonnet floor at session start.
+**Monitor-side findings went to #180 (tier:mid, spec in the issue, Sonnet-fit):** episode state
+is memory-only (a restart mid-episode silently loses the ledger row + RECOVERY edge), midnight
+weewx.log rotation zeroes `wu_bad_windows` and falsifies a pending reset verdict, and
+`do_reset`'s exception path never emails (timed out live 08-14 01:56:30).
 
-**DEC-0088 (S80, freeze_baseline.py fix) and the DEC-0083 stall-burst plateau both hold**,
-untouched this session (freeze/stall side not touched).
-
-**Dependabot PR #158 (weewx 5.4.0→5.5.0) still deliberately deferred** — no base-platform bump
+**Dependabot PR #158 (weewx 5.4.0→5.5.0) stays deliberately deferred** — no base-platform bump
 mid-campaign; revisit post-campaign (~08-23) with v2.0.14.
 
-### ▶▶ S82 JOB LIST
+### ▶▶ S83 JOB LIST
 
-1. **The state-machine audit, on Fable 5** — see above. This is the user-chosen next session;
-   run it whenever convenient, doesn't depend on job 2 below.
-2. **Verify arm-A's fresh block 1 — due `2026-08-15T00:05`.** Tick log should show
-   `swapping H -> A` and `arm A live and healthy`.
-3. **Watch for DEC-0089's fix to prove itself on a real pause**, if one occurs — first live
-   exercise of the corrected `recovered_since()`. A clean pause + auto-resume via the new
-   periodic-`[OK]` path needs nothing from you.
-4. Daily square watch (~5 min): `ops/soak_check.sh`, STOP **and PAUSE** both absent, state matches
-   schedule.
+1. **Verify arm-A's block 1 swapped in at `2026-08-15T00:05`** — tick log `swapping H -> A` +
+   `arm A live and healthy`. This is also the S82 code's first live working tick (lock +
+   deferral active): if the swap did NOT happen, check for a PAUSE first — a deferred swap is
+   now legitimate behavior, not a fault — then for STOP.
+2. Daily square watch (~5 min): `ops/soak_check.sh`; STOP **and PAUSE** both absent; state
+   matches schedule.
+3. **Watch the revised resume machinery on a real pause** — floor-resume + rotated-log reads
+   have no live exercise yet (n=0 on the S82 mechanism; BACKLOG watch updated).
+4. **#180 (monitor package)** when a session has room — mechanical once designed, deploy needs
+   the owner-run kill dance (memory + issue both carry it).
 
-### Current state (S81 close)
+### Current state (S82 close)
 
 | Thing | State |
 |---|---|
-| Prod | **v2.0.13**, driver **ws.5**, untouched — only `rx_experiment.sh` (NAS-resident) was deployed |
-| Campaign B | Holding on **H**, confirmed live; arm **A** now due `2026-08-15T00:05`, square through `08-23T00:05`. STOP and PAUSE both absent |
-| Pause/resume (DEC-0087/0089) | Exercised once (19:40:05), revealed and triggered the DEC-0089 fix — a genuinely healthy pause+auto-resume cycle still unobserved |
-| Freeze rate | DEC-0088-corrected (1.31/day), unchanged this session |
+| Prod | **v2.0.13**, driver **ws.5**, untouched — only NAS-resident `rx_experiment.sh` redeployed |
+| Campaign B | Holding on **H**; arm **A** due `2026-08-15T00:05`, square through `08-23T00:05`. STOP and PAUSE both absent |
+| rx_experiment.sh | S82 five-fix version live (sha `4438a2a3…`), owner-run scp fallback (read-guard, as S81) |
+| Freeze rate | DEC-0088-corrected (1.31/day), untouched this session |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | `dev` synced with `origin/dev` (`6079053`); PR #177 merged this session. `main` unchanged. Only `dependabot/pip/weewx-5.5.0` (#158) remains beyond `dev`/`main`, deliberately deferred |
+| Branches | `dev` = `origin/dev` (#179 + S82 close merged). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, deferred |
+| Cross-repo | ops#163 closed (OPS-DEC-0101 carry) · ops#165 filed (sweep exemption) · weewx#180 filed (monitor trio) |
 
 ## Blockers
 
@@ -90,40 +85,36 @@ mid-campaign; revisit post-campaign (~08-23) with v2.0.14.
 - **A file match proves the FILE, never the PROCESS** (DEC-0074) — liveness = startup line after
   file mtime, `/proc/<pid>/stat` field 22 vs `/proc/uptime`, new pid + old gone.
 - **`secret-read-guard.sh` matches by basename** — read `ops/wxcheck.sh` / any `weewx.conf` with
-  `readconf`. Its documented `command`-prefix escape hatch does NOT clear it (found S75). **Recurred
-  S81 on an unrelated file** — `scp`-ing `ops/rx_experiment.sh` (no secrets) tripped it too, most
-  likely on the `. nas.env` sourcing in the same command, not the destination. Fallback: hand the
-  owner the single command — **say explicitly it runs on the Mac, not the NAS** (S81: an unstated
-  location cost a round trip when run from a NAS shell instead).
+  `readconf`. Its documented `command`-prefix escape hatch does NOT clear it (found S75). **Trips
+  the rx_experiment.sh `scp` deploy every time** (S81, S82 — likely the `. nas.env` sourcing):
+  the settled fallback is handing the owner the single command — **say explicitly it runs on the
+  Mac, not the NAS**. Ran cleanly that way S82.
+- **`rx_experiment.lock` exists only during a pass's critical section** — absence at rest is
+  correct; a holder older than 1800s is broken automatically and loudly ("breaking stale lock").
+  Don't read a missing lock as "the cron is dead".
 - **Driver re-inits log `startup process`, never `Starting up weewx`** — a boot-marker grep that
   misses this reads respawns as absent.
-- **`nasctl` is read-only** — NAS mutations (clearing `rx_experiment.STOP`, deploying the script
-  itself when the guard above doesn't intervene) need the Class C mint path: confirm in chat,
-  mint, re-run identical. Worked cleanly S74/75/78/79/81.
+- **`nasctl` is read-only** — NAS mutations need the Class C mint path (confirm in chat, mint,
+  re-run identical — mint and re-run as TWO separate calls). Worked S74/75/78/79/81; S82's scp
+  fell through to the read-guard fallback above instead.
 - **`due_arm()` never returns `NONE` once the pilot block has run** — its last pilot row (`H`)
   is the implicit hold value until the square's first row, so `tick`'s silent no-op
   (`want == have`) can run for hours with zero log output — found S81, briefly read as a dead cron
   job after a schedule shift. Check `current_arm()`/state + STOP/PAUSE directly, not log silence.
 - **`rx_experiment.sh` the SCRIPT lives flat at the NAS project root**
   (`/volume1/docker/weewx-rtldavis/rx_experiment.sh`), not under an `ops/` subdirectory — but its
-  LOG output does not: `rx_experiment.log`/`.STOP`/`.PAUSE`/`.state` split across two different
-  places (`.state`/`.STOP`/`.PAUSE` flat at the project root next to the script; `.log` and
-  `_data.log` under `logs/`, alongside `weewx.log`/`weewx_monitor.log`) — confirmed S80 the hard
-  way (a `nasctl tail` on the flat path 404'd). `nasctl ls` the actual directory before assuming
-  either layout.
-- **`nasctl grep` takes `<pattern> <file>`, pattern first** — same order as real `grep`, but easy
-  to get backwards by analogy with `nasctl cat`/`tail`/`ls <path>`. Reversed, the file path gets
-  treated as the pattern and rejected as "not metacharacter-free" — a confusing error that doesn't
-  name the actual mistake. Found S80.
+  LOG output does not: `.state`/`.STOP`/`.PAUSE`/`.lock` flat at the project root next to the
+  script; `.log` and `_data.log` under `logs/`, alongside `weewx.log`/`weewx_monitor.log` —
+  confirmed S80 the hard way. `nasctl ls` the actual directory before assuming either layout.
+- **`nasctl grep` takes `<pattern> <file>`, pattern first, single-word patterns only** — reversed
+  arguments are rejected with a confusing "not metacharacter-free" error (S80); multi-word
+  patterns silently return a FALSE ZERO through the ssh quoting layer (S53). Positive-control any
+  zero count.
 - **Merging several same-session PRs in sequence: re-`git fetch` before every merge-into, not just
-  the first.** S79: fetched fresh before merging dev into PR #173's branch (correct), then reused
-  that now-stale `origin/dev` ref for a third branch's merge after #173 had since merged on
-  GitHub — silently dropped #173's doc changes, no conflict, no error, `git merge` just used what
-  it had. `git log --oneline -3 origin/dev` right before each merge-in is the check.
+  the first.** S79 silently dropped a merged PR's doc changes by reusing a stale `origin/dev` ref.
+  `git log --oneline -3 origin/dev` right before each merge-in is the check.
 
-_Last updated: 2026-08-14 (S81 close) — DEC-0087's first live pause/resume exercise found a real
-bug in its own resume logic; fixed and shipped as DEC-0089 (PR #177, merged to `dev`), deployed
-with a third +24h schedule shift, STOP cleared, live state verified healthy. Arm-A now due
-2026-08-15T00:05. Next session: the state-machine audit (guard/pause/abort/resume), user's
-explicit choice to run on Fable 5 — carried to S82 alongside arm-A verification and the daily
-square watch._
+_Last updated: 2026-08-14 (S82 close) — the state-machine audit (DEC-0090) shipped five
+rx_experiment.sh fixes + the soak reset counter, merged (PR #179) and deployed sha-verified the
+same morning, before the square's first block; monitor-side trio specced to #180; ops#163
+closed / ops#165 filed. Arm A due 2026-08-15T00:05 — the new code's first live exercise._
