@@ -4922,3 +4922,82 @@ an undocumented blind spot, this doc's own recurring lesson that a passing check
 the assertion — here, the classification — is wrong (DEC-0045). Also corrects a live BACKLOG.md
 watch item (S79's freeze-rate entry) that would otherwise have been read as a possible trend at
 the next check.
+
+## DEC-0089 — `recovered_since()`'s RECOVERY-edge check had the same lagging-signal blind spot DEC-0087 was built to fix
+
+**Status:** Accepted · **Date:** 2026-08-14 (S81) · **relates to** DEC-0087 (the mechanism this
+corrects), DEC-0082 (schedule-shift recovery, applied a third time), DEC-0045 (a passing test
+proves nothing if the assertion is wrong), DEC-0088 (same session's sibling finding, same lesson)
+
+### Context
+
+DEC-0087's own first live exercise, ~14 hours after S80 closed. Three short reception dips
+(2026-08-13 19:14, 19:22, 19:37 — each under a minute, each self-recovering) dragged the 30-min
+mean below the floor and correctly tripped `PAUSE: 30-min mean reception 48% < 50% floor (arm H)`
+at `19:40:05`. Reception then read healthy continuously from `19:43` onward — every periodic
+`RECEPTION: NN% ... [OK]` line for almost two hours straight, verified directly against
+`weewx_monitor.log.1` — yet the pause never auto-resumed. It rode the full 120-minute ceiling into
+`ABORT: RF-dead pause exceeded 120min without recovery (arm H)` at `21:45:01`, which restored
+baseline and set STOP. STOP then blocked every tick for the next 10.5+ hours, straight through
+arm-A's scheduled `00:05` swap, which never happened — discovered at session start the next
+morning (~08:15 EDT) when the campaign hadn't advanced.
+
+### What was wrong
+
+`recovered_since()` (DEC-0087) checks for a `RECEPTION RECOVERY` log line newer than the pause
+start. That line is written **only on an ALERT→RECOVERY transition edge** — the monitor logs it
+when reception climbs back over threshold *after* having been in a 5-consecutive-window ALERT
+state. Reception recovered gradually after `19:40:05` and never dropped low enough again to
+re-trigger a fresh ALERT, so no fresh RECOVERY line was ever written — confirmed by grepping the
+exact window: zero matches, despite dozens of `[OK]` readings in the same span. `recovered_since()`
+had no way to see a station that is *currently* healthy but never re-entered the specific
+state-machine transition it was watching for.
+
+**The irony, stated plainly:** DEC-0087 exists because the guard's original resume check (wait for
+the 30-min mean itself to climb back over the floor) was "unnecessarily slow — stale bad samples
+keep dragging the mean down well after the episode itself has ended." The replacement traded a
+too-slow signal for one with a different failure mode: an edge detector that can go permanently
+silent if the underlying condition never produces a fresh edge. Same lesson as DEC-0088, found the
+same session: a corrected mechanism can carry a new blind spot of its own, and the only way to
+know is to watch its first real exercise against the actual log, not assume the design reasoning
+was complete.
+
+### The fix
+
+`recovered_since()` gains a second, independent check: the monitor's own periodic classification
+line (`RECEPTION: NN% avg over last N windows [OK]`/`[LOW]`, logged roughly every 5 minutes
+**regardless of ALERT state** — a level signal, not an edge signal). If the newest such line since
+the pause start reads `[OK]`, that counts as recovered. This is additive, not a replacement: the
+original RECOVERY-edge check still runs first and can still resolve a sharp recovery faster than
+waiting for the next periodic tick; the new check only matters when the edge check would otherwise
+go silent. RF-dead pause/escalation precedence and every other DEC-0087 behavior are untouched.
+
+4 new tests: the exact incident fixture (an `[OK]` line, no RECOVERY line at all) now asserts
+**recovered**, where it previously asserted the opposite — that flipped assertion *is* the
+regression test, not a broken one; a fresh `[LOW]` line still does not resume; a stale `[OK]`
+predating the pause still does not resume (matches the existing stale-RECOVERY-line test's logic);
+a guard-level end-to-end test confirms auto-resume fires from a periodic `[OK]` line with zero
+RECOVERY lines anywhere in the log. 30/30 `test_rx_experiment.py`, 242/242 full suite.
+
+### Recovery actions taken same session
+
+- **Schedule shifted +24h a third time** (DEC-0082's mechanism, unchanged, applied again): arm A's
+  block 1 now due `2026-08-15T00:05`; square runs `08-15 → 08-23T00:05`. Dates only — arm sequence
+  and full 8/8 balance preserved verbatim, confirmed by `test_schedule_is_a_balanced_latin_square`
+  passing unmodified.
+- Fixed script + shifted schedule deployed together (one NAS write, avoids a tick landing between
+  the two and computing `due_arm()` against a schedule that's fixed but not yet shifted, or
+  vice versa).
+- STOP cleared only after the deploy verified live — clearing it first, against a stale schedule,
+  would let `due_arm()` join the square mid-grid on the very next tick, the exact hazard DEC-0066/
+  DEC-0082 already named ("do not improvise... regenerate schedule dates first").
+
+### Why this belongs in DECISIONS
+
+A second, independent subsystem-behavior defect in the file DEC-0087 itself calls "the most
+dangerous thing in this repo's ops/ directory," found and fixed the same class of way DEC-0014
+requires: documented cause, a concrete alternative considered (see above — replace vs. augment the
+edge check), tests, and this record. Also the second time in two consecutive sessions (DEC-0088,
+DEC-0089) that a just-shipped correction to this campaign's automation carried its own undiscovered
+blind spot — worth naming as a pattern, not just two unrelated bugs, when scoping the broader
+robustness review this incident also prompted (BACKLOG.md).

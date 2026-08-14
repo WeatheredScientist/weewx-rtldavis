@@ -482,6 +482,29 @@ def test_guard_does_not_resume_on_a_recovery_line_before_the_pause_started(tmp_p
     assert (tmp_path / "rx_experiment.PAUSE").exists(), "a stale recovery must not clear a live pause"
 
 
+def test_guard_resumes_from_a_periodic_ok_line_even_without_a_recovery_line(tmp_path):
+    """End-to-end version of the 2026-08-14 incident fix: reception reads
+    healthy on the monitor's ordinary periodic line, no ALERT/RECOVERY pair
+    ever fires, and the guard must still auto-resume rather than sit paused
+    until the 120-min ceiling escalates to a needless hard abort."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    pause_started = datetime.datetime.now() - datetime.timedelta(minutes=30)
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(pause_started.timestamp())}|{pause_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    ok_time = datetime.datetime.now() - datetime.timedelta(minutes=1)
+    (logs / "weewx_monitor.log").write_text(
+        f"{ok_time.strftime('%Y-%m-%d %H:%M:%S')} RECEPTION: 71% avg over last 5 windows [OK] "
+        "(bad windows: 0)\n"
+    )
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), "a healthy periodic read must resume"
+    assert not (tmp_path / "rx_experiment.STOP").exists()
+    assert "RESUME:" in (logs / "rx_experiment.log").read_text()
+
+
 def test_guard_escalates_to_full_abort_past_the_ceiling(tmp_path):
     conf, baseline, logs = _rx_base(tmp_path)
     pause_started = datetime.datetime.now() - datetime.timedelta(seconds=7300)  # > 7200s ceiling
@@ -533,9 +556,40 @@ def test_recovered_since_false_when_recovery_line_is_before_pause_start(tmp_path
     assert _call_recovered_since(mon, "2026-08-13 02:00:00").returncode != 0
 
 
-def test_recovered_since_false_when_monlog_has_no_recovery_line(tmp_path):
+def test_recovered_since_true_from_a_periodic_ok_line_even_without_a_recovery_line(tmp_path):
+    """The actual 2026-08-14 incident, reproduced: a healthy periodic [OK] read
+    with no RECOVERY line at all (because reception never dropped low enough
+    again to re-trigger a fresh ALERT) must still count as recovered -- this
+    exact fixture used to assert the opposite, which is why the pause rode the
+    full 120-min ceiling into a needless hard abort that night.
+    """
     mon = tmp_path / "mon.log"
     mon.write_text(
         "2026-08-13 01:51:33 RECEPTION: 62% avg over last 5 windows [OK] (bad windows: 0)\n"
     )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode == 0
+
+
+def test_recovered_since_false_when_periodic_line_is_low_not_ok(tmp_path):
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 01:51:33 RECEPTION: 40% avg over last 5 windows [LOW] (bad windows: 3)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
+
+
+def test_recovered_since_false_when_only_ok_line_is_stale_before_pause(tmp_path):
+    """An [OK] read that predates the pause is exactly as stale as a predating
+    RECOVERY line (already covered above) -- it must not clear a pause that
+    started after the station was already fine and has said nothing since."""
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 00:30:00 RECEPTION: 70% avg over last 5 windows [OK] (bad windows: 0)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
+
+
+def test_recovered_since_false_when_monlog_has_neither_line_type(tmp_path):
+    mon = tmp_path / "mon.log"
+    mon.write_text("")
     assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
