@@ -2,9 +2,9 @@
 
 **Always-load, tier 1.** What to pull on demand, and when — never read at session start. *"Working
 near it" means read it.* **Classes, not instances** (rule 9): a row names a set and its convention;
-instances self-describe at source. **A file in no class gets its own row.** *~1066 tok vs a 1000
+instances self-describe at source. **A file in no class gets its own row.** *~1.1K tok vs a 1000
 cap — carried, not shaved: coverage beats cap (OPS-DEC-0101), `docs/` rows are rule 9's reserved
-exception, and the sweep matches bare filenames. See ops#158.*
+exception, and the sweep matches bare filenames. See ops#158/#165.*
 
 ## Governance & history
 
