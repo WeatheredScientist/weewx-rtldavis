@@ -42,9 +42,16 @@
 #   6. Every failure path restores the baseline snapshot and emails.
 #   7. RF-dead reception dips PAUSE rather than trip property #4's abort: no
 #      config/container touched, auto-clears on the monitor's own RECOVERY
-#      signal, escalates to the full sticky abort if it runs past a ceiling with
-#      no recovery. Scoped to the reception-floor check only -- a failed write
-#      or an unhealthy post-swap check still go straight through #4, unchanged.
+#      signal OR on its periodic level reading back at/above the pause floor,
+#      escalates to the full sticky abort if it runs past a ceiling with no
+#      recovery. A due swap is DEFERRED while paused (BASELINE exempt) rather
+#      than fired into the episode. Scoped to the reception-floor check only --
+#      a failed write or an unhealthy post-swap check still go straight
+#      through #4, unchanged. The guard stands down once the campaign has
+#      self-terminated to BASELINE.
+#   8. tick/guard/abort serialize behind one lock: a slow health check cannot
+#      be interleaved with the next scheduled pass (abort proceeds even
+#      unlocked -- a human's emergency stop is never skipped).
 #
 # Usage:
 #   ops/rx_experiment.sh schedule     # print the block table and exit (review this)
@@ -95,6 +102,10 @@ PAUSE_CEILING_SECS=7200  # 120 min -- longest known RF-dead episode on record is
                          # still escalating something genuinely novel (dongle
                          # fault, disconnected antenna) to a human instead of
                          # pausing silently forever.
+LOCKDIR="$BASE/rx_experiment.lock"
+LOCK_STALE_SECS=1800     # a holder older than this is hung, not working: the
+                         # longest legitimate critical section is a full-budget
+                         # health_ok (~500s wall) plus restore/restart slack.
 
 # ── The arms ──────────────────────────────────────────────────────────────────
 # CAMPAIGN B — LNA PHYSICALLY REMOVED (antenna -> coax -> dongle, bias tee OFF
@@ -218,6 +229,39 @@ SCHEDULE="
 log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$XLOG"; }
 
 say_dry() { [ "$DRY_RUN" = "1" ] && printf 'DRY-RUN would: %s\n' "$*" && return 0; return 1; }
+
+# Concurrency guard (S82). tick and guard fire from the same 5-minute scheduler,
+# and a full-budget health_ok outlives the period (measured 383s wall on the
+# 2026-08-11 02:05 abort, and the budget has since grown to 60 tries): without
+# exclusion the next tick re-runs the SAME swap mid-verification (duplicate
+# harvest rows, container killed under the health check it is being judged by),
+# and guard judges reception mid-swap -- the guard/tick interleave is on record
+# at 02:05:03 that morning, two processes restoring/rewriting the same conf in
+# the same second. mkdir is the atomic primitive; the pid file distinguishes a
+# crashed holder (break immediately) from a live one (skip this pass); the age
+# ceiling breaks a HUNG live holder loudly, because a silently-skipped tick
+# forever would be the due_arm() silent no-op trap wearing a new hat.
+# kill -0, not /proc: tick/guard run as root on the NAS so the probe always
+# reaches its target, and the test suite runs on macOS where /proc is absent.
+acquire_lock() {
+  if mkdir "$LOCKDIR" 2>/dev/null; then echo "$$" > "$LOCKDIR/pid"; return 0; fi
+  local pid now mt age
+  pid="$(cat "$LOCKDIR/pid" 2>/dev/null)"
+  now="$(date '+%s')"; mt="$(stat -c %Y "$LOCKDIR" 2>/dev/null || echo "$now")"
+  age=$(( now - mt ))
+  if [ -z "$pid" ] && [ "$age" -lt 60 ]; then
+    return 1    # young lock, pid not written yet: a winner mid-acquisition, not debris
+  fi
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && [ "$age" -lt "$LOCK_STALE_SECS" ]; then
+    return 1                                  # live, sane-aged holder is working
+  fi
+  log "LOCK: breaking stale lock (holder pid ${pid:-unknown}, age ${age}s)"
+  rm -rf "$LOCKDIR"
+  mkdir "$LOCKDIR" 2>/dev/null || return 1    # lost the retake race to another breaker
+  echo "$$" > "$LOCKDIR/pid"
+  return 0
+}
+release_lock() { rm -rf "$LOCKDIR"; }
 
 # Independent of weewx_monitor.py on purpose: if the monitor is wedged, the abort
 # path must still be able to reach a human.
@@ -404,20 +448,37 @@ PYEOF
 # almost two hours with no fresh ALERT (so no fresh RECOVERY either), and the
 # pause rode the full 120-min ceiling into a needless hard ABORT despite the
 # station being demonstrably fine the whole time. So also check the monitor's
-# own periodic classification (`RECEPTION: NN% ... [OK]`/`[LOW]`, logged every
-# ~5min regardless of ALERT state) for its newest read since the pause started
+# own periodic classification (`RECEPTION: NN% ...`, logged every ~5min
+# regardless of ALERT state) for its newest read since the pause started
 # -- a level check as the fallback to the edge check above, not a replacement:
 # the edge check can fire faster on a sharp recovery, the level check catches
 # a gradual one that never re-alerts.
+#
+# The level check resumes at ABORT_PCT -- the same floor that pauses -- NOT at
+# the monitor's [OK] tag (S82). [OK] means >=60% (WU_RF_MIN_PCT), so requiring
+# it made the resume condition stricter than the entry condition: reception
+# sitting anywhere in [ABORT_PCT, 60) would never have triggered a pause yet
+# could not end one, and rode the ceiling into the same needless abort one band
+# lower (the band is real: 52-58% periodic reads logged 08-13/14). Entry and
+# exit sharing one floor can flap near it; each flap is two log lines and no
+# config/container touch, and a genuinely dead receiver reads ~0% and never
+# flaps, so the ceiling escalation it exists for is unaffected.
+#
+# Both greps read the rotated file too: weewx_monitor.log rotates daily at
+# 00:05 -- the exact minute of the 00/06/12/18+:05 swap slots -- and a
+# single-file read goes blind on everything pre-rotation right then. harvest()
+# and soak_check.sh both already learned this; this function had not.
 recovered_since() {
-  local since="$1" last
-  last="$(grep -oE '^[0-9-]{10} [0-9:]{8} RECEPTION RECOVERY' "$MONLOG" 2>/dev/null \
+  local since="$1" last pct
+  last="$(grep -h -oE '^[0-9-]{10} [0-9:]{8} RECEPTION RECOVERY' "$MONLOG.1" "$MONLOG" 2>/dev/null \
       | tail -1 | cut -d' ' -f1,2)"
   [ -n "$last" ] && [[ "$last" > "$since" ]] && return 0
-  last="$(grep -oE '^[0-9-]{10} [0-9:]{8} RECEPTION: [0-9]+% avg over last [0-9]+ windows \[(OK|LOW)\]' \
-      "$MONLOG" 2>/dev/null | tail -1)"
+  last="$(grep -h -oE '^[0-9-]{10} [0-9:]{8} RECEPTION: [0-9]+% avg over last [0-9]+ windows \[(OK|LOW)\]' \
+      "$MONLOG.1" "$MONLOG" 2>/dev/null | tail -1)"
   [ -n "$last" ] || return 1
-  [[ "$(cut -d' ' -f1,2 <<< "$last")" > "$since" ]] && [[ "$last" == *'[OK]'* ]]
+  [[ "$(cut -d' ' -f1,2 <<< "$last")" > "$since" ]] || return 1
+  pct="$(grep -oE 'RECEPTION: [0-9]+' <<< "$last" | grep -oE '[0-9]+$')"
+  [ -n "$pct" ] && [ "$pct" -ge "$ABORT_PCT" ]
 }
 
 trip_abort() {
@@ -481,14 +542,32 @@ install)
   ;;
 
 tick)
+  acquire_lock || { log "tick: another instance holds the lock, skipping this pass"; exit 0; }
+  trap release_lock EXIT
   [ -f "$STOP" ] && { log "tick: STOP sentinel present, refusing"; exit 1; }
   [ -f "$BASELINE_SNAP" ] || { log "tick: not installed (no baseline snapshot)"; exit 1; }
   want="$(due_arm)"; have="$(current_arm)"
   [ "$want" = "NONE" ] && { log "tick: campaign not started yet"; exit 0; }
   [ "$want" = "$have" ] && exit 0                       # idempotent no-op
 
+  # An active reception pause DEFERS a scheduled swap instead of being cleared
+  # by it (S82). The old "arm swap supersedes it" rule swapped INTO the live
+  # episode: health_ok waits on archive records, records stop during RF-dead
+  # episodes (DEC-0069/0077, measured), so the swap converted DEC-0087's soft
+  # pause straight back into the hard sticky abort it exists to avoid -- and
+  # the nightly episode cluster (ledger 08-11..14: 00:49-02:12) sits right on
+  # the 00:05/06:05 slots. due_arm() already self-heals a late swap by design;
+  # the block starts late instead of the campaign halting. The BASELINE
+  # self-terminator is exempt: ending on prod config must never wait on RF
+  # (safety property #5), and it runs no health check that an episode could
+  # fail anyway.
+  if [ -f "$PAUSE" ] && [ "$want" != "BASELINE" ]; then
+    log "tick: swap $have -> $want deferred (reception pause active)"
+    exit 0
+  fi
+  [ -f "$PAUSE" ] && { log "tick: clearing pause (BASELINE self-termination supersedes it)"; rm -f "$PAUSE"; }
+
   log "tick: swapping $have -> $want"
-  [ -f "$PAUSE" ] && { log "tick: clearing stale pause (arm swap supersedes it)"; rm -f "$PAUSE"; }
   [ "$have" != "NONE" ] && harvest "$have" "$(last_swap_human)"
 
   if [ "$want" = "BASELINE" ]; then
@@ -516,9 +595,20 @@ tick)
   ;;
 
 guard)
+  acquire_lock || { log "guard: another instance holds the lock, skipping this pass"; exit 0; }
+  trap release_lock EXIT
   [ -f "$STOP" ] && exit 0                              # already halted; stay quiet
   [ -f "$STATE" ] || exit 0
   [ "$(current_arm)" = "NONE" ] && exit 0
+  # After the BASELINE self-terminator the campaign is OVER and the guard
+  # stands down (S82). It used to stay armed forever -- the scheduler entries
+  # deliberately persist between campaigns (runbook: "idempotent no-ops"), so
+  # the first 120-min unrecovered episode AFTER a clean campaign end would
+  # have paused, ridden the ceiling, restarted prod for nothing and emailed
+  # "campaign halted" about a campaign that no longer existed. Campaign A
+  # never exposed this only because it ended in an abort whose STOP sentinel
+  # short-circuits above.
+  [ "$(current_arm)" = "BASELINE" ] && exit 0
 
   # Already paused for reception? Check for recovery or a ceiling breach --
   # the 30-min mean is deliberately NOT re-evaluated here (see recovered_since);
@@ -544,7 +634,11 @@ guard)
     age=$(( $(date '+%s') - swept ))
     [ "$age" -lt "$SETTLE_SECS" ] && exit 0
   fi
-  read -r n mean <<< "$(grep -oE 'RECEPTION: [0-9]+%' "$MONLOG" 2>/dev/null \
+  # Reads the rotated file too (S82): the monitor log rotates at 00:05, so a
+  # single-file read left the floor blind for the ~30 min after midnight it
+  # takes six fresh periodic lines to accumulate -- nightly, at the hour the
+  # episode cluster lives. Chronology holds: .1 is strictly older.
+  read -r n mean <<< "$(grep -h -oE 'RECEPTION: [0-9]+%' "$MONLOG.1" "$MONLOG" 2>/dev/null \
       | grep -oE '[0-9]+' | tail -n "$ABORT_SAMPLES" \
       | awk '{s+=$1; n++} END {print n+0, (n? int(s/n) : -1)}')"
   # Too few samples means the monitor is quiet, not that reception collapsed —
@@ -566,6 +660,15 @@ status)
   ;;
 
 abort)
+  # Manual emergency stop: takes the lock when free (serializing with a live
+  # tick/guard), but proceeds regardless -- a human reaching for the abort must
+  # never be silently skipped. Racing an in-flight tick is the pre-S82 status
+  # quo at worst, and the STOP written here halts every subsequent pass.
+  if acquire_lock; then
+    trap release_lock EXIT
+  else
+    log "abort: lock held by a live tick/guard; proceeding anyway (manual emergency path)"
+  fi
   trip_abort "manual abort requested"
   ;;
 

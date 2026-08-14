@@ -570,7 +570,10 @@ def test_recovered_since_true_from_a_periodic_ok_line_even_without_a_recovery_li
     assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode == 0
 
 
-def test_recovered_since_false_when_periodic_line_is_low_not_ok(tmp_path):
+def test_recovered_since_false_when_periodic_line_is_below_the_pause_floor(tmp_path):
+    """40% is below ABORT_PCT (50) — still paused. (S82 renamed this from
+    'low_not_ok': the resume criterion is now the pause floor itself, not the
+    monitor's [OK] tag, so what keeps this red is 40 < 50, not the [LOW] tag.)"""
     mon = tmp_path / "mon.log"
     mon.write_text(
         "2026-08-13 01:51:33 RECEPTION: 40% avg over last 5 windows [LOW] (bad windows: 3)\n"
@@ -593,3 +596,186 @@ def test_recovered_since_false_when_monlog_has_neither_line_type(tmp_path):
     mon = tmp_path / "mon.log"
     mon.write_text("")
     assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
+
+
+# ── S82 state-machine audit fixes ─────────────────────────────────────────────
+# Five defects from the S82 audit of this script's guard/tick/abort/pause/resume
+# machine, each with its regression test: (1) the resume criterion was stricter
+# than the pause floor (a [50,60) trap band that rode the ceiling into a
+# needless abort); (2) recovered_since() and the guard's floor mean read only
+# the live monitor log, which rotates at 00:05 -- the exact swap minute;
+# (3) a scheduled swap force-cleared an active pause and swapped INTO the
+# episode, converting the soft pause back into the hard abort; (4) the guard
+# never stood down after the BASELINE self-terminator; (5) tick/guard had no
+# mutual exclusion although a full-budget health_ok outlives the 5-min cron
+# period (both interleavings are in the 2026-08-11 02:05:03 log).
+
+
+def test_recovered_since_true_at_the_pause_floor_even_when_tagged_low(tmp_path):
+    """The S82 flip: 55% is >= ABORT_PCT (50), so a pause must end -- even
+    though the monitor tags anything under 60% [LOW]. Under the old
+    [OK]-required rule this exact fixture stayed paused and would have ridden
+    the 120-min ceiling into a needless abort, the DEC-0089 failure one band
+    lower. Reception genuinely sat in this band on 08-13/14 (52-58% reads)."""
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 01:51:33 RECEPTION: 55% avg over last 5 windows [LOW] (bad windows: 2)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode == 0
+
+
+def test_recovered_since_false_just_below_the_pause_floor(tmp_path):
+    """Boundary: 49 < 50 stays paused. Entry and exit share ABORT_PCT exactly."""
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 01:51:33 RECEPTION: 49% avg over last 5 windows [LOW] (bad windows: 2)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
+
+
+def test_recovered_since_reads_the_rotated_monitor_log(tmp_path):
+    """weewx_monitor.log rotates daily at 00:05 -- the exact minute of every
+    swap slot. A recovery that landed just before rotation lives in .log.1;
+    the single-file read went blind on it (harvest() and soak_check.sh both
+    already read the pair; recovered_since() had not)."""
+    mon = tmp_path / "mon.log"
+    mon.write_text("")  # fresh post-rotation file, nothing in it yet
+    (tmp_path / "mon.log.1").write_text(
+        "2026-08-13 01:51:33 RECEPTION: 71% avg over last 5 windows [OK] (bad windows: 0)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode == 0
+
+
+def test_guard_floor_reads_the_rotated_monitor_log(tmp_path):
+    """The pause floor needs ABORT_SAMPLES periodic lines; after rotation the
+    live log holds fewer than six for ~30 minutes -- nightly, at the hour the
+    episode cluster lives. Three lines either side of the rotation must still
+    add up to a quorum (pre-S82 this fixture produced no pause: n=3 < 6)."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log.1").write_text(_reception_lines(30, n=3))
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30, n=3))
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), \
+        "six low lines split across the rotation must still trip the floor"
+
+
+def _fake_date(tmp_path, env, now: str):
+    """Prepend a PATH shim so date(1) always answers NOW (the install-test
+    trick, reused). Only for paths that never reach acquire_lock's arithmetic."""
+    fake = tmp_path / "bin"
+    fake.mkdir(exist_ok=True)
+    (fake / "date").write_text(f'#!/bin/sh\necho "{now}"\n')
+    (fake / "date").chmod(0o755)
+    env["PATH"] = f"{fake}:{env['PATH']}"
+    return env
+
+
+def _call_tick(tmp_path, fake_now=None):
+    env = dict(os.environ, RX_BASE=str(tmp_path))
+    if fake_now:
+        env = _fake_date(tmp_path, env, fake_now)
+    return subprocess.run(["bash", str(SCRIPT), "tick"],
+                          capture_output=True, text=True, env=env)
+
+
+def test_tick_defers_swap_while_paused(tmp_path):
+    """A due swap must WAIT out an active reception pause, not clear it and
+    swap into the episode: health_ok waits on archive records, records stop
+    during RF-dead episodes (DEC-0069/0077), so the old supersede rule
+    converted DEC-0087's soft pause straight back into the hard sticky abort.
+    Schedule-agnostic: pins now to the last real arm row, whatever the
+    regenerated dates say."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    when, arm = _schedule_rows()[-2]          # last non-BASELINE row
+    assert arm != "BASELINE"
+    have = "H" if arm != "H" else "A"
+    (tmp_path / "rx_experiment.state").write_text(
+        f"{have}|{int(time.time()) - 3600}|2026-01-01 00:00:00\n")
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(time.time()) - 300}|2026-01-01 00:00:00\n")
+    sha_before = _sha(conf)
+
+    r = _call_tick(tmp_path, fake_now=when)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), "the pause must survive the tick"
+    assert _sha(conf) == sha_before, "a deferred swap must not touch the config"
+    state = (tmp_path / "rx_experiment.state").read_text()
+    assert state.startswith(f"{have}|"), "a deferred swap must not advance the state"
+    xlog = (logs / "rx_experiment.log").read_text()
+    assert "deferred" in xlog and f"-> {arm}" in xlog
+
+
+def test_tick_baseline_supersedes_pause(tmp_path):
+    """The self-terminator is exempt from deferral: ending on prod config must
+    never wait on RF (safety property #5), and it runs no health check an
+    episode could fail. A pause present at campaign end is cleared, baseline
+    restored, completion recorded."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(time.time()) - 300}|2026-01-01 00:00:00\n")
+
+    r = _call_tick(tmp_path, fake_now="2099-01-01T00:00")
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), \
+        "BASELINE must clear the pause, not defer to it"
+    assert conf.read_text() == baseline.read_text(), "prod must end on the baseline config"
+    assert (tmp_path / "rx_experiment.state").read_text().startswith("BASELINE|")
+    xlog = (logs / "rx_experiment.log").read_text()
+    assert "CAMPAIGN COMPLETE" in xlog
+
+
+def test_guard_stands_down_after_baseline_self_termination(tmp_path):
+    """After the campaign self-terminates the guard must go quiet. It used to
+    stay armed forever (the scheduler entries deliberately persist between
+    campaigns), so the first long episode after a clean campaign end would
+    pause, ride the ceiling, restart prod for nothing and email 'campaign
+    halted' about a campaign that no longer existed."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (tmp_path / "rx_experiment.state").write_text(
+        f"BASELINE|{int(time.time()) - 3600}|2026-01-01 00:00:00\n")
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30))  # would pause if armed
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), \
+        "no pause after self-termination -- the campaign is over"
+    assert not (tmp_path / "rx_experiment.STOP").exists()
+
+
+def test_second_instance_skips_while_lock_is_held_by_a_live_process(tmp_path):
+    """Mutual exclusion: while a live holder works, the next pass skips --
+    and must NOT dismantle the holder's lock on its way out."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30))  # would pause if it ran
+    lock = tmp_path / "rx_experiment.lock"
+    lock.mkdir()
+    (lock / "pid").write_text(str(os.getpid()))  # this test process: alive
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), "a skipped pass must do nothing"
+    assert lock.exists(), "a live holder's lock must survive the skipped pass"
+    assert "holds the lock" in (logs / "rx_experiment.log").read_text()
+
+
+def test_stale_lock_from_a_dead_holder_is_broken(tmp_path):
+    """A crashed holder must not wedge the campaign: a lock whose pid is dead
+    is broken loudly and the pass proceeds (a silently-skipped tick forever
+    would be the due_arm() no-op trap wearing a new hat)."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30))
+    proc = subprocess.Popen(["true"])
+    proc.wait()                                # reaped: pid is dead
+    lock = tmp_path / "rx_experiment.lock"
+    lock.mkdir()
+    (lock / "pid").write_text(str(proc.pid))
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    xlog = (logs / "rx_experiment.log").read_text()
+    assert "breaking stale lock" in xlog
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), \
+        "after breaking the stale lock the pass must actually run"
+    assert not lock.exists(), "the pass must release the lock it took over"
