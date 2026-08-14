@@ -14,6 +14,7 @@ Fields written (None → omitted, last known value used for sparse fields):
   barometer_inHg, rainRate_inch_per_hour
   radiation_Wpm2, UV, cloudbase_foot
   dateTime
+  barometer_fetch_epoch (#172 — passthrough, NOT cached/TTL'd; see new_loop)
 
 NOTE: Packet is explicitly normalized to US (imperial) units before extraction
 so that output key names (outTemp_F, barometer_inHg, etc.) always reflect
@@ -170,6 +171,16 @@ class LoopJsonWriter(StdService):
                                 'omitting rather than serving a stale value under a '
                                 'live timestamp; sensor may be failing or rejected'
                                 % (out_key, age, self._ttl(out_key)))
+        # barometer_fetch_epoch (#172) bypasses the cache/TTL machinery on
+        # purpose: barometer_inHg is a WeatherLink-API relay (INTERFACES §1),
+        # and this is the epoch of the last fetch that actually succeeded --
+        # its entire job is to REVEAL staleness, so omitting it for being old
+        # would recreate the exact gap it exists to close. pressure_service
+        # stamps it into every packet once one fetch has succeeded; absent
+        # before then (consumers already treat every field as possibly-missing).
+        fe = pkt.get('barometer_fetch_epoch')
+        if fe is not None:
+            data['barometer_fetch_epoch'] = fe
         data['dateTime'] = pkt.get('dateTime')
 
         for path in (self.path, self.current_path):
