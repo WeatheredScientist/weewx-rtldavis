@@ -5,6 +5,57 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S83] — 2026-08-14 — ops#169 answered: our yield is a near-no-op, the box has a nightly heavy window, and the filesystem was wrong (DEC-0092)
+
+- **Answered coffee-radar's shared-NAS I/O lease proposal (ops#169), measured rather than
+  estimated.** `binding` defaults to `archive`, so InfluxDB gets **1 record/60 s**; total weewx
+  write bandwidth is order **tens of MB/day**. Our shape is metadata-heavy (~50–85k renames/day
+  via `loop_json_writer.py`), not bandwidth-heavy — so downshifting frees almost nothing, and the
+  counterpart accepted a near-no-op courtesy side as the honest answer rather than a refusal.
+- **Drew the data-integrity line ops#169 asked us for.** InfluxDB deferral is safe — the *live*
+  config was checked, not the shipped defaults: `[[Influx]]` sets only connection keys, so prod
+  runs `stale=None` / `max_backlog=1e6` and a 30-min defer queues ~30 records against a million.
+  The **SQLite archive write is the red line** (engine waits a hardcoded 120 s then restarts;
+  `timeout=30` exists because a *reader* holding the lock 6 s once cost 5–10 min of prod), and
+  loop-JSON is contractually fixed by INTERFACES §1.
+- **Corrected a mechanism both sessions had adopted: `/volume1` and all 25 mounts under it are
+  btrfs — only DSM's `/` is ext4.** There is no `jbd2` in either tenant's data path. Caught by
+  reading `/proc/mounts` instead of inheriting the claim, *after* it was already in our draft.
+  The strategic conclusion survives (`btrfs-transaction` is equally outside ioprio); write
+  amplification is higher than the ext4 model predicts, and the mount is `relatime`, not
+  `noatime`. Attribution independently confirmed impossible — `blkio/` holds only `reset_stats`,
+  and cgroup v2's `io.*` postdates this 4.4.302+ kernel.
+- **Found the box's real schedule, which outranks the protocol.** A sibling tenant's nightly
+  maintenance runs **00:10 → ~03:00–05:10 every night** (6 nights verified, median ~4h20m), so
+  **~72% of every 00:05 campaign block** sits under a heavy-I/O window nobody knew about; two more
+  jobs fire at 00:05 itself, one of them our own `weewx-monitor` logrotate — the same minute as
+  the swap's `harvest()`, which reads that log and its rotation. Task-id → owner mapping recorded
+  in the gitignored local-infra doc; BOOT's copy is genericized (public repo).
+- **Comparability is safe, and said so explicitly:** the square is a 4×4 Latin square run twice,
+  so each arm takes the midnight slot exactly twice and a slot-level confound is absorbed by
+  construction. The exposure is midnight *swap reliability* and *variance*, both uniform across
+  arms. Job 1 gains a check-the-cluster-before-blaming-the-S82-state-machine caveat.
+- **Blocker 1 gains a testable lead** (DEC-0067/0068): split freeze timestamps by hour-of-day
+  against that nightly window. No prior analysis controlled for it because nobody knew it ran, and
+  it is testable against rotated logs we already hold. Deferred post-square — `freeze_baseline.py`
+  is itself a heavy sweep and would add load to the measurement it is explaining.
+- **Coordination landed before any protocol constant was locked, via schedule disclosure rather
+  than throttling:** the counterpart held its 12–20 h sweep past 08-22 and moved its 6-hourly job
+  off :00 to :30 before block 1. Both verified here by process evidence, not relayed — the id=11
+  output directory stamped 18:31 proves the new schedule *executed*, DEC-0074's principle applied
+  to a neighbour.
+- **Recorded but deliberately not acted on:** SQLite-on-CoW favors WAL, but the ~300% figure is
+  single-writer and ours is the multi-process shape that bit us — **DEC-0071 stays closed**.
+  `chattr +C` on the archive DB queued instead, with `noatime`, moving our logrotate off 00:05,
+  and the freeze split. Also flagged for a design pass of its own — dataless freq-hop loop packets
+  (DEC-0024) republish byte-identical loop-JSON under a refreshed timestamp.
+- Gates: pre-commit ran ruff/mypy (no code files), tests, and the secret gate — plus a **positive
+  control on `check_secrets.sh`**, which first appeared to show a seventh hole in the `_apppw`
+  rule and did not: the payload used a key name outside `_key`. With the real `GMAIL_PASS` shape
+  both quoted and unquoted forms tripped, confirming the DEC-0084 fix works. A *failing* positive
+  control needs the same scrutiny as a passing one.
+
+---
 ## [S82b] — 2026-08-14 — Owner's reframe used: #180 deployed pre-square, #172/#144 merged for v2.0.14 (DEC-0091)
 
 - **"We haven't started our campaign yet"** — the owner's reframe of the S82 close: block 1 was
@@ -78,38 +129,4 @@ under [Pre-S16].
   suite; ruff/mypy/secret gate clean, positive control caught both planted payloads.
 
 ---
-## [S81] — 2026-08-14 — DEC-0087's first live pause/resume exercise found a bug in itself, fixed as DEC-0089
-
-- **Arm A never swapped in overnight.** Session start (~08:15) found `current_arm()` still `H`
-  and a STOP sentinel blocking every tick since `21:45:01` the night before — arm A's `00:05`
-  slot never happened.
-- **Reconstructed against the actual logs, not assumed.** Three short reception dips
-  (2026-08-13 19:14–19:38) tripped DEC-0087's `PAUSE` at `19:40:05` — its first-ever live firing.
-  Reception then read healthy continuously (`[OK]`, 65–81%) from `19:43` for almost two hours,
-  but `recovered_since()` only checks for a `RECEPTION RECOVERY` log line — an ALERT→RECOVERY
-  *edge* — and none fired again because reception never dropped low enough to re-trigger a fresh
-  ALERT. The pause rode the full 120-minute ceiling into `ABORT: RF-dead pause exceeded 120min
-  without recovery` at `21:45:01`.
-- **DEC-0089 — the fix**: `recovered_since()` now also checks the monitor's ordinary periodic
-  `RECEPTION: NN% ... [OK]`/`[LOW]` line (logged every ~5min regardless of ALERT state) as an
-  additive level-signal fallback to the edge check — same lesson as DEC-0088, one session later:
-  a just-shipped correction carried its own undiscovered blind spot. 4 new tests, including the
-  exact incident fixture with its assertion flipped (the regression test). 30/30
-  `test_rx_experiment.py`, 242/242 full suite.
-- **Recovery**: schedule shifted +24h a third time (DEC-0082's unchanged mechanism) — arm A now
-  due `2026-08-15T00:05`, square `08-15 → 08-23T00:05`. Fix + shift deployed together to the NAS
-  (sha-verified) before clearing STOP, so no tick could land between a fixed-but-unshifted or
-  shifted-but-unfixed state.
-- **Post-clear log silence traced and confirmed as expected**, not a second incident: `due_arm()`
-  returns the pilot block's trailing `H` row (never a literal `NONE`) until the square's first
-  row arrives, matching `current_arm()`, so `tick`'s silent no-op runs for as long as nothing is
-  due. New `BOOT.md` gotcha.
-- Shipped as PR #177, merged to `dev` (`6079053`).
-- **Next session scoped**: a dedicated audit of `rx_experiment.sh`'s full guard/pause/abort/resume
-  state machine + `weewx_monitor.py`'s alerting/reset logic, hunting for other edge-vs-level
-  signal mismatches — two sessions running with one each (DEC-0088, DEC-0089) is a pattern worth
-  a deliberate pass. User's explicit choice: run it on **Claude Fable 5** (judgment/investigative
-  work per AGENT-ECONOMY.md).
-
----
-*(S73–S80 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S81 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
