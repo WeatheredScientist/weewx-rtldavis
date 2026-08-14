@@ -12,62 +12,63 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S80 → S81)
+## ▶ Resume here (S81 → S82)
 
 ### What's settled (do not re-derive)
 
-**Campaign B: v2.0.13/ws.5 in prod, `prod-baseline-20260811` tagged.** Square shifted twice now
-(DEC-0082 S75, DEC-0087 S79) — runs **08-14 → 08-22T00:05**. Holding on **H** until then.
-Untouched this session — S80 was a docs/ops-tooling session only, no NAS/container write.
+**Campaign B: v2.0.13/ws.5 in prod, `prod-baseline-20260811` tagged.** Square shifted a THIRD
+time (DEC-0082 S75, DEC-0087 S79, **DEC-0089 S81**) — runs **08-15 → 08-23T00:05**. Holding on
+**H**, confirmed live (state file, no STOP/PAUSE).
 
-**S80: `freeze_baseline.py`'s "elevated window" traced to a tool blind spot and fixed (DEC-0088,
-PR #175, merged).** The freeze-rate re-run (job 3) found the flagged 48h window had cooled, but
-24h/36h had newly gone elevated instead — until the freshest event (2026-08-13 10:24–10:27) turned
-out to be this session's own abort-recovery restart (`10:25:01 tick: swapping A -> H`), not a
-freeze. `classify()`'s swap check only knew the fixed 0/6/12/18 schedule; it had no way to see a
-restart landing off it (an abort's baseline restore, a DEC-0087 pause escalation, a self-heal).
-Fixed: `classify()` now also cross-references every logged `tick: swapping`/`RESTORING baseline
-snapshot` line as ground truth, padded 3min back / 12min forward. Verified directly against the
-log for one instance (the 2026-08-12 "19:55 freeze" **is** the 19:55:35 abort's own restart
-footprint, not independent). **Corrected reading: 7 of 47 "freezes" were restarts — rate 1.54/day
-→ 1.31/day, all four rolling windows flip from elevated/85–95th pct to unremarkable (49–67th
-pct).** 5 new tests, 238/238 full suite. Not a one-off: DEC-0087 guarantees more ad hoc restarts
-going forward, so this was worth fixing now, not just re-reading.
+**S81: DEC-0087's first live exercise found a real bug in its own resume logic — fixed as
+DEC-0089 (PR #177, merged).** Three short dips (2026-08-13 19:14–19:38) tripped `PAUSE` at
+`19:40:05` (arm H). Reception then read healthy continuously from `19:43` for ~2h, but
+`recovered_since()` only checked for a `RECEPTION RECOVERY` line — an ALERT→RECOVERY *edge* —
+which never fired again since reception never re-alerted. The pause rode the full 120-min
+ceiling into a needless `ABORT` at `21:45:01`; the resulting STOP blocked every tick for 10.5+
+hours, straight through arm-A's `00:05` swap, found next session start. **Fix:** also check the
+monitor's periodic `RECEPTION: NN% ... [OK]` line (a level signal) as an additive fallback to the
+edge check. 4 new tests, 242/242 full suite. Deployed with a third +24h schedule shift
+(sha-verified), STOP cleared after. **Post-clear silence is expected, not an incident** — see the
+new `due_arm()` gotcha below before reading it as a dead cron job.
 
-**DEC-0087 (PR #173, shipped S79): RF-dead reception dips PAUSE instead of hard-aborting.** Still
-**not yet exercised live** as of this handoff — checked S80 (`grep`'d for `PAUSE:`/`RESUME:`/
-`ESCALATING` in `rx_experiment.log`), zero hits, as expected.
+**Next session: the state-machine audit, on Fable 5.** Two sessions running (DEC-0088, DEC-0089)
+each found a "signal blind spot" bug in just-shipped campaign automation — a pattern, not a
+coincidence. Scope: `ops/rx_experiment.sh`'s full guard/tick/abort/pause/resume state machine +
+`weewx_monitor.py`'s alerting/reset logic, hunting for other edge-vs-level signal mismatches in
+the same class. Verify every finding against real log evidence before proposing a fix (both real
+bugs here were only confirmed that way). **User's explicit model choice: Fable 5** — judgment/
+investigative work per AGENT-ECONOMY.md, escalate off the Sonnet floor at session start.
 
-**Stall burst (DEC-0083) plateau CONFIRMED (S79, 4th flat reading)** — 48h/72h still exactly
-record-max 6/6, no further growth, 24h back to 1 (68th pct). Settled unless a fresh climb reopens
-it. Not re-touched S80 (freeze side only).
+**DEC-0088 (S80, freeze_baseline.py fix) and the DEC-0083 stall-burst plateau both hold**,
+untouched this session (freeze/stall side not touched).
 
 **Dependabot PR #158 (weewx 5.4.0→5.5.0) still deliberately deferred** — no base-platform bump
-mid-campaign; revisit post-campaign with v2.0.14.
+mid-campaign; revisit post-campaign (~08-23) with v2.0.14.
 
-### ▶▶ S81 JOB LIST
+### ▶▶ S82 JOB LIST
 
-1. **Verify arm-A's fresh block 1 — due `2026-08-14T00:05`, unconfirmed as of this handoff.**
-   Tick log should show `swapping H -> A` and `arm A live and healthy`.
-2. **Watch for DEC-0087's pause/resume to fire for real** — first live exercise of the new
-   mechanism, still unobserved after two sessions. Grep `rx_experiment.log` for
-   `PAUSE:`/`RESUME:`/`ESCALATING`; a clean pause+auto-resume needs nothing from you. An
-   escalation past 120 min gets the same reconstruct-before-clearing treatment as any STOP.
-3. Daily square watch (~5 min): `ops/soak_check.sh`, STOP **and PAUSE** both absent, state matches
+1. **The state-machine audit, on Fable 5** — see above. This is the user-chosen next session;
+   run it whenever convenient, doesn't depend on job 2 below.
+2. **Verify arm-A's fresh block 1 — due `2026-08-15T00:05`.** Tick log should show
+   `swapping H -> A` and `arm A live and healthy`.
+3. **Watch for DEC-0089's fix to prove itself on a real pause**, if one occurs — first live
+   exercise of the corrected `recovered_since()`. A clean pause + auto-resume via the new
+   periodic-`[OK]` path needs nothing from you.
+4. Daily square watch (~5 min): `ops/soak_check.sh`, STOP **and PAUSE** both absent, state matches
    schedule.
 
-### Current state (S80 close)
+### Current state (S81 close)
 
 | Thing | State |
 |---|---|
-| Prod | **v2.0.13**, driver **ws.5**, untouched this session |
-| Campaign B | Holding on **H**; arm **A** due `2026-08-14T00:05`, square through `08-22T00:05`. STOP and PAUSE both absent, confirmed live |
-| Freeze rate | **Corrected and closed (DEC-0088)**: 1.31/day (40 events/30.5d), all four rolling windows unremarkable — the S79 "elevated window" was substantially this tool bug |
-| Stall rate | Plateau CONFIRMED (S79, 4th flat reading) — settled unless a fresh climb reopens it |
-| Pause/resume (DEC-0087) | Deployed, **still not yet exercised** after two sessions — first real PAUSE/RESUME cycle still unobserved |
+| Prod | **v2.0.13**, driver **ws.5**, untouched — only `rx_experiment.sh` (NAS-resident) was deployed |
+| Campaign B | Holding on **H**, confirmed live; arm **A** now due `2026-08-15T00:05`, square through `08-23T00:05`. STOP and PAUSE both absent |
+| Pause/resume (DEC-0087/0089) | Exercised once (19:40:05), revealed and triggered the DEC-0089 fix — a genuinely healthy pause+auto-resume cycle still unobserved |
+| Freeze rate | DEC-0088-corrected (1.31/day), unchanged this session |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | `dev` synced with `origin/dev` (`8104c30`); PR #175 merged this session. `main` unchanged at `prod-baseline-20260811` — no image rebuild this session, no promotion due. Only `dependabot/pip/weewx-5.5.0` (#158) remains beyond `dev`/`main`, deliberately deferred |
+| Branches | `dev` synced with `origin/dev` (`6079053`); PR #177 merged this session. `main` unchanged. Only `dependabot/pip/weewx-5.5.0` (#158) remains beyond `dev`/`main`, deliberately deferred |
 
 ## Blockers
 
@@ -89,18 +90,20 @@ mid-campaign; revisit post-campaign with v2.0.14.
 - **A file match proves the FILE, never the PROCESS** (DEC-0074) — liveness = startup line after
   file mtime, `/proc/<pid>/stat` field 22 vs `/proc/uptime`, new pid + old gone.
 - **`secret-read-guard.sh` matches by basename** — read `ops/wxcheck.sh` / any `weewx.conf` with
-  `readconf`. **Found S75: its documented `command`-prefix escape hatch does NOT clear
-  it** — re-blocked with the identical message even with `command scp ...` already applied. Looks
-  like a bug in the guard's own matching, not filed anywhere yet. If it blocks a NAS write again:
-  try a different tool (`rsync` also got flatly denied with no mint path that session — may be a
-  separate classifier layer) or hand the single command to the owner rather than iterating on
-  `scp` variants.
+  `readconf`. Its documented `command`-prefix escape hatch does NOT clear it (found S75). **Recurred
+  S81 on an unrelated file** — `scp`-ing `ops/rx_experiment.sh` (no secrets) tripped it too, most
+  likely on the `. nas.env` sourcing in the same command, not the destination. Fallback: hand the
+  owner the single command — **say explicitly it runs on the Mac, not the NAS** (S81: an unstated
+  location cost a round trip when run from a NAS shell instead).
 - **Driver re-inits log `startup process`, never `Starting up weewx`** — a boot-marker grep that
   misses this reads respawns as absent.
-- **`nasctl` is read-only by design (mutations refused by the box)** — clearing
-  `rx_experiment.STOP` (or, per DEC-0087, deploying `rx_experiment.sh` itself) needs the mutating
-  NAS path (Class C, full-credential ssh): confirm the exact command in chat first, mint, re-run
-  identical. Worked cleanly S74, S75, S78, S79.
+- **`nasctl` is read-only** — NAS mutations (clearing `rx_experiment.STOP`, deploying the script
+  itself when the guard above doesn't intervene) need the Class C mint path: confirm in chat,
+  mint, re-run identical. Worked cleanly S74/75/78/79/81.
+- **`due_arm()` never returns `NONE` once the pilot block has run** — its last pilot row (`H`)
+  is the implicit hold value until the square's first row, so `tick`'s silent no-op
+  (`want == have`) can run for hours with zero log output — found S81, briefly read as a dead cron
+  job after a schedule shift. Check `current_arm()`/state + STOP/PAUSE directly, not log silence.
 - **`rx_experiment.sh` the SCRIPT lives flat at the NAS project root**
   (`/volume1/docker/weewx-rtldavis/rx_experiment.sh`), not under an `ops/` subdirectory — but its
   LOG output does not: `rx_experiment.log`/`.STOP`/`.PAUSE`/`.state` split across two different
@@ -118,8 +121,9 @@ mid-campaign; revisit post-campaign with v2.0.14.
   GitHub — silently dropped #173's doc changes, no conflict, no error, `git merge` just used what
   it had. `git log --oneline -3 origin/dev` right before each merge-in is the check.
 
-_Last updated: 2026-08-13 (S80 close) — freeze_baseline.py's ad hoc-restart blind spot found,
-fixed and shipped (DEC-0088, PR #175, merged to `dev`); the S79 "elevated window" traced
-substantially to this bug, corrected reading unremarkable across all four rolling windows.
-Campaign B untouched, still holding on H. Arm-A's fresh block 1 and DEC-0087's first live
-pause/resume both still pending, carried to S81._
+_Last updated: 2026-08-14 (S81 close) — DEC-0087's first live pause/resume exercise found a real
+bug in its own resume logic; fixed and shipped as DEC-0089 (PR #177, merged to `dev`), deployed
+with a third +24h schedule shift, STOP cleared, live state verified healthy. Arm-A now due
+2026-08-15T00:05. Next session: the state-machine audit (guard/pause/abort/resume), user's
+explicit choice to run on Fable 5 — carried to S82 alongside arm-A verification and the daily
+square watch._
