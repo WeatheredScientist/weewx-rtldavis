@@ -76,6 +76,13 @@ CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 # 'startup process' lines; 'droughts' counts the driver's ws.5 'DATA DROUGHT'
 # self-classification lines (receiver alive, no decodes -> RF-quiet class).
 EPISODES_LOG = os.environ.get('EPISODES_LOG', f'{BASE_DIR}/logs/episodes.log')
+# S82b (#180): the open episode, mirrored to disk. EP is module memory, and a
+# monitor restart mid-episode (every deploy is one) used to silently lose the
+# open episode: no ledger row ever written -- the pre-registered LNA datum --
+# no RECOVERY line for rx_experiment.sh's fast resume path, and the ALERT
+# email never got its RECOVERY pair. The mirror is rewritten on every episode
+# mutation and removed at close; startup restores it (episode_load).
+EPISODE_STATE = os.environ.get('EPISODE_STATE', f'{BASE_DIR}/logs/monitor_episode.state')
 DOCKER_BIN = os.environ.get('DOCKER_BIN', '/usr/local/bin/docker')
 
 # Env names whose VALUES must never reach an email or a log (DEC-0062). The
@@ -319,7 +326,13 @@ def do_reset(notify=True):
             log(f"RESET error: {result.stderr}")
             send_email(f"{STATION_NAME}: RTL-SDR reset FAILED", f"{USB_RESET_SCRIPT} failed: {result.stderr}")
     except Exception as e:
+        # S82b (#180): this path used to log only, unlike the nonzero-exit
+        # branch above which emails -- it fired live 2026-08-14 01:56:30 as a
+        # 15 s sudo timeout and told nobody. A reset that never ran is at
+        # least as alarming as one that ran and failed.
         log(f"RESET error: {e}")
+        send_email(f"{STATION_NAME}: RTL-SDR reset FAILED",
+                   f"{USB_RESET_SCRIPT} raised: {e}")
 
 # Watchdog escalation state (S62). Kept in one dict rather than threaded through
 # main()'s locals: the reset path spans both the line scanner and the poll loop,
@@ -476,6 +489,21 @@ def watchdog_not_running(wu_bad_windows):
         f"Consecutive bad reception windows: {wu_bad_windows}")
 
 
+def void_pending_verdict(reason):
+    """Void a pending reset verdict that cannot be honestly judged (S82b, #180).
+
+    The rotation-reset branch zeroes wu_bad_windows as OFFSET bookkeeping, not
+    because reception verified good -- letting watchdog_poll() judge a pending
+    reset by that zeroed counter logged 'verified effective' at midnight,
+    mislabeled the verify-effective forensics capture (the control evidence
+    DEC-0075/0081-class analysis depends on), and silently refreshed the
+    RESET_MAX_TRIES hedge budget mid-episode. Voided loudly instead;
+    tries/escalated stay exactly as they were."""
+    if WD['check_at']:
+        WD['check_at'] = 0.0
+        log(f"RESET verdict void: {reason}")
+
+
 def watchdog_poll(wu_bad_windows, now):
     """Judge whether the pending reset worked. Called once per poll."""
     if not WD['check_at'] or now < WD['check_at']:
@@ -517,20 +545,69 @@ EP = {
 }
 
 
+def episode_persist():
+    """Mirror the open episode to EPISODE_STATE (S82b, #180).
+
+    No open episode -> the mirror is removed. Telemetry must never take the
+    watchdog down (same rule as the ledger itself), so every failure here is
+    logged and swallowed."""
+    import json
+    try:
+        if not EP['onset']:
+            if os.path.exists(EPISODE_STATE):
+                os.remove(EPISODE_STATE)
+            return
+        tmp = EPISODE_STATE + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(EP, f)
+        os.replace(tmp, EPISODE_STATE)
+    except OSError as e:
+        log(f"EPISODE state persist failed: {e}")
+
+
+def episode_load():
+    """Restore an open episode left by a previous monitor process (startup).
+    Returns True when one was restored. Any defect in the file is logged and
+    ignored -- a corrupt mirror must not stop the monitor."""
+    import json
+    try:
+        if not os.path.exists(EPISODE_STATE):
+            return False
+        with open(EPISODE_STATE) as f:
+            saved = json.load(f)
+        if not saved.get('onset'):
+            return False
+        EP.update({k: saved[k] for k in EP if k in saved})
+        log("EPISODE restored from state file: open since %s "
+            "(monitor restarted mid-episode)" % datetime.fromtimestamp(
+                EP['onset']).strftime('%Y-%m-%d %H:%M:%S'))
+        return True
+    except Exception as e:
+        log(f"EPISODE state load failed (ignored): {e}")
+        return False
+
+
 def episode_open(avg, now):
     EP['onset'] = now
     EP['stalls'] = EP['resets'] = EP['respawns'] = EP['droughts'] = 0
     EP['worst_avg'] = avg
     EP['last_cmd'] = ''
+    episode_persist()
 
 
 def episode_note_avg(avg):
     if EP['onset'] and avg < EP['worst_avg']:
         EP['worst_avg'] = avg
+        episode_persist()
 
 
 def episode_close(now):
-    """Write the ledger row and clear. No-op if no episode is open."""
+    """Write the ledger row and clear. No-op if no episode is open.
+
+    Order is row-first, then clear-and-remove-the-mirror: a crash between the
+    two can at worst duplicate an adjacent ledger row on the next recovery,
+    never lose one -- the mirror exists precisely because losing rows was the
+    failure mode (S82b, #180)."""
     if not EP['onset']:
         return
     row = "%s|%s|%d|%d|%d|%d|%d|%.0f|%s\n" % (
@@ -545,6 +622,7 @@ def episode_close(now):
     except OSError as e:
         log(f"EPISODE ledger write failed: {e}")
     EP['onset'] = 0.0
+    episode_persist()
 
 
 def wu_pct(count):
@@ -794,6 +872,15 @@ def main():
     wu_hourly_buckets = {}
     wu_report_start   = period_floor(time.time(), RF_REPORT_INTERVAL_HOURS)
 
+    # S82b (#180): pick up an episode a previous monitor process left open.
+    # wu_in_alert is re-derived from the restored onset (the two are the same
+    # fact: an alert IS an open episode); the repeat clock restarts now so a
+    # pre-restart REPEAT cannot double-send.
+    if episode_load():
+        wu_in_alert       = True
+        wu_alert_sent_at  = EP['onset']
+        wu_repeat_sent_at = time.time()
+
     log("Monitor started")
     send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
 
@@ -807,6 +894,7 @@ def main():
         cur = get_log_size()
         if cur < last_offset:
             log(f"Log reset detected (was {last_offset} bytes, now {cur}) - container restarted")
+            void_pending_verdict("log rotated before the verification window closed")
             last_offset = 0
             for svc in last_seen:
                 last_seen[svc] = 0.0
@@ -831,6 +919,7 @@ def main():
                     watchdog_stall(wu_bad_windows)
                     if WD['last_reset'] != _reset_before:
                         EP['resets'] += 1
+                    episode_persist()
                 elif 'rtldavis process is not running' in line:
                     # A DIFFERENT fault from a stall -- the binary dies on
                     # startup. Never reset here (S62, ERR-0005).
@@ -843,10 +932,12 @@ def main():
                     m = re.search(r"startup process '([^']*)'", line)
                     if m:
                         EP['last_cmd'] = m.group(1)
+                    episode_persist()
                 elif 'DATA DROUGHT' in line:
                     # Driver ws.5 self-classification: receiver emitting,
                     # nothing decoding -- the RF-quiet class (S73).
                     EP['droughts'] += 1
+                    episode_persist()
                 g = parse_rain_glitch(line)
                 if g and now - last_glitch_alert > RAIN_GLITCH_CD:
                     ts, detail, phantom_in = g
