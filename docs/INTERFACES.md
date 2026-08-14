@@ -1,7 +1,7 @@
 # Interfaces — weewx-rtldavis
 
 **Status:** Source of truth (the contract consumers depend on)
-**Last updated:** 2026-08-12 (S77)
+**Last updated:** 2026-08-14 (S82b)
 
 This repo's real product is **data**, not weewx internals. Two published surfaces make up the
 contract; changing either can break downstream consumers (currently: the Eagle Hunt dashboard, dev
@@ -45,9 +45,20 @@ headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's
   it relays that value as-is. Unlike `rain`/`rainRate`, **no `_qc` flag marks this** (§2's mechanism
   covers only those two fields today), so a consumer cannot tell from the packet alone that
   `barometer_inHg`'s correction happened entirely upstream, unlike every RF-derived field beside it.
-  The same fetched value also backfills the internal `pressure` and `altimeter` loop-packet keys when
-  those are null (`pressure_service.py:92-97`) — neither is part of this published contract, but
-  they do not mean their usual distinct things here.
+- **`barometer_fetch_epoch` — the relay's own freshness (S82b, #172; lands in prod with v2.0.14).**
+  The Unix epoch of the last WeatherLink fetch that actually *succeeded* (a failed or empty poll
+  does not advance it). It bypasses the TTL machinery on purpose — its job is to *reveal*
+  staleness, so it is published verbatim however old it is, and omitted only when no fetch has
+  ever succeeded this run. Consumers wanting a staleness gate compare it to `dateTime` (both are
+  epoch seconds); `barometer_inHg` itself still expires from the feed at 2 × `fetch_interval` as
+  above.
+- **`pressure` and `altimeter` are honest nulls, not backfilled (S82b, #144; lands with v2.0.14).**
+  The fetched sea-level value used to also backfill the internal `pressure` (station) and
+  `altimeter` loop-packet keys — different quantities, so the archive's station-pressure column
+  carried sea-level numbers at this site's elevation (hlf#302). Per DEC-0006 they now stay null
+  (the ISS never transmits them), and the **archive columns go NULL from the v2.0.14 deploy
+  onward**. Neither key was ever part of this published loop-JSON contract; archive readers
+  (hyperlocal-forecast) get honest absence instead of a mislabeled value.
 
   Past its TTL a field is **omitted rather than frozen**, and the writer logs a `WARNING` naming the
   field. Before S48 the cache was unbounded, so a dead or SensorQC-rejected sensor emitted its last
@@ -74,6 +85,7 @@ headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's
 | `UV` | UV | index |
 | `cloudbase_foot` | cloudbase | ft |
 | `dateTime` | dateTime | Unix epoch (s) |
+| `barometer_fetch_epoch` | (pressure_service, S82b) | Unix epoch (s) — optional; no TTL |
 
 **Live example** (a sparse packet — gust/dewpoint/barometer/cloudbase served from cache, omitted here
 only because not yet seen this run):
