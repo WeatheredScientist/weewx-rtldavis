@@ -5175,3 +5175,114 @@ lands. That is how #183 went in.
 `test_parse_raw_channel`'s StdService stub has no `bind`, so the new pressure tests reuse whatever
 stub is present but guarantee `bind` exists. The #144 **offset quantification** (archive vs METAR
 MSLP) is the batch's one open sliver — method written into #144, read-only, campaign-safe.
+
+## DEC-0092 — Answering the shared-NAS I/O lease proposal (ops#169): our yield is a near-no-op, the box's real schedule is a nightly heavy window, and the filesystem everyone was reasoning from was wrong
+
+**Date:** 2026-08-14 (S83) · **Status:** Accepted
+**Relates to:** DEC-0068 (coffee-radar / freeze correlation, which this extends with a second and
+much larger candidate) · DEC-0067 (the freeze mechanism this hands a testable split) · DEC-0074
+(process-not-file verification, applied to a neighbour's schedule change) · DEC-0071 (WAL —
+**informed, deliberately NOT reopened**) · DEC-0024 (the loop-packet inflation this re-reads as a
+write-amplification fact) · DEC-0059/0064 (campaign integrity, the constraint that drove the
+coordination)
+
+**The ask.** coffee-radar filed ops#169 proposing an advisory disk-I/O lease on the shared NAS: a
+heavy job atomically creates a lease `{tenant, job, ttl, renew_at}`, cooperating tenants poll it
+and voluntarily downshift while a foreign lease is live. weewx was asked first, as the box's
+continuous writer, on the reasoning that S185's measured contention correlated with continuous
+weather ingestion. The protocol is advisory because per-container I/O attribution is impossible
+on this kernel; the format and constants were deliberately left unlocked pending our answer.
+
+**The answer: yes to a client, and the honest caveat that our yield frees almost nothing.**
+Measured rather than estimated before replying. `binding` defaults to `archive`, so InfluxDB
+receives **1 record per 60 s**, not loop packets. Total weewx-originated write bandwidth is order
+**tens of MB/day** — a single sweep moves more in a minute. Our shape is the inverse of a sweep:
+high-frequency, tiny, and metadata-heavy (~50–85k tmp-write + rename cycles/day via
+`loop_json_writer.py`, near-zero data). The counterpart accepted this and recorded that a
+near-no-op weewx courtesy side is an acceptable answer to ops#169 — the protocol is advisory
+precisely so a tenant can answer that honestly rather than ship a client that looks cooperative
+and moves nothing.
+
+**The data-integrity line, which is what ops#169 actually asked us to draw.** Deferring InfluxDB
+posts is safe: the **live** config was checked (not the shipped defaults) and `[[Influx]]` sets
+only connection keys, so prod runs `stale = None` and `max_backlog = 1,000,000` — a 30-minute
+deferral queues ~30 records against a million-record cap, posting late and losing none. The
+**SQLite archive write is the red line**: weewx's engine waits a hardcoded 120 s on a busy
+database and then restarts, and our non-stock `timeout = 30` exists because a *reader* holding
+the lock six seconds once cost a 5–10 minute outage. weewx will never delay an archive commit
+for a lease; the failure mode there is an outage, not late data. The loop-JSON surface is
+likewise undeferrable — INTERFACES §1 publishes its ~2.5 s cadence and the dashboard reads it,
+so our one high-volume write is contractually fixed.
+
+**The filesystem correction, and why it is in a DEC rather than a comment.** Both sessions had
+converged on a mechanism — that our rename load costs ext4 journal commits, that `jbd2` runs in
+its own kernel context outside any ioprio, and therefore that the pressure is reachable by
+neither protocol lever. The conclusion is right; the mechanism was wrong. **`/proc/mounts` shows
+`/volume1` and all 25 mounts beneath it are btrfs** (`cachedev_0`, `space_cache=v2`,
+`metadata_ratio=50`, `auto_reclaim_space`, `ssd`, `relatime`); **only DSM's `/` on `/dev/md0` is
+ext4**, and neither tenant writes application data there. There is no `jbd2` in either party's
+data path. What replaces it is copy-on-write B-tree churn serialized through
+`btrfs-transaction` — equally outside ioprio, so the strategic conclusion survives intact, but
+write amplification is higher than the ext4 model predicts and the mount is `relatime`, not
+`noatime`, so read sweeps generate real allocations. This was caught only because the claim was
+verified instead of inherited, after it had already been adopted into our draft.
+
+**Attribution is genuinely impossible, and now the reason is recorded.**
+`/sys/fs/cgroup/blkio/` exists but holds only `blkio.reset_stats` plus cgroup boilerplate — no
+`io_service_bytes`, no `throttle.*`, no `weight`. `CONFIG_BLK_CGROUP` is on; accounting and
+throttling are not. The obvious escape hatch is also closed for a reason worth stating once so it
+is not re-opened: the kernel is **4.4.302+**, and cgroup v2's `io.max`/`io.latency`/`io.cost`
+landed in 4.10/4.19/5.4. The feature postdates the kernel; this is not a Synology configuration
+choice that can be argued with. Verified independently by both tenants.
+
+**The finding that outranks the protocol: the box has a nightly heavy window, and our midnight
+block sits in it.** Resolving the DSM task ids in `/etc/crontab` (method:
+`/volume1/docker/TaskSchedulerOutput/synoscheduler/<id>/<epoch>/`, world-readable, no root)
+turned up three daily jobs firing inside the 00:05 swap window — and one of them is not small.
+A sibling tenant's nightly maintenance (id=15) runs **00:10 → ~03:00–05:10 every night**, six
+nights verified, median ~4h20m. Campaign blocks are 6 h, so **~72% of every 00:05 block runs
+under a heavy-I/O window that no prior analysis knew about.** Two more fire at 00:05 itself:
+our own `weewx-monitor` logrotate (id=2 — the same minute as the swap's `harvest()`, which reads
+that very log and its rotation) and another tenant's capture job (id=9). Identities are recorded
+in the gitignored local-infra doc; the repo copy is genericized because this repo is public.
+
+**Comparability is safe; reliability and variance are the exposure.** The square is a 4×4 Latin
+square run twice, so each arm occupies the midnight slot exactly twice and a slot-level confound
+is absorbed by construction — this is what the design is for, and it holds without changes.
+What the cluster threatens is (a) the midnight *swap* succeeding, since three jobs contend in the
+same minute as `health_ok()`, and (b) variance, since freezes distort exactly the counters the
+campaign measures (DEC-0067) and midnight blocks are systematically noisier. Both apply
+uniformly across arms, so neither biases the result.
+
+**The lead this hands DEC-0067/0068.** Blocker 1 (freezes, 1.31/day, root cause unproven) has a
+new testable hypothesis: **split the freeze timestamps by hour-of-day against that nightly
+window.** DEC-0068 found coffee-radar correlated with 1 of 3 captured freezes; this is a second
+candidate with roughly eight times the nightly duration, and no prior analysis controlled for it
+because nobody knew it ran. It is testable **against rotated logs we already hold** — no new
+instrumentation. Deferred until after the square, because `ops/freeze_baseline.py` is itself a
+heavy multi-rotation sweep and would add load to the measurement it is trying to explain.
+
+**Coordination worked before any constant was locked, and the mechanism was disclosure.**
+On being told the square's schedule, the counterpart **held its 12–20 h Stage-1 sweep until after
+08-22** and banked the hold so a later session could not relaunch it by accident, then **moved its
+6-hourly job off :00 to :30** before block 1. Both were verified here rather than relayed —
+`30 0,6,12,18` in the live crontab, and the id=11 output directory stamped 18:31, which proves the
+new schedule *executed* rather than merely being configured (DEC-0074's principle applied to a
+neighbour). None of that required throttling; it required knowing each other's schedules. That is
+the argument for the lease log being the load-bearing part of ops#169 rather than the yield.
+
+**Recorded but deliberately not acted on.** SQLite on CoW btrfs is a documented pathology, and we
+run `journal_mode = DELETE` — the worst mode for CoW — pinned on every connection. **This does
+not reopen DEC-0071.** WAL was abandoned for a correctness failure (a reader stranded on a stale
+snapshot) that is independent of performance, and the counterpart supplied the qualification that
+settles it: the ~300% WAL figure comes from single-writer workloads, while ours is exactly the
+multi-process shape that bit us — `weewxd` writing while the monitor, `wxcheck`, and the analysis
+scripts read. The non-conflicting option is `chattr +C` on the archive DB (~25–30% class,
+compatible with DELETE mode, costs btrfs checksums on that file, and only takes effect on an empty
+file or directory). Queued post-square with the v2.0.14 recreate, needing its own DEC.
+
+**Post-square queue from this work:** `noatime` on `/volume1` (owner-level DSM change, benefits
+all four tenants, plausibly the cheapest single intervention identified) · `chattr +C` on the
+archive DB · move our own logrotate off 00:05 · the freeze hour-of-day split · and the standing
+option to stop generating dataless loop-JSON writes at all, since DEC-0024's freq-hop packets
+republish byte-identical values under a refreshed timestamp (own design pass, touches INTERFACES).
