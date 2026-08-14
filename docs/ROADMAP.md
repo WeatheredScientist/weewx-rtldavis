@@ -3,7 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-14 (S81 — targeted line update, not a full pass: Campaign B square dates
+**Last updated:** 2026-08-14 (S82b — targeted line update, not a full pass: the campaign-B entry's
+"lockfile is post-campaign work" corrected — the S82 audit shipped it pre-square with four more
+state-machine fixes, DEC-0090).
+Prior: 2026-08-14 (S81 — targeted line update, not a full pass: Campaign B square dates
 corrected again for the DEC-0089 recovery shift, 08-14→08-22 to 08-15→08-23, DEC-0089's resume-bug
 fix noted inline).
 Prior: 2026-08-13 (S80 — targeted line update, not a full pass: the P0 freeze-rate
@@ -205,7 +208,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       rows tagged P449 between 01:23 and 08:55 include the stall + baseline morning —
       `campaign_analyze.py` is unaffected (it reads swap-time blocks, not harvest tags). Minor
       apparatus defect found: tick and guard raced each other's restarts at 02:05 (no lock);
-      converged safely via the sticky STOP; lockfile is post-campaign work.
+      converged safely via the sticky STOP. *The lock shipped S82 (DEC-0090), ahead of the
+      square, alongside four more state-machine fixes from the same audit — not post-campaign
+      after all.*
       *Explain the outages* — substantially met at DEC-0067: the recurring class is **process
       freezes, not RF loss**, bounded and pre-dating the LNA removal, while ERR-0005 is a
       **single incident**. **Bound re-measured S76 (DEC-0083): 1.49/day, median 240 s** over
