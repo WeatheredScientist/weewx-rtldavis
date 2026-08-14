@@ -29,6 +29,20 @@ under [Pre-S16].
 - Mechanical: #183 branched before #182 merged → branch protection refused the merge until
   `gh api .../pulls/183/update-branch` + CI rerun (now a BOOT gotcha). ROADMAP's "lockfile is
   post-campaign work" corrected (DEC-0090 shipped it pre-square).
+- **weewx 5.5.0 pre-adoption review: GREEN** (same day, post-close) — source-diffed all 11
+  runtime-chain files between v5.4.0/v5.5.0 rather than trusting the changelog: 7 byte-identical
+  (incl. `accum.py` — the campaign metric's write path — `restx.py`, `units.py`, the logger);
+  weedb's `timeout` read + pragmas-as-mapping **verbatim** (DEC-0070/0071 behaviors survive);
+  `manager.py`'s new locked-DB retry layers benignly atop our 30 s timeout. Verdict + v2.0.14 cut
+  checklist on PR #158 — the bump is now execution-only.
+- **#144's offset third quantified: station-side, ~+0.04 inHg high** — 8 days of archive
+  barometer vs four METAR references (+0.038…+0.049, conversion validated against reported-SLP
+  anchors), agreeing with hlf#302's seven forecast models; stable daily, ±0.015 diurnal wobble.
+  Knob identified: the WeatherLink console's configured elevation (~37 ft equivalent) — owner
+  check filed as ops#168; hlf#302 answered in full. One authorized read-only archive query
+  (mint path), no repo changes.
+- **ops#167 filed**: lead-time heads-up to HLF that archive `pressure`/`altimeter` go NULL at
+  the v2.0.14 deploy (it reads those columns; hlf#302 adjacent).
 - 20 new tests across the two PRs; **271/271** on the merged tip; all gates green throughout.
 
 ---
