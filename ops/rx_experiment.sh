@@ -179,39 +179,39 @@ SCHEDULE="
 2026-08-11T02:50|P372
 2026-08-11T03:35|P328
 2026-08-11T04:20|H
-2026-08-14T00:05|A
-2026-08-14T06:05|B
-2026-08-14T12:05|C
-2026-08-14T18:05|D
-2026-08-15T00:05|B
-2026-08-15T06:05|C
-2026-08-15T12:05|D
-2026-08-15T18:05|A
-2026-08-16T00:05|C
-2026-08-16T06:05|D
-2026-08-16T12:05|A
-2026-08-16T18:05|B
-2026-08-17T00:05|D
-2026-08-17T06:05|A
-2026-08-17T12:05|B
-2026-08-17T18:05|C
-2026-08-18T00:05|A
-2026-08-18T06:05|B
-2026-08-18T12:05|C
-2026-08-18T18:05|D
-2026-08-19T00:05|B
-2026-08-19T06:05|C
-2026-08-19T12:05|D
-2026-08-19T18:05|A
-2026-08-20T00:05|C
-2026-08-20T06:05|D
-2026-08-20T12:05|A
-2026-08-20T18:05|B
-2026-08-21T00:05|D
-2026-08-21T06:05|A
-2026-08-21T12:05|B
-2026-08-21T18:05|C
-2026-08-22T00:05|BASELINE
+2026-08-15T00:05|A
+2026-08-15T06:05|B
+2026-08-15T12:05|C
+2026-08-15T18:05|D
+2026-08-16T00:05|B
+2026-08-16T06:05|C
+2026-08-16T12:05|D
+2026-08-16T18:05|A
+2026-08-17T00:05|C
+2026-08-17T06:05|D
+2026-08-17T12:05|A
+2026-08-17T18:05|B
+2026-08-18T00:05|D
+2026-08-18T06:05|A
+2026-08-18T12:05|B
+2026-08-18T18:05|C
+2026-08-19T00:05|A
+2026-08-19T06:05|B
+2026-08-19T12:05|C
+2026-08-19T18:05|D
+2026-08-20T00:05|B
+2026-08-20T06:05|C
+2026-08-20T12:05|D
+2026-08-20T18:05|A
+2026-08-21T00:05|C
+2026-08-21T06:05|D
+2026-08-21T12:05|A
+2026-08-21T18:05|B
+2026-08-22T00:05|D
+2026-08-22T06:05|A
+2026-08-22T12:05|B
+2026-08-22T18:05|C
+2026-08-23T00:05|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -397,11 +397,27 @@ PYEOF
 # a genuine recovery is not held hostage by stale bad samples still sitting in
 # its window -- reuses weewx_monitor.py's own RECOVERY line instead of
 # inventing a second detector.
+#
+# A RECOVERY line only fires on an ALERT->RECOVERY *edge*, though -- found
+# 2026-08-14: three short dips tripped the PAUSE via the lagging 30-min mean at
+# 19:40, reception then read a healthy [OK] continuously from ~19:43 onward for
+# almost two hours with no fresh ALERT (so no fresh RECOVERY either), and the
+# pause rode the full 120-min ceiling into a needless hard ABORT despite the
+# station being demonstrably fine the whole time. So also check the monitor's
+# own periodic classification (`RECEPTION: NN% ... [OK]`/`[LOW]`, logged every
+# ~5min regardless of ALERT state) for its newest read since the pause started
+# -- a level check as the fallback to the edge check above, not a replacement:
+# the edge check can fire faster on a sharp recovery, the level check catches
+# a gradual one that never re-alerts.
 recovered_since() {
   local since="$1" last
   last="$(grep -oE '^[0-9-]{10} [0-9:]{8} RECEPTION RECOVERY' "$MONLOG" 2>/dev/null \
       | tail -1 | cut -d' ' -f1,2)"
-  [ -n "$last" ] && [[ "$last" > "$since" ]]
+  [ -n "$last" ] && [[ "$last" > "$since" ]] && return 0
+  last="$(grep -oE '^[0-9-]{10} [0-9:]{8} RECEPTION: [0-9]+% avg over last [0-9]+ windows \[(OK|LOW)\]' \
+      "$MONLOG" 2>/dev/null | tail -1)"
+  [ -n "$last" ] || return 1
+  [[ "$(cut -d' ' -f1,2 <<< "$last")" > "$since" ]] && [[ "$last" == *'[OK]'* ]]
 }
 
 trip_abort() {
