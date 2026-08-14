@@ -8,6 +8,34 @@ Nothing here is rewritten — text moves, history stays greppable.
 ---
 
 
+## [S80] — 2026-08-13 — freeze_baseline.py's ad hoc-restart blind spot found and fixed (DEC-0088)
+
+- **Freeze-rate corroboration (job 3) surfaced a tool bug, not a trend.** The 48h window S79
+  flagged had cooled to unremarkable on re-run, but 24h/36h had newly gone elevated (95.9th/94.0th
+  pct) — until the freshest event (2026-08-13 10:24–10:27) turned out to line up almost exactly
+  with this session's own tick log (`10:25:01 tick: swapping A -> H`), the S79 abort's self-heal
+  restart, not a freeze.
+- **Root cause**: `classify()`'s swap detection only recognized the fixed 0/6/12/18 schedule — no
+  way to see a restart `rx_experiment.sh` triggers off it (an abort's baseline restore, a
+  DEC-0087 pause escalation, a tick self-heal). Verified directly against the log, not just
+  inferred: the 2026-08-12 "19:55 freeze" already on record **is** the `19:55:35 ABORT` →
+  `19:55:36 RESTORING baseline snapshot` restart's own footprint.
+- **Fix**: `classify()` now also cross-references every logged `tick: swapping`/`RESTORING
+  baseline snapshot` line as ground truth, padded 3min back / 12min forward. RF-dead precedence
+  unchanged and re-tested against the new path.
+- **Corrected reading**: 7 of 47 previously-counted "freezes" reclassified as swap — rate
+  1.54/day → 1.31/day, all four rolling windows (24h/36h/48h/72h) flip from elevated/85–95th pct
+  to unremarkable (49–67th pct). Not a one-off: DEC-0087 guarantees more ad hoc restarts going
+  forward, so the bug's main damage was still ahead of it.
+- 5 new tests (ad hoc detection, pad boundaries, RF-dead precedence over the new path, a positive
+  control encoding the exact 10:24 event that found this). 17/17 `test_freeze_baseline.py`,
+  238/238 full suite, ruff clean, mypy clean.
+- Shipped as PR #175, merged to `dev` (`8104c30`). BACKLOG.md's S79 freeze-rate watch item closed
+  out with the correction (append-only, per convention). Campaign B untouched — no NAS/container
+  write this session.
+
+---
+
 ## [S79] — 2026-08-13 — Arm-A abort reconstructed and recovered; DEC-0087 pause/resume ships
 
 - **Arm-A swap verified** (`00:05:02 swapping H -> A`, `00:08:24 arm A live and healthy`) — S78's
