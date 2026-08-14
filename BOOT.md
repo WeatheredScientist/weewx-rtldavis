@@ -32,6 +32,26 @@ closed. PR #183 (#172 + #144) merged to `dev`: **`barometer_fetch_epoch`** (no-T
 stamp) and **honest-null `pressure`/`altimeter`** (archive columns go NULL at deploy — hlf#302
 heads-up posted). INTERFACES §1 updated; #172/#144 stay open until the v2.0.14 deploy.
 
+**S83: the box has a nightly heavy window, and the midnight block sits in it (ops#169).**
+Answering coffee-radar's shared-NAS lease proposal turned up the box's real I/O schedule.
+**A sibling project's nightly maintenance task (DSM id=15) runs 00:10 → ~03:00–05:10 EVERY
+night** — six nights verified, median ~4h20m. Campaign blocks are 6 h, so **~72% of every
+00:05 block runs under it.** Two more fire at 00:05 itself: id=2 = our own `weewx-monitor`
+logrotate (same minute as the swap's `harvest()`), id=9 = another tenant's capture job.
+Task-id → owner mapping is in the gitignored local-infra doc, not here.
+**Comparability is safe** — the square is a 4×4 Latin square run twice, so each arm takes the
+midnight slot exactly twice and the confound is absorbed by construction. What it threatens is
+midnight *swap reliability* and *variance*. The neighbouring tenant moved its 6-hourly job off :00 to
+:30 before block 1 (verified executing, not just configured). Method for resolving any DSM task
+id → command, no root needed: `/volume1/docker/TaskSchedulerOutput/synoscheduler/<id>/<epoch>/`.
+weewx's own answer is posted on ops#169. Also corrected there: **`/volume1` is btrfs, not ext4**
+(only DSM's `/` is ext4) — verified in `/proc/mounts`, and both sessions had been reasoning from
+the wrong filesystem. **Post-square queue from this work:** `noatime` on `/volume1` (currently
+`relatime`; on CoW that is real write amplification, benefits all four tenants, owner-level DSM
+change) · `chattr +C` on the archive DB (SQLite-on-CoW is a documented pathology; needs a DEC,
+must ride the v2.0.14 recreate, does NOT reopen DEC-0071 — WAL's ~300% figure is single-writer
+and our multi-process shape is what bit us) · move our own logrotate (id=2) off 00:05.
+
 **The v2.0.14 queue (post-campaign, ~08-23):** weewx 5.5.0 (PR #158) + #172's field + #144's
 honest nulls + move `:latest` to v2.0.13 once the square proves it. NAS-native build (DEC-0078),
 recreate re-verifies the three CONSTANTS live-config deviations. **5.5.0 is pre-reviewed GREEN**
@@ -51,6 +71,11 @@ DEC-0086) — owner check filed as **ops#168**, no repo work pending. Full worku
 1. **Verify arm-A's block 1 swapped in at `2026-08-15T00:05`** — tick log `swapping H -> A` +
    `arm A live and healthy`. First live working tick of the S82 code: if the swap did NOT
    happen, check for a PAUSE first (a deferred swap is now legitimate behavior), then STOP.
+   **New for the 00:05 slot only (S83):** three foreign/own jobs fire in that minute-plus-five
+   (id=2 our logrotate, id=9 a tenant capture job, id=15 the ~4 h nightly maintenance at
+   00:10 — see the tenancy block). If `health_ok()`
+   is slow or the block reads oddly, that cluster is a candidate explanation — check it
+   **before** concluding the S82 state machine misbehaved. Does NOT apply to 06/12/18:05.
 2. Daily square watch (~5 min): `ops/soak_check.sh`; STOP **and PAUSE** both absent; state
    matches schedule.
 3. **Watch the revised resume machinery on a real pause** — floor-resume + rotated reads +
@@ -67,7 +92,7 @@ DEC-0086) — owner check filed as **ops#168**, no repo work pending. Full worku
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
 | Branches | `dev` = `origin/dev` (`ba09e80`; PRs #179/#181/#182/#183 all merged). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, queued for v2.0.14 |
-| Trackers | #180 closed · #172/#144 commented, open until v2.0.14 · ops#163 closed / ops#165 filed |
+| Trackers | #180 closed · #172/#144 commented, open until v2.0.14 · ops#163 closed / ops#165 filed · **ops#169 answered (S83)** |
 
 ## Blockers
 
@@ -76,6 +101,15 @@ DEC-0086) — owner check filed as **ops#168**, no repo work pending. Full worku
    **Still hard-aborts — DEC-0087 deliberately does not cover freezes** ("RF re-established" isn't
    a meaningful resume condition for a process-wedge event). Root cause still unproven (thread
    blocking on the bind-mounted log volume is the leading hypothesis, DEC-0067/0068).
+   **NEW TESTABLE LEAD (S83): split the freeze timestamps by hour-of-day.** A sibling tenant's
+   nightly maintenance occupies 00:10→~04:30 EVERY night (see the tenancy block above) — a ~4 h
+   heavy-I/O window that nobody knew about when DEC-0067/0068/0088 were written, so no prior
+   analysis controlled for it. If freezes cluster inside that window, a large share of the
+   1.31/day is explained. Testable **against data we already hold** — the rotated logs
+   `ops/freeze_baseline.py` already sweeps; no new instrumentation. DEC-0068 found coffee-radar
+   correlated with 1 of 3 captured freezes; this is a second candidate with ~8× the nightly
+   duration. Run the split **after the square** — the script is itself a heavy multi-rotation
+   log sweep and would add load to the measurement it is trying to explain.
 2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open): interference vs no-LNA
    front-end margin vs site vs condensation. **DEC-0083 adds a dated onset (08-10 23:56) the
    characterization should start from** — it coincides with the campaign-B pilot night and the
