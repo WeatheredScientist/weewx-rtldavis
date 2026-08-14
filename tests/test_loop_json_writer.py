@@ -63,6 +63,33 @@ def _make_writer(tmpdir):
     return LoopJsonWriter(engine=None, config_dict=cfg)
 
 
+def test_fetch_epoch_is_passed_through_even_when_ancient():
+    """#172 (S82b): barometer_fetch_epoch bypasses the cache/TTL machinery —
+    its whole purpose is to reveal staleness, so an old value must be
+    published verbatim, never omitted the way TTL'd fields are."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer(tmpdir)
+        ancient = 1234567890 - 100_000          # far past every TTL in the file
+        event = types.SimpleNamespace(packet={
+            'dateTime': 1234567890, 'outTemp': 72.5,
+            'barometer_fetch_epoch': ancient,
+        })
+        w.new_loop(event)
+        with open(w.path) as f:
+            data = json.load(f)
+        assert data['barometer_fetch_epoch'] == ancient
+
+
+def test_fetch_epoch_absent_when_never_stamped():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer(tmpdir)
+        event = types.SimpleNamespace(packet={'dateTime': 1234567890, 'outTemp': 72.5})
+        w.new_loop(event)
+        with open(w.path) as f:
+            data = json.load(f)
+        assert 'barometer_fetch_epoch' not in data
+
+
 def test_writes_both_paths_with_identical_content():
     with tempfile.TemporaryDirectory() as tmpdir:
         w = _make_writer(tmpdir)
