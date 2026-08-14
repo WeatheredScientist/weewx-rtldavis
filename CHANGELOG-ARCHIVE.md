@@ -8,6 +8,28 @@ Nothing here is rewritten — text moves, history stays greppable.
 ---
 
 
+## [S78] — 2026-08-12 — Guard abort reconstructed and cleared: first freeze pair to gate the campaign
+
+- **`rx_experiment.STOP` fired at 19:55 local** (`30-min mean reception 47% < 50% floor, arm H`).
+  Reconstructed via `ops/freeze_baseline.py`: two back-to-back FREEZE events (19:46→19:50 240s,
+  19:55→20:02 420s) — no stall line, correctly absent from `stall_baseline.py`'s episode list.
+  **First known freeze pair severe enough to trip the campaign's own abort floor** (freezes were
+  characterized as "gates nothing", DEC-0081/0083). Reception recovered to 67–84% within 10 min,
+  healthy since.
+- **STOP cleared** (owner-approved in chat, Class C), well ahead of the `2026-08-13T00:05` arm-A
+  due time — no schedule shift needed this time, unlike DEC-0082. Landed in PR #168. Treated as a
+  `BOOT.md`/`BACKLOG.md` finding, not a new DEC — refines an already-decided characterization
+  rather than making a new design call.
+- **Stall burst (DEC-0083): third flat reading (S76/S77/S78)** — 48h/72h still record-max 6/6 with
+  no further growth, starting to lean plateau per S77's own threshold. 24h dropped to 1 episode
+  (68th pct); acute rate quiet ~19h at check time.
+- `ops/soak_check.sh`: 16 pass / 1 expected warn / 0 fail. Green gate: ruff clean, 224 tests, mypy
+  clean on 46 files — no code touched this session, docs only.
+- **Swap verification still open**: arm-A due `2026-08-13T00:05` had not yet occurred at session
+  close — carried to S79.
+
+---
+
 ## [S77] — 2026-08-12 — Freeze rate gets its own tool (DEC-0085); barometer's WeatherLink-passthrough provenance documented (DEC-0086)
 
 - **DEC-0085 — `ops/freeze_baseline.py` ships**, completing DEC-0083's explicitly-flagged

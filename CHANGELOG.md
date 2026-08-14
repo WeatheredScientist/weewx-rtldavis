@@ -5,6 +5,40 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S81] — 2026-08-14 — DEC-0087's first live pause/resume exercise found a bug in itself, fixed as DEC-0089
+
+- **Arm A never swapped in overnight.** Session start (~08:15) found `current_arm()` still `H`
+  and a STOP sentinel blocking every tick since `21:45:01` the night before — arm A's `00:05`
+  slot never happened.
+- **Reconstructed against the actual logs, not assumed.** Three short reception dips
+  (2026-08-13 19:14–19:38) tripped DEC-0087's `PAUSE` at `19:40:05` — its first-ever live firing.
+  Reception then read healthy continuously (`[OK]`, 65–81%) from `19:43` for almost two hours,
+  but `recovered_since()` only checks for a `RECEPTION RECOVERY` log line — an ALERT→RECOVERY
+  *edge* — and none fired again because reception never dropped low enough to re-trigger a fresh
+  ALERT. The pause rode the full 120-minute ceiling into `ABORT: RF-dead pause exceeded 120min
+  without recovery` at `21:45:01`.
+- **DEC-0089 — the fix**: `recovered_since()` now also checks the monitor's ordinary periodic
+  `RECEPTION: NN% ... [OK]`/`[LOW]` line (logged every ~5min regardless of ALERT state) as an
+  additive level-signal fallback to the edge check — same lesson as DEC-0088, one session later:
+  a just-shipped correction carried its own undiscovered blind spot. 4 new tests, including the
+  exact incident fixture with its assertion flipped (the regression test). 30/30
+  `test_rx_experiment.py`, 242/242 full suite.
+- **Recovery**: schedule shifted +24h a third time (DEC-0082's unchanged mechanism) — arm A now
+  due `2026-08-15T00:05`, square `08-15 → 08-23T00:05`. Fix + shift deployed together to the NAS
+  (sha-verified) before clearing STOP, so no tick could land between a fixed-but-unshifted or
+  shifted-but-unfixed state.
+- **Post-clear log silence traced and confirmed as expected**, not a second incident: `due_arm()`
+  returns the pilot block's trailing `H` row (never a literal `NONE`) until the square's first
+  row arrives, matching `current_arm()`, so `tick`'s silent no-op runs for as long as nothing is
+  due. New `BOOT.md` gotcha.
+- Shipped as PR #177, merged to `dev` (`6079053`).
+- **Next session scoped**: a dedicated audit of `rx_experiment.sh`'s full guard/pause/abort/resume
+  state machine + `weewx_monitor.py`'s alerting/reset logic, hunting for other edge-vs-level
+  signal mismatches — two sessions running with one each (DEC-0088, DEC-0089) is a pattern worth
+  a deliberate pass. User's explicit choice: run it on **Claude Fable 5** (judgment/investigative
+  work per AGENT-ECONOMY.md).
+
+---
 ## [S80] — 2026-08-13 — freeze_baseline.py's ad hoc-restart blind spot found and fixed (DEC-0088)
 
 - **Freeze-rate corroboration (job 3) surfaced a tool bug, not a trend.** The 48h window S79
@@ -64,25 +98,4 @@ under [Pre-S16].
   until the mechanism has real data.
 
 ---
-## [S78] — 2026-08-12 — Guard abort reconstructed and cleared: first freeze pair to gate the campaign
-
-- **`rx_experiment.STOP` fired at 19:55 local** (`30-min mean reception 47% < 50% floor, arm H`).
-  Reconstructed via `ops/freeze_baseline.py`: two back-to-back FREEZE events (19:46→19:50 240s,
-  19:55→20:02 420s) — no stall line, correctly absent from `stall_baseline.py`'s episode list.
-  **First known freeze pair severe enough to trip the campaign's own abort floor** (freezes were
-  characterized as "gates nothing", DEC-0081/0083). Reception recovered to 67–84% within 10 min,
-  healthy since.
-- **STOP cleared** (owner-approved in chat, Class C), well ahead of the `2026-08-13T00:05` arm-A
-  due time — no schedule shift needed this time, unlike DEC-0082. Landed in PR #168. Treated as a
-  `BOOT.md`/`BACKLOG.md` finding, not a new DEC — refines an already-decided characterization
-  rather than making a new design call.
-- **Stall burst (DEC-0083): third flat reading (S76/S77/S78)** — 48h/72h still record-max 6/6 with
-  no further growth, starting to lean plateau per S77's own threshold. 24h dropped to 1 episode
-  (68th pct); acute rate quiet ~19h at check time.
-- `ops/soak_check.sh`: 16 pass / 1 expected warn / 0 fail. Green gate: ruff clean, 224 tests, mypy
-  clean on 46 files — no code touched this session, docs only.
-- **Swap verification still open**: arm-A due `2026-08-13T00:05` had not yet occurred at session
-  close — carried to S79.
-
----
-*(S73–S77 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S78 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
