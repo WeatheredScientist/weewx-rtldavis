@@ -20,10 +20,9 @@ is a **separate repo** — don't make dashboard changes here.
 **08-15 → 08-23T00:05** (third shift, DEC-0089). Holding on **H**; arm **A** due
 `2026-08-15T00:05` — the first block runs on ALL of S82/S82b's fixes.
 
-**S82 (DEC-0090): the state-machine audit shipped five `rx_experiment.sh` fixes** — floor-aligned
-resume, rotated-log reads, swap deferral while paused (BASELINE exempt), guard stand-down at
-BASELINE, tick/guard/abort lock — PR #179, deployed sha `4438a2a3…`. Plus the dead
-`soak_check.sh` reset counter ('RESET: running' now).
+**S82 (DEC-0090): the audit shipped five `rx_experiment.sh` state-machine fixes + the dead
+`soak_check.sh` reset counter** — PR #179, deployed sha `4438a2a3…`; the fix list lives in the
+DEC row.
 
 **S82b (DEC-0091): the owner's reframe ("square hasn't started") used the pre-block-1 window.**
 PR #182 (the #180 monitor trio) merged AND deployed same day — episode state mirrored to
@@ -33,9 +32,19 @@ closed. PR #183 (#172 + #144) merged to `dev`: **`barometer_fetch_epoch`** (no-T
 stamp) and **honest-null `pressure`/`altimeter`** (archive columns go NULL at deploy — hlf#302
 heads-up posted). INTERFACES §1 updated; #172/#144 stay open until the v2.0.14 deploy.
 
-**The v2.0.14 queue (post-campaign, ~08-23):** weewx 5.5.0 (PR #158, deliberately deferred) +
-#172's field + #144's honest nulls + move `:latest` to v2.0.13 once the square proves it.
-NAS-native build (DEC-0078), recreate re-verifies the three CONSTANTS live-config deviations.
+**The v2.0.14 queue (post-campaign, ~08-23):** weewx 5.5.0 (PR #158) + #172's field + #144's
+honest nulls + move `:latest` to v2.0.13 once the square proves it. NAS-native build (DEC-0078),
+recreate re-verifies the three CONSTANTS live-config deviations. **5.5.0 is pre-reviewed GREEN**
+(S82b source-diff pass over 11 runtime-chain files: weedb's `timeout` read + pragmas-as-mapping
+verbatim, accum/restx/units byte-identical, manager's new locked-DB retry benign atop our 30 s
+timeout; verdict + cut checklist on PR #158) — **the cut is execution-only, Sonnet-fit.**
+
+**#144's offset is quantified and attributed: station-side, ~+0.04 inHg high.** Four METAR
+references gave +0.038…+0.049 (agreeing with hlf#302's seven models — eleven comparators);
+stable all week, bounded diurnal wobble ±0.015. The knob is the **WeatherLink console's
+configured station elevation** (~37 ft equivalent; our barometer is WL's cloud value relayed,
+DEC-0086) — owner check filed as **ops#168**, no repo work pending. Full workup: hlf#302
+(identifiers) / #144 (public).
 
 ### ▶▶ S83 JOB LIST
 
@@ -46,9 +55,6 @@ NAS-native build (DEC-0078), recreate re-verifies the three CONSTANTS live-confi
    matches schedule.
 3. **Watch the revised resume machinery on a real pause** — floor-resume + rotated reads +
    deferral have no live exercise yet (n=0 on the S82 mechanism; BACKLOG watch re-baselined).
-4. Optional, campaign-safe: **#144's offset quantification** — archive `barometer` vs METAR
-   MSLP over a multi-day window; method in the issue comment; keep the METAR station id out of
-   committed text.
 
 ### Current state (S82b close)
 
@@ -115,7 +121,8 @@ NAS-native build (DEC-0078), recreate re-verifies the three CONSTANTS live-confi
   `git checkout -- <file>` to unplant a staged positive-control payload** — it restores the
   planted version from the index (S55's gotcha, re-bitten S82b); edit the lines out instead.
 
-_Last updated: 2026-08-14 (S82b close) — the owner's "square hasn't started" reframe knocked out
-#180 (deployed, verified, closed), #172 and #144 (merged for v2.0.14) the same day, on top of
-S82's audit fixes. DEC-0091 logged. Arm A due 2026-08-15T00:05 — the square starts on one
-consistent, fully-patched instrument stack._
+_Last updated: 2026-08-14 (S82b close, amended same day) — the owner's "square hasn't started"
+reframe knocked out #180 (deployed, verified, closed), #172 and #144 (merged for v2.0.14), then
+the afternoon added the 5.5.0 GREEN review (PR #158), the #144 offset verdict (station-side,
+ops#168 carries the owner's WL-elevation check) and ops#167's HLF heads-up. DEC-0091 logged.
+Arm A due 2026-08-15T00:05 — the square starts on one consistent, fully-patched stack._
