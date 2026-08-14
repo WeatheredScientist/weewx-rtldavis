@@ -60,12 +60,14 @@ trigger below is plainly satisfied.
 - **RF-dead pause/resume incident rate (DEC-0087, new S79)** — first fired S81 (2026-08-13
   19:40:05, arm H) and immediately escalated to a hard abort at the 120-min ceiling — not the
   self-resolving case the mechanism was built for, but a bug in it (DEC-0089: `recovered_since()`
-  never saw a fresh RECOVERY line despite ~2h of healthy reception). Fixed same session. n=1,
-  too early to say anything about the rate now that the mechanism is trustworthy again — the
-  tracking half of DEC-0087's original ask (a future analysis script, same shape as
-  `ops/stall_baseline.py`/`ops/freeze_baseline.py`, correlating incident count and paused-minutes
-  against time-of-day/arm) stays deliberately deferred until enough *correctly-handled* incidents
-  accumulate to be worth reading.
+  never saw a fresh RECOVERY line despite ~2h of healthy reception). Fixed same session. **S82's
+  audit (DEC-0090) then revised the machinery again** — resume at the pause floor (not [OK]),
+  rotated-log reads, swaps defer while paused, tick/guard lock — so the rate baseline starts
+  from the S82 mechanism; incidents before 2026-08-14 are not comparable. n=0 on the current
+  mechanism. The tracking half of DEC-0087's original ask (a future analysis script, same shape
+  as `ops/stall_baseline.py`/`ops/freeze_baseline.py`, correlating incident count and
+  paused-minutes against time-of-day/arm) stays deliberately deferred until enough
+  *correctly-handled* incidents accumulate to be worth reading.
 
 ✅ **Dropouts watch is CLOSED (DEC-0067)**, replaced by the process-freeze blocker. **Never re-open
 it on a `WINDOW: 0/21` reading**: that metric cannot tell a freeze from deafness, which was the whole
