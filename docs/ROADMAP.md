@@ -40,6 +40,9 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
   at or past S86 and this line still says S86, that itself is the signal it's overdue — run the
   same pass as S56, S66 and S76 did (diff every open/pending item here against DECISIONS.md,
   CHANGELOG.md and `BOOT.md`).
+- Prior: 2026-08-14 (S83 — targeted line update, not a full pass: the campaign-B gate row still
+  carried DEC-0083's 1.49/day after DEC-0088 corrected it to 1.31/day at S80, and the freeze row
+  gained DEC-0092's hour-of-day hypothesis). Tripwire unchanged at S86.
 - Last full reconciliation: **S76, 2026-08-12** — the tripwire fired on schedule and the pass ran.
   Two stale items fixed: the freeze row carried "~2-4 min, roughly once a day" for ~13 sessions
   and is now the measured 1.49/day, median 240 s (DEC-0083); and the **USB-reset P0 row was still
@@ -214,7 +217,12 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       *Explain the outages* — substantially met at DEC-0067: the recurring class is **process
       freezes, not RF loss**, bounded and pre-dating the LNA removal, while ERR-0005 is a
       **single incident**. **Bound re-measured S76 (DEC-0083): 1.49/day, median 240 s** over
-      30.3 d — the long-carried "~1/day, ~3.5 min" understated both by ~40 %. *Watchdog* — done (S63). *Metric freeze-aware* — **done
+      30.3 d — the long-carried "~1/day, ~3.5 min" understated both by ~40 %. **Corrected to
+      1.31/day by DEC-0088 (S80)**; this row was missed by that session's targeted pass and is
+      fixed here at S83 — the same carried-stale-figure shape the guardrail above has now caught
+      three times. **S83 (DEC-0092) adds a testable hypothesis, not a new number:** split the
+      freeze timestamps by hour-of-day against the sibling tenant's nightly 00:10→~04:30
+      maintenance window, which no prior analysis controlled for because nobody knew it ran. *Watchdog* — done (S63). *Metric freeze-aware* — **done
       (DEC-0069)**, and the gate turned out to be mostly a **resolution** problem: the old 5-minute
       aggregate let one frozen minute wreck four good ones (~0.8 pts), while per-minute
       `rxCheckPercent` puts the real correction at **±0.03 pts against a 2.0-pt bar**. *DB lock* —
