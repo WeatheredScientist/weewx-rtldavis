@@ -5001,3 +5001,112 @@ edge check), tests, and this record. Also the second time in two consecutive ses
 DEC-0089) that a just-shipped correction to this campaign's automation carried its own undiscovered
 blind spot — worth naming as a pattern, not just two unrelated bugs, when scoping the broader
 robustness review this incident also prompted (BACKLOG.md).
+
+---
+
+## DEC-0090 — The S82 state-machine audit: the DEC-0088/0089 blind-spot pattern was a class, and the class had more members
+
+**Date:** 2026-08-14 (S82) · **Status:** Accepted
+**Relates to:** DEC-0087/0088/0089 (the prompting pattern) · DEC-0069/0077 (records stop during
+episodes — the evidence under fix 3) · DEC-0074 (the rename fix 6's counter missed) · DEC-0064
+(campaign B design, unchanged) · DEC-0014 (incremental, tested, no rewrite)
+
+**Why an audit.** Two consecutive sessions (DEC-0088, DEC-0089) each found a "signal blind spot"
+in just-shipped campaign automation — a consumer watching for an edge that need not fire, blind to
+the level that was there. BOOT ordered a dedicated pass (user's explicit Fable 5 pick) over
+`ops/rx_experiment.sh`'s full guard/tick/abort/pause/resume machine plus `weewx_monitor.py`'s
+alerting/reset logic, with one rule: every finding verified against real log/ledger evidence
+before a fix is proposed. Result: five defects fixed same-session (PR #179), three monitor-side
+defects specced and deferred (#180), two clean checks and one deliberate reliance recorded.
+
+**1. Resume threshold aligned to the pause floor.** `recovered_since()`'s level check required the
+monitor's `[OK]` tag, which means ≥60% (`WU_RF_MIN_PCT`) — stricter than the 50% `ABORT_PCT` that
+pauses. Reception in [50,60) could never have entered a pause yet could not end one, and rode the
+120-min ceiling into the same needless abort DEC-0089 had just fixed, one band lower. The band is
+occupied, not theoretical: 52–58% periodic reads logged 08-13 10:26, 14:32–14:37, 19:17 and 08-14
+01:50. Resume is now the newest periodic line ≥ `ABORT_PCT` (the RECOVERY-edge check stays as the
+fast path; `[OK]` implies ≥50 so it is subsumed). Flap near the floor is accepted deliberately:
+a flap is two log lines and no config/container touch, and a genuinely dead receiver reads ~0%
+and never flaps, so the ceiling escalation the pause exists for is unaffected. Rejected
+alternative: a hysteresis margin (floor+5) — shrinks the trap band instead of closing it and
+invents a third threshold to keep consistent.
+
+**2. Rotation-blind reads.** `recovered_since()` and the guard's floor mean read only the live
+`weewx_monitor.log`, which rotates daily at 00:05 — the exact minute of every swap slot. A
+recovery landing just before rotation was invisible to the resume path, and the floor had a
+~30-min post-rotation blackout nightly (fewer than `ABORT_SAMPLES` fresh lines → the
+never-abort-on-absence refusal), in the hour the episode cluster lives. `harvest()` and
+`soak_check.sh` had each already learned the `.1`-pair lesson; the resume path had not. Both
+greps now read `"$MONLOG.1" "$MONLOG"`.
+
+**3. Swap deferral while paused.** tick force-cleared an active PAUSE at swap time ("arm swap
+supersedes it") and swapped into the live episode: `health_ok` waits on archive records, and
+records stop during RF-dead episodes (DEC-0069's absent-rows measurement; DEC-0077's outage
+anatomy), so a slot-straddling episode converted DEC-0087's soft pause straight back into the
+hard sticky abort it exists to avoid — at 00:05/06:05, inside the nightly episode cluster
+(ledger 08-11→14: 12 episodes, 00:49–02:12 plus evening events, 5 of them ≥6 min; roughly a
+1-in-4 chance across the square's 32 slots at recent rates). Swaps now defer while paused —
+`due_arm()`'s existing self-heal makes the block start late instead of the campaign halting.
+BASELINE is exempt: self-termination onto prod config never waits on RF (safety property #5)
+and runs no health check an episode could fail. This deliberately changes pre-registered
+apparatus behavior mid-campaign, before the square's first block: the alternative — keep the
+supersede rule and let a collision abort — is the failure mode that had already cost three
+recovery cycles in four days.
+
+**4. Guard stand-down at BASELINE.** The guard never stood down after the self-terminator: its
+early exits knew STOP/no-state/NONE but not BASELINE, and the scheduler entries deliberately
+persist between campaigns (runbook: "idempotent no-ops against a completed campaign"). So the
+first ≥120-min unrecovered episode after a clean campaign end would pause, ride the ceiling,
+restart prod for nothing and email "campaign halted" about a campaign that no longer existed.
+Campaign A never exposed it only because it ended in an abort whose STOP short-circuits first.
+One-line early exit on `BASELINE`.
+
+**5. tick/guard/abort serialize behind a lock.** No mutual exclusion existed, and a full-budget
+`health_ok` outlives the 5-min scheduler period (measured 383s wall on the 2026-08-11 02:05
+abort at the then-36-try budget; the budget is now 60 tries ≈ 500s+ wall). The guard/tick
+interleave is on record — 02:05:03 that morning: tick logs "swapping P449 -> P402" and guard
+logs "ABORT: 30-min mean 39%" the same second; double restore, double restart, two emails,
+the conf written concurrently by both. The tick-vs-tick variant (unobserved, arithmetic-certain
+on a slow RF acquisition) duplicates harvest rows and kills the container under the very health
+check judging it. Mechanism: `mkdir` lock + pid file; liveness via `kill -0` (root-to-root on
+the NAS; also the macOS test host has no /proc); empty-pid grace <60s (a winner mid-acquisition
+is not debris); 1800s age ceiling breaks a HUNG holder loudly — a silently-skipped-forever tick
+would be the `due_arm()` no-op trap wearing a new hat. Manual `abort` takes the lock when free
+but proceeds regardless: a human's emergency stop is never skipped.
+
+**6. soak_check's reset counter, dead since S67.** `mon_resets` grepped `RESET: triggering` — a
+message DEC-0074's rename retired — and read 0 for ~6 weeks; the impossible "1 ineffective of 0
+fired" on S82's morning soak was the tell. Now counts `RESET: running` (fires exactly once per
+attempt). ops#147 item-6 class: a consumer grep stranded by a message rename — the very class
+DEC-0074 documents, one hop downstream from where it fixed it.
+
+**Monitor-side, specced and deferred to #180 (tier:mid).** (a) Episode/alert state is
+memory-only — a monitor restart mid-episode silently loses the `episodes.log` row (the
+pre-registered LNA-verdict datum), the RECOVERY edge and the ALERT's email pairing; all 6
+recent ALERTs pair 1:1 with ledger rows, so nothing is lost yet, but every deploy is a
+kill+respawn. (b) The weewx.log rotation-reset branch zeroes `wu_bad_windows` while an
+alert survives, so a reset fired within `RESET_VERIFY_S` of midnight is judged "verified
+effective" by rotation rather than by reception — mislabeling the forensics captures
+DEC-0075/0081-class analysis depends on, and silently refreshing the 1-hedge budget.
+(c) `do_reset()`'s exception path only logs, unlike the nonzero-exit path which emails — and
+it fired live at 01:56:30 this morning (`timed out after 15 seconds`). Deferral grounds: no
+deadline, the daemon deploy needs the owner-run kill dance, and the fixes are mechanical now
+that the spec is written — it is the issue body.
+
+**Checked and clean, recorded so they are not re-derived:** the guard's mean-source regex
+matches only the periodic level lines (the ALERT/RECOVERY/REPEAT/SUMMARY formats cannot
+contaminate it); `due_arm`/`schedule_started` string comparisons; `write_arm`'s atomic
+write-and-verify; `harvest`'s rotation pair; `health_ok`'s rotation exposure at 00:05
+(weewx.log rotates ~23:59, complete before the slot).
+
+**Known reliance left in place, on purpose:** the guard's floor mean has no freshness
+requirement — six stale healthy lines from a dead monitor would pin it green indefinitely.
+Deliberate layering: the guard trusts the monitor; `soak_check.sh` criterion 9 watches the
+monitor's liveness. Duplicating that watch inside the guard buys nothing.
+
+9 new tests, one renamed to the new semantics (39/39 file, 251/251 suite). Deployed
+same session: merged tip sha `4438a2a3…` scp'd to the NAS (owner-run fallback — the S81
+read-guard gotcha recurred exactly as documented) and verified at 10:38. First live exercise
+is the 08-15 00:05 arm-A swap. Cross-repo same session: ops#163 closed (the MANIFEST carry is
+settled — OPS-DEC-0101, ops#158 precedent), ops#165 filed (decision-blessed carries need a
+sweep exemption or they re-file forever), weewx#180 filed.
