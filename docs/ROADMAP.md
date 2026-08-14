@@ -3,7 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-13 (S80 — targeted line update, not a full pass: the P0 freeze-rate
+**Last updated:** 2026-08-14 (S81 — targeted line update, not a full pass: Campaign B square dates
+corrected again for the DEC-0089 recovery shift, 08-14→08-22 to 08-15→08-23, DEC-0089's resume-bug
+fix noted inline).
+Prior: 2026-08-13 (S80 — targeted line update, not a full pass: the P0 freeze-rate
 figures corrected per DEC-0088, 1.49/1.48/day → 1.31/day).
 Prior: 2026-08-13 (S79 — Campaign B square dates corrected again for the DEC-0087
 recovery shift, 08-13→08-21 to 08-14→08-22, plus the new pause/resume mechanism noted inline).
@@ -235,6 +238,18 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       Intended to make this class of unattended-multi-hour-halt rare going forward; whether it
       actually does is itself now trackable (see BACKLOG's standing watches for the pause/resume
       incident count once it starts accumulating data).
+      **S81 (2026-08-14): DEC-0087's first live firing exposed a bug in itself.** A PAUSE tripped
+      correctly at 19:40:05 on three short reception dips, but `recovered_since()` only checked
+      for a `RECEPTION RECOVERY` log line — an ALERT→RECOVERY *edge* — and reception recovered
+      gradually without ever re-triggering a fresh ALERT, so no RECOVERY line ever fired despite
+      ~2h of healthy `[OK]` readings. The pause rode the full 120-min ceiling into a needless
+      ABORT, and the resulting STOP again sat unattended overnight, straight through arm A's
+      `00:05` swap. **DEC-0089** fixes it: `recovered_since()` also checks the monitor's ordinary
+      periodic `[OK]`/`[LOW]` line (a level signal, not an edge) as an additive fallback. Square
+      shifted +24h a third time: now runs **08-15 → 08-23T00:05**, not the 08-14 → 08-22T00:05
+      above (PR #177). Two sessions running with one novel blind-spot bug each in just-shipped
+      campaign automation (DEC-0088, DEC-0089) — a dedicated state-machine audit is scoped for
+      the next session (`BOOT.md`), not just another reactive fix.
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,
