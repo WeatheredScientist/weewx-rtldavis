@@ -5110,3 +5110,68 @@ read-guard gotcha recurred exactly as documented) and verified at 10:38. First l
 is the 08-15 00:05 arm-A swap. Cross-repo same session: ops#163 closed (the MANIFEST carry is
 settled — OPS-DEC-0101, ops#158 precedent), ops#165 filed (decision-blessed carries need a
 sweep exemption or they re-file forever), weewx#180 filed.
+
+---
+
+## DEC-0091 — The pre-square window used: the audit's remaining fixes shipped and deployed the same day, plus two deliberate contract changes for v2.0.14
+
+**Date:** 2026-08-14 (S82b) · **Status:** Accepted
+**Relates to:** DEC-0090 (the audit that specced all of this) · DEC-0006 (honest nulls, applied to
+the archive's pressure columns) · DEC-0086 (the barometer passthrough this instruments) · DEC-0074
+(the deploy-verification criterion used) · DEC-0064 (one-image-per-square, upheld)
+
+**The owner's reframe, and what it changed.** S82 had scheduled the monitor trio and the pressure
+work post-campaign on instrument-stability grounds. The owner pointed out the square had not
+started — pilot and hold were done, block 1 was due at 00:05 that night. That flips the calculus:
+changing the instrument BEFORE the measurement begins is strictly better than after it ends, since
+the whole square then runs on one consistent monitor. Executed same day: PR #182 (monitor trio)
+merged 16:13Z, deployed 12:24 EDT, respawned pid 7625 with `Monitor started` 12:25:21 — startup
+line after file mtime, per DEC-0074. PR #183 (pressure package) merged 16:23Z onto `dev`.
+**The image was still held**: cutting v2.0.14 and recreating the container hours before the
+square's clean start trades a week of dashboard convenience for a NAS build, a recreate that can
+silently revert the three live-config deviations (CONSTANTS), and a midnight deadline — and the
+square runs on exactly one image either way. v2.0.14 is queued post-campaign (~08-23): weewx
+5.5.0 (#158) + `barometer_fetch_epoch` (#172) + honest-null pressure (#144) + the `:latest` move
+once the square proves v2.0.13.
+
+**Contract change 1 (#144): `pressure`/`altimeter` become honest nulls — a consumer-visible
+archive change.** `pressure_service.py` backfilled both internal keys with the fetched
+`bar_sea_level`. Those are different quantities: at any nonzero elevation the archive's
+station-pressure column carried sea-level numbers — not DEC-0086's "reader trap" but a wrong
+value, and `hyperlocal-forecast` reads that archive (hlf#302 is the complaint). Per DEC-0006 the
+keys now stay None; **from the v2.0.14 deploy onward the archive's `pressure`/`altimeter` columns
+are NULL**. Rejected: computing true station pressure from altitude (adds a formula and a
+dependency for columns no published contract carries); documenting-and-keeping (a wrong number
+with a footnote is still wrong). Heads-up posted on #144 for HLF; INTERFACES §1 documents it.
+
+**Contract change 2 (#172): `barometer_fetch_epoch`, a freshness stamp outside the TTL
+machinery.** `last_fetch` is a throttle stamp — it advances on FAILED attempts too — so a new
+`last_success` records the last fetch that actually yielded a value, and every loop packet
+carries it as an integer epoch. `loop_json_writer` publishes it verbatim, deliberately bypassing
+the cache/TTL: the field's entire job is to REVEAL staleness, so omitting it for being old would
+recreate the gap it closes. Absent only before the first success of a run. Loop-JSON only —
+InfluxDB deliberately not extended (schemaless absence is free, nothing asked for it there).
+This is provenance metadata beside DEC-0086's still-open `_qc`-flag question, not a resolution
+of it.
+
+**Monitor persistence semantics (the #180 trio's design calls).** (a) The open episode mirrors to
+`logs/monitor_episode.state` on every mutation; startup restores it, and `wu_in_alert` re-derives
+from the restored onset (an alert IS an open episode — one fact, not two states to sync). The
+repeat-email clock restarts at load so a pre-restart REPEAT cannot double-send. Close is
+**row-first, then clear**: a crash between the two duplicates an adjacent ledger row at worst,
+never loses one — losing rows was the defect. (b) The rotation branch **voids** a pending reset
+verdict (`RESET verdict void: ...`) instead of letting the zeroed `wu_bad_windows` fake
+"verified effective" — tries/escalated untouched, forensics labels stay honest. (c) `do_reset`'s
+exception path emails like its nonzero-exit sibling (it fired live at 01:56:30 that morning as a
+15 s sudo timeout that told nobody).
+
+**Mechanical fact worth keeping:** a second same-session PR branched before the first merged sits
+BLOCKED by branch protection ("requirements not met", state stays OPEN — and `gh pr merge`'s
+quiet refusal is another face of its never-trustworthy output) until the branch is updated;
+`gh api -X PUT repos/<r>/pulls/<n>/update-branch` does it server-side, CI reruns, then the merge
+lands. That is how #183 went in.
+
+12 + 8 new tests (271/271 on the merged tip). One test-infra note: per-file weewx stubs interact —
+`test_parse_raw_channel`'s StdService stub has no `bind`, so the new pressure tests reuse whatever
+stub is present but guarantee `bind` exists. The #144 **offset quantification** (archive vs METAR
+MSLP) is the batch's one open sliver — method written into #144, read-only, campaign-safe.
