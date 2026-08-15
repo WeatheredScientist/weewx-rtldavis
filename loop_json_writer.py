@@ -4,9 +4,24 @@ loop_json_writer.py
 Eagle Hunt PWS — expanded LOOP packet JSON writer.
 Writes all real-time fields to /opt/weewx-data/loop-data.txt on every
 LOOP packet (~2.5s for Davis VP2+), and atomically to a second path
-(current.json) that the dashboard fetches first at boot so a first-time
-visitor doesn't see em-dashes (Cold-load Fix B). Both writes carry identical
-content; only the destination path differs. Atomic write via tmp+rename.
+(current.json). Both writes carry identical content; only the destination
+path differs. Atomic write via tmp+rename.
+
+current.json was shipped (DEC-0051) FOR a boot fetch -- so a first-time
+visitor doesn't see em-dashes (Cold-load Fix B) -- but nothing reads it
+today (verified S84, DEC-0093). This docstring claimed the dashboard
+fetched it at boot; that was never true. Its per-packet cadence is
+therefore unsettled: DEC-0093 proposes decoupling it from loop-data.txt,
+which would remove ~half of this service's ~45,000 renames/day. Do not
+"tidy" the two paths into a tighter coupling before reading that DEC.
+
+loop-data.txt's cadence, by contrast, is pinned: the eh-proxy 503s when
+dateTime is more than 30 s old and the dashboard reads that 503 as proof
+the station is down, so dateTime here is a LIVENESS signal, independent of
+the per-field TTL below (INTERFACES §1). Do not add "skip the write when
+nothing changed" -- on a calm night consecutive payloads are genuinely
+identical (wind_speed is set unconditionally, 0.0 when calm) and the
+suppression would report a healthy station as offline (DEC-0093).
 
 Fields written (None → omitted, last known value used for sparse fields):
   windSpeed_mph, windGust_mph, windDir

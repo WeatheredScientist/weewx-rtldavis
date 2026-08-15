@@ -5286,3 +5286,132 @@ all four tenants, plausibly the cheapest single intervention identified) · `cha
 archive DB · move our own logrotate off 00:05 · the freeze hour-of-day split · and the standing
 option to stop generating dataless loop-JSON writes at all, since DEC-0024's freq-hop packets
 republish byte-identical values under a refreshed timestamp (own design pass, touches INTERFACES).
+
+**Update (S84, 2026-08-15) — the last queue item was answered and is retired; see DEC-0093.**
+The dataless-write option rested on a stale reading of DEC-0024: **Layer B (S43) already stopped
+freq-hop packets from being published as loop packets**, so the class this proposed to remove has
+been empty for three months and the design pass would have found nothing to cut. Two figures above
+are refined by the measurement that followed: the renames estimate is **~45,000/day, not 50–85k**
+(the upper bound was the *pre*-Layer-B rate), and "**loop-JSON is contractually fixed by
+INTERFACES §1**" is right for `loop-data.txt` — pinned by a 30 s consumer liveness gate this repo
+had never written down — but wrong for `current.json`, which has no consumer at all and is where
+the yield actually is.
+
+## DEC-0093 — The dataless-write proposal was answered three months ago; the real write amplification is `current.json`, which nothing reads
+
+**Status:** Accepted (finding + direction; **no code changed this session** — PRINCIPLES §8,
+DEC-0014) · implementation gated on the dashboard confirming the cadence
+**Date:** S84 (2026-08-15)
+**Relations:** **answers and retires** DEC-0092's last post-square queue item · **refines**
+DEC-0092's renames figure and its "loop-JSON is contractually fixed" claim · **does NOT reopen**
+DEC-0024 (both layers stand) · **upholds** DEC-0006/DEC-0053 · **relates to** DEC-0051, DEC-0054 ·
+**declines a link to** DEC-0067/0068
+
+### What was asked
+
+Whether `loop_json_writer.py` should skip writing when a LOOP packet carries no sensor data —
+raised out of ops#169's cooperative disk-I/O lease proposal, where weewx's footprint was
+established as metadata/rename-heavy rather than bandwidth-heavy (DEC-0092). The stated premise:
+`PacketFactory.create()` yields CHANNELPackets carrying `freqError` telemetry and no readings, the
+writer fires on them, and ~40% of writes are therefore byte-identical to the previous write except
+for a refreshed `dateTime`.
+
+### The premise was stale
+
+**DEC-0024 Layer B (S43) already fixed this**, one level above the writer. A channel-hop packet is
+stashed by `_cache_pending_freq_fields()` and the loop `continue`s (`rtldavis.py:1507-1517`); its
+`freqError{n}` fields ride in on the next real DATA packet (`_merge_pending_freq_fields()`,
+`rtldavis.py:1506`). `PacketFactory.create()` does still *yield* CHANNELPackets — which is what the
+reading saw — but `genLoopPackets` filters them before WeeWX ever sees one, so `new_loop()` cannot
+fire on a hop packet. The `~40%` figure is `66/166`: DEC-0024's own **pre-fix** 1.66×.
+
+**Verified live, not from source** (DEC-0074 — a file proves the file, never the process). The
+monitor is logging `WINDOW: 12–18/21 (57–86%)`, `RECEPTION: 72–74% avg` — the post-Layer-B
+signature DEC-0024 recorded (67–81%, matching the driver's trusted `rxCheckPercent`). The
+inflation's signature is this metric pinning near 100%, because dataless publishes were what
+inflated it. It is not pinned.
+
+Also re-confirmed, because it constrains any future attempt: DEC-0024 rejected option (A), dropping
+the hop packet outright, because `freqError0-4` are mapped onto real archive columns
+(`consBatteryVoltage`/`hail`/`hailRate`/`heatingTemp`/`heatingVoltage`). That constraint still
+holds.
+
+### The measurement DEC-0092 estimated
+
+From the live monitor, ~15.6 packets/min received → **~22,500 loop packets/day → ~45,000
+renames/day** across the two paths. DEC-0092's `~50–85k` brackets both states: ~85k is the
+pre-Layer-B rate, ~45–50k is the corrected one. The measured value landing at the low end is
+independent confirmation that no inflation remains.
+
+### The real finding: `current.json` has no consumer
+
+The eh-proxy's only `/weewx-data` read is `loop-data.txt` (dashboard `server.js:889`); its
+`serveStatic` serves the public/dev/lab directories and never that path. No runtime reference
+exists in the dashboard, in hyperlocal-forecast, or in this repo outside the writer and its tests —
+every other hit is documentation. The dashboard's own roadmap still carries Cold-load Fix B's
+consumer half as **open at P0**.
+
+So **half of all writes — ~22,500 renames/day — go to a file nothing reads.** That is essentially
+the entire 40% the proposal was chasing, except it is real, and it is removable by inspection
+rather than by reasoning about semantics.
+
+### Direction (gated, not shipped)
+
+`current.json`'s cadence **decouples** from `loop-data.txt`. It is a cold-load snapshot: 30–60 s is
+ample, since the polling loop replaces it within one tick, and a first-time visitor's worst case is
+a first paint up to a minute stale. That removes **~47% of total renames**.
+
+Not deletion — `current.json` is a published surface (INTERFACES §1) and the dashboard intends to
+build against it. **Gated on the dashboard confirming**, per INTERFACES change discipline. The
+argument for doing it now rather than later: the window is open *because* Fix B's consumer half was
+never built, so nothing can break; once that consumer exists against a 2.5 s assumption, the same
+change becomes a genuine interface break.
+
+### Why the write is NOT suppressed on unchanged content — recorded so it is not re-proposed
+
+`dateTime` on `loop-data.txt` is a **liveness** signal with a numeric threshold a consumer already
+depends on: the eh-proxy 503s when `Date.now()/1000 - parsed.dateTime > 30` (`server.js:896`), and
+the dashboard treats that 503 as its single authoritative proof the station is down (dash
+DEC-0154). `wind_speed` is set unconditionally in every parsed frame (`rtldavis.py:1579`),
+including `0.0` when calm, so on a calm night consecutive payloads are genuinely identical for
+minutes. Content-based suppression would therefore report a **healthy station as offline**. Any
+such scheme would need a heartbeat floor well under 30 s, which reclaims most of what it saves.
+
+The semantic argument put to us was that a hop packet republishing cached values under an advanced
+`dateTime` is already "serving a stale value under a live timestamp", so suppressing would be *more*
+honest. It inverts. DEC-0006/DEC-0053 deliberately keep **two independent axes**: per-field
+freshness is carried by the TTL machinery (a field that stops updating is *omitted* within 300 s),
+and feed liveness is carried by `dateTime`. Republishing a cached value under a new `dateTime` is
+honest *because* the TTL bounds it — that is precisely what DEC-0053 closed. Suppression collapses
+the two axes back into one, so a frozen `dateTime` would mean either "no packets" or "no changes"
+with no way to tell — reintroducing the exact ambiguity DEC-0006 exists to remove, one level up.
+S82b's own `barometer_fetch_epoch` states the governing principle: a staleness signal must never be
+omitted for being old. A liveness signal must likewise not be withheld for being unchanged.
+
+One residual dataless case does survive Layer B: DEC-0054 frame co-rejection nulls every
+`FRAME_WEATHER_KEYS` field, so that packet updates no cache entry. Suppressing it would be actively
+wrong — the packet's *arrival* is proof RF is alive; only its content was rejected.
+
+### The link that does not hold
+
+Tempting and false: that halving writer I/O bears on the freeze blocker. **DEC-0068 measured
+`weewxd`'s main thread staying `S`, never `D`, even during a load-12 freeze** and concluded "this
+isn't literal I/O-blocking". Less writer I/O is not evidence toward DEC-0067/0068. Recorded so the
+motivation is not re-derived.
+
+### Doc contradiction found and corrected
+
+INTERFACES §1 and the writer's module docstring both asserted, in the present tense since S43, that
+the dashboard fetches `current.json` at boot. It does not, and did not. Both corrected this
+session; INTERFACES §1 additionally now records the **30 s liveness gate**, a load-bearing consumer
+expectation this repo had never written down — DEC-0092 asserted loop-JSON was "contractually
+fixed" without the number that makes it so. The dashboard's roadmap holds the accurate half (Fix B
+open), so **cross-repo reconciliation is still owed**: weewx shipped its half and documented the
+whole feature as done.
+
+### For ops#169
+
+weewx's honest position: its footprint is **~47% removable unilaterally, with no lease protocol at
+all**, and the remaining `loop-data.txt` half is pinned to a 30 s consumer gate, so it cannot defer
+those writes under a lease without a consumer-visible outage. That is a **hard floor, not a soft
+one** — useful for the protocol to know about this participant.
