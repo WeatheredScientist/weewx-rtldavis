@@ -62,6 +62,20 @@ under [Pre-S16].
   count matching claimed count. **Side result: the 08-15 02:00–02:22 blackout was RF-dead, not a
   freeze** — three `rtldavis process stalled` lines sit inside it, which is DEC-0067's own rule;
   S84b's open question closed by one grep. Blocker 1 stays open — mechanism still unproven.
+- **Cross-repo brought current at close (S84e).** **ops#169** updated with both DECs: our 08-14
+  footprint figure corrected (`~45k`, not `50–85k` — the upper bound was a pre-fix rate), **~47%
+  declared removable unilaterally with no lease at all**, `loop-data.txt` declared a **hard 30 s
+  floor** for the lease spec (a deferral past it is a consumer-visible outage, not a preference),
+  the nightly-window freeze lead **retracted** from our side of that thread, and coffee-radar's
+  ~19:00 job reported as correlating with 30% of our freezes — limits stated, no schedule change
+  requested. **ops#173** (BOOT over cap) acknowledged with the measurement and the post-square plan,
+  plus the general point that a repo running a live time-boxed experiment exceeds a static cap
+  structurally, which is a different condition from neglect. **ops#157** (owner on VPN through
+  ~08-16) acknowledged — it explains this session's NAS gap, and weewx re-derived that condition
+  instead of reading the heads-up that already said it. **dash#430** filed, awaiting their answer.
+- Gates at close: ruff clean, **271/271** pytest, mypy clean over 49 files, secret gate clean with
+  its positive control at 54/54. Campaign B verified live at 10:39 EDT (arm B, reception 69–77%
+  [OK], no STOP/PAUSE/lock). PR #158 deliberately still held for the v2.0.14 post-campaign cut.
 
 ---
 ## [S83] — 2026-08-14 — ops#169 answered: our yield is a near-no-op, the box has a nightly heavy window, and the filesystem was wrong (DEC-0092)
