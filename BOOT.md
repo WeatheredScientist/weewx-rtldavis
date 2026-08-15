@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S82b → S83)
+## ▶ Resume here (S84 → S85)
 
 ### What's settled (do not re-derive)
 
@@ -20,76 +20,82 @@ is a **separate repo** — don't make dashboard changes here.
 **08-15 → 08-23T00:05** (third shift, DEC-0089). Holding on **H**; arm **A** due
 `2026-08-15T00:05` — the first block runs on ALL of S82/S82b's fixes.
 
-**S82 (DEC-0090): the audit shipped five `rx_experiment.sh` state-machine fixes + the dead
-`soak_check.sh` reset counter** — PR #179, deployed sha `4438a2a3…`; the fix list lives in the
-DEC row.
+**S82/S82b (DEC-0090, DEC-0091): apparatus fixes + the monitor trio are deployed and verified; the
+pressure package (#183) is merged to `dev` for v2.0.14.** The whole square runs one monitor
+version. Detail in CHANGELOG / the DEC rows; what is still live sits in the state table and the
+v2.0.14 queue below.
 
-**S82b (DEC-0091): the pre-block-1 window used — monitor trio (#182) deployed and verified, and
-the pressure package (#183) merged to `dev`.** The whole square runs on one monitor version.
-Detail in CHANGELOG S82b / DEC-0091; the parts still live are in the state table and the v2.0.14
-queue below.
+**S84 (DEC-0093): `current.json` is written ~22,500×/day and nothing reads it.** The
+"skip dataless loop-JSON writes" idea (DEC-0092's last queue item) **was already done in S43** —
+Layer B filters freq-hop packets in `genLoopPackets`, so that class has been empty for three
+months and the "~40%" was DEC-0024's own *pre-fix* figure. Measured **~45,000 renames/day**, not
+50–85k. The yield is `current.json`: **no consumer anywhere**, while the dashboard's roadmap still
+carries Cold-load Fix B's consumer half open at P0. **Direction: decouple its cadence to 30–60 s
+(~47% of renames), gated on the dashboard confirming** (job 4). **Do not "optimize"
+`loop-data.txt`** — the eh-proxy 503s at `now - dateTime > 30` and the dashboard reads that 503 as
+its one proof the station is down, so content-based suppression would report a healthy station
+offline on a calm night. Full argument, and the freeze-blocker link that does *not* hold, in
+DEC-0093.
 
-**S83: the box has a nightly heavy window, and the midnight block sits in it (ops#169).**
-Answering coffee-radar's shared-NAS lease proposal turned up the box's real I/O schedule.
-**A sibling project's nightly maintenance task (DSM id=15) runs 00:10 → ~03:00–05:10 EVERY
-night** — six nights verified, median ~4h20m. Campaign blocks are 6 h, so **~72% of every
-00:05 block runs under it.** Two more fire at 00:05 itself: id=2 = our own `weewx-monitor`
-logrotate (same minute as the swap's `harvest()`), id=9 = another tenant's capture job.
-Task-id → owner mapping is in the gitignored local-infra doc, not here.
-**Comparability is safe** — the square is a 4×4 Latin square run twice, so each arm takes the
-midnight slot exactly twice and the confound is absorbed by construction. What it threatens is
-midnight *swap reliability* and *variance*. The neighbouring tenant moved its 6-hourly job off :00 to
-:30 before block 1 (verified executing, not just configured). Method for resolving any DSM task
-id → command, no root needed: `/volume1/docker/TaskSchedulerOutput/synoscheduler/<id>/<epoch>/`.
-weewx's own answer is posted on ops#169. Also corrected there: **`/volume1` is btrfs, not ext4**
-(only DSM's `/` is ext4) — verified in `/proc/mounts`, and both sessions had been reasoning from
-the wrong filesystem. **Post-square queue from this work:** `noatime` on `/volume1` (currently
-`relatime`; on CoW that is real write amplification, benefits all four tenants, owner-level DSM
-change) · `chattr +C` on the archive DB (SQLite-on-CoW is a documented pathology; needs a DEC,
-must ride the v2.0.14 recreate, does NOT reopen DEC-0071 — WAL's ~300% figure is single-writer
-and our multi-process shape is what bit us) · move our own logrotate (id=2) off 00:05.
+**S83: the box has a nightly heavy window, and the midnight block sits in it (ops#169, DEC-0092).**
+A sibling project's nightly maintenance (DSM id=15) runs **00:10 → ~03:00–05:10 every night**
+(6 nights verified), so **~72% of every 00:05 campaign block runs under it**; id=2 (our own
+logrotate, same minute as the swap's `harvest()`) and id=9 (a tenant capture job) fire at 00:05
+itself. **Comparability is safe** — the 4×4 square runs twice, so each arm takes the midnight slot
+exactly twice and the confound is absorbed by construction; what it threatens is midnight *swap
+reliability* and *variance*. Full workup, the btrfs-not-ext4 correction, and the task-id resolution
+method are in DEC-0092. **Post-square queue from it:** `noatime` on `/volume1` (owner-level DSM
+change) · `chattr +C` on the archive DB (needs its own DEC, rides the v2.0.14 recreate, does **not**
+reopen DEC-0071) · move our logrotate off 00:05.
 
 **The v2.0.14 queue (post-campaign, ~08-23):** weewx 5.5.0 (PR #158) + #172's field + #144's
 honest nulls + move `:latest` to v2.0.13 once the square proves it. NAS-native build (DEC-0078),
 recreate re-verifies the three CONSTANTS live-config deviations. **5.5.0 is pre-reviewed GREEN**
-(S82b source-diff pass over 11 runtime-chain files: weedb's `timeout` read + pragmas-as-mapping
-verbatim, accum/restx/units byte-identical, manager's new locked-DB retry benign atop our 30 s
-timeout; verdict + cut checklist on PR #158) — **the cut is execution-only, Sonnet-fit.**
+(S82b source-diff pass over 11 runtime-chain files; verdict + cut checklist on PR #158) — **the cut
+is execution-only, Sonnet-fit.**
 
-**#144's offset is quantified and attributed: station-side, ~+0.04 inHg high.** Four METAR
-references gave +0.038…+0.049 (agreeing with hlf#302's seven models — eleven comparators);
-stable all week, bounded diurnal wobble ±0.015. The knob is the **WeatherLink console's
-configured station elevation** (~37 ft equivalent; our barometer is WL's cloud value relayed,
-DEC-0086) — owner check filed as **ops#168**, no repo work pending. Full workup: hlf#302
-(identifiers) / #144 (public).
+**#144's offset is settled: station-side, ~+0.04 inHg high, knob is the WeatherLink console's
+configured station elevation.** Owner check filed as **ops#168**; no repo work pending. Workup in
+DEC-0091 / hlf#302 / #144.
 
-### ▶▶ S83 JOB LIST
+### ▶▶ S85 JOB LIST
 
-1. **Verify arm-A's block 1 swapped in at `2026-08-15T00:05`** — tick log `swapping H -> A` +
-   `arm A live and healthy`. First live working tick of the S82 code: if the swap did NOT
-   happen, check for a PAUSE first (a deferred swap is now legitimate behavior), then STOP.
-   **New for the 00:05 slot only (S83):** three foreign/own jobs fire in that minute-plus-five
-   (id=2 our logrotate, id=9 a tenant capture job, id=15 the ~4 h nightly maintenance at
-   00:10 — see the tenancy block). If `health_ok()`
-   is slow or the block reads oddly, that cluster is a candidate explanation — check it
+1. **STILL UNVERIFIED — arm-A's block 1 swap at `2026-08-15T00:05`.** S84 could not check it: the
+   **NAS is unroutable from the laptop's current network** (Mac on `<LAN_SUBNET>`, NAS on
+   `<NAS_SUBNET>`) — a routing fact, **not** a prod signal, and not evidence of an outage. Do this
+   first, from the home network. Tick log wants `swapping H -> A` + `arm A live and healthy`; if the
+   swap did NOT happen, check for a PAUSE first (a deferred swap is legitimate behavior), then STOP.
+   **For the 00:05 slot only:** three jobs fire in that minute-plus-five (id=2 our logrotate, id=9 a
+   tenant capture job, id=15 the ~4 h nightly maintenance at 00:10 — see the tenancy block). If
+   `health_ok()` is slow or the block reads oddly, that cluster is a candidate explanation — check it
    **before** concluding the S82 state machine misbehaved. Does NOT apply to 06/12/18:05.
 2. Daily square watch (~5 min): `ops/soak_check.sh`; STOP **and PAUSE** both absent; state
-   matches schedule.
+   matches schedule. **Two days of watch are now unobserved** (08-15 onward) — catch up before
+   reading any block as healthy.
 3. **Watch the revised resume machinery on a real pause** — floor-resume + rotated reads +
    deferral have no live exercise yet (n=0 on the S82 mechanism; BACKLOG watch re-baselined).
+4. **This file is ~3,150 tok against its ~2,500 cap** — it arrived at S84 already ~3,030 over, and
+   S84 trimmed S83's tenancy block, #144, the 5.5.0 parenthetical and the freeze lead to land
+   roughly net-neutral while adding a session. Closing the last ~650 means cutting **live campaign
+   context**, which should be a deliberate pass (ARCHIVE/ or a `MANIFEST.md` row per DEC-0063), not
+   a closeout scramble mid-square. Do it once the square lands, or sooner if it grows again.
+5. **Cross-repo reconciliation owed (DEC-0093)** — weewx documented Cold-load Fix B as done while
+   the dashboard's roadmap still carries its consumer half open at P0, and `current.json` has no
+   reader. Needs the dashboard side to confirm the 30–60 s cadence **before** any writer change;
+   until then the cadence question stays open, not shipped. Not a weewx-only call (DEC-0010).
 
-### Current state (S82b close)
+### Current state (S84 close)
 
 | Thing | State |
 |---|---|
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` (S82) + `weewx_monitor.py` (S82b, pid 7625) both redeployed today, sha+process verified |
-| Campaign B | Holding on **H**; arm **A** due `2026-08-15T00:05`, square through `08-23T00:05`. STOP and PAUSE both absent |
-| `dev` beyond prod | #183's pressure package (baked files) — rides until the v2.0.14 image cut |
+| Campaign B | Arm **A** was due `2026-08-15T00:05`, square through `08-23T00:05`. **State as of S84 close is UNKNOWN — not checked, NAS unroutable from this network** (job 1). Last confirmed reading was S83: holding on H, STOP and PAUSE both absent |
+| `dev` beyond prod | #183's pressure package (baked files) + S84's docs — rides until the v2.0.14 image cut |
 | Freeze rate | DEC-0088-corrected (1.31/day), untouched |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | `dev` = `origin/dev` (`ba09e80`; PRs #179/#181/#182/#183 all merged). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, queued for v2.0.14 |
-| Trackers | #180 closed · #172/#144 commented, open until v2.0.14 · ops#163 closed / ops#165 filed · **ops#169 answered (S83)** |
+| Branches | `dev` = `origin/dev` (`26ea196` + S84's docs PR). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, queued for v2.0.14 — deliberately held for the post-campaign cut, pre-reviewed GREEN, not stalled |
+| Trackers | #180 closed · #172/#144 commented, open until v2.0.14 · ops#163 closed / ops#165 filed · ops#169 answered (S83), **refined by DEC-0093 (S84) — our yield is ~47% removable unilaterally, and `loop-data.txt` is a hard 30 s floor, not a soft one** |
 
 ## Blockers
 
@@ -98,15 +104,12 @@ DEC-0086) — owner check filed as **ops#168**, no repo work pending. Full worku
    **Still hard-aborts — DEC-0087 deliberately does not cover freezes** ("RF re-established" isn't
    a meaningful resume condition for a process-wedge event). Root cause still unproven (thread
    blocking on the bind-mounted log volume is the leading hypothesis, DEC-0067/0068).
-   **NEW TESTABLE LEAD (S83): split the freeze timestamps by hour-of-day.** A sibling tenant's
-   nightly maintenance occupies 00:10→~04:30 EVERY night (see the tenancy block above) — a ~4 h
-   heavy-I/O window that nobody knew about when DEC-0067/0068/0088 were written, so no prior
-   analysis controlled for it. If freezes cluster inside that window, a large share of the
-   1.31/day is explained. Testable **against data we already hold** — the rotated logs
-   `ops/freeze_baseline.py` already sweeps; no new instrumentation. DEC-0068 found coffee-radar
-   correlated with 1 of 3 captured freezes; this is a second candidate with ~8× the nightly
-   duration. Run the split **after the square** — the script is itself a heavy multi-rotation
-   log sweep and would add load to the measurement it is trying to explain.
+   **NEW TESTABLE LEAD (S83): split the freeze timestamps by hour-of-day** against the ~4 h
+   nightly window above — nobody knew about it when DEC-0067/0068/0088 were written, so no prior
+   analysis controlled for it. Testable against rotated logs we already hold; no new
+   instrumentation. Run it **after the square** (the sweep is itself heavy). **Not an I/O-volume
+   lead** — DEC-0068 measured the main thread `S`, never `D`, so reducing writes is not a fix
+   (DEC-0093).
 2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open): interference vs no-LNA
    front-end margin vs site vs condensation. **DEC-0083 adds a dated onset (08-10 23:56) the
    characterization should start from** — it coincides with the campaign-B pilot night and the
@@ -158,8 +161,12 @@ DEC-0086) — owner check filed as **ops#168**, no repo work pending. Full worku
   `git checkout -- <file>` to unplant a staged positive-control payload** — it restores the
   planted version from the index (S55's gotcha, re-bitten S82b); edit the lines out instead.
 
-_Last updated: 2026-08-14 (S82b close, amended same day) — the owner's "square hasn't started"
-reframe knocked out #180 (deployed, verified, closed), #172 and #144 (merged for v2.0.14), then
-the afternoon added the 5.5.0 GREEN review (PR #158), the #144 offset verdict (station-side,
-ops#168 carries the owner's WL-elevation check) and ops#167's HLF heads-up. DEC-0091 logged.
-Arm A due 2026-08-15T00:05 — the square starts on one consistent, fully-patched stack._
+_Last updated: 2026-08-15 (S84 close) — a docs-only session. DEC-0093: the dataless-loop-JSON
+proposal out of ops#169 was **already fixed in S43** (DEC-0024 Layer B), the "~40%" was that DEC's
+own pre-fix figure, and the real write amplification is `current.json`, which **nothing reads** —
+direction set (decouple its cadence, ~47% of renames), gated on the dashboard, nothing shipped.
+DEC-0092's last queue item retired in place; its 50–85k renames figure refined to ~45k. INTERFACES
+§1 gained the 30 s liveness gate it had never recorded and lost a claim that was never true._
+
+_**The campaign was not observed this session** — the NAS is unroutable from this laptop's network.
+That is a routing fact, not an outage; S85 job 1 is to actually look._

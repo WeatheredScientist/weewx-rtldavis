@@ -5,6 +5,41 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S84] — 2026-08-15 — The dataless-write proposal was already fixed in S43; the real amplification is `current.json`, which nothing reads (DEC-0093)
+
+- **Asked (out of ops#169) whether `loop_json_writer.py` should skip dataless LOOP packets — it
+  already does, one level up.** DEC-0024 Layer B (S43) stashes freq-hop packets and `continue`s
+  (`rtldavis.py:1507-1517`), so `new_loop()` cannot fire on one; `PacketFactory.create()` does still
+  *yield* them, which is what the reading saw, but `genLoopPackets` filters them first. The `~40%`
+  figure was `66/166` — DEC-0024's own **pre-fix** 1.66×. **Verified live rather than from source**
+  (DEC-0074): the monitor reads `WINDOW: 12–18/21 (57–86%)`, `RECEPTION: 72–74%` — the post-Layer-B
+  signature; the inflation's signature is this metric pinning near 100%.
+- **Measured what DEC-0092 estimated:** ~22,500 loop packets/day → **~45,000 renames/day**, refining
+  its `50–85k` (whose upper bound was the pre-Layer-B rate). DEC-0092's last post-square queue item
+  is answered and retired in place, in the house `Update (Sxx)` pattern.
+- **`current.json` has no consumer anywhere.** The eh-proxy's only `/weewx-data` read is
+  `loop-data.txt`; no runtime reference exists in the dashboard, in hyperlocal-forecast, or in this
+  repo outside the writer and its tests; the dashboard's roadmap still carries Cold-load Fix B's
+  consumer half **open at P0**. So half of all writes go to a file nothing reads — the whole 40% the
+  proposal chased, but real. **Direction: decouple its cadence to 30–60 s (~47% of renames removed),
+  gated on the dashboard confirming.** Not shipped; **no code changed** (PRINCIPLES §8, DEC-0014).
+- **Recorded why content-based suppression is rejected, so it is not re-proposed.** The eh-proxy
+  503s at `now - dateTime > 30` and the dashboard reads that 503 as its one proof the station is
+  down, while `wind_speed` is set unconditionally including `0.0` when calm — a calm night would
+  report a **healthy station as offline**. The "suppression is more honest" argument inverts
+  DEC-0006/0053's two independent freshness axes (per-field TTL vs feed liveness).
+- **Doc contradiction corrected:** INTERFACES §1 and the writer's docstring had claimed since S43
+  that the dashboard fetches `current.json` at boot; it never did. INTERFACES §1 now also records
+  the **30 s liveness gate** — DEC-0092 called loop-JSON "contractually fixed" without the number
+  that makes it so. **Cross-repo reconciliation still owed** (weewx documented the whole feature as
+  done; the dashboard holds the accurate half).
+- **Link declined:** DEC-0068 measured the main thread `S`, never `D`, during a load-12 freeze, so
+  less writer I/O is **not** evidence toward the freeze blocker (DEC-0067/0068).
+- Docs only, plus a docstring in `loop_json_writer.py` (no behavior change). **Arm-A swap
+  verification not done — the NAS is unroutable from this laptop's current network** (Mac on
+  `<LAN_SUBNET>`, NAS on `<NAS_SUBNET>`); not a prod signal, and it stays job-list item 1.
+
+---
 ## [S83] — 2026-08-14 — ops#169 answered: our yield is a near-no-op, the box has a nightly heavy window, and the filesystem was wrong (DEC-0092)
 
 - **Answered coffee-radar's shared-NAS I/O lease proposal (ops#169), measured rather than
@@ -97,36 +132,4 @@ under [Pre-S16].
 - 20 new tests across the two PRs; **271/271** on the merged tip; all gates green throughout.
 
 ---
-## [S82] — 2026-08-14 — The state-machine audit: five apparatus fixes shipped (DEC-0090), monitor package filed
-
-- **The audit BOOT ordered ran (user's Fable 5 pick)** over `ops/rx_experiment.sh`'s
-  guard/tick/abort/pause/resume machine and `weewx_monitor.py`'s alerting/reset logic, hunting
-  the DEC-0088/0089 edge-vs-level class. Every finding verified against live logs and the
-  episode ledger before any fix was proposed; two clean checks recorded so they aren't re-derived.
-- **Five `rx_experiment.sh` defects fixed (PR #179, merged + deployed 10:38, sha `4438a2a3…`):**
-  resume aligned to the pause floor (the occupied [50,60) band could enter a pause it could never
-  exit → needless ceiling abort); `recovered_since()` + the guard's floor mean read the rotated
-  monitor log (rotates 00:05 — the exact swap minute); a due swap defers during an active pause
-  instead of swapping into the episode's health-check abort (BASELINE exempt — property #5);
-  the guard stands down after the BASELINE self-terminator (was armed forever between campaigns);
-  tick/guard/abort serialize behind a lock (the 08-11 02:05:03 guard/tick interleave was on
-  record, and a full-budget health_ok outlives the 5-min cron period).
-- **`soak_check.sh`'s reset counter was dead since S67** — it grepped `RESET: triggering`,
-  retired by DEC-0074's rename; the impossible "1 ineffective of 0 fired" on this morning's soak
-  was the tell. Now counts `RESET: running`.
-- **Monitor-side trio specced and deferred to #180 (tier:mid):** memory-only episode state (a
-  restart mid-episode loses the ledger row + RECOVERY edge), midnight rotation zeroing
-  `wu_bad_windows` and falsifying pending reset verdicts, and `do_reset`'s email-less exception
-  path (timed out live at 01:56:30 this morning).
-- **Ops lane:** #163 closed (MANIFEST carry settled — OPS-DEC-0101/ops#158 precedent), ops#165
-  filed (tier-sweep needs an exemption for decision-blessed carries), MANIFEST's self-measurement
-  de-drifted to ~1.1K.
-- **Morning square watch:** overnight STOP refusals were S81's already-resolved blockade tail;
-  both 01:55/01:59 stalls diagnosed RF-class (known DEC-0081/0083 phenomenon); reception 71%
-  within 1 sd of baseline. Holding on H all session; arm A due `08-15T00:05` on the new code —
-  its first live exercise.
-- 9 new tests (one renamed to the new semantics); 39/39 `test_rx_experiment.py`, 251/251 full
-  suite; ruff/mypy/secret gate clean, positive control caught both planted payloads.
-
----
-*(S73–S81 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S82 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
