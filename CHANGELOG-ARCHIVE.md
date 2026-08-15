@@ -8,6 +8,38 @@ Nothing here is rewritten — text moves, history stays greppable.
 ---
 
 
+## [S82] — 2026-08-14 — The state-machine audit: five apparatus fixes shipped (DEC-0090), monitor package filed
+
+- **The audit BOOT ordered ran (user's Fable 5 pick)** over `ops/rx_experiment.sh`'s
+  guard/tick/abort/pause/resume machine and `weewx_monitor.py`'s alerting/reset logic, hunting
+  the DEC-0088/0089 edge-vs-level class. Every finding verified against live logs and the
+  episode ledger before any fix was proposed; two clean checks recorded so they aren't re-derived.
+- **Five `rx_experiment.sh` defects fixed (PR #179, merged + deployed 10:38, sha `4438a2a3…`):**
+  resume aligned to the pause floor (the occupied [50,60) band could enter a pause it could never
+  exit → needless ceiling abort); `recovered_since()` + the guard's floor mean read the rotated
+  monitor log (rotates 00:05 — the exact swap minute); a due swap defers during an active pause
+  instead of swapping into the episode's health-check abort (BASELINE exempt — property #5);
+  the guard stands down after the BASELINE self-terminator (was armed forever between campaigns);
+  tick/guard/abort serialize behind a lock (the 08-11 02:05:03 guard/tick interleave was on
+  record, and a full-budget health_ok outlives the 5-min cron period).
+- **`soak_check.sh`'s reset counter was dead since S67** — it grepped `RESET: triggering`,
+  retired by DEC-0074's rename; the impossible "1 ineffective of 0 fired" on this morning's soak
+  was the tell. Now counts `RESET: running`.
+- **Monitor-side trio specced and deferred to #180 (tier:mid):** memory-only episode state (a
+  restart mid-episode loses the ledger row + RECOVERY edge), midnight rotation zeroing
+  `wu_bad_windows` and falsifying pending reset verdicts, and `do_reset`'s email-less exception
+  path (timed out live at 01:56:30 this morning).
+- **Ops lane:** #163 closed (MANIFEST carry settled — OPS-DEC-0101/ops#158 precedent), ops#165
+  filed (tier-sweep needs an exemption for decision-blessed carries), MANIFEST's self-measurement
+  de-drifted to ~1.1K.
+- **Morning square watch:** overnight STOP refusals were S81's already-resolved blockade tail;
+  both 01:55/01:59 stalls diagnosed RF-class (known DEC-0081/0083 phenomenon); reception 71%
+  within 1 sd of baseline. Holding on H all session; arm A due `08-15T00:05` on the new code —
+  its first live exercise.
+- 9 new tests (one renamed to the new semantics); 39/39 `test_rx_experiment.py`, 251/251 full
+  suite; ruff/mypy/secret gate clean, positive control caught both planted payloads.
+
+
 ## [S81] — 2026-08-14 — DEC-0087's first live pause/resume exercise found a bug in itself, fixed as DEC-0089
 
 - **Arm A never swapped in overnight.** Session start (~08:15) found `current_arm()` still `H`

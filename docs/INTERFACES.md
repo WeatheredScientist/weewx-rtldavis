@@ -20,10 +20,24 @@ Written by `loop_json_writer.py` (a WeeWX `data_service`, DEC-0005) to
 `/opt/weewx-data/loop-data.txt` **and** `/opt/weewx-data/current.json` on **every LOOP packet
 (~2.5 s** for the VP2+), via atomic tmp-write + `os.replace`. Both files carry identical content —
 only the path differs. `loop-data.txt` is served to the dashboard's ongoing polling at `/loopdata`
-by the eh-proxy (which lives in the dashboard's deployment, not this repo); `current.json` is what
-the dashboard fetches **first at boot**, so a first-time visitor doesn't see em-dashes before the
-polling loop's first response lands (Cold-load Fix B). Serving `current.json` with the right cache
-headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's.
+by the eh-proxy (which lives in the dashboard's deployment, not this repo).
+
+`current.json` was shipped (DEC-0051) **for** a boot fetch — so a first-time visitor doesn't see
+em-dashes before the polling loop's first response lands (Cold-load Fix B) — but **nothing reads it
+today** (verified S84, DEC-0093: the eh-proxy's only `/weewx-data` read is `loop-data.txt`, and the
+dashboard's own roadmap still carries Fix B's consumer half as open). This doc asserted the fetch in
+the present tense from S43 until S84; it was never true. Treat the cadence of `current.json` as
+**unsettled** until that consumer exists — DEC-0093 proposes decoupling it from `loop-data.txt`,
+and the cheapest moment to do so is before anything depends on the current one. Serving it with the
+right cache headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's.
+
+> **Liveness gate — a consumer expectation this doc did not record until S84.** The eh-proxy
+> returns **503 when `Date.now()/1000 - dateTime > 30`**, and the dashboard treats that 503 as its
+> single authoritative proof the station is down (dash DEC-0154). So `dateTime` must keep advancing
+> at least every 30 s on `loop-data.txt`: it is a **liveness** signal, not a change signal, and it
+> is independent of the per-field TTL machinery below. Anything that would suppress or delay a
+> `loop-data.txt` write past that bound produces a false "station offline" on a healthy station.
+> The gate applies to `/loopdata` only — `current.json` is not behind it.
 
 **Contract:**
 - **Units are US/imperial**, encoded in the key names. The packet is `to_US()`-normalized before
