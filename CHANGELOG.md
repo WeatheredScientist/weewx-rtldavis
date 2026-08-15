@@ -35,9 +35,18 @@ under [Pre-S16].
   done; the dashboard holds the accurate half).
 - **Link declined:** DEC-0068 measured the main thread `S`, never `D`, during a load-12 freeze, so
   less writer I/O is **not** evidence toward the freeze blocker (DEC-0067/0068).
-- Docs only, plus a docstring in `loop_json_writer.py` (no behavior change). **Arm-A swap
-  verification not done — the NAS is unroutable from this laptop's current network** (Mac on
-  `192.168.1.x`, NAS on `192.168.127.x`); not a prod signal, and it stays job-list item 1.
+- Docs only, plus a docstring in `loop_json_writer.py` (no behavior change).
+- **Amended same day (S84b) — the NAS came back in reach and the square was verified after all.**
+  `H -> A` at `00:05:01` (`arm A live and healthy` `00:06:23`), `A -> B` at `06:05:01` (healthy
+  `06:07:20`); on arm **B**, no STOP, no PAUSE. **DEC-0087/0089 got their first live exercise and
+  held:** one ~20-min blackout (02:00–02:22, reception `30→2→16→1→0%`) produced **three**
+  pause/resume cycles as the 30-min mean lagged the recovery, and **pre-DEC-0087 the first trip
+  would have been a sticky STOP that killed the block unattended.** Resumes 2 and 3 came from
+  `recovered_since()`'s second path (`RECEPTION: 73% [OK]` at 02:31:43 / 02:41:44) — **DEC-0089's
+  fix is what carried them**, since only one `RECEPTION RECOVERY` edge line exists. Whether the
+  blackout was RF or a process freeze is **not established** (DEC-0067: both read identically on
+  this metric) and it sits inside DEC-0092's nightly heavy-I/O window — logged as blocker 1's lead,
+  not scored as an RF result. S84's "NAS unroutable" note was true when written and is now stale.
 
 ---
 ## [S83] — 2026-08-14 — ops#169 answered: our yield is a near-no-op, the box has a nightly heavy window, and the filesystem was wrong (DEC-0092)
