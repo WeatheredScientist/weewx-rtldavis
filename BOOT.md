@@ -24,13 +24,10 @@ is a **separate repo** — don't make dashboard changes here.
 `soak_check.sh` reset counter** — PR #179, deployed sha `4438a2a3…`; the fix list lives in the
 DEC row.
 
-**S82b (DEC-0091): the owner's reframe ("square hasn't started") used the pre-block-1 window.**
-PR #182 (the #180 monitor trio) merged AND deployed same day — episode state mirrored to
-`logs/monitor_episode.state` + restored at startup, rotation voids pending reset verdicts,
-reset-exception path emails; live as **pid 7625** since 12:25:21, verified per DEC-0074; #180
-closed. PR #183 (#172 + #144) merged to `dev`: **`barometer_fetch_epoch`** (no-TTL staleness
-stamp) and **honest-null `pressure`/`altimeter`** (archive columns go NULL at deploy — hlf#302
-heads-up posted). INTERFACES §1 updated; #172/#144 stay open until the v2.0.14 deploy.
+**S82b (DEC-0091): the pre-block-1 window used — monitor trio (#182) deployed and verified, and
+the pressure package (#183) merged to `dev`.** The whole square runs on one monitor version.
+Detail in CHANGELOG S82b / DEC-0091; the parts still live are in the state table and the v2.0.14
+queue below.
 
 **S83: the box has a nightly heavy window, and the midnight block sits in it (ops#169).**
 Answering coffee-radar's shared-NAS lease proposal turned up the box's real I/O schedule.
@@ -120,6 +117,12 @@ DEC-0086) — owner check filed as **ops#168**, no repo work pending. Full worku
 
 ## Gotchas that survive here because they are NOT in the canonical docs
 
+- **Campaign clocks are LOCAL (EDT); most tool output is UTC — convert before comparing.** The
+  `SCHEDULE` rows (`2026-08-15T00:05|A`), the swap slots, the log timestamps and DSM's crontab are
+  all **local**; `git`/`gh` output (`mergedAt: …Z`), and most API responses are **UTC**. S83 read a
+  `Z` timestamp as local and put the swap four hours nearer than it was. DEC-0068 hit the identical
+  trap from the other side — coffee-radar's 19:00 run only matched the freeze once corrected to
+  EDT, not UTC. Two hits now, so treat any bare timestamp as UTC until proven local.
 - **A file match proves the FILE, never the PROCESS** (DEC-0074) — liveness = startup line after
   file mtime, `/proc/<pid>/stat` field 22 vs `/proc/uptime`, new pid + old gone.
 - **`secret-read-guard.sh` trips every NAS `scp` deploy** (S81 rx_experiment, S82 again, S82b
