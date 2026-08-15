@@ -25,17 +25,26 @@ pressure package (#183) is merged to `dev` for v2.0.14.** The whole square runs 
 version. Detail in CHANGELOG / the DEC rows; what is still live sits in the state table and the
 v2.0.14 queue below.
 
-**S84 (DEC-0093): `current.json` is written ~22,500×/day and nothing reads it.** The
-"skip dataless loop-JSON writes" idea (DEC-0092's last queue item) **was already done in S43** —
-Layer B filters freq-hop packets in `genLoopPackets`, so that class has been empty for three
-months and the "~40%" was DEC-0024's own *pre-fix* figure. Measured **~45,000 renames/day**, not
-50–85k. The yield is `current.json`: **no consumer anywhere**, while the dashboard's roadmap still
-carries Cold-load Fix B's consumer half open at P0. **Direction: decouple its cadence to 30–60 s
-(~47% of renames), gated on the dashboard confirming** (job 4). **Do not "optimize"
-`loop-data.txt`** — the eh-proxy 503s at `now - dateTime > 30` and the dashboard reads that 503 as
-its one proof the station is down, so content-based suppression would report a healthy station
-offline on a calm night. Full argument, and the freeze-blocker link that does *not* hold, in
-DEC-0093.
+**S84b: the square is live and DEC-0087/0089 earned their keep on night one.** `swapping H -> A`
+at `00:05:01`, `arm A live and healthy` at `00:06:23`; block 2 swapped `A -> B` at `06:05:01`,
+healthy `06:07:20`. State `B|…|2026-08-15 06:07:20`, no STOP, no PAUSE (the `.STOP.campaignA` file
+at the project root is campaign **A**'s, a different name — do not misread it). **One ~20-min
+blackout at 02:00–02:22 produced THREE pause/resume cycles** (02:15 PAUSE 45% → 02:25 RESUME ·
+02:30 PAUSE 20% → 02:35 RESUME · 02:40 PAUSE 39% → 02:45 RESUME): the 30-min mean kept lagging the
+recovery, exactly DEC-0087's scenario. **Pre-DEC-0087 that first trip would have been a sticky STOP
+at 02:15 killing the block unattended.** Resumes 2 and 3 came from `recovered_since()`'s *second*
+path — `RECEPTION: 73% [OK]` at 02:31:43 and 02:41:44, both newer than their pause and above the
+50% floor — i.e. **DEC-0089's fix is what carried them**; only one `RECEPTION RECOVERY` edge line
+exists (02:22:40), so the edge-only logic would have stranded both. Verified against the monitor
+log, not inferred from the script.
+
+**S84 (DEC-0093): `current.json` is written ~22,500×/day and nothing reads it.** DEC-0092's
+"skip dataless loop-JSON writes" queue item **was already done in S43** (Layer B) and is retired;
+measured **~45,000 renames/day**, not 50–85k. Direction: **decouple `current.json`'s cadence to
+30–60 s (~47% of renames), gated on the dashboard** (job 5). **Do not "optimize" `loop-data.txt`**
+— the eh-proxy 503s at `now - dateTime > 30` and the dashboard reads that as proof the station is
+down, so content-based suppression would report a healthy station offline on a calm night. Full
+argument, and the freeze link that does *not* hold, in DEC-0093.
 
 **S83: the box has a nightly heavy window, and the midnight block sits in it (ops#169, DEC-0092).**
 A sibling project's nightly maintenance (DSM id=15) runs **00:10 → ~03:00–05:10 every night**
@@ -60,25 +69,25 @@ DEC-0091 / hlf#302 / #144.
 
 ### ▶▶ S85 JOB LIST
 
-1. **STILL UNVERIFIED — arm-A's block 1 swap at `2026-08-15T00:05`.** S84 could not check it: the
-   **NAS is unroutable from the laptop's current network** (Mac on `192.168.1.x`, NAS on
-   `192.168.127.x`) — a routing fact, **not** a prod signal, and not evidence of an outage. Do this
-   first, from the home network. Tick log wants `swapping H -> A` + `arm A live and healthy`; if the
-   swap did NOT happen, check for a PAUSE first (a deferred swap is legitimate behavior), then STOP.
-   **For the 00:05 slot only:** three jobs fire in that minute-plus-five (id=2 our logrotate, id=9 a
-   tenant capture job, id=15 the ~4 h nightly maintenance at 00:10 — see the tenancy block). If
-   `health_ok()` is slow or the block reads oddly, that cluster is a candidate explanation — check it
-   **before** concluding the S82 state machine misbehaved. Does NOT apply to 06/12/18:05.
-2. Daily square watch (~5 min): `ops/soak_check.sh`; STOP **and PAUSE** both absent; state
-   matches schedule. **Two days of watch are now unobserved** (08-15 onward) — catch up before
-   reading any block as healthy.
-3. **Watch the revised resume machinery on a real pause** — floor-resume + rotated reads +
-   deferral have no live exercise yet (n=0 on the S82 mechanism; BACKLOG watch re-baselined).
-4. **This file is ~3,150 tok against its ~2,500 cap** — it arrived at S84 already ~3,030 over, and
-   S84 trimmed S83's tenancy block, #144, the 5.5.0 parenthetical and the freeze lead to land
-   roughly net-neutral while adding a session. Closing the last ~650 means cutting **live campaign
-   context**, which should be a deliberate pass (ARCHIVE/ or a `MANIFEST.md` row per DEC-0063), not
-   a closeout scramble mid-square. Do it once the square lands, or sooner if it grows again.
+1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP **and PAUSE** both absent; state
+   matches schedule. **Verified good at S84b close (08-15 09:00 EDT)** — see the block below;
+   next unobserved window starts after block 3 (`12:05`).
+2. **Investigate the 02:00–02:22 reception blackout — arm A's first block took a real one.**
+   Reception ran `30% → 2% → 16% → 1% → 0%` with a `RECEPTION ALERT` at 02:02:31, recovering to
+   71% at 02:22:40 and holding 71–78% since. **Whether that was RF or a process freeze is NOT
+   established** — DEC-0067 is explicit that both read identically on this metric (it counts
+   *published output*), and the episode sits **inside the nightly heavy-I/O window**
+   (00:10 → ~03:00–05:10, DEC-0092). That is blocker 1's testable lead arriving on its own: an
+   instance to test *against*, in arm A's own data. Do not score it as an RF result until split.
+3. **Watch the revised resume machinery on a real pause** — **no longer n=0: it fired three times
+   on 08-15 and worked** (see below). Remaining unexercised: the 120-min ceiling escalation, the
+   swap-deferral path, and rotated-log reads across a `.1` boundary.
+4. **This file is ~3,500 tok against its ~2,500 cap** — it arrived at S84 already ~3,030 over.
+   S84/S84b trimmed S83's tenancy block, #144, the 5.5.0 parenthetical, the freeze lead and the
+   DEC-0093 block, and still went up: **the square's live state genuinely costs more than the cap
+   allows while it is running.** Closing the last ~1,000 means cutting live campaign context, so do
+   it as a deliberate pass (ARCHIVE/ or a `MANIFEST.md` row per DEC-0063) **once the square lands
+   ~08-23** — that is also when most of this section becomes deletable in one stroke.
 5. **Cross-repo reconciliation owed (DEC-0093)** — weewx documented Cold-load Fix B as done while
    the dashboard's roadmap still carries its consumer half open at P0, and `current.json` has no
    reader. Needs the dashboard side to confirm the 30–60 s cadence **before** any writer change;
@@ -89,7 +98,7 @@ DEC-0091 / hlf#302 / #144.
 | Thing | State |
 |---|---|
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` (S82) + `weewx_monitor.py` (S82b, pid 7625) both redeployed today, sha+process verified |
-| Campaign B | Arm **A** was due `2026-08-15T00:05`, square through `08-23T00:05`. **State as of S84 close is UNKNOWN — not checked, NAS unroutable from this network** (job 1). Last confirmed reading was S83: holding on H, STOP and PAUSE both absent |
+| Campaign B | **Live and on schedule.** Blocks 1–2 done: `H -> A` `08-15 00:05:01`, `A -> B` `06:05:01`; now on arm **B** since `06:07:20`. Square through `08-23T00:05`. STOP and PAUSE both absent; three pauses on night one all auto-resumed. Verified 08-15 09:00 EDT |
 | `dev` beyond prod | #183's pressure package (baked files) + S84's docs — rides until the v2.0.14 image cut |
 | Freeze rate | DEC-0088-corrected (1.31/day), untouched |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
@@ -168,5 +177,8 @@ direction set (decouple its cadence, ~47% of renames), gated on the dashboard, n
 DEC-0092's last queue item retired in place; its 50–85k renames figure refined to ~45k. INTERFACES
 §1 gained the 30 s liveness gate it had never recorded and lost a claim that was never true._
 
-_**The campaign was not observed this session** — the NAS is unroutable from this laptop's network.
-That is a routing fact, not an outage; S85 job 1 is to actually look._
+_Amended same day (S84b): the NAS became reachable again and **the campaign was checked after all**
+— blocks 1–2 clean, on arm B. S84's earlier "NAS unroutable" note was a real routing condition at
+the time (laptop on a different subnet), **not** an outage, and it is now stale; the verified state
+is in the S84b block above. The lesson stands: a tool timing out is a statement about the path, not
+about the box._
