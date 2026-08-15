@@ -25,19 +25,16 @@ pressure package (#183) is merged to `dev` for v2.0.14.** The whole square runs 
 version. Detail in CHANGELOG / the DEC rows; what is still live sits in the state table and the
 v2.0.14 queue below.
 
-**S84b: the square is live and DEC-0087/0089 earned their keep on night one.** `swapping H -> A`
-at `00:05:01`, `arm A live and healthy` at `00:06:23`; block 2 swapped `A -> B` at `06:05:01`,
-healthy `06:07:20`. State `B|…|2026-08-15 06:07:20`, no STOP, no PAUSE (the `.STOP.campaignA` file
-at the project root is campaign **A**'s, a different name — do not misread it). **One ~20-min
-blackout at 02:00–02:22 produced THREE pause/resume cycles** — and it was **RF-dead, not a freeze**
-(three `rtldavis process stalled` lines inside it, DEC-0094). (02:15 PAUSE 45% → 02:25 RESUME ·
-02:30 PAUSE 20% → 02:35 RESUME · 02:40 PAUSE 39% → 02:45 RESUME): the 30-min mean kept lagging the
-recovery, exactly DEC-0087's scenario. **Pre-DEC-0087 that first trip would have been a sticky STOP
-at 02:15 killing the block unattended.** Resumes 2 and 3 came from `recovered_since()`'s *second*
-path — `RECEPTION: 73% [OK]` at 02:31:43 and 02:41:44, both newer than their pause and above the
-50% floor — i.e. **DEC-0089's fix is what carried them**; only one `RECEPTION RECOVERY` edge line
-exists (02:22:40), so the edge-only logic would have stranded both. Verified against the monitor
-log, not inferred from the script.
+**S84b: the square is live and DEC-0087/0089 earned their keep on night one.** `H -> A`
+`00:05:01` (healthy `00:06:23`), `A -> B` `06:05:01` (healthy `06:07:20`). **One ~20-min
+blackout at 02:00–02:22 produced THREE pause/resume cycles** as the 30-min mean lagged the
+recovery — exactly DEC-0087's scenario, and **pre-DEC-0087 the first trip would have been a
+sticky STOP killing the block unattended.** Resumes 2 and 3 came from `recovered_since()`'s
+**second** path (`RECEPTION: [OK]` lines newer than the pause), i.e. **DEC-0089's fix carried
+them** — only one `RECEPTION RECOVERY` edge line exists, so edge-only logic would have stranded
+both. The blackout was **RF-dead, not a freeze** (three `rtldavis process stalled` lines inside
+it, DEC-0094). Full account in CHANGELOG S84. *(The `.STOP.campaignA` file at the project root
+is campaign **A**'s — a different name, not a live sentinel.)*
 
 **S84 (DEC-0093): `current.json` is written ~22,500×/day and nothing reads it.** DEC-0092's
 "skip dataless loop-JSON writes" queue item **was already done in S43** (Layer B) and is retired;
@@ -71,16 +68,18 @@ DEC-0091 / hlf#302 / #144.
 ### ▶▶ S85 JOB LIST
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP **and PAUSE** both absent; state
-   matches schedule. **Verified good at S84b close (08-15 09:00 EDT)** — see the block below;
-   next unobserved window starts after block 3 (`12:05`).
+   matches schedule. **Verified good 08-15 10:39 EDT** (reception 69–77% [OK], no
+   markers) — next unobserved window is block 3's swap at `12:05`.
 2. **Watch the revised resume machinery on a real pause** — **no longer n=0: it fired three times
    on 08-15 and worked** (see below). Remaining unexercised: the 120-min ceiling escalation, the
    swap-deferral path, and rotated-log reads across a `.1` boundary.
-3. **This file is ~3,600 tok against its ~2,500 cap** — it arrived at S84 already ~3,030 over, and
-   four trimming passes still ended above where they started: **the square's live state genuinely
-   costs more than the cap allows while it is running.** Closing the gap means cutting live campaign
-   context, so do it as a deliberate pass (ARCHIVE/ or a `MANIFEST.md` row per DEC-0063) **once the
-   square lands ~08-23** — which is also when most of this section becomes deletable in one stroke.
+3. **This file is over cap and it is TRACKED as [ops#173]** (~3,550 vs 2,500; acknowledged there
+   S84 with the plan, so **do not re-derive it or open a second issue**). Four trimming passes this
+   session applied rule 1 and still landed above cap: **a repo running a live time-boxed experiment
+   exceeds a static cap for the duration, structurally.** The diet lands at the **square's close
+   ~08-23**, when most of this section becomes deletable in one stroke; remainder to `ARCHIVE/` or a
+   `MANIFEST.md` row (DEC-0063). ops#173 closes when the sweep goes green.
+
 4. **Cross-repo reconciliation FILED, awaiting their answer — [dash#430]** (DEC-0093). weewx had
    documented Cold-load Fix B as done while the dashboard's roadmap still carries its consumer half
    open at P0, and `current.json` has no reader. The issue asks them to pick one of: confirm
@@ -89,20 +88,25 @@ DEC-0091 / hlf#302 / #144.
    (DEC-0010). Nothing to chase before ~08-23; if it is still unanswered when the square lands,
    ping it then.
 
-   [dash#430]: https://github.com/WeatheredScientist/eaglehunt-weather-dashboard/issues/430
+
+[ops#157]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/157
+[ops#169]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/169
+[ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
+[dash#430]: https://github.com/WeatheredScientist/eaglehunt-weather-dashboard/issues/430
 
 ### Current state (S84 close)
 
 | Thing | State |
 |---|---|
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` (S82) + `weewx_monitor.py` (S82b, pid 7625) both redeployed today, sha+process verified |
-| Campaign B | **Live and on schedule.** Blocks 1–2 done: `H -> A` `08-15 00:05:01`, `A -> B` `06:05:01`; now on arm **B** since `06:07:20`. Square through `08-23T00:05`. STOP and PAUSE both absent; three pauses on night one all auto-resumed. Verified 08-15 09:00 EDT |
+| Campaign B | **Live and on schedule.** Blocks 1–2 done: `H -> A` `08-15 00:05:01`, `A -> B` `06:05:01`; on arm **B** since `06:07:20`, next swap `12:05`. Square through `08-23T00:05`. STOP/PAUSE/lock all absent; three pauses on night one all auto-resumed; reception 69–77% [OK]. Verified 08-15 10:39 EDT |
 | `dev` beyond prod | #183's pressure package (baked files) + S84's docs — rides until the v2.0.14 image cut |
 | Freeze rate | DEC-0088-corrected (1.31/day), untouched. **Hour-of-day split done (DEC-0094): nightly window refuted, evening 18:00–21:00 carries the signal** |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
 | Branches | `dev` = `origin/dev` (`26ea196` + S84's docs PR). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, queued for v2.0.14 — deliberately held for the post-campaign cut, pre-reviewed GREEN, not stalled |
-| Trackers | #180 closed · #172/#144 commented, open until v2.0.14 · ops#163 closed / ops#165 filed · ops#169 answered (S83), **refined by DEC-0093 (S84) — our yield is ~47% removable unilaterally, and `loop-data.txt` is a hard 30 s floor, not a soft one** |
+| Trackers | #180 closed · #172/#144 open until v2.0.14 · #158 held for v2.0.14 (pre-reviewed GREEN, **not stalled**) · ops#163 closed / ops#165 filed |
+| Cross-repo (S84) | **[ops#169] updated** — footprint corrected to ~45k, ~47% removable unilaterally, `loop-data.txt` declared a **hard 30 s floor** for the lease spec, the nightly-window freeze lead **retracted**, and coffee-radar's ~19:00 job reported as correlating with 30% of our freezes (limits stated). **[dash#430] filed, awaiting their answer** — `current.json` cadence. **[ops#173] acknowledged** (BOOT cap, job 3). **[ops#157] acknowledged** — the VPN heads-up explained this session's NAS gap. ops#168 still owner-side (WL elevation) |
 
 ## Blockers
 
@@ -170,15 +174,11 @@ DEC-0091 / hlf#302 / #144.
   `git checkout -- <file>` to unplant a staged positive-control payload** — it restores the
   planted version from the index (S55's gotcha, re-bitten S82b); edit the lines out instead.
 
-_Last updated: 2026-08-15 (S84 close) — a docs-only session. DEC-0093: the dataless-loop-JSON
-proposal out of ops#169 was **already fixed in S43** (DEC-0024 Layer B), the "~40%" was that DEC's
-own pre-fix figure, and the real write amplification is `current.json`, which **nothing reads** —
-direction set (decouple its cadence, ~47% of renames), gated on the dashboard, nothing shipped.
-DEC-0092's last queue item retired in place; its 50–85k renames figure refined to ~45k. INTERFACES
-§1 gained the 30 s liveness gate it had never recorded and lost a claim that was never true._
+_Last updated: 2026-08-15 (S84 close, four amendments same day). **DEC-0093** (`current.json` has
+no reader; direction set, gated on dash#430, nothing shipped) and **DEC-0094** (nightly-window
+freeze lead **refuted**, evening cluster real). The square started on time. Cross-repo: ops#169
+updated with both, ops#173 + ops#157 acknowledged, dash#430 filed and awaiting._
 
-_Amended same day (S84b): the NAS became reachable again and **the campaign was checked after all**
-— blocks 1–2 clean, on arm B. S84's earlier "NAS unroutable" note was a real routing condition at
-the time (laptop on a different subnet), **not** an outage, and it is now stale; the verified state
-is in the S84b block above. The lesson stands: a tool timing out is a statement about the path, not
-about the box._
+_Blocker 1 is narrower but NOT closed: the freeze mechanism is still unproven — DEC-0068 measured
+the main thread `S`, never `D`, so "correlates with" is not "is blocked by". Next step there is a
+mechanism probe during an evening window, not more timestamp counting._
