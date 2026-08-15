@@ -116,6 +116,22 @@ of 7 (of 47) miscounted the same way across the full window. Corrected reading: 
 tool is more accurate going forward (DEC-0087's pause/resume will keep producing this exact class
 of ad hoc restart).
 
+✅ **S84d: freezes split by hour-of-day — the nightly-window lead is refuted, the evening one is
+real (DEC-0094).** Run over the 40 DEC-0088-corrected events (07-14 → 08-13) at **zero prod cost**:
+`freeze_baseline.py` prints every individual event by design, and those listings survive in session
+transcripts, so no fresh sweep was needed — the deferral in `BOOT.md` had priced a *fresh run*, not
+the split. **Nightly maintenance window (00:10–04:30, 18.1% of the day): 9 vs 7.2 expected,
+P=0.29 — explains nothing**, and median duration inside (240 s) equals outside. **Evening
+18:00–21:00: 12 vs 5.0, P=0.0027**; coffee-radar's own ~18:30–20:00 window 7 vs 2.5, P=0.011;
+across **10 distinct dates**. That converts DEC-0068's "n=1, not a base rate" into one: **30% of
+freezes in 12.5% of the day.** **Two limits, stated:** the evening cluster was found post hoc and
+the omnibus X²=30.8 (df=23, crit 35.2) does **not** reject uniformity, so it corroborates DEC-0068's
+mechanistic hypothesis rather than proving it independently; and the window pre-dates the campaign,
+so a fresh run post-square should confirm. **If this is recomputed, use the DEC-0088-corrected run
+only** — three pre-fix runs (1.48/1.54/1.57) also sit in the transcripts, and the positive control
+is whether 2026-08-12 19:55 is *absent* (corrected) or *present* (pre-fix). **Mechanism remains the
+open half**: `weewxd` stays `S`, never `D`, so "correlates with" is still not "is blocked by".
+
 ✅ Closed, do not re-run: **#74 calm-windDir** (S59) · **campaign-A abort near-miss** (S62, DEC-0065
 — the abort was correct, DEC-0061's budget holds).
 
