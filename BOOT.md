@@ -17,8 +17,8 @@ is a **separate repo** — don't make dashboard changes here.
 ### What's settled (do not re-derive)
 
 **Campaign B: v2.0.13/ws.5 in prod, `prod-baseline-20260811` tagged.** Square runs
-**08-15 → 08-23T00:05** (third shift, DEC-0089). Holding on **H**; arm **A** due
-`2026-08-15T00:05` — the first block runs on ALL of S82/S82b's fixes.
+**08-15 → 08-23T00:05** (third shift, DEC-0089). **Started on time and is running** — live state
+in the table below, night-one detail in the S84b block.
 
 **S82/S82b (DEC-0090, DEC-0091): apparatus fixes + the monitor trio are deployed and verified; the
 pressure package (#183) is merged to `dev` for v2.0.14.** The whole square runs one monitor
@@ -29,7 +29,8 @@ v2.0.14 queue below.
 at `00:05:01`, `arm A live and healthy` at `00:06:23`; block 2 swapped `A -> B` at `06:05:01`,
 healthy `06:07:20`. State `B|…|2026-08-15 06:07:20`, no STOP, no PAUSE (the `.STOP.campaignA` file
 at the project root is campaign **A**'s, a different name — do not misread it). **One ~20-min
-blackout at 02:00–02:22 produced THREE pause/resume cycles** (02:15 PAUSE 45% → 02:25 RESUME ·
+blackout at 02:00–02:22 produced THREE pause/resume cycles** — and it was **RF-dead, not a freeze**
+(three `rtldavis process stalled` lines inside it, DEC-0094). (02:15 PAUSE 45% → 02:25 RESUME ·
 02:30 PAUSE 20% → 02:35 RESUME · 02:40 PAUSE 39% → 02:45 RESUME): the 30-min mean kept lagging the
 recovery, exactly DEC-0087's scenario. **Pre-DEC-0087 that first trip would have been a sticky STOP
 at 02:15 killing the block unattended.** Resumes 2 and 3 came from `recovered_since()`'s *second*
@@ -41,7 +42,7 @@ log, not inferred from the script.
 **S84 (DEC-0093): `current.json` is written ~22,500×/day and nothing reads it.** DEC-0092's
 "skip dataless loop-JSON writes" queue item **was already done in S43** (Layer B) and is retired;
 measured **~45,000 renames/day**, not 50–85k. Direction: **decouple `current.json`'s cadence to
-30–60 s (~47% of renames), gated on the dashboard** (job 5). **Do not "optimize" `loop-data.txt`**
+30–60 s (~47% of renames), gated on the dashboard** (job 4). **Do not "optimize" `loop-data.txt`**
 — the eh-proxy 503s at `now - dateTime > 30` and the dashboard reads that as proof the station is
 down, so content-based suppression would report a healthy station offline on a calm night. Full
 argument, and the freeze link that does *not* hold, in DEC-0093.
@@ -72,23 +73,15 @@ DEC-0091 / hlf#302 / #144.
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP **and PAUSE** both absent; state
    matches schedule. **Verified good at S84b close (08-15 09:00 EDT)** — see the block below;
    next unobserved window starts after block 3 (`12:05`).
-2. **Investigate the 02:00–02:22 reception blackout — arm A's first block took a real one.**
-   Reception ran `30% → 2% → 16% → 1% → 0%` with a `RECEPTION ALERT` at 02:02:31, recovering to
-   71% at 02:22:40 and holding 71–78% since. **Whether that was RF or a process freeze is NOT
-   established** — DEC-0067 is explicit that both read identically on this metric (it counts
-   *published output*), and the episode sits **inside the nightly heavy-I/O window**
-   (00:10 → ~03:00–05:10, DEC-0092). That is blocker 1's testable lead arriving on its own: an
-   instance to test *against*, in arm A's own data. Do not score it as an RF result until split.
-3. **Watch the revised resume machinery on a real pause** — **no longer n=0: it fired three times
+2. **Watch the revised resume machinery on a real pause** — **no longer n=0: it fired three times
    on 08-15 and worked** (see below). Remaining unexercised: the 120-min ceiling escalation, the
    swap-deferral path, and rotated-log reads across a `.1` boundary.
-4. **This file is ~3,500 tok against its ~2,500 cap** — it arrived at S84 already ~3,030 over.
-   S84/S84b trimmed S83's tenancy block, #144, the 5.5.0 parenthetical, the freeze lead and the
-   DEC-0093 block, and still went up: **the square's live state genuinely costs more than the cap
-   allows while it is running.** Closing the last ~1,000 means cutting live campaign context, so do
-   it as a deliberate pass (ARCHIVE/ or a `MANIFEST.md` row per DEC-0063) **once the square lands
-   ~08-23** — that is also when most of this section becomes deletable in one stroke.
-5. **Cross-repo reconciliation FILED, awaiting their answer — [dash#430]** (DEC-0093). weewx had
+3. **This file is ~3,600 tok against its ~2,500 cap** — it arrived at S84 already ~3,030 over, and
+   four trimming passes still ended above where they started: **the square's live state genuinely
+   costs more than the cap allows while it is running.** Closing the gap means cutting live campaign
+   context, so do it as a deliberate pass (ARCHIVE/ or a `MANIFEST.md` row per DEC-0063) **once the
+   square lands ~08-23** — which is also when most of this section becomes deletable in one stroke.
+4. **Cross-repo reconciliation FILED, awaiting their answer — [dash#430]** (DEC-0093). weewx had
    documented Cold-load Fix B as done while the dashboard's roadmap still carries its consumer half
    open at P0, and `current.json` has no reader. The issue asks them to pick one of: confirm
    30–60 s · drop Fix B (then weewx stops writing the file entirely) · keep ~2.5 s and say why.
@@ -105,7 +98,7 @@ DEC-0091 / hlf#302 / #144.
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` (S82) + `weewx_monitor.py` (S82b, pid 7625) both redeployed today, sha+process verified |
 | Campaign B | **Live and on schedule.** Blocks 1–2 done: `H -> A` `08-15 00:05:01`, `A -> B` `06:05:01`; now on arm **B** since `06:07:20`. Square through `08-23T00:05`. STOP and PAUSE both absent; three pauses on night one all auto-resumed. Verified 08-15 09:00 EDT |
 | `dev` beyond prod | #183's pressure package (baked files) + S84's docs — rides until the v2.0.14 image cut |
-| Freeze rate | DEC-0088-corrected (1.31/day), untouched |
+| Freeze rate | DEC-0088-corrected (1.31/day), untouched. **Hour-of-day split done (DEC-0094): nightly window refuted, evening 18:00–21:00 carries the signal** |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
 | Branches | `dev` = `origin/dev` (`26ea196` + S84's docs PR). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, queued for v2.0.14 — deliberately held for the post-campaign cut, pre-reviewed GREEN, not stalled |
@@ -118,12 +111,14 @@ DEC-0091 / hlf#302 / #144.
    **Still hard-aborts — DEC-0087 deliberately does not cover freezes** ("RF re-established" isn't
    a meaningful resume condition for a process-wedge event). Root cause still unproven (thread
    blocking on the bind-mounted log volume is the leading hypothesis, DEC-0067/0068).
-   **NEW TESTABLE LEAD (S83): split the freeze timestamps by hour-of-day** against the ~4 h
-   nightly window above — nobody knew about it when DEC-0067/0068/0088 were written, so no prior
-   analysis controlled for it. Testable against rotated logs we already hold; no new
-   instrumentation. Run it **after the square** (the sweep is itself heavy). **Not an I/O-volume
-   lead** — DEC-0068 measured the main thread `S`, never `D`, so reducing writes is not a fix
-   (DEC-0093).
+   **The S83 hour-of-day lead is ANSWERED and NEGATIVE (S84d, DEC-0094) — do not re-run it.** The
+   nightly window holds **9 of 40 freezes vs 7.2 expected, P=0.29**; durations inside match outside.
+   **The evening carries the signal instead: 18:00–21:00 = 12 vs 5.0 (P=0.0027)**, coffee-radar's
+   ~19:00 window 7 vs 2.5 (P=0.011), over 10 distinct dates — DEC-0068's n=1 is now a base rate
+   (30% of freezes in 12.5% of the day). **Mechanism still unproven**, which is why this blocker
+   stays open: DEC-0068 measured the main thread `S`, never `D`, so neither coffee-radar's load nor
+   our own write volume is established as *blocking* us (DEC-0093 declines the write-volume link).
+   Next real step is a mechanism probe during an evening window, not more timestamp counting.
 2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open): interference vs no-LNA
    front-end margin vs site vs condensation. **DEC-0083 adds a dated onset (08-10 23:56) the
    characterization should start from** — it coincides with the campaign-B pilot night and the
