@@ -88,10 +88,15 @@ DEC-0091 / hlf#302 / #144.
    allows while it is running.** Closing the last ~1,000 means cutting live campaign context, so do
    it as a deliberate pass (ARCHIVE/ or a `MANIFEST.md` row per DEC-0063) **once the square lands
    ~08-23** — that is also when most of this section becomes deletable in one stroke.
-5. **Cross-repo reconciliation owed (DEC-0093)** — weewx documented Cold-load Fix B as done while
-   the dashboard's roadmap still carries its consumer half open at P0, and `current.json` has no
-   reader. Needs the dashboard side to confirm the 30–60 s cadence **before** any writer change;
-   until then the cadence question stays open, not shipped. Not a weewx-only call (DEC-0010).
+5. **Cross-repo reconciliation FILED, awaiting their answer — [dash#430]** (DEC-0093). weewx had
+   documented Cold-load Fix B as done while the dashboard's roadmap still carries its consumer half
+   open at P0, and `current.json` has no reader. The issue asks them to pick one of: confirm
+   30–60 s · drop Fix B (then weewx stops writing the file entirely) · keep ~2.5 s and say why.
+   **weewx changes nothing until they reply** — do not ship a writer change on our own read of it
+   (DEC-0010). Nothing to chase before ~08-23; if it is still unanswered when the square lands,
+   ping it then.
+
+   [dash#430]: https://github.com/WeatheredScientist/eaglehunt-weather-dashboard/issues/430
 
 ### Current state (S84 close)
 
