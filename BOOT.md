@@ -48,12 +48,12 @@ argument, and the freeze link that does *not* hold, in DEC-0093.
 A sibling project's nightly maintenance (DSM id=15) runs **00:10 → ~03:00–05:10 every night**
 (6 nights verified), so **~72% of every 00:05 campaign block runs under it**; id=2 (our own
 logrotate, same minute as the swap's `harvest()`) and id=9 (a tenant capture job) fire at 00:05
-itself. **Comparability is safe** — the 4×4 square runs twice, so each arm takes the midnight slot
-exactly twice and the confound is absorbed by construction; what it threatens is midnight *swap
-reliability* and *variance*. Full workup, the btrfs-not-ext4 correction, and the task-id resolution
-method are in DEC-0092. **Post-square queue from it:** `noatime` on `/volume1` (owner-level DSM
-change) · `chattr +C` on the archive DB (needs its own DEC, rides the v2.0.14 recreate, does **not**
-reopen DEC-0071) · move our logrotate off 00:05.
+itself. **Comparability is safe** — the square runs twice, so each arm takes the midnight slot
+exactly twice and the confound is absorbed by construction; what it threatens is *swap
+reliability* and *variance*. Workup, the btrfs-not-ext4 correction and the task-id method:
+DEC-0092. **Post-square queue from it:** `noatime` on `/volume1` (owner-level DSM change) ·
+`chattr +C` on the archive DB (own DEC, rides the v2.0.14 recreate, does **not** reopen DEC-0071) ·
+move our logrotate off 00:05.
 
 **The v2.0.14 queue (post-campaign, ~08-23):** weewx 5.5.0 (PR #158) + #172's field + #144's
 honest nulls + move `:latest` to v2.0.13 once the square proves it. NAS-native build (DEC-0078),
@@ -68,17 +68,18 @@ DEC-0091 / hlf#302 / #144.
 ### ▶▶ S85 JOB LIST
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP **and PAUSE** both absent; state
-   matches schedule. **Verified good 08-15 10:39 EDT** (reception 69–77% [OK], no
-   markers) — next unobserved window is block 3's swap at `12:05`.
+   matches schedule. **Verified good through block 4 (08-15 18:18 EDT)** — next unobserved
+   window is the `08-16T00:05` swap to `B`, which is also the first repeat of an arm.
 2. **Watch the revised resume machinery on a real pause** — **no longer n=0: it fired three times
    on 08-15 and worked** (see below). Remaining unexercised: the 120-min ceiling escalation, the
    swap-deferral path, and rotated-log reads across a `.1` boundary.
-3. **This file is over cap and it is TRACKED as [ops#173]** (~3,550 vs 2,500; acknowledged there
-   S84 with the plan, so **do not re-derive it or open a second issue**). Four trimming passes this
-   session applied rule 1 and still landed above cap: **a repo running a live time-boxed experiment
-   exceeds a static cap for the duration, structurally.** The diet lands at the **square's close
-   ~08-23**, when most of this section becomes deletable in one stroke; remainder to `ARCHIVE/` or a
-   `MANIFEST.md` row (DEC-0063). ops#173 closes when the sweep goes green.
+3. **This file is over cap and it is TRACKED as [ops#173]** (~3,670 vs 2,500; acknowledged there
+   S84 at ~3,550, plus the swap-settle row added after — a deliberate ~50 tok spend to stop a
+   future session re-investigating a non-trend. **Do not re-derive this or open a second issue.**)
+   Repeated trimming passes applied rule 1 and still landed above cap: **a repo running a live
+   time-boxed experiment exceeds a static cap for the duration, structurally.** The diet lands at
+   the **square's close ~08-23**, when most of this section becomes deletable in one stroke;
+   remainder to `ARCHIVE/` or a `MANIFEST.md` row (DEC-0063). ops#173 closes when the sweep is green.
 
 4. **Cross-repo reconciliation FILED, awaiting their answer — [dash#430]** (DEC-0093). weewx had
    documented Cold-load Fix B as done while the dashboard's roadmap still carries its consumer half
@@ -99,7 +100,8 @@ DEC-0091 / hlf#302 / #144.
 | Thing | State |
 |---|---|
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` (S82) + `weewx_monitor.py` (S82b, pid 7625) both redeployed today, sha+process verified |
-| Campaign B | **Live and on schedule.** Blocks 1–2 done: `H -> A` `08-15 00:05:01`, `A -> B` `06:05:01`; on arm **B** since `06:07:20`, next swap `12:05`. Square through `08-23T00:05`. STOP/PAUSE/lock all absent; three pauses on night one all auto-resumed; reception 69–77% [OK]. Verified 08-15 10:39 EDT |
+| Campaign B | **Live and on schedule — day 1 complete, all four arms exercised once (4 of 32 blocks).** `A` `00:05:01` · `B` `06:05:01` · `C` `12:05:01` · **`D` `18:05:01`, healthy `18:07:18`** — every swap on time, none deferred. Next `08-16T00:05` → `B`. Square through `08-23T00:05`. STOP/PAUSE/lock all absent; the only pauses were night one's three (all auto-resumed); reception 69–77% [OK]. Verified 08-15 18:18 EDT |
+| Swap settle time | 82/139/198/137 s — **not a trend, do not re-flag.** All fit `~20 s + k×60 s` (stable restart, k = archive boundaries missed: 1,2,3,2). Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
 | `dev` beyond prod | #183's pressure package (baked files) + S84's docs — rides until the v2.0.14 image cut |
 | Freeze rate | DEC-0088-corrected (1.31/day), untouched. **Hour-of-day split done (DEC-0094): nightly window refuted, evening 18:00–21:00 carries the signal** |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
