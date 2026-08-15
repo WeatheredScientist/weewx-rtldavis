@@ -3252,6 +3252,16 @@ name — its real identity is in `IMAGE`, not `NAMES`. This is a general NAS-ops
 to coffee-radar: any future "is container X running" check on this shared box should grep the whole
 `docker ps`/`nasctl ps` line, not assume a container's own image name is also its runtime name.
 
+**Update (S84d, 2026-08-15) — "n=1, not a base rate" now HAS its base rate; see DEC-0094.** An
+hour-of-day split of the 40 DEC-0088-corrected freezes (2026-07-14 → 08-13) puts **12 in 18:00–21:00
+against 5.0 expected (P=0.0027)** and **7 in this job's own ~18:30–20:00 window against 2.5
+(P=0.011)**, spread over **10 distinct dates** — so the correlation this DEC could only observe once
+holds across a month: **30% of all freezes in 12.5% of the day.** Two limits carried forward: the
+cluster was identified post hoc and the omnibus X² does not reject uniformity (so this is
+corroboration of this DEC's hypothesis, not independent proof), and **the mechanism is still the
+open part** — this DEC's own finding that `weewxd` stays `S` and never `D` even at loadavg 12.39
+means "correlates with" is still not "is blocked by".
+
 ## DEC-0069 — The campaign metric moves to per-minute `rxCheckPercent`, and freeze exclusion is structural
 
 **Status:** Accepted · **Date:** 2026-08-05 (S66) · **Closes** DEC-0066's second launch gate ·
@@ -5297,6 +5307,15 @@ INTERFACES §1**" is right for `loop-data.txt` — pinned by a 30 s consumer liv
 had never written down — but wrong for `current.json`, which has no consumer at all and is where
 the yield actually is.
 
+**Update (S84d, 2026-08-15) — the testable lead this DEC handed DEC-0067/0068 is answered, and it
+is NEGATIVE; see DEC-0094.** The hour-of-day split was run (at zero prod cost — the deferral had
+priced a *fresh* `freeze_baseline.py` run, but the split only needed events already printed and
+preserved in transcripts). The nightly maintenance window holds **9 of 40 freezes against 7.2
+expected, P=0.29** — it does not explain the freeze rate. The evening cluster does carry signal
+(18:00–21:00: 12 vs 5.0, P=0.0027), which corroborates DEC-0068 rather than this DEC's lead. The
+schedule finding above stands on its own evidence; only its freeze-explaining *implication* is
+withdrawn.
+
 ## DEC-0093 — The dataless-write proposal was answered three months ago; the real write amplification is `current.json`, which nothing reads
 
 **Status:** Accepted (finding + direction; **no code changed this session** — PRINCIPLES §8,
@@ -5415,3 +5434,90 @@ weewx's honest position: its footprint is **~47% removable unilaterally, with no
 all**, and the remaining `loop-data.txt` half is pinned to a 30 s consumer gate, so it cannot defer
 those writes under a lease without a consumer-visible outage. That is a **hard floor, not a soft
 one** — useful for the protocol to know about this participant.
+
+## DEC-0094 — The nightly-window freeze lead is refuted; the evening cluster is real, and the whole test cost prod nothing
+
+**Status:** Accepted (measurement) · **Date:** S84d (2026-08-15)
+**Relations:** **answers and closes** DEC-0092's testable lead · **upgrades** DEC-0068 from n=1 to a
+measured base rate · **feeds** DEC-0067's open mechanism question · **applies** DEC-0088's
+correction · **does NOT close** blocker 1
+
+### The deferral was priced wrong
+
+DEC-0092 handed DEC-0067/0068 a lead — split the freeze timestamps by hour-of-day against the
+sibling tenant's nightly maintenance window — and deferred it post-square because "the script is
+itself a heavy sweep" that "would add load to the measurement it is trying to explain." That is
+true of a **fresh** `ops/freeze_baseline.py` run. It is not true of the split.
+
+The script prints **every individual freeze event**, by deliberate design — an S37 anti-confounder
+("a summary rate alone hides exactly the confounder above"). Those listings survive in the session
+transcripts. So the split is arithmetic over data already collected: **no archive query, no log
+sweep, no ssh, zero load on the running square.** The generalisable form: *before deferring an
+analysis for its collection cost, check whether collection already happened.* This repo's own
+S39 lesson (an inherited item's reasoning often lives only in a transcript) applies to its **data**,
+not just its reasoning.
+
+### Dataset, and why it is the right one
+
+The **DEC-0088-corrected** run only: **n=40, 1.31/day, window 2026-07-14 → 2026-08-13**. Three
+other runs sit in the transcripts (1.48, 1.54, 1.57/day) and all pre-date DEC-0088's
+ad-hoc-restart fix; analysing those would have meant analysing known-miscounted data.
+
+Two integrity checks, both passed before any conclusion was drawn:
+- **Parsed event count equals the run's own claimed count** (40 = 40), so the transcript block is
+  complete, not truncated.
+- **Positive control against an independently documented fact:** DEC-0088 established that
+  2026-08-12 **19:55** was an abort-recovery restart, not a freeze. It is **absent** from the n=40
+  set and **present** in the 1.54 and 1.57 sets — the corrected run is provably the one used.
+
+Timestamps are `datetime.fromtimestamp()`, i.e. naive **local**, so they align with the local
+maintenance window directly (assumes Mac and NAS both EDT; the 00:05/06:05 swap lines corroborate).
+
+### Result — the lead is refuted
+
+| window | share of day | observed | expected | P(X ≥ obs) |
+|---|---|---|---|---|
+| nightly maintenance 00:10–04:30 | 18.1% | 9 | 7.2 | 0.29 |
+| evening 18:00–21:00 | 12.5% | **12** | 5.0 | **0.0027** |
+| coffee-radar's ~19:00 run, 18:30–20:00 | 6.3% | 7 | 2.5 | 0.011 |
+
+**The nightly window explains nothing.** It covers 18% of the day and holds 9 of 40 freezes against
+7.2 expected. DEC-0092's hypothesis — that a large share of the 1.31/day would prove to sit inside
+it — is **refuted on this data**, and blocker 1 should stop advertising it as a pending lead.
+Median freeze duration inside the window (240 s) is identical to outside (240 s): no severity
+effect either.
+
+**The evening is where the signal is**, and it is not a new hypothesis. DEC-0068 already named
+coffee-radar's documented 19:00 daily run as a *confirmed contributor* from process evidence
+(loadavg 12.39, the container verified running through freeze #2) but could only say "n=1
+correlated out of 3 captured freezes, **not a base rate**". This is the base rate: **30% of all
+freezes in 12.5% of the day**, spread across **10 distinct dates**, so it is not one bad night
+repeated.
+
+### Stated honestly: what this is not
+
+The evening cluster was found **post hoc**, by looking at the histogram. The omnibus test across all
+24 bins is **X² = 30.8, df = 23, critical 35.2 — not significant**: the 24-hour distribution as a
+whole does *not* reject uniformity. What keeps the finding from being a naked post-hoc peak is that
+it is an **independent dataset agreeing with a pre-existing, mechanistically motivated hypothesis**
+(DEC-0068), not a fresh claim mined from the same data that suggested it. Treated as corroboration,
+not proof.
+
+The window also **pre-dates both the campaign and the nightly-window discovery** — correct for
+testing a standing schedule, but a fresh `freeze_baseline.py` run after the square should confirm,
+and that run still belongs post-square at its real cost.
+
+### Side result: the 2026-08-15 blackout was RF-dead, not a freeze
+
+Arm A's first block took a ~20-min reception blackout at 02:00–02:22 (S84b), and its position inside
+the nightly window made "process freeze" the tempting reading. It is not: `weewx.log` carries
+**three `rtldavis process stalled` lines** in it (02:05:00, 02:16:16, 02:20:19). By BACKLOG's own
+rule (DEC-0067) a >150 s gap **with** a stall line is RF-dead — the watchdog fired, so the main
+thread was running and correctly reporting that it heard no RF. Consistent with the hour-of-day
+result. One grep, and it closes the S84b open question.
+
+### What is still open
+
+Blocker 1 stands. The freeze **mechanism** remains unproven — DEC-0068 measured `weewxd`'s main
+thread staying `S`, never `D`, even during the load-12 freeze, so "coffee-radar's run correlates"
+is still not "coffee-radar's I/O blocks us". This narrows *when* to look, not *what to look for*.

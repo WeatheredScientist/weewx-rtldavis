@@ -47,6 +47,21 @@ under [Pre-S16].
   blackout was RF or a process freeze is **not established** (DEC-0067: both read identically on
   this metric) and it sits inside DEC-0092's nightly heavy-I/O window — logged as blocker 1's lead,
   not scored as an RF result. S84's "NAS unroutable" note was true when written and is now stale.
+- **Later the same day (S84d, DEC-0094) — the hour-of-day freeze split ran, at zero prod cost, and
+  refuted the lead it was meant to test.** DEC-0092 deferred it post-square as "a heavy sweep";
+  that priced a *fresh* `freeze_baseline.py` run, but the script prints every individual event by
+  design and those listings survive in session transcripts, so the split was arithmetic over
+  already-collected data — no ssh, no archive query, no load on the square. **Nightly maintenance
+  window (00:10–04:30): 9 of 40 freezes vs 7.2 expected, P=0.29 — it explains nothing.** The
+  evening does: **18:00–21:00 = 12 vs 5.0 (P=0.0027)**, coffee-radar's ~19:00 window 7 vs 2.5
+  (P=0.011), over 10 distinct dates — turning DEC-0068's "n=1, not a base rate" into **30% of
+  freezes in 12.5% of the day**. Stated with its limits: found post hoc, and the omnibus X²=30.8
+  (df=23, crit 35.2) does **not** reject uniformity, so it corroborates DEC-0068 rather than
+  proving it. Used the **DEC-0088-corrected run only**, verified by a positive control (the
+  documented 08-12 19:55 restart is absent from it, present in the pre-fix runs) and by parsed
+  count matching claimed count. **Side result: the 08-15 02:00–02:22 blackout was RF-dead, not a
+  freeze** — three `rtldavis process stalled` lines sit inside it, which is DEC-0067's own rule;
+  S84b's open question closed by one grep. Blocker 1 stays open — mechanism still unproven.
 
 ---
 ## [S83] — 2026-08-14 — ops#169 answered: our yield is a near-no-op, the box has a nightly heavy window, and the filesystem was wrong (DEC-0092)
