@@ -25,24 +25,18 @@ pressure package (#183) is merged to `dev` for v2.0.14.** The whole square runs 
 version. Detail in CHANGELOG / the DEC rows; what is still live sits in the state table and the
 v2.0.14 queue below.
 
-**S84b: the square is live and DEC-0087/0089 earned their keep on night one.** `H -> A`
-`00:05:01` (healthy `00:06:23`), `A -> B` `06:05:01` (healthy `06:07:20`). **One ~20-min
-blackout at 02:00–02:22 produced THREE pause/resume cycles** as the 30-min mean lagged the
-recovery — exactly DEC-0087's scenario, and **pre-DEC-0087 the first trip would have been a
-sticky STOP killing the block unattended.** Resumes 2 and 3 came from `recovered_since()`'s
-**second** path (`RECEPTION: [OK]` lines newer than the pause), i.e. **DEC-0089's fix carried
-them** — only one `RECEPTION RECOVERY` edge line exists, so edge-only logic would have stranded
-both. The blackout was **RF-dead, not a freeze** (three `rtldavis process stalled` lines inside
-it, DEC-0094). Full account in CHANGELOG S84. *(The `.STOP.campaignA` file at the project root
-is campaign **A**'s — a different name, not a live sentinel.)*
+**S84b: DEC-0087/0089 earned their keep on night one.** One ~20-min blackout (02:00–02:22,
+**RF-dead, not a freeze** — three `rtldavis process stalled` lines, DEC-0094) drove THREE
+pause/resume cycles as the 30-min mean lagged recovery. **Pre-DEC-0087 the first trip would
+have been a sticky STOP killing the block unattended**, and resumes 2–3 needed DEC-0089's
+second path — only one `RECEPTION RECOVERY` edge line exists. Full account: CHANGELOG S84.
+*(`.STOP.campaignA` at the project root is campaign **A**'s — not a live sentinel.)*
 
-**S84 (DEC-0093): `current.json` is written ~22,500×/day and nothing reads it.** DEC-0092's
-"skip dataless loop-JSON writes" queue item **was already done in S43** (Layer B) and is retired;
-measured **~45,000 renames/day**, not 50–85k. Direction: **decouple `current.json`'s cadence to
-30–60 s (~47% of renames), gated on the dashboard** (job 4). **Do not "optimize" `loop-data.txt`**
-— the eh-proxy 503s at `now - dateTime > 30` and the dashboard reads that as proof the station is
-down, so content-based suppression would report a healthy station offline on a calm night. Full
-argument, and the freeze link that does *not* hold, in DEC-0093.
+**S84/S85 (DEC-0093): `current.json` had no reader and was rewritten ~22,500×/day.** Now
+throttled to 60 s (dash#430 confirmed), **47.9%** of renames removed, merged to `dev` and
+queued for deploy — job 4. **Do not "optimize" `loop-data.txt`**: the eh-proxy 503s at
+`now - dateTime > 30` and the dashboard reads that as proof the station is down, so
+content-based suppression reports a healthy station offline on a calm night.
 
 **S83: the box has a nightly heavy window, and the midnight block sits in it (ops#169, DEC-0092).**
 A sibling project's nightly maintenance (DSM id=15) runs **00:10 → ~03:00–05:10 every night**
@@ -60,7 +54,8 @@ honest nulls + move `:latest` to v2.0.13 once the square proves it + **copy the 
 `loop_json_writer.py` to the NAS *project root* — NOT into the image, NOT into
 `weewx-data/bin/user/` (DEC-0093: it is bind-mounted, the bake does not carry it, and that second
 path is a decoy). Verify with `nasctl inspect` before, and after the restart confirm the startup
-line reads `every 60 s`; a file check alone proves the FILE, never the PROCESS (DEC-0074).** NAS-native build (DEC-0078),
+line reads `every 60 s`; a file check alone proves the FILE, never the PROCESS (DEC-0074).**
+NAS-native build (DEC-0078), and the
 recreate re-verifies the three CONSTANTS live-config deviations. **5.5.0 is pre-reviewed GREEN**
 (S82b source-diff pass over 11 runtime-chain files; verdict + cut checklist on PR #158) — **the cut
 is execution-only, Sonnet-fit.**
@@ -77,13 +72,14 @@ DEC-0091 / hlf#302 / #144.
 2. **Watch the revised resume machinery on a real pause** — **no longer n=0: it fired three times
    on 08-15 and worked** (see below). Remaining unexercised: the 120-min ceiling escalation, the
    swap-deferral path, and rotated-log reads across a `.1` boundary.
-3. **This file is over cap and it is TRACKED as [ops#173]** (~3,670 vs 2,500; acknowledged there
-   S84 at ~3,550, plus the swap-settle row added after — a deliberate ~50 tok spend to stop a
-   future session re-investigating a non-trend. **Do not re-derive this or open a second issue.**)
-   Repeated trimming passes applied rule 1 and still landed above cap: **a repo running a live
-   time-boxed experiment exceeds a static cap for the duration, structurally.** The diet lands at
-   the **square's close ~08-23**, when most of this section becomes deletable in one stroke;
-   remainder to `ARCHIVE/` or a `MANIFEST.md` row (DEC-0063). ops#173 closes when the sweep is green.
+3. **This file is over cap and it is TRACKED as [ops#173]** (**~3,850** vs 2,500; last reported
+   there at ~3,550 and it has grown since — S85 added the deploy-layer warning and the guard
+   misfire gotcha, both of which prevent a specific expensive mistake. **Do not re-derive this or
+   open a second issue; do update ops#173's figure when you next touch it.**) Repeated trimming
+   passes applied rule 1 and still landed above cap: **a repo running a live time-boxed experiment
+   exceeds a static cap for the duration, structurally.** The diet lands at the **square's close
+   ~08-23**, when most of this section becomes deletable in one stroke; remainder to `ARCHIVE/` or a
+   `MANIFEST.md` row (DEC-0063). ops#173 closes when the sweep is green.
 
 4. **[dash#430] ANSWERED and IMPLEMENTED — this now needs DEPLOYING, not deciding** (DEC-0093).
    The dashboard confirmed **60 s** ("please make the change"), so `current_interval` shipped to
@@ -107,7 +103,7 @@ DEC-0091 / hlf#302 / #144.
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` (S82) + `weewx_monitor.py` (S82b, pid 7625) both redeployed today, sha+process verified |
 | Campaign B | **Live and on schedule — day 1 complete, all four arms exercised once (4 of 32 blocks).** `A` `00:05:01` · `B` `06:05:01` · `C` `12:05:01` · **`D` `18:05:01`, healthy `18:07:18`** — every swap on time, none deferred. Next `08-16T00:05` → `B`. Square through `08-23T00:05`. STOP/PAUSE/lock all absent; the only pauses were night one's three (all auto-resumed); reception 69–77% [OK]. Verified 08-15 18:18 EDT |
 | Swap settle time | 82/139/198/137 s — **not a trend, do not re-flag.** All fit `~20 s + k×60 s` (stable restart, k = archive boundaries missed: 1,2,3,2). Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
-| `dev` beyond prod | #183's pressure package (baked files) + S84's docs — rides until the v2.0.14 image cut |
+| `dev` beyond prod | **Two different deploy layers, don't conflate them.** #183's pressure package = **baked**, rides the v2.0.14 image cut. S85's `loop_json_writer.py` = **mounted**, needs a file copy to the project root (the bake will NOT carry it, DEC-0093). Plus S84/S85 docs |
 | Freeze rate | DEC-0088-corrected (1.31/day), untouched. **Hour-of-day split done (DEC-0094): nightly window refuted, evening 18:00–21:00 carries the signal** |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
