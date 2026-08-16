@@ -42,6 +42,13 @@ DEC-0046).**
 | Driver (`rtldavis.py`), `pressure_service.py` | the **image** | an `scp` to `weewx-data/bin/user/` does nothing — needs a rebuild |
 | `weewx.conf` and other mounted config | the **mount** | an image rebuild does nothing — needs a live edit on the NAS |
 | `influx.py` | mounted → `scp` **is** correct | — |
+| **`loop_json_writer.py`** (verified S85) | the **mount** — `<project root>/loop_json_writer.py`, bind-mounted `ro` over the venv copy | **an image rebuild does nothing** — the Dockerfile never `COPY`s this file. Deploy = `scp` to the **project root** + restart. **The copy in `weewx-data/bin/user/` is a DECOY**: it is not the mount source and editing it changes nothing |
+| `ogoxeUploader.py`, `sortedcontainers` | the **mount** (same pattern, per-file `ro` binds) | as above |
+
+**Verify, don't recall** — `nasctl inspect weewx-rtldavis-v2` lists the per-file bind mounts
+explicitly. That is the authoritative answer for any file, and it takes one command. S85 found
+`loop_json_writer.py` was missing from this table entirely while being mounted, which would have
+made a change "ship" with an image cut and silently do nothing — DEC-0046's exact failure.
 
 **Ask "which layer actually wins in prod?" for every file, every time.** A previous session's answer
 about a *different* file proves nothing about this one.
