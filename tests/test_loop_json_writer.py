@@ -123,7 +123,9 @@ def test_windchill_cached_forward_like_heatindex():
         }))
         w.new_loop(types.SimpleNamespace(packet={'dateTime': 2}))
 
-        with open(w.current_path) as f:
+        # the LIVE feed: current.json is throttled since DEC-0093, so a packet
+        # 1 s later is inside its interval and would still show packet 1
+        with open(w.path) as f:
             data = json.load(f)
 
         assert data['windchill_F'] == 28.4, "windchill should be cached forward"
@@ -148,6 +150,14 @@ def _make_writer_cfg(tmpdir, loop_extra=None, davis=None):
 
 
 def _read(w):
+    """The LIVE feed. Cache/TTL assertions belong here, not on current.json:
+    since DEC-0093 the snapshot is throttled, so reading it would test the
+    write cadence by accident and fail on any packet inside the interval."""
+    with open(w.path) as f:
+        return json.load(f)
+
+
+def _read_current(w):
     with open(w.current_path) as f:
         return json.load(f)
 
@@ -301,3 +311,100 @@ if __name__ == '__main__':
     total = sum(1 for n in globals() if n.startswith('test_'))
     print("\n%d/%d passed" % (total - fails, total))
     sys.exit(1 if fails else 0)
+
+
+# --- current.json cadence (DEC-0093, S84) ----------------------------------
+# current.json is a cold-load snapshot, not a live feed: throttled to
+# current_interval (default 60 s) while loop-data.txt stays per-packet, because
+# its dateTime is a liveness signal behind a hard 30 s consumer gate.
+
+def _pkt(ts, **kw):
+    return types.SimpleNamespace(packet=dict({'dateTime': ts,
+                                              'outTemp': 70.0}, **kw))
+
+
+def test_current_json_throttled_but_loop_data_is_not():
+    """The core of DEC-0093: same payload, two cadences."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir, loop_extra={'current_interval': 60})
+        w.new_loop(_pkt(1000, outTemp=70.0))          # first packet: both
+        assert _read_current(w)['outTemp_F'] == 70.0
+
+        w.new_loop(_pkt(1003, outTemp=71.0))          # +3 s: loop only
+        assert _read(w)['outTemp_F'] == 71.0          # live feed advanced
+        assert _read_current(w)['outTemp_F'] == 70.0  # snapshot held
+        assert _read_current(w)['dateTime'] == 1000
+
+
+def test_current_json_refreshes_once_the_interval_elapses():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir, loop_extra={'current_interval': 60})
+        w.new_loop(_pkt(1000, outTemp=70.0))
+        w.new_loop(_pkt(1059, outTemp=71.0))          # 59 s: still inside
+        assert _read_current(w)['dateTime'] == 1000
+        w.new_loop(_pkt(1060, outTemp=72.0))          # 60 s: due
+        assert _read_current(w)['dateTime'] == 1060
+        assert _read_current(w)['outTemp_F'] == 72.0
+
+
+def test_first_packet_always_writes_current_json():
+    """A restart must not leave the previous run's snapshot standing for a
+    whole interval — the first packet republishes immediately."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir, loop_extra={'current_interval': 3600})
+        w.new_loop(_pkt(5000, outTemp=61.0))
+        assert _read_current(w)['dateTime'] == 5000
+
+
+def test_current_interval_zero_restores_per_packet_writes():
+    """The S43-S84 behavior stays reachable by config."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir, loop_extra={'current_interval': 0})
+        w.new_loop(_pkt(1000, outTemp=70.0))
+        w.new_loop(_pkt(1002, outTemp=71.0))
+        assert _read_current(w)['dateTime'] == 1002
+        assert _read_current(w) == _read(w)
+
+
+def test_default_interval_is_60s_and_configurable():
+    w = LoopJsonWriter(engine=None, config_dict={})
+    assert w.current_interval == 60
+    w2 = LoopJsonWriter(engine=None, config_dict={
+        'LoopJsonWriter': {'current_interval': '30'}})
+    assert w2.current_interval == 30
+
+
+def test_backwards_clock_still_refreshes_current_json():
+    """A station clock correction can step dateTime backwards. Treating a
+    negative elapsed as 'not due' would freeze the snapshot until real time
+    caught up, which could be hours."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir, loop_extra={'current_interval': 60})
+        w.new_loop(_pkt(9000, outTemp=70.0))
+        w.new_loop(_pkt(1000, outTemp=71.0))          # clock stepped back
+        assert _read_current(w)['dateTime'] == 1000
+
+
+def test_failed_current_write_retries_on_the_next_packet():
+    """_current_last must only advance on a successful write, or one transient
+    failure would suppress the snapshot for a whole extra interval."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir, loop_extra={'current_interval': 60})
+        w.new_loop(_pkt(1000, outTemp=70.0))
+        # make the snapshot write fail: point it at an unwritable directory
+        w.current_path = os.path.join(tmpdir, 'nope', 'current.json')
+        w.new_loop(_pkt(1100, outTemp=71.0))          # due, but fails
+        assert w._current_last == 1000                # not advanced
+        w.current_path = os.path.join(tmpdir, 'current2.json')
+        w.new_loop(_pkt(1105, outTemp=72.0))          # retries immediately
+        with open(w.current_path) as f:
+            assert json.load(f)['dateTime'] == 1105
+
+
+def test_loop_data_written_on_every_packet_regardless():
+    """The liveness path must never be throttled (30 s proxy gate)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir, loop_extra={'current_interval': 3600})
+        for i, ts in enumerate((1000, 1002, 1005, 1007)):
+            w.new_loop(_pkt(ts, outTemp=70.0 + i))
+            assert _read(w)['dateTime'] == ts
