@@ -72,14 +72,15 @@ DEC-0091 / hlf#302 / #144.
 2. **Watch the revised resume machinery on a real pause** — **no longer n=0: it fired three times
    on 08-15 and worked** (see below). Remaining unexercised: the 120-min ceiling escalation, the
    swap-deferral path, and rotated-log reads across a `.1` boundary.
-3. **This file is over cap and it is TRACKED as [ops#173]** (**~3,850** vs 2,500; last reported
-   there at ~3,550 and it has grown since — S85 added the deploy-layer warning and the guard
-   misfire gotcha, both of which prevent a specific expensive mistake. **Do not re-derive this or
-   open a second issue; do update ops#173's figure when you next touch it.**) Repeated trimming
-   passes applied rule 1 and still landed above cap: **a repo running a live time-boxed experiment
-   exceeds a static cap for the duration, structurally.** The diet lands at the **square's close
-   ~08-23**, when most of this section becomes deletable in one stroke; remainder to `ARCHIVE/` or a
-   `MANIFEST.md` row (DEC-0063). ops#173 closes when the sweep is green.
+3. **Over cap, TRACKED as [ops#173] — do not re-derive or open a second issue.** Measure exactly as
+   the sweep does or your number won't match: `git show origin/dev:BOOT.md | LC_ALL=en_US.UTF-8
+   wc -m` ÷ 4 (**pushed** tip; plain-C `wc -m` degrades to bytes). *Not `boot-cap-check.sh` — that
+   is ops's own gate and fails weewx on section names `tier-sweep.sh` deliberately ignores.*
+   Repeated rule-1 passes were outpaced anyway: **a repo running a live time-boxed experiment
+   exceeds a static cap for the duration, structurally.** Diet at the **square's close ~08-23**,
+   when most of this section becomes deletable at once; remainder to `ARCHIVE/` or a `MANIFEST.md`
+   row (DEC-0063). *(`MANIFEST.md` is over too, but that is the deliberate OPS-DEC-0101 carry, not
+   drift — named on ops#173 so the dedupe doesn't re-file it.)*
 
 4. **[dash#430] ANSWERED and IMPLEMENTED — this now needs DEPLOYING, not deciding** (DEC-0093).
    The dashboard confirmed **60 s** ("please make the change"), so `current_interval` shipped to
