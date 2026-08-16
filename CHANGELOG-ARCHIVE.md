@@ -8,6 +8,47 @@ Nothing here is rewritten — text moves, history stays greppable.
 ---
 
 
+## [S82b] — 2026-08-14 — Owner's reframe used: #180 deployed pre-square, #172/#144 merged for v2.0.14 (DEC-0091)
+
+- **"We haven't started our campaign yet"** — the owner's reframe of the S82 close: block 1 was
+  still hours out, so pre-block-1 is the RIGHT window for instrument changes, not a violation of
+  mid-campaign discipline. All three backlog items knocked out same day.
+- **PR #182 — the #180 monitor trio, merged AND deployed before the square** (scp 12:24 EDT,
+  respawned pid 7625, `Monitor started` 12:25:21 — startup line after file mtime, DEC-0074): the
+  open episode now mirrors to `logs/monitor_episode.state` and restores at startup (a restart
+  mid-episode used to silently lose the ledger row + RECOVERY edge); log rotation voids a pending
+  reset verdict instead of faking "verified effective" off the zeroed counter; `do_reset`'s
+  exception path emails (it fired live at 01:56:30 that morning as a silent 15 s timeout).
+  #180 closed. The whole square now runs on one monitor version.
+- **PR #183 — #172 + #144, merged to `dev`, deploys with v2.0.14 post-campaign**:
+  `barometer_fetch_epoch` (last *successful* WeatherLink fetch, published outside the TTL
+  machinery — a staleness signal must never be omitted for being old) and honest-null
+  `pressure`/`altimeter` (they carried sea-level values mislabeled as station pressure — the
+  archive columns go NULL from v2.0.14; hlf#302 heads-up posted on #144). INTERFACES §1 updated;
+  both issues commented and left open until the deploy.
+- **v2.0.14 queue set**: weewx 5.5.0 (#158) + #172 + #144 + the `:latest` move once the square
+  proves v2.0.13. Remaining #144 sliver: the +0.03 inHg offset quantification (method in the
+  issue, read-only, campaign-safe).
+- Mechanical: #183 branched before #182 merged → branch protection refused the merge until
+  `gh api .../pulls/183/update-branch` + CI rerun (now a BOOT gotcha). ROADMAP's "lockfile is
+  post-campaign work" corrected (DEC-0090 shipped it pre-square).
+- **weewx 5.5.0 pre-adoption review: GREEN** (same day, post-close) — source-diffed all 11
+  runtime-chain files between v5.4.0/v5.5.0 rather than trusting the changelog: 7 byte-identical
+  (incl. `accum.py` — the campaign metric's write path — `restx.py`, `units.py`, the logger);
+  weedb's `timeout` read + pragmas-as-mapping **verbatim** (DEC-0070/0071 behaviors survive);
+  `manager.py`'s new locked-DB retry layers benignly atop our 30 s timeout. Verdict + v2.0.14 cut
+  checklist on PR #158 — the bump is now execution-only.
+- **#144's offset third quantified: station-side, ~+0.04 inHg high** — 8 days of archive
+  barometer vs four METAR references (+0.038…+0.049, conversion validated against reported-SLP
+  anchors), agreeing with hlf#302's seven forecast models; stable daily, ±0.015 diurnal wobble.
+  Knob identified: the WeatherLink console's configured elevation (~37 ft equivalent) — owner
+  check filed as ops#168; hlf#302 answered in full. One authorized read-only archive query
+  (mint path), no repo changes.
+- **ops#167 filed**: lead-time heads-up to HLF that archive `pressure`/`altimeter` go NULL at
+  the v2.0.14 deploy (it reads those columns; hlf#302 adjacent).
+- 20 new tests across the two PRs; **271/271** on the merged tip; all gates green throughout.
+
+
 ## [S82] — 2026-08-14 — The state-machine audit: five apparatus fixes shipped (DEC-0090), monitor package filed
 
 - **The audit BOOT ordered ran (user's Fable 5 pick)** over `ops/rx_experiment.sh`'s

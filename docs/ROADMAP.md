@@ -220,6 +220,10 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       30.3 d — the long-carried "~1/day, ~3.5 min" understated both by ~40 %. **Corrected to
       1.31/day by DEC-0088 (S80)**; this row was missed by that session's targeted pass and is
       fixed here at S83 — the same carried-stale-figure shape the guardrail above has now caught
+      **S85 (DEC-0094) splits it by hour and the result is a NEGATIVE: the nightly maintenance
+      window holds 9 of 40 freezes vs 7.2 expected (P=0.29) — it explains nothing. The evening
+      18:00–21:00 does carry signal (12 vs 5.0, P=0.0027), corroborating DEC-0068 rather than
+      this row. Mechanism still unproven, so the gate's verdict is unchanged.**
       three times. **S83 (DEC-0092) adds a testable hypothesis, not a new number:** split the
       freeze timestamps by hour-of-day against the sibling tenant's nightly 00:10→~04:30
       maintenance window, which no prior analysis controlled for because nobody knew it ran. *Watchdog* — done (S63). *Metric freeze-aware* — **done
