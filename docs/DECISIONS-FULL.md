@@ -5521,3 +5521,37 @@ result. One grep, and it closes the S84b open question.
 Blocker 1 stands. The freeze **mechanism** remains unproven — DEC-0068 measured `weewxd`'s main
 thread staying `S`, never `D`, even during the load-12 freeze, so "coffee-radar's run correlates"
 is still not "coffee-radar's I/O blocks us". This narrows *when* to look, not *what to look for*.
+
+**Update (S85, 2026-08-15) — the gate opened, the change is IMPLEMENTED, and the deploy mechanism
+in this DEC's own "Direction" section was wrong.**
+
+`eaglehunt-weather-dashboard#430` answered with Option 1: *"Confirmed — `current.json` is
+cold-load-only... 60s is fine... Please make the change — Fix B isn't built yet, so there's nothing
+to break, and we'll design its consumer against 60s from the start."* So the cadence question is
+settled by the consumer, exactly as the gating required.
+
+**Shipped:** `current_interval` (default **60 s**) throttles `current.json` only; `loop-data.txt`
+stays per-packet. The first packet of a run always writes the snapshot, so a restart republishes
+immediately instead of leaving the previous run's file standing for an interval. `current_interval
+= 0` restores the S43–S84 behavior. A failed snapshot write does **not** advance the timestamp, so
+one transient failure cannot suppress it for an extra interval; a **backwards** clock step also
+forces a write, since treating negative elapsed as "not due" would freeze the snapshot until real
+time caught up. 8 new tests (23 in the file, 279 suite).
+
+**Measured, not estimated:** simulating one day at 2.5625 s/packet gives `loop-data.txt` 33,717
+writes and `current.json` **1,405** — 67,434 → 35,122 renames/day, **47.9% removed**, matching the
+~47% this DEC projected.
+
+**The correction that matters for anyone shipping this: `loop_json_writer.py` is MOUNTED, not
+baked.** `nasctl inspect` shows `<project root>/loop_json_writer.py` bind-mounted `ro` over
+`site-packages/user/loop_json_writer.py`, and **the Dockerfile never `COPY`s the file at all.** So
+"ships with the v2.0.14 image cut" — the plan this DEC and BOOT both carried — **would have been a
+silent no-op with a green checkmark**, DEC-0046's exact failure mode. Deploy is `scp` to the
+**project root** plus a container restart. Two further traps found the same way: the copy in
+`weewx-data/bin/user/loop_json_writer.py` is a **decoy** (not the mount source, editing it does
+nothing), and `CONSTANTS.md`'s deploy-layer table did not list this file at all — now fixed, with
+`nasctl inspect` named as the authoritative per-file check.
+
+**Deploy timing unchanged in substance:** it still rides the ~08-23 v2.0.14 window, because that is
+when the container is next recreated anyway and mid-square restarts are avoidable churn — but it
+rides as an `scp`, not as a bake, and the v2.0.14 checklist now says so.

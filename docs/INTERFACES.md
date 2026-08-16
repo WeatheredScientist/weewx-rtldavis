@@ -22,14 +22,22 @@ Written by `loop_json_writer.py` (a WeeWX `data_service`, DEC-0005) to
 only the path differs. `loop-data.txt` is served to the dashboard's ongoing polling at `/loopdata`
 by the eh-proxy (which lives in the dashboard's deployment, not this repo).
 
-`current.json` was shipped (DEC-0051) **for** a boot fetch — so a first-time visitor doesn't see
-em-dashes before the polling loop's first response lands (Cold-load Fix B) — but **nothing reads it
-today** (verified S84, DEC-0093: the eh-proxy's only `/weewx-data` read is `loop-data.txt`, and the
-dashboard's own roadmap still carries Fix B's consumer half as open). This doc asserted the fetch in
-the present tense from S43 until S84; it was never true. Treat the cadence of `current.json` as
-**unsettled** until that consumer exists — DEC-0093 proposes decoupling it from `loop-data.txt`,
-and the cheapest moment to do so is before anything depends on the current one. Serving it with the
-right cache headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's.
+**`current.json` is a cold-load SNAPSHOT on its own slower cadence, not a second live feed
+(DEC-0093, S85).** It exists for a boot fetch — so a first-time visitor doesn't see em-dashes before
+the polling loop's first response lands (Cold-load Fix B, DEC-0051) — and is rewritten **at most
+once per `[LoopJsonWriter] current_interval`, default 60 s**, plus always on the first packet of a
+run so a restart republishes immediately. `current_interval = 0` restores the pre-S85
+write-on-every-packet behavior.
+
+Content is identical to `loop-data.txt` **when written**; between writes its `dateTime` is simply
+older. A consumer must therefore **not** use `current.json` for liveness — see the gate below.
+Cadence confirmed by the consumer side in `eaglehunt-weather-dashboard#430`; nothing read the file
+at all between S43 and S85, which is why the cadence could be changed with nothing to break.
+Serving it with the right cache headers (`no-store`) is the dashboard/eh-proxy's responsibility,
+not this repo's.
+
+> *This doc asserted from S43 to S84 that the dashboard fetched `current.json` at boot. That was
+> never true — the consumer half was still unbuilt. Corrected S84 (DEC-0093).*
 
 > **Liveness gate — a consumer expectation this doc did not record until S84.** The eh-proxy
 > returns **503 when `Date.now()/1000 - dateTime > 30`**, and the dashboard treats that 503 as its
@@ -37,7 +45,10 @@ right cache headers (`no-store`) is the dashboard/eh-proxy's responsibility, not
 > at least every 30 s on `loop-data.txt`: it is a **liveness** signal, not a change signal, and it
 > is independent of the per-field TTL machinery below. Anything that would suppress or delay a
 > `loop-data.txt` write past that bound produces a false "station offline" on a healthy station.
-> The gate applies to `/loopdata` only — `current.json` is not behind it.
+> **The gate applies to `/loopdata` only** — `current.json` is deliberately *not* behind it, which
+> is exactly why that path can be throttled and this one cannot. A consumer must not compute
+> staleness from `current.json`'s `dateTime`: by design it can be up to `current_interval` old on a
+> perfectly healthy station.
 
 **Contract:**
 - **Units are US/imperial**, encoded in the key names. The packet is `to_US()`-normalized before
