@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S84 → S85)
+## ▶ Resume here (S85 → S86)
 
 ### What's settled (do not re-derive)
 
@@ -62,7 +62,7 @@ is execution-only, Sonnet-fit.**
 configured station elevation.** Owner check filed as **ops#168**; no repo work pending. Workup in
 DEC-0091 / hlf#302 / #144.
 
-### ▶▶ S85 JOB LIST
+### ▶▶ S86 JOB LIST
 
 **Tier call, say it before starting (owner's `CLAUDE.md`; he asked to be reminded).** Jobs 1/3
 and the v2.0.14 cut are **execution — Sonnet-fits**. **Job 2's actual test and ops#175's
@@ -114,7 +114,7 @@ persists and re-prices later sessions (OPS-DEC-0010).
 [ops#176]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/176
 [dash#430]: https://github.com/WeatheredScientist/eaglehunt-weather-dashboard/issues/430
 
-### Current state (S85)
+### Current state (S85 close)
 
 | Thing | State |
 |---|---|
