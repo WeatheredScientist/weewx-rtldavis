@@ -25,12 +25,12 @@ pressure package (#183) is merged to `dev` for v2.0.14.** The whole square runs 
 version. Detail in CHANGELOG / the DEC rows; what is still live sits in the state table and the
 v2.0.14 queue below.
 
-**S84b: DEC-0087/0089 earned their keep on night one.** One ~20-min blackout (02:00–02:22,
-**RF-dead, not a freeze** — three `rtldavis process stalled` lines, DEC-0094) drove THREE
-pause/resume cycles as the 30-min mean lagged recovery. **Pre-DEC-0087 the first trip would
-have been a sticky STOP killing the block unattended**, and resumes 2–3 needed DEC-0089's
-second path — only one `RECEPTION RECOVERY` edge line exists. Full account: CHANGELOG S84.
-*(`.STOP.campaignA` at the project root is campaign **A**'s — not a live sentinel.)*
+**S84b: DEC-0087/0089 earned their keep on night one (n=3, all auto-resumed).** One ~20-min
+blackout — **RF-dead, not a freeze** (three `rtldavis process stalled` lines, DEC-0094) — drove
+three pause/resume cycles as the 30-min mean lagged recovery. **Pre-DEC-0087 the first trip
+would have been a sticky STOP killing the block unattended**; resumes 2–3 needed DEC-0089's
+second path. Full account: CHANGELOG S84. *(`.STOP.campaignA` at the project root is campaign
+**A**'s — not a live sentinel.)*
 
 **S84/S85 (DEC-0093): `current.json` had no reader and was rewritten ~22,500×/day.** Now
 throttled to 60 s (dash#430 confirmed), **47.9%** of renames removed, merged to `dev` and
@@ -42,10 +42,9 @@ content-based suppression reports a healthy station offline on a calm night.
 A sibling project's nightly maintenance (DSM id=15) runs **00:10 → ~03:00–05:10 every night**
 (6 nights verified), so **~72% of every 00:05 campaign block runs under it**; id=2 (our own
 logrotate, same minute as the swap's `harvest()`) and id=9 (a tenant capture job) fire at 00:05
-itself. **Comparability is safe** — the square runs twice, so each arm takes the midnight slot
-exactly twice and the confound is absorbed by construction; what it threatens is *swap
-reliability* and *variance*. Workup, the btrfs-not-ext4 correction and the task-id method:
-DEC-0092. **Post-square queue from it:** `noatime` on `/volume1` (owner-level DSM change) ·
+itself. **Comparability is safe** — each arm takes the midnight slot exactly twice, so the confound
+is absorbed by construction; what it threatens is *swap reliability* and *variance*. Workup, the
+btrfs correction and the task-id method: DEC-0092. **Post-square queue from it:** `noatime` on `/volume1` (owner-level DSM change) ·
 `chattr +C` on the archive DB (own DEC, rides the v2.0.14 recreate, does **not** reopen DEC-0071) ·
 move our logrotate off 00:05.
 
@@ -55,8 +54,7 @@ honest nulls + move `:latest` to v2.0.13 once the square proves it + **copy the 
 `weewx-data/bin/user/` (DEC-0093: it is bind-mounted, the bake does not carry it, and that second
 path is a decoy). Verify with `nasctl inspect` before, and after the restart confirm the startup
 line reads `every 60 s`; a file check alone proves the FILE, never the PROCESS (DEC-0074).**
-NAS-native build (DEC-0078), and the
-recreate re-verifies the three CONSTANTS live-config deviations. **5.5.0 is pre-reviewed GREEN**
+NAS-native build (DEC-0078); the recreate re-verifies the three CONSTANTS live-config deviations. **5.5.0 is pre-reviewed GREEN**
 (S82b source-diff pass over 11 runtime-chain files; verdict + cut checklist on PR #158) — **the cut
 is execution-only, Sonnet-fit.**
 
@@ -95,9 +93,10 @@ DEC-0091 / hlf#302 / #144.
 [ops#157]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/157
 [ops#169]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/169
 [ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
+[ops#176]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/176
 [dash#430]: https://github.com/WeatheredScientist/eaglehunt-weather-dashboard/issues/430
 
-### Current state (S84 close)
+### Current state (S85)
 
 | Thing | State |
 |---|---|
@@ -110,7 +109,7 @@ DEC-0091 / hlf#302 / #144.
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
 | Branches | `dev` = `origin/dev` (`26ea196` + S84's docs PR). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, queued for v2.0.14 — deliberately held for the post-campaign cut, pre-reviewed GREEN, not stalled |
 | Trackers | #180 closed · #172/#144 open until v2.0.14 · #158 held for v2.0.14 (pre-reviewed GREEN, **not stalled**) · ops#163 closed / ops#165 filed |
-| Cross-repo (S84) | **[ops#169] updated** — footprint corrected to ~45k, ~47% removable unilaterally, `loop-data.txt` declared a **hard 30 s floor** for the lease spec, the nightly-window freeze lead **retracted**, and coffee-radar's ~19:00 job reported as correlating with 30% of our freezes (limits stated). **[dash#430] filed, awaiting their answer** — `current.json` cadence. **[ops#173] acknowledged** (BOOT cap, job 3). **[ops#157] acknowledged** — the VPN heads-up explained this session's NAS gap. ops#168 still owner-side (WL elevation) |
+| Cross-repo (S84–S85) | **NOTHING IS OWED BY WEEWX** — `ops#169` stays open and carries `repo:weewx`, so session-start will surface it; do **not** re-engage. Our input is banked (footprint, the hard 30 s floor, the freeze-lead retraction, the evening correlation with its limits, two negatives on HLF's window) and the **NAS-LEASE spec review round is DONE** — findings accepted into v1.3, landing is coffee-radar's and gates on HLF's floor. What weewx already knows about adopting it is in `BACKLOG.md`; adoption needs our own DEC. **[dash#430] ANSWERED** → job 4. **[ops#173]** BOOT cap → job 3. **[ops#157]** VPN heads-up, ack'd. **[ops#176]** guard misfire, filed, awaiting triage. ops#168 owner-side (WL elevation) |
 
 ## Blockers
 
@@ -187,8 +186,9 @@ DEC-0091 / hlf#302 / #144.
 
 _Last updated: 2026-08-15 (S84 close, four amendments same day). **DEC-0093** (`current.json` has
 no reader; direction set, gated on dash#430, nothing shipped) and **DEC-0094** (nightly-window
-freeze lead **refuted**, evening cluster real). The square started on time. Cross-repo: ops#169
-updated with both, ops#173 + ops#157 acknowledged, dash#430 filed and awaiting._
+freeze lead **refuted**, evening cluster real). The square started on time. Cross-repo: dash#430
+answered and its change merged (deploy queued), the NAS-LEASE spec reviewed and our findings taken,
+ops#173/#157 acknowledged, ops#176 filed. **Nothing owed by weewx — see the cross-repo row.**_
 
 _Blocker 1 is narrower but NOT closed: the freeze mechanism is still unproven — DEC-0068 measured
 the main thread `S`, never `D`, so "correlates with" is not "is blocked by". Next step there is a
