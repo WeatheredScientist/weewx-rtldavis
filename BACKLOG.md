@@ -403,3 +403,26 @@ pull an item into ROADMAP.md's P0–P3 when it's actually about to be worked.
   opened S56): IR sky sensor alongside the lightning detector, targeted for the Jan–Feb 2027 winter
   build. Cross-repo with the dashboard (`repo:dashboard, repo:weewx, tier:frontier`). Planning
   horizon only — not scheduled.
+- **NAS-LEASE courtesy protocol — proposed, NOT adopted; weewx binds only via its own DEC** (S85).
+  Spec drafted by coffee-radar for OPS-DEC-0107 (provisional number), durable at
+  [ops#169](https://github.com/WeatheredScientist/eaglehunt-ops/issues/169). weewx is a listed
+  *participant* with declared levers, which commits us to nothing — the spec's own charter says it
+  binds a tenant only when that tenant lands an adopting DEC. Four things S85's review already
+  established, recorded so a future session doesn't re-derive them:
+  - **A client would be HOST-side, not in the container.** `nasctl inspect` shows the container's
+    whole mount set (`weewx-data`, `logs`, four per-file `ro` binds) and `LEASE_DIR` is not among
+    them. Mounts are fixed at creation, so adding one is kill→rm→run — a release-class event.
+    `weewx_monitor.py` already runs resident host-side on a 30 s poll and sees the whole volume.
+  - **But our lever is IN the container.** The InfluxDB uploader is `influx.py`, a RESTThread inside
+    weewx. So host-side gets us *observe + write the attribution log* (most of the protocol's value
+    by its own §4) and **cannot** downshift the uploader. **The unbuilt part is the in-container
+    reach, not the client.**
+  - ⚠️ **Our house atomic-write idiom is FORBIDDEN for the lease file.** Renewal must rewrite in
+    place on the held descriptor (seek-0 + write + truncate); `tmp` + `os.replace()` — what
+    `loop_json_writer.py` does everywhere, and what DEC-0051 established as our pattern — **replaces
+    the inode and silently strands the holder's `flock` on an unlinked file**, degrading validity to
+    TTL-only with no error anywhere. Caught by HLF on their v1 review. weewx is the tenant most
+    exposed to this, because the wrong idiom is our reflex.
+  - **`flock` capability is a non-issue for us**: a Python client uses stdlib `fcntl.flock()`; no
+    binary needed (runtime is `ubuntu:26.04`, so `/usr/bin/flock` is almost certainly there too —
+    inferred from packaging, not runtime-verified).
