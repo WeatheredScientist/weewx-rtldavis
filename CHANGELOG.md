@@ -73,7 +73,26 @@ under [Pre-S16].
   structurally, which is a different condition from neglect. **ops#157** (owner on VPN through
   ~08-16) acknowledged — it explains this session's NAS gap, and weewx re-derived that condition
   instead of reading the heads-up that already said it. **dash#430** filed, awaiting their answer.
-- Gates at close: ruff clean, **271/271** pytest, mypy clean over 49 files, secret gate clean with
+- **S85: dash#430 answered 60 s, so DEC-0093's gated change is IMPLEMENTED (not yet deployed).**
+  `[LoopJsonWriter] current_interval` (default **60 s**) throttles `current.json` only;
+  `loop-data.txt` stays per-packet because its `dateTime` sits behind the 30 s proxy liveness gate.
+  First packet of a run always writes the snapshot (a restart republishes immediately), a failed
+  write does not advance the timestamp (one transient failure can't suppress it for an extra
+  interval), a backwards clock step forces a write, and `current_interval = 0` restores the
+  S43–S84 behavior. **Measured by simulating a full day at 2.5625 s/packet: 33,717 → 1,405
+  snapshot writes, 67,434 → 35,122 renames/day, 47.9% removed** — matching DEC-0093's projection.
+  8 new tests (23 in the file, **279** suite); three existing tests were reading `current.json` to
+  assert cache/TTL semantics and now read the live feed, which is what they always meant.
+- **The deploy plan was wrong and the check caught it: `loop_json_writer.py` is MOUNTED, not
+  baked.** `nasctl inspect` shows `<project root>/loop_json_writer.py` bind-mounted `ro` over the
+  venv copy, and **the Dockerfile never `COPY`s it** — so "ships with the v2.0.14 image cut", which
+  both DEC-0093 and BOOT had said, **would have been a silent no-op with a green checkmark**
+  (DEC-0046's exact failure). Deploy is a file copy to the **project root** plus a restart; the
+  copy in `weewx-data/bin/user/` is a **decoy**. `CONSTANTS.md`'s deploy-layer table did not list
+  this file at all — now fixed, with `nasctl inspect` named as the authoritative per-file check and
+  the two other mounted modules added.
+- Gates at close: ruff clean, **271/271** pytest (**279/279** after S85's tests), mypy clean over
+  49 files, secret gate clean with
   its positive control at 54/54. Campaign B verified live at 10:39 EDT (arm B, reception 69–77%
   [OK], no STOP/PAUSE/lock). PR #158 deliberately still held for the v2.0.14 post-campaign cut.
 
