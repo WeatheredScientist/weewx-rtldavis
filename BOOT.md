@@ -56,7 +56,11 @@ DEC-0092. **Post-square queue from it:** `noatime` on `/volume1` (owner-level DS
 move our logrotate off 00:05.
 
 **The v2.0.14 queue (post-campaign, ~08-23):** weewx 5.5.0 (PR #158) + #172's field + #144's
-honest nulls + move `:latest` to v2.0.13 once the square proves it. NAS-native build (DEC-0078),
+honest nulls + move `:latest` to v2.0.13 once the square proves it + **copy the new
+`loop_json_writer.py` to the NAS *project root* — NOT into the image, NOT into
+`weewx-data/bin/user/` (DEC-0093: it is bind-mounted, the bake does not carry it, and that second
+path is a decoy). Verify with `nasctl inspect` before, and after the restart confirm the startup
+line reads `every 60 s`; a file check alone proves the FILE, never the PROCESS (DEC-0074).** NAS-native build (DEC-0078),
 recreate re-verifies the three CONSTANTS live-config deviations. **5.5.0 is pre-reviewed GREEN**
 (S82b source-diff pass over 11 runtime-chain files; verdict + cut checklist on PR #158) — **the cut
 is execution-only, Sonnet-fit.**
@@ -81,13 +85,14 @@ DEC-0091 / hlf#302 / #144.
    the **square's close ~08-23**, when most of this section becomes deletable in one stroke;
    remainder to `ARCHIVE/` or a `MANIFEST.md` row (DEC-0063). ops#173 closes when the sweep is green.
 
-4. **Cross-repo reconciliation FILED, awaiting their answer — [dash#430]** (DEC-0093). weewx had
-   documented Cold-load Fix B as done while the dashboard's roadmap still carries its consumer half
-   open at P0, and `current.json` has no reader. The issue asks them to pick one of: confirm
-   30–60 s · drop Fix B (then weewx stops writing the file entirely) · keep ~2.5 s and say why.
-   **weewx changes nothing until they reply** — do not ship a writer change on our own read of it
-   (DEC-0010). Nothing to chase before ~08-23; if it is still unanswered when the square lands,
-   ping it then.
+4. **[dash#430] ANSWERED and IMPLEMENTED — this now needs DEPLOYING, not deciding** (DEC-0093).
+   The dashboard confirmed **60 s** ("please make the change"), so `current_interval` shipped to
+   `dev`: `current.json` throttled, `loop-data.txt` deliberately untouched, **47.9%** of renames
+   removed (simulated a full day, not estimated). **The deploy is a file copy to the NAS project
+   root, NOT the image bake** — this file is bind-mounted and the Dockerfile never `COPY`s it, so a
+   rebuild alone is a silent no-op (DEC-0046's failure mode; the `weewx-data/bin/user/` copy is a
+   **decoy**, not the mount source). Rides the v2.0.14 window ~08-23 because that is the next
+   container recreate anyway. Steps + verification are in the v2.0.14 queue above.
 
 
 [ops#157]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/157
