@@ -32,7 +32,7 @@ campaign **A**'s — not a live sentinel.)*
 
 **S84/S85 (DEC-0093): `current.json` had no reader and was rewritten ~22,500×/day.** Now
 throttled to 60 s (dash#430 confirmed), **47.9%** of renames removed, merged to `dev` and
-queued for deploy — job 4. **Do not "optimize" `loop-data.txt`**: the eh-proxy 503s at
+queued for deploy — job 5. **Do not "optimize" `loop-data.txt`**: the eh-proxy 503s at
 `now - dateTime > 30` and the dashboard reads that as proof the station is down, so
 content-based suppression reports a healthy station offline on a calm night.
 
@@ -63,6 +63,12 @@ configured station elevation.** Owner check filed as **ops#168**; no repo work p
 DEC-0091 / hlf#302 / #144.
 
 ### ▶▶ S85 JOB LIST
+
+**Tier call, say it before starting (owner's `CLAUDE.md`; he asked to be reminded).** Jobs 1/3
+and the v2.0.14 cut are **execution — Sonnet-fits**. **Job 2's actual test and ops#175's
+retention DEC are judgment work** (ops#175 is already labelled `tier:frontier`) — name it in
+your first reply and let him escalate with a **session-only** switch; a bare `/model <m>`
+persists and re-prices later sessions (OPS-DEC-0010).
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP absent, state matches schedule.
    **Verified good through block 6 (08-16 08:10 EDT)** — next unobserved window is the
