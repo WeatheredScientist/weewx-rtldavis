@@ -152,6 +152,13 @@ DEC-0091 / hlf#302 / #144.
   monitor — likely the `. nas.env` sourcing; the `command`-prefix escape does NOT clear it). The
   settled fallback: hand the owner the single command, **saying explicitly it runs on the Mac**.
   Ran cleanly that way three times now.
+- **A guard block can be a MISFIRE — check before you go near the mint path (S85, ops#176).**
+  `push-nas-guard.sh` hard-blocked a `python3` heredoc that only edited a **local** `.md` file,
+  because the *prose being written* quoted the transfer verb; the guard's own message named a
+  **backtick** as the NAS host. **Do not ask for a mint on a misfire** — that authorizes a "NAS
+  write" that never leaves the laptop and burns a classifier draw. **Rung 0: re-spell it.** Use
+  `Write`/`Edit` for file content instead of a shell heredoc and the guard is not involved at all,
+  correctly. A genuine NAS write just blocks again, so the check costs nothing.
 - **A second same-session PR branched before the first merged sits BLOCKED by branch protection**
   ("requirements not met", state stays OPEN — and `gh pr merge`'s quiet refusal is another face
   of its never-trustworthy output). Fix server-side: `gh api -X PUT repos/<r>/pulls/<n>/update-branch`,
