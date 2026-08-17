@@ -79,10 +79,22 @@ these.** Re-apply and re-verify after any recreate.
 
 ## Hardware / site
 
-Davis 6263 VP2+ ISS · 6410 hall anemometer (replaced ~16–17 Jun 2026) · RTL-SDR Blog v3 + inline LNA
-(bias-tee) · 915 MHz vertical · ~150 ft through walls. Reception is **noise-floor limited**:
-measured baseline **73.3%, sd 4.67** (DEC-0059 — this supersedes the older "~67–70%" figure).
-A reproducible ~2-pt dip at **hours 07 and 19** belongs to the site, not to any experiment arm.
+Davis 6263 VP2+ ISS · RTL-SDR Blog v3 · 915 MHz vertical · ~150 ft through walls. **LNA (bias-tee)
+currently OUT** — see timeline below, do not assume it's inline. Reception is **noise-floor
+limited**: measured baseline **73.3%, sd 4.67** (DEC-0059 — this supersedes the older "~67–70%"
+figure). A reproducible ~2-pt dip at **hours 07 and 19** belongs to the site, not to any
+experiment arm.
+
+### Hardware timeline
+
+| Date | Change |
+|---|---|
+| 2026-05-01 | Station operational |
+| 2026-05-16 | Dedicated 915 MHz antenna installed |
+| 2026-05-27 | LNA ordered |
+| ~2026-06-01 | LNA activated (bias-tee voltage) |
+| 2026-06-16/17 | 6410 hall anemometer replaced |
+| 2026-08-02 | LNA removed (mid-ERR-0005; DEC-0081/DEC-0083) |
 
 Station coordinates: gitignored local-infra doc. Attribution: **WeatheredScientist**.
 
