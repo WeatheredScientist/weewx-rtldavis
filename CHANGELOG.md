@@ -5,6 +5,40 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S86] — 2026-08-17 — Watch-checkpoint discipline, LNA hardware history documented, scheduled ROADMAP reconciliation
+
+- **Three daily-watch checkpoints through campaign B block 11, plus a dated hardware timeline in
+  `CONSTANTS.md` — PR #203, merged.** `BOOT.md` now carries the night-3 finding: the reception-floor
+  PAUSE pattern that hit ~02:15–02:45 on nights 1–2 shifted to ~03:25–04:20 on night 3 (4 cycles,
+  not 2–3) — still n=3, still needs a proper test, but the shift argues against a pure tick-grid
+  artifact. `CONSTANTS.md`'s Hardware/site section gained a dated timeline (station live 05-01,
+  antenna 05-16, LNA ordered 05-27/activated ~06-01, anemometer replaced 06-16/17, LNA removed
+  08-02) and dropped the stale "+ inline LNA" claim — the LNA has been out since 08-02, not
+  present as the line previously implied. Prompted by an owner question re-examining whether the
+  current elevated RF-dead episode rate is caused by the LNA removal: it isn't, directly — DEC-0083's
+  onset (08-10 23:56) is 8 days after removal, and the intervening week was the quietest stretch in
+  the whole 30-day record. Attribution among campaign B's high-gain arms / v2.0.12 / weather stays
+  open, unchanged from DEC-0083.
+- **ops#157 (VPN heads-up) closed** — the owner confirmed being back home off VPN, and NAS access
+  was verified clean throughout the session (nasctl, ssh-backed calls, soak checks, no timeouts).
+- **weewx-rtldavis#74 and #44 retroactively communicated** — both had been closed with zero
+  comments (S52 and S43 respectively). Traced each to its actual fixing commit (`0b1ef85` for #74's
+  calm-windDir log-level fix, `973235b` for #44's windchill/cloudbase fields, the latter's own
+  commit message citing #44 directly) and added a comment naming it, rather than leaving the
+  closure unexplained. Prompted by an owner ask to audit "any other issues we've closed" for the
+  same gap, not just the one named.
+- **`docs/ROADMAP.md`'s scheduled S86 reconciliation ran on time (tripwire: "by S86").** One stale
+  item found and fixed: the freeze P0 item still stopped at DEC-0088's S80 rate correction and
+  never picked up **DEC-0094 (S85)** — the hour-of-day split that refutes the nightly-maintenance
+  hypothesis but finds the evening 18:00–21:00 window significant instead (P=0.0027). Everything
+  else on ROADMAP verified current against DECISIONS.md/CHANGELOG.md/BOOT.md. Next tripwire: S96.
+- **Board review confirmed nothing else is currently actionable for weewx** — checked the
+  cross-project "Claude Code work" board (192 items, 9 not Done) directly rather than relying on
+  `BOOT.md`'s own list. Everything weewx-relevant is either finished-and-queued for the v2.0.14
+  deploy window (#144, #172, #158), explicitly not-owed (ops#169), or deliberately deferred
+  (ops#173). **ops#175 (archive/InfluxDB retention policy) is the one real open item** — scoped
+  for S87 on Opus (see `BOOT.md`'s job list for the reasoning).
+
 ## [S85] — 2026-08-16 — DEC-0093's gated half shipped (and its deploy plan was wrong); the NAS-LEASE spec reviewed; a new 02:15 watch
 
 - **`current.json` cadence implemented — the dashboard answered dash#430 with 60 s and asked us to
@@ -151,55 +185,4 @@ under [Pre-S16].
   [OK], no STOP/PAUSE/lock). PR #158 deliberately still held for the v2.0.14 post-campaign cut.
 
 ---
-## [S83] — 2026-08-14 — ops#169 answered: our yield is a near-no-op, the box has a nightly heavy window, and the filesystem was wrong (DEC-0092)
-
-- **Answered coffee-radar's shared-NAS I/O lease proposal (ops#169), measured rather than
-  estimated.** `binding` defaults to `archive`, so InfluxDB gets **1 record/60 s**; total weewx
-  write bandwidth is order **tens of MB/day**. Our shape is metadata-heavy (~50–85k renames/day
-  via `loop_json_writer.py`), not bandwidth-heavy — so downshifting frees almost nothing, and the
-  counterpart accepted a near-no-op courtesy side as the honest answer rather than a refusal.
-- **Drew the data-integrity line ops#169 asked us for.** InfluxDB deferral is safe — the *live*
-  config was checked, not the shipped defaults: `[[Influx]]` sets only connection keys, so prod
-  runs `stale=None` / `max_backlog=1e6` and a 30-min defer queues ~30 records against a million.
-  The **SQLite archive write is the red line** (engine waits a hardcoded 120 s then restarts;
-  `timeout=30` exists because a *reader* holding the lock 6 s once cost 5–10 min of prod), and
-  loop-JSON is contractually fixed by INTERFACES §1.
-- **Corrected a mechanism both sessions had adopted: `/volume1` and all 25 mounts under it are
-  btrfs — only DSM's `/` is ext4.** There is no `jbd2` in either tenant's data path. Caught by
-  reading `/proc/mounts` instead of inheriting the claim, *after* it was already in our draft.
-  The strategic conclusion survives (`btrfs-transaction` is equally outside ioprio); write
-  amplification is higher than the ext4 model predicts, and the mount is `relatime`, not
-  `noatime`. Attribution independently confirmed impossible — `blkio/` holds only `reset_stats`,
-  and cgroup v2's `io.*` postdates this 4.4.302+ kernel.
-- **Found the box's real schedule, which outranks the protocol.** A sibling tenant's nightly
-  maintenance runs **00:10 → ~03:00–05:10 every night** (6 nights verified, median ~4h20m), so
-  **~72% of every 00:05 campaign block** sits under a heavy-I/O window nobody knew about; two more
-  jobs fire at 00:05 itself, one of them our own `weewx-monitor` logrotate — the same minute as
-  the swap's `harvest()`, which reads that log and its rotation. Task-id → owner mapping recorded
-  in the gitignored local-infra doc; BOOT's copy is genericized (public repo).
-- **Comparability is safe, and said so explicitly:** the square is a 4×4 Latin square run twice,
-  so each arm takes the midnight slot exactly twice and a slot-level confound is absorbed by
-  construction. The exposure is midnight *swap reliability* and *variance*, both uniform across
-  arms. Job 1 gains a check-the-cluster-before-blaming-the-S82-state-machine caveat.
-- **Blocker 1 gains a testable lead** (DEC-0067/0068): split freeze timestamps by hour-of-day
-  against that nightly window. No prior analysis controlled for it because nobody knew it ran, and
-  it is testable against rotated logs we already hold. Deferred post-square — `freeze_baseline.py`
-  is itself a heavy sweep and would add load to the measurement it is explaining.
-- **Coordination landed before any protocol constant was locked, via schedule disclosure rather
-  than throttling:** the counterpart held its 12–20 h sweep past 08-22 and moved its 6-hourly job
-  off :00 to :30 before block 1. Both verified here by process evidence, not relayed — the id=11
-  output directory stamped 18:31 proves the new schedule *executed*, DEC-0074's principle applied
-  to a neighbour.
-- **Recorded but deliberately not acted on:** SQLite-on-CoW favors WAL, but the ~300% figure is
-  single-writer and ours is the multi-process shape that bit us — **DEC-0071 stays closed**.
-  `chattr +C` on the archive DB queued instead, with `noatime`, moving our logrotate off 00:05,
-  and the freeze split. Also flagged for a design pass of its own — dataless freq-hop loop packets
-  (DEC-0024) republish byte-identical loop-JSON under a refreshed timestamp.
-- Gates: pre-commit ran ruff/mypy (no code files), tests, and the secret gate — plus a **positive
-  control on `check_secrets.sh`**, which first appeared to show a seventh hole in the `_apppw`
-  rule and did not: the payload used a key name outside `_key`. With the real `GMAIL_PASS` shape
-  both quoted and unquoted forms tripped, confirming the DEC-0084 fix works. A *failing* positive
-  control needs the same scrutiny as a passing one.
-
----
-*(S73–S82b rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S83 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*

@@ -12,123 +12,97 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S85 → S86)
+## ▶ Resume here (S86 → S87)
 
 ### What's settled (do not re-derive)
 
 **Campaign B: v2.0.13/ws.5 in prod, `prod-baseline-20260811` tagged.** Square runs
-**08-15 → 08-23T00:05** (third shift, DEC-0089). **Started on time and is running** — live state
-in the table below, night-one detail in the S84b block.
+**08-15 → 08-23T00:05** — **5 days left as of S86 close**, 11+ of 32 blocks in, every swap on
+time, none deferred. Live state in the table below.
 
-**S82/S82b (DEC-0090, DEC-0091): apparatus fixes + the monitor trio are deployed and verified; the
-pressure package (#183) is merged to `dev` for v2.0.14.** The whole square runs one monitor
-version. Detail in CHANGELOG / the DEC rows; what is still live sits in the state table and the
-v2.0.14 queue below.
+**Pressure package (#183, closes #172/#144) + monitor trio (DEC-0090/0091) + `current_interval`
+throttle (DEC-0093) are all merged to `dev`, none deployed yet.** All ride the v2.0.14 cut (queue
+below) — deliberately held until the square closes, not stalled. #144's offset itself is settled
+(station-side, ~+0.04 inHg high, WeatherLink console elevation setting; owner check filed as
+ops#168, no repo work pending) — #183 is the honest-nulls code fix, already done.
 
-**S84b: DEC-0087/0089 earned their keep.** Night one's blackout was **RF-dead, not a freeze**
-(three `rtldavis process stalled` lines, DEC-0094). Pause/resume detail and the running count
-are in job 2; full account in CHANGELOG S84. *(`.STOP.campaignA` at the project root is
-campaign **A**'s — not a live sentinel.)*
+**Resume machinery (DEC-0087/0089) is proven, not theoretical: 10 pause/resume cycles across
+three nights, all auto-recovered, zero STOPs.** Still unexercised: the 120-min ceiling escalation,
+the swap-deferral path, rotated-log reads across a `.1` boundary. *(`.STOP.campaignA` at the
+project root is campaign **A**'s — not a live sentinel.)*
 
-**S84/S85 (DEC-0093): `current.json` had no reader and was rewritten ~22,500×/day.** Now
-throttled to 60 s (dash#430 confirmed), **47.9%** of renames removed, merged to `dev` and
-queued for deploy — job 5. **Do not "optimize" `loop-data.txt`**: the eh-proxy 503s at
-`now - dateTime > 30` and the dashboard reads that as proof the station is down, so
-content-based suppression reports a healthy station offline on a calm night.
+**The nightly-heavy-window confound (ops#169, DEC-0092) is absorbed by design, not a live
+concern.** A sibling tenant's maintenance runs 00:10→~03:00–05:10 most nights; each campaign arm
+takes the midnight slot exactly twice, so comparability is safe by construction. Nothing owed by
+weewx on this thread. Post-square queue from it: `noatime` on `/volume1`, `chattr +C` on the
+archive DB, move our logrotate off 00:05 — all deferred to the v2.0.14 window.
 
-**S83: the box has a nightly heavy window, and the midnight block sits in it (ops#169, DEC-0092).**
-A sibling project's nightly maintenance (DSM id=15) runs **00:10 → ~03:00–05:10 every night**
-(6 nights verified), so **~72% of every 00:05 campaign block runs under it**; id=2 (our own
-logrotate, same minute as the swap's `harvest()`) and id=9 (a tenant capture job) fire at 00:05
-itself. **Comparability is safe** — each arm takes the midnight slot exactly twice, so the confound
-is absorbed by construction; what it threatens is *swap reliability* and *variance*. Workup, the
-btrfs correction and the task-id method: DEC-0092.
-**Post-square queue from it:** `noatime` on `/volume1` (owner-level DSM change) ·
-`chattr +C` on the archive DB (own DEC, rides the v2.0.14 recreate, does **not** reopen DEC-0071) ·
-move our logrotate off 00:05.
+**Hardware history is now documented (CONSTANTS.md, S86): LNA in ~01Jun→02Aug (~2mo), out since.**
+A pre-governance no-LNA baseline also exists (~mid-May→~01Jun; owner has email records if ever
+needed). Doesn't change DEC-0081/0083's finding: the current elevated stall rate's onset
+(08-10 23:56) is **8 days after** the LNA came out, not coincident with it — attribution among
+campaign B's high-gain arms / v2.0.12 / weather stays open (DEC-0083), post-campaign
+characterization question.
 
-**The v2.0.14 queue (post-campaign, ~08-23):** weewx 5.5.0 (PR #158) + #172's field + #144's
-honest nulls + move `:latest` to v2.0.13 once the square proves it + **copy the new
-`loop_json_writer.py` to the NAS *project root* — NOT into the image, NOT into
-`weewx-data/bin/user/` (DEC-0093: it is bind-mounted, the bake does not carry it, and that second
-path is a decoy). Verify with `nasctl inspect` before, and after the restart confirm the startup
-line reads `every 60 s`; a file check alone proves the FILE, never the PROCESS (DEC-0074).**
-NAS-native build (DEC-0078); the recreate re-verifies the three CONSTANTS live-config
-deviations. **5.5.0 is pre-reviewed GREEN**
-(S82b source-diff pass over 11 runtime-chain files; verdict + cut checklist on PR #158) — **the cut
-is execution-only, Sonnet-fit.**
+**The v2.0.14 queue (post-campaign, ~08-23):** weewx 5.5.0 (PR #158, pre-reviewed GREEN) + #183's
+pressure package (merged) + move `:latest` to v2.0.13 once the square proves it + **copy the new
+`loop_json_writer.py` (now with `current_interval`) to the NAS *project root* — NOT the image, NOT
+`weewx-data/bin/user/`** (mounted not baked, DEC-0093 — that second path is a decoy). Verify with
+`nasctl inspect` before, confirm the startup line reads `every 60 s` after — a file check alone
+proves the FILE, never the PROCESS (DEC-0074). NAS-native build (DEC-0078); the recreate
+re-verifies CONSTANTS' three live-config deviations **and** the hardware-timeline line still
+reads LNA-out. **The cut is execution-only, Sonnet-fit.**
 
-**#144's offset is settled: station-side, ~+0.04 inHg high, knob is the WeatherLink console's
-configured station elevation.** Owner check filed as **ops#168**; no repo work pending. Workup in
-DEC-0091 / hlf#302 / #144.
+### ▶▶ S87 JOB LIST
 
-### ▶▶ S86 JOB LIST
+**PRIMARY — [ops#175] retention DEC. Start this session on Opus, deliberately (session-only
+switch, not a bare `/model` — that persists and re-prices later sessions, OPS-DEC-0010).**
+Archive SQLite + shared InfluxDB bucket have no retention policy. Same pattern HLF's DEC-0156/0174
+already solved — read those first, don't design from scratch. Already banked here: measured
+growth ~0.41 MB/day, ~6.4 yr to 1 GB (not urgent, design it properly anyway); ideas parked in
+`BACKLOG.md` Open ideas. **Why Opus over Fable** (asked S86): no documented capability split
+between them for this task shape (checked `eaglehunt-ops/AGENT-ECONOMY.md` §3 directly); Opus
+runs ~half Fable's list cost and has the larger measured context ceiling (~1M vs ~608K,
+DEC-0035) — escalate for capability, never headroom, and there's no capability case for Fable
+here. Nothing blocks starting immediately.
 
-**Tier call, say it before starting (owner's `CLAUDE.md`; he asked to be reminded).** Jobs 1/3
-and the v2.0.14 cut are **execution — Sonnet-fits**. **Job 2's actual test and ops#175's
-retention DEC are judgment work** (ops#175 is already labelled `tier:frontier`) — name it in
-your first reply and let him escalate with a **session-only** switch; a bare `/model <m>`
-persists and re-prices later sessions (OPS-DEC-0010).
+**Standing watches — cheap, execution-tier. Pick up whenever it's been a while since the last
+check; not necessarily bundled into the Opus/175 session above.**
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP absent, state matches schedule.
-   **Verified good through block 11 (08-17 12:21 EDT)** — arm `A`, swapped on schedule 12:05:01.
-   Overnight 00:05 (A→C) and 06:05 (C→D) swaps both on time. Six stall/RF-dead episodes overnight
-   (01:41, 03:05, 03:21, 03:42, 03:52, 07:11 — durations 62/494/248/352/423/62s), all auto-recovered,
-   no STOP — see job 2 for the reception-floor detail. Soak: 14 passed, 3 warnings (same categories
-   as prior checks, all explained). Next unobserved window is `08-17T18:05`.
-2. ⚠️ **WATCH — reception-floor dip hit a THIRD night, but broke the ~02:15–02:45 pattern.**
-   08-15: PAUSE 02:15 (45%)/02:30 (20%)/02:40 (39%), arm A. 08-16: PAUSE 02:15 (36%)/02:30 (37%),
-   arm B. **08-17: PAUSE 03:25 (33%)/03:51 (30%)/04:05 (26%)/04:15 (40%), arm C — shifted ~1h10m
-   later, 4 cycles not 2–3.** All ten auto-resumed, no STOP. The shift argues against a pure
-   tick-grid/fixed-clock artifact; n=3 nights, still not yet tested properly (judgment work,
-   unchanged from S85 — DEC-0094 refuted *freezes* by hour, S85 refuted *stall episodes* by hour,
-   nobody has tested *this* metric). Sits inside HLF's nightly maintenance (00:10–04:46). If it
-   holds it's the first weewx evidence of cross-tenant harm — DEC-0093's caveat still applies:
-   can't distinguish real RF loss from a starved demodulator.
-3. **Resume machinery** — no longer n=0: **five pause/resume cycles over two nights, all recovered**
-   (DEC-0087 + DEC-0089's second path). Still unexercised: the 120-min ceiling escalation, the
-   swap-deferral path, and rotated-log reads across a `.1` boundary.
-4. **Over cap, TRACKED as [ops#173] — do not re-derive or open a second issue.** Measure exactly as
-   the sweep does or your number won't match: `git show origin/dev:BOOT.md | LC_ALL=en_US.UTF-8
-   wc -m` ÷ 4 (**pushed** tip; plain-C `wc -m` degrades to bytes). *Not `boot-cap-check.sh` — that
-   is ops's own gate and fails weewx on section names `tier-sweep.sh` deliberately ignores.*
-   Repeated rule-1 passes were outpaced anyway: **a repo running a live time-boxed experiment
-   exceeds a static cap for the duration, structurally.** Diet at the **square's close ~08-23**,
-   when most of this section becomes deletable at once; remainder to `ARCHIVE/` or a `MANIFEST.md`
-   row (DEC-0063). *(`MANIFEST.md` is over too, but that is the deliberate OPS-DEC-0101 carry, not
-   drift — named on ops#173 so the dedupe doesn't re-file it.)*
+   **Verified good through block 11 (08-17 12:21 EDT)** — arm `A`, on-schedule swap 12:05:01.
+   Next unobserved window `08-17T18:05`.
+2. ⚠️ **Reception-floor dip, n=3 nights, pattern SHIFTED.** 08-15/08-16 both paused ~02:15–02:45;
+   **08-17 paused 03:25–04:20 instead** (4 cycles, not 2–3) — argues against a pure
+   tick-grid/fixed-clock artifact. **Still needs the proper statistical test — judgment work**,
+   same as ops#175 (DEC-0094 refuted the *freeze* nightly-window lead, S85 refuted the *stall
+   episode* one; nobody has tested this reception-floor metric). Raw numbers: `logs/rx_experiment.log`.
+3. Resume machinery — see "What's settled" above; keep counting cycles, watch for the three
+   untested paths.
+4. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
+   square's close (~08-23), both weewx and ops sides already agreed; the issue can sit until then.
+5. **[dash#430] Answered and implemented, needs DEPLOYING not deciding** — rides the v2.0.14
+   window, see queue above.
 
-5. **[dash#430] ANSWERED and IMPLEMENTED — this now needs DEPLOYING, not deciding** (DEC-0093).
-   The dashboard confirmed **60 s** ("please make the change"), so `current_interval` shipped to
-   `dev`: `current.json` throttled, `loop-data.txt` deliberately untouched, **47.9%** of renames
-   removed (simulated a full day, not estimated). **The deploy is a file copy to the NAS project
-   root, NOT the image bake** — this file is bind-mounted and the Dockerfile never `COPY`s it, so a
-   rebuild alone is a silent no-op (DEC-0046's failure mode; the `weewx-data/bin/user/` copy is a
-   **decoy**, not the mount source). Rides the v2.0.14 window ~08-23 because that is the next
-   container recreate anyway. Steps + verification are in the v2.0.14 queue above.
-
-
-[ops#157]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/157
 [ops#169]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/169
 [ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
 [ops#175]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/175
-[ops#176]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/176
 [dash#430]: https://github.com/WeatheredScientist/eaglehunt-weather-dashboard/issues/430
 
-### Current state (S85 close)
+### Current state (S86 close)
 
 | Thing | State |
 |---|---|
-| Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` (S82) + `weewx_monitor.py` (S82b, pid 7625) both redeployed today, sha+process verified |
-| Campaign B | **Live and on schedule — 11 of 32 blocks, every swap on time, none deferred.** 08-16: `D→A` 18:05:11 (healthy). 08-17: `A→C` 00:05:01 · `C→D` 06:05:02 · `D→A` 12:05:01 (all healthy). **Now on arm `A`, next swap `08-17T18:05`.** Square through `08-23T00:05` (**5d 11h44m left as of 08-17 12:21**). STOP/lock absent; all PAUSEs auto-resumed — see job 2 for the night-3 reception-floor detail (shifted window, n=3). Verified 08-17 12:21 EDT |
-| Swap settle time | n=6: 82/139/198/137/197/79 s — **not a trend, do not re-flag** (now well supported). All fit `~20 s + k×60 s`, k = archive boundaries missed: 1,2,3,2,3,1. Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
-| `dev` beyond prod | **Two different deploy layers, don't conflate them.** #183's pressure package = **baked**, rides the v2.0.14 image cut. S85's `loop_json_writer.py` = **mounted**, needs a file copy to the project root (the bake will NOT carry it, DEC-0093). Plus S84/S85 docs |
-| Freeze rate | DEC-0088-corrected (1.31/day), untouched. **Hour-of-day split done (DEC-0094): nightly window refuted, evening 18:00–21:00 carries the signal** |
-| Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
+| Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` + `weewx_monitor.py` unchanged since S82/S82b, sha+process verified |
+| Campaign B | **Live and on schedule — 11 of 32 blocks, every swap on time, none deferred.** 08-17: `A→C` 00:05:01 · `C→D` 06:05:02 · `D→A` 12:05:01 (all healthy). **Now on arm `A`, next swap `08-17T18:05`.** Square through `08-23T00:05` (**5d left as of 08-17 12:21**). STOP/lock absent; all PAUSEs auto-resumed — see job 2 for the night-3 reception-floor shift (n=3). Verified 08-17 12:21 EDT |
+| Swap settle time | n=6: 82/139/198/137/197/79 s — **not a trend, do not re-flag** (well supported). Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
+| `dev` beyond prod | **Two different deploy layers, don't conflate them.** #183's pressure package = **baked**, rides the v2.0.14 image cut. `loop_json_writer.py` (incl. `current_interval`) = **mounted**, needs a file copy to the project root (the bake will NOT carry it, DEC-0093). Plus S84–S86 docs |
+| Freeze rate | DEC-0088-corrected (1.31/day), untouched. Hour-of-day split done (DEC-0094): nightly window refuted, evening 18:00–21:00 carries the signal — now also in `docs/ROADMAP.md` (S86 reconciliation caught it missing there) |
+| Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md`, now with the hardware timeline alongside |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | `dev` = `origin/dev` (`26ea196` + S84's docs PR). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, queued for v2.0.14 — deliberately held for the post-campaign cut, pre-reviewed GREEN, not stalled |
-| Trackers | #180 closed · #172/#144 open until v2.0.14 · #158 held for v2.0.14 (pre-reviewed GREEN, **not stalled**) · ops#163 closed / ops#165 filed |
-| Cross-repo (S84–S85) | **NOTHING IS OWED BY WEEWX** — `ops#169` stays open and carries `repo:weewx`, so session-start will surface it; do **not** re-engage. Our input is banked (footprint, the hard 30 s floor, the freeze-lead retraction, the evening correlation with its limits, two negatives on HLF's window) and the **NAS-LEASE spec review round is DONE** — findings accepted into v1.3, landing is coffee-radar's and gates on HLF's floor. What weewx already knows about adopting it is in `BACKLOG.md`; adoption needs our own DEC. **[dash#430] ANSWERED** → job 5. **[ops#173]** BOOT cap → job 4. **[ops#157]** VPN heads-up, ack'd. **[ops#176]** guard misfire, filed, awaiting triage. **[ops#175]** archive/InfluxDB retention — acknowledged with measured growth (~0.41 MB/day, ~6.4 yr to 1 GB); **design deferred to `BACKLOG.md` Open ideas, nothing owed on the thread**. ops#168 owner-side (WL elevation) |
+| Branches | `dev` = `origin/dev`, S86's two PRs merged (#203 watch-checkpoints/hardware-timeline + this closeout). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, queued for v2.0.14 — deliberately held, pre-reviewed GREEN, not stalled |
+| Trackers | #180/#74/#44 closed (latter two retroactively communicated, S86 — were closed with 0 comments, now cite the fixing commits) · #172/#144 open until v2.0.14 (code done, deploy pending) · #158 held for v2.0.14 · ops#163/#176 closed |
+| Cross-repo (S86) | **NOTHING OWED BY WEEWX beyond ops#175, now ACTIVE — see S87 job list.** ops#169 stays open, carries `repo:weewx`, no re-engagement needed. **[ops#157] CLOSED** (VPN window passed, back home confirmed, communicated with a comment). ops#168 owner-side (WL elevation) |
 
 ## Blockers
 
@@ -202,12 +176,17 @@ persists and re-prices later sessions (OPS-DEC-0010).
   the first** (S79 silently dropped a merged PR's doc changes off a stale ref). And **never
   `git checkout -- <file>` to unplant a staged positive-control payload** — it restores the
   planted version from the index (S55's gotcha, re-bitten S82b); edit the lines out instead.
+- **GitHub's API can degrade on WRITES while READS stay fine (S86)** — `gh pr merge` and a REST
+  `PUT .../merge` both 503'd repeatedly while `gh pr view`/`gh api GET` succeeded throughout.
+  Verify with a GET before assuming a mutation failed either way; don't hammer the write path in
+  a foreground retry loop (blocked by design — use a bounded background retry, or let the owner
+  merge via the web UI, which isn't behind the same path).
 
-_Last updated: 2026-08-15 (S84 close, four amendments same day). **DEC-0093** (`current.json` has
-no reader; direction set, gated on dash#430, nothing shipped) and **DEC-0094** (nightly-window
-freeze lead **refuted**, evening cluster real). The square started on time. Cross-repo: dash#430
-answered and its change merged (deploy queued), the NAS-LEASE spec reviewed and our findings taken,
-ops#173/#157 acknowledged, ops#176 filed. **Nothing owed by weewx — see the cross-repo row.**_
+_Last updated: 2026-08-17 (S86 close). Landed: PR #203 (BOOT/CONSTANTS watch checkpoints +
+hardware timeline), ops#157 closed, #74/#44 retroactively communicated, `docs/ROADMAP.md`'s
+scheduled S86 reconciliation (tripwire fired on time, one stale item fixed — see ROADMAP itself).
+Next session (S87) starts on **Opus**, deliberately, for **ops#175**. **Nothing else owed by
+weewx — see the cross-repo row.**_
 
 _Blocker 1 is narrower but NOT closed: the freeze mechanism is still unproven — DEC-0068 measured
 the main thread `S`, never `D`, so "correlates with" is not "is blocked by". Next step there is a

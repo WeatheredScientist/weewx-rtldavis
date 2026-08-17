@@ -3,7 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-14 (S82b — targeted line update, not a full pass: the campaign-B entry's
+**Last updated:** 2026-08-17 (S86 — **scheduled full reconciliation, tripwire fired on time**: the
+freeze item (P0, line below) gained DEC-0094's evening-window finding, missing since S85; everything
+else diffed clean against DECISIONS.md/CHANGELOG.md/BOOT.md — see the guardrail section for detail).
+Prior: 2026-08-14 (S82b — targeted line update, not a full pass: the campaign-B entry's
 "lockfile is post-campaign work" corrected — the S82 audit shipped it pre-square with four more
 state-machine fixes, DEC-0090).
 Prior: 2026-08-14 (S81 — targeted line update, not a full pass: Campaign B square dates
@@ -36,14 +39,22 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S86** (~10 sessions out). If the session counter is
-  at or past S86 and this line still says S86, that itself is the signal it's overdue — run the
-  same pass as S56, S66 and S76 did (diff every open/pending item here against DECISIONS.md,
+- **Next scheduled reconciliation check: by S96** (~10 sessions out). If the session counter is
+  at or past S96 and this line still says S96, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76 and S86 did (diff every open/pending item here against DECISIONS.md,
   CHANGELOG.md and `BOOT.md`).
+- Last full reconciliation: **S86, 2026-08-17** — tripwire fired on time. One stale item found and
+  fixed: the freeze P0 item (line below) still stopped at DEC-0088's S80 rate correction and never
+  picked up **DEC-0094 (S85)** — the hour-of-day split that refutes the nightly-maintenance-window
+  hypothesis (9/40 freezes vs 7.2 expected, P=0.29) but finds the **evening 18:00–21:00 window
+  significant instead** (12 vs 5.0, P=0.0027) — directly relevant to "why does weewx freeze" and
+  missing from it for one session. Everything else verified current: Campaign B block already
+  carried DEC-0094's tenant-window split, DEC-0087/0089/0090 pause/resume and lock fixes, and the
+  08-15→08-23T00:05 schedule; the DB-lock, receiveWindow and P3 rows are unchanged and correct.
 - Prior: 2026-08-14 (S83 — targeted line update, not a full pass: the campaign-B gate row still
   carried DEC-0083's 1.49/day after DEC-0088 corrected it to 1.31/day at S80, and the freeze row
-  gained DEC-0092's hour-of-day hypothesis). Tripwire unchanged at S86.
-- Last full reconciliation: **S76, 2026-08-12** — the tripwire fired on schedule and the pass ran.
+  gained DEC-0092's hour-of-day hypothesis).
+- Prior full reconciliation: **S76, 2026-08-12** — the tripwire fired on schedule and the pass ran.
   Two stale items fixed: the freeze row carried "~2-4 min, roughly once a day" for ~13 sessions
   and is now the measured 1.49/day, median 240 s (DEC-0083); and the **USB-reset P0 row was still
   an unticked checkbox while its own body had said "✅ CLOSED at S73" since S73** — the identical
@@ -328,7 +339,13 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       **Corrected again S80 (DEC-0088): the tool's swap detection was schedule-only and missed ad
       hoc restarts (abort recovery, pause escalation) as a source of expected downtime, counting
       7 of them as freezes. True rate 1.31/day, 40 events over 30.5 d, not 1.49/1.48 — all four
-      rolling windows read unremarkable.** *When recomputing, drop `interval != 1` rows first: the
+      rolling windows read unremarkable.** **S85 (DEC-0094) split the rate by hour-of-day — a real
+      lead, not a rate correction: the sibling tenant's nightly maintenance window tested NEGATIVE
+      (9/40 freezes vs 7.2 expected, P=0.29), but the evening 18:00–21:00 window is significant
+      (12 vs 5.0, P=0.0027), corroborating coffee-radar's own ~19:00 correlation (DEC-0068) across
+      10 distinct dates. Mechanism still unproven — DEC-0068 measured the main thread `S`, never
+      `D`, so "correlates with" is not yet "is blocked by" — next step is a mechanism probe during
+      an evening window, not more timestamp counting.** *When recomputing, drop `interval != 1` rows first: the
       S37 backfill wrote `interval=15` rows that read as 28 phantom 900 s freezes and inflate the
       rate ~60 %.* Individual events seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59,
       08-03 23:23 (262 s, S64), and two more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;
