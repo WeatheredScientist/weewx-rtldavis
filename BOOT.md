@@ -71,19 +71,20 @@ your first reply and let him escalate with a **session-only** switch; a bare `/m
 persists and re-prices later sessions (OPS-DEC-0010).
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP absent, state matches schedule.
-   **Verified good through block 6 (08-16 08:10 EDT)** — next unobserved window is the
-   `08-16T12:05` swap to `D`.
-2. ⚠️ **NEW WATCH — the ~02:15–02:45 reception dip has now happened on BOTH nights of the square.**
-   08-15: PAUSE 02:15 (45%), 02:30 (20%), 02:40 (39%). 08-16: PAUSE 02:15 (36%), 02:30 (37%).
-   Different arms (A then B), same clock window, all five auto-resumed. **n=2 nights — a pattern
-   worth testing, not yet a finding.** It sits inside HLF's published nightly maintenance
-   (00:10–04:46) and near `blend-refresh`'s end (02:23). **This is a THIRD metric**: DEC-0094 tested
-   *freezes* by hour (negative, P=0.29) and S85 tested *stall episodes* (negative, P=0.32) — nobody
-   has tested **reception-floor dips**, which is what these are. Caveat before anyone gets excited:
-   `02:15` is partly a tick artifact (the guard runs on a 5-min grid, so it fires at the first tick
-   past the floor), and two nights is two nights. **Collect a few more nights, then test properly.**
-   If it holds it is the first weewx evidence of cross-tenant harm — and DEC-0093's caveat applies:
-   we cannot distinguish real RF loss from a starved demodulator.
+   **Verified good through block 11 (08-17 12:21 EDT)** — arm `A`, swapped on schedule 12:05:01.
+   Overnight 00:05 (A→C) and 06:05 (C→D) swaps both on time. Six stall/RF-dead episodes overnight
+   (01:41, 03:05, 03:21, 03:42, 03:52, 07:11 — durations 62/494/248/352/423/62s), all auto-recovered,
+   no STOP — see job 2 for the reception-floor detail. Soak: 14 passed, 3 warnings (same categories
+   as prior checks, all explained). Next unobserved window is `08-17T18:05`.
+2. ⚠️ **WATCH — reception-floor dip hit a THIRD night, but broke the ~02:15–02:45 pattern.**
+   08-15: PAUSE 02:15 (45%)/02:30 (20%)/02:40 (39%), arm A. 08-16: PAUSE 02:15 (36%)/02:30 (37%),
+   arm B. **08-17: PAUSE 03:25 (33%)/03:51 (30%)/04:05 (26%)/04:15 (40%), arm C — shifted ~1h10m
+   later, 4 cycles not 2–3.** All ten auto-resumed, no STOP. The shift argues against a pure
+   tick-grid/fixed-clock artifact; n=3 nights, still not yet tested properly (judgment work,
+   unchanged from S85 — DEC-0094 refuted *freezes* by hour, S85 refuted *stall episodes* by hour,
+   nobody has tested *this* metric). Sits inside HLF's nightly maintenance (00:10–04:46). If it
+   holds it's the first weewx evidence of cross-tenant harm — DEC-0093's caveat still applies:
+   can't distinguish real RF loss from a starved demodulator.
 3. **Resume machinery** — no longer n=0: **five pause/resume cycles over two nights, all recovered**
    (DEC-0087 + DEC-0089's second path). Still unexercised: the 120-min ceiling escalation, the
    swap-deferral path, and rotated-log reads across a `.1` boundary.
@@ -119,7 +120,7 @@ persists and re-prices later sessions (OPS-DEC-0010).
 | Thing | State |
 |---|---|
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` (S82) + `weewx_monitor.py` (S82b, pid 7625) both redeployed today, sha+process verified |
-| Campaign B | **Live and on schedule — 6 of 32 blocks, every swap on time, none deferred.** 08-15: `A` 00:05 · `B` 06:05 · `C` 12:05 · `D` 18:05. 08-16: `D→B` 00:05:01 (healthy 00:08:18) · `B→C` 06:05:01 (healthy 06:06:20). **Now on arm `C`, next swap `08-16T12:05` → `D`.** Square through `08-23T00:05`. STOP/lock absent; all pauses auto-resumed. Verified 08-16 08:10 EDT |
+| Campaign B | **Live and on schedule — 11 of 32 blocks, every swap on time, none deferred.** 08-16: `D→A` 18:05:11 (healthy). 08-17: `A→C` 00:05:01 · `C→D` 06:05:02 · `D→A` 12:05:01 (all healthy). **Now on arm `A`, next swap `08-17T18:05`.** Square through `08-23T00:05` (**5d 11h44m left as of 08-17 12:21**). STOP/lock absent; all PAUSEs auto-resumed — see job 2 for the night-3 reception-floor detail (shifted window, n=3). Verified 08-17 12:21 EDT |
 | Swap settle time | n=6: 82/139/198/137/197/79 s — **not a trend, do not re-flag** (now well supported). All fit `~20 s + k×60 s`, k = archive boundaries missed: 1,2,3,2,3,1. Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
 | `dev` beyond prod | **Two different deploy layers, don't conflate them.** #183's pressure package = **baked**, rides the v2.0.14 image cut. S85's `loop_json_writer.py` = **mounted**, needs a file copy to the project root (the bake will NOT carry it, DEC-0093). Plus S84/S85 docs |
 | Freeze rate | DEC-0088-corrected (1.31/day), untouched. **Hour-of-day split done (DEC-0094): nightly window refuted, evening 18:00–21:00 carries the signal** |
