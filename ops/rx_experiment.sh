@@ -183,6 +183,11 @@ arm_cmd() {
 # tests/test_rx_experiment.py machine-checks the balance, order, pilot
 # structure, hold placement and terminator.
 # LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
+# BETWEEN CAMPAIGNS this block is EMPTY — the stand-down state (DEC-0096):
+# `install` refuses it loudly, the structural tests skip, and the staleness
+# guard passes. Empty it when a campaign completes (a fully-elapsed table must
+# never sit here looking installable — DEC-0066's trap); regenerate it with
+# the recipe above to schedule the next one.
 SCHEDULE="
 2026-08-11T00:35|P496
 2026-08-11T01:20|P449
@@ -304,6 +309,14 @@ current_arm()     { [ -f "$STATE" ] && cut -d'|' -f1 "$STATE" || echo "NONE"; }
 last_swap_epoch() { [ -f "$STATE" ] && cut -d'|' -f2 "$STATE" || echo "0"; }
 last_swap_human() { [ -f "$STATE" ] && cut -d'|' -f3 "$STATE" || echo "1970-01-01 00:00:00"; }
 write_state()     { echo "$1|$(date '+%s')|$(date '+%Y-%m-%d %H:%M:%S')" > "$STATE"; }
+
+# True (0) when SCHEDULE carries at least one row. An EMPTY block is the
+# deliberate between-campaigns stand-down state (DEC-0096): a completed
+# campaign's table is emptied rather than left fully-elapsed-but-installable
+# (DEC-0066's trap), and `install` refuses the stand-down state loudly.
+schedule_has_rows() {
+  [ -n "$(echo "$SCHEDULE" | grep -v '^$' | head -1)" ]
+}
 
 # Which arm should be live right now? Latest schedule row whose time <= now.
 # Self-healing: a missed scheduler run swaps late rather than skipping a block.
@@ -525,6 +538,14 @@ schedule)
 
 install)
   [ -f "$BASELINE_SNAP" ] && { echo "Baseline snapshot already exists: $BASELINE_SNAP"; exit 1; }
+  if ! schedule_has_rows; then
+    echo "REFUSING to install: no campaign scheduled." >&2
+    echo "The SCHEDULE= block is empty — the between-campaigns stand-down state" >&2
+    echo "(DEC-0096). Installing would snapshot a baseline and then tick forever" >&2
+    echo "doing nothing. Generate the next campaign's table first (recipe above" >&2
+    echo "the SCHEDULE= block), then install." >&2
+    exit 1
+  fi
   if schedule_started; then
     echo "REFUSING to install: the schedule has already started." >&2
     echo "  first row: $(echo "$SCHEDULE" | grep -v '^$' | head -1 | cut -d'|' -f1)" >&2
