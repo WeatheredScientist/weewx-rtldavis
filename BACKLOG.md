@@ -246,6 +246,36 @@ failed resets currently produce no further action.
   re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
+- **Hot-swap gain / receive-window without restarting the container (owner question, S89).**
+  Asked while looking at how much restarting campaign B does. **Answer: nothing prevents it but
+  the feature itself, and most of the machinery is already built.** Gain is only a CLI flag on the
+  Go binary, carried inside the `cmd = /usr/local/bin/rtldavis -gain NNN ... -ex N` string in the
+  mounted config. **`rtldavis.py` has no concept of gain at all** — `grep -i gain` returns five
+  hits, four of which are the word "a*gain*st" and the fifth a comment documenting the flag; the
+  driver passes the string to `Popen` and never looks inside. And the swap path exists:
+  `ProcManager.startup(cmd, …)` takes the command **as a parameter**, `shutdown()` kills and reaps
+  the child (ws.5), and that kill→respawn cycle is already exercised routinely by the driver's
+  150 s watchdog — DEC-0081 confirmed it "fires and respawns correctly", three times in one night.
+  **The whole gap is the trigger**: the config is read once in `__init__`, `self.cmd` is assembled
+  once, and there is no runtime reload or control channel. A hot swap is `shutdown()` → rewrite
+  `self.cmd` → `startup()`, plus something to ask for it (a watched control file or a signal).
+  **The prize is larger than skipping a restart:** `-ex` rides the same string, so *both* axes of
+  the 2×2 square could swap with no container touch — which would retire the **600 s settle
+  window** (currently discarding 10 min of every 6 h block, ~2.8% of campaign data), remove the
+  restart transient as a confound (settle times measured 79–198 s vs seconds for a child respawn),
+  and eliminate the **abort-on-unhealthy-swap failure class** that has already cost real blocks
+  (DEC-0082's +24 h shift; the S79 incident behind DEC-0087).
+  **Constraints, so nobody starts this at the wrong moment:** (1) **not during campaign B** —
+  changing the swap protocol mid-square breaks comparability, the exact confound DEC-0064's
+  fixed-slot design exists to prevent; revisit once the square closes (~08-23) *and* the gated
+  v2.0.14 queue has cleared. (2) The Go binary sets gain **only at startup** — there is no runtime
+  control channel in the binary, so this is a child respawn, not a live `rtlsdr_set_tuner_gain()`.
+  (3) It widens the vendored fork (`CHANGES-FROM-UPSTREAM.md`), though it looks upstreamable.
+  (4) **Unmeasured:** how fast the RTL-SDR device re-opens after a deliberate SIGKILL under normal
+  conditions — the watchdog does exactly this today so it works, but the gap length is unmeasured,
+  and DEC-0081's "respawned children stay silent" finding is *episode-specific*, not normal
+  operation. Don't conflate the two. Needs a DEC and approval before code (PRINCIPLES §8).
+  Tracked jointly with ops: [ops#179](https://github.com/WeatheredScientist/eaglehunt-ops/issues/179).
 - ~~**Retention policy for the SQLite archive + the InfluxDB `weewx` bucket**~~ — **ANSWERED S87,
   [DEC-0095](docs/DECISIONS.md).** The weewx half of
   [ops#175](https://github.com/WeatheredScientist/eaglehunt-ops/issues/175) is settled:
