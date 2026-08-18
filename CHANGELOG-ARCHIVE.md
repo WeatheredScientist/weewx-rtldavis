@@ -7,6 +7,98 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S84] — 2026-08-15 — The dataless-write proposal was already fixed in S43; the real amplification is `current.json`, which nothing reads (DEC-0093)
+
+- **Asked (out of ops#169) whether `loop_json_writer.py` should skip dataless LOOP packets — it
+  already does, one level up.** DEC-0024 Layer B (S43) stashes freq-hop packets and `continue`s
+  (`rtldavis.py:1507-1517`), so `new_loop()` cannot fire on one; `PacketFactory.create()` does still
+  *yield* them, which is what the reading saw, but `genLoopPackets` filters them first. The `~40%`
+  figure was `66/166` — DEC-0024's own **pre-fix** 1.66×. **Verified live rather than from source**
+  (DEC-0074): the monitor reads `WINDOW: 12–18/21 (57–86%)`, `RECEPTION: 72–74%` — the post-Layer-B
+  signature; the inflation's signature is this metric pinning near 100%.
+- **Measured what DEC-0092 estimated:** ~22,500 loop packets/day → **~45,000 renames/day**, refining
+  its `50–85k` (whose upper bound was the pre-Layer-B rate). DEC-0092's last post-square queue item
+  is answered and retired in place, in the house `Update (Sxx)` pattern.
+- **`current.json` has no consumer anywhere.** The eh-proxy's only `/weewx-data` read is
+  `loop-data.txt`; no runtime reference exists in the dashboard, in hyperlocal-forecast, or in this
+  repo outside the writer and its tests; the dashboard's roadmap still carries Cold-load Fix B's
+  consumer half **open at P0**. So half of all writes go to a file nothing reads — the whole 40% the
+  proposal chased, but real. **Direction: decouple its cadence to 30–60 s (~47% of renames removed),
+  gated on the dashboard confirming.** Not shipped; **no code changed** (PRINCIPLES §8, DEC-0014).
+- **Recorded why content-based suppression is rejected, so it is not re-proposed.** The eh-proxy
+  503s at `now - dateTime > 30` and the dashboard reads that 503 as its one proof the station is
+  down, while `wind_speed` is set unconditionally including `0.0` when calm — a calm night would
+  report a **healthy station as offline**. The "suppression is more honest" argument inverts
+  DEC-0006/0053's two independent freshness axes (per-field TTL vs feed liveness).
+- **Doc contradiction corrected:** INTERFACES §1 and the writer's docstring had claimed since S43
+  that the dashboard fetches `current.json` at boot; it never did. INTERFACES §1 now also records
+  the **30 s liveness gate** — DEC-0092 called loop-JSON "contractually fixed" without the number
+  that makes it so. **Cross-repo reconciliation still owed** (weewx documented the whole feature as
+  done; the dashboard holds the accurate half).
+- **Link declined:** DEC-0068 measured the main thread `S`, never `D`, during a load-12 freeze, so
+  less writer I/O is **not** evidence toward the freeze blocker (DEC-0067/0068).
+- Docs only, plus a docstring in `loop_json_writer.py` (no behavior change).
+- **Amended same day (S84b) — the NAS came back in reach and the square was verified after all.**
+  `H -> A` at `00:05:01` (`arm A live and healthy` `00:06:23`), `A -> B` at `06:05:01` (healthy
+  `06:07:20`); on arm **B**, no STOP, no PAUSE. **DEC-0087/0089 got their first live exercise and
+  held:** one ~20-min blackout (02:00–02:22, reception `30→2→16→1→0%`) produced **three**
+  pause/resume cycles as the 30-min mean lagged the recovery, and **pre-DEC-0087 the first trip
+  would have been a sticky STOP that killed the block unattended.** Resumes 2 and 3 came from
+  `recovered_since()`'s second path (`RECEPTION: 73% [OK]` at 02:31:43 / 02:41:44) — **DEC-0089's
+  fix is what carried them**, since only one `RECEPTION RECOVERY` edge line exists. Whether the
+  blackout was RF or a process freeze is **not established** (DEC-0067: both read identically on
+  this metric) and it sits inside DEC-0092's nightly heavy-I/O window — logged as blocker 1's lead,
+  not scored as an RF result. S84's "NAS unroutable" note was true when written and is now stale.
+- **Later the same day (S84d, DEC-0094) — the hour-of-day freeze split ran, at zero prod cost, and
+  refuted the lead it was meant to test.** DEC-0092 deferred it post-square as "a heavy sweep";
+  that priced a *fresh* `freeze_baseline.py` run, but the script prints every individual event by
+  design and those listings survive in session transcripts, so the split was arithmetic over
+  already-collected data — no ssh, no archive query, no load on the square. **Nightly maintenance
+  window (00:10–04:30): 9 of 40 freezes vs 7.2 expected, P=0.29 — it explains nothing.** The
+  evening does: **18:00–21:00 = 12 vs 5.0 (P=0.0027)**, coffee-radar's ~19:00 window 7 vs 2.5
+  (P=0.011), over 10 distinct dates — turning DEC-0068's "n=1, not a base rate" into **30% of
+  freezes in 12.5% of the day**. Stated with its limits: found post hoc, and the omnibus X²=30.8
+  (df=23, crit 35.2) does **not** reject uniformity, so it corroborates DEC-0068 rather than
+  proving it. Used the **DEC-0088-corrected run only**, verified by a positive control (the
+  documented 08-12 19:55 restart is absent from it, present in the pre-fix runs) and by parsed
+  count matching claimed count. **Side result: the 08-15 02:00–02:22 blackout was RF-dead, not a
+  freeze** — three `rtldavis process stalled` lines sit inside it, which is DEC-0067's own rule;
+  S84b's open question closed by one grep. Blocker 1 stays open — mechanism still unproven.
+- **Cross-repo brought current at close (S84e).** **ops#169** updated with both DECs: our 08-14
+  footprint figure corrected (`~45k`, not `50–85k` — the upper bound was a pre-fix rate), **~47%
+  declared removable unilaterally with no lease at all**, `loop-data.txt` declared a **hard 30 s
+  floor** for the lease spec (a deferral past it is a consumer-visible outage, not a preference),
+  the nightly-window freeze lead **retracted** from our side of that thread, and coffee-radar's
+  ~19:00 job reported as correlating with 30% of our freezes — limits stated, no schedule change
+  requested. **ops#173** (BOOT over cap) acknowledged with the measurement and the post-square plan,
+  plus the general point that a repo running a live time-boxed experiment exceeds a static cap
+  structurally, which is a different condition from neglect. **ops#157** (owner on VPN through
+  ~08-16) acknowledged — it explains this session's NAS gap, and weewx re-derived that condition
+  instead of reading the heads-up that already said it. **dash#430** filed, awaiting their answer.
+- **S85: dash#430 answered 60 s, so DEC-0093's gated change is IMPLEMENTED (not yet deployed).**
+  `[LoopJsonWriter] current_interval` (default **60 s**) throttles `current.json` only;
+  `loop-data.txt` stays per-packet because its `dateTime` sits behind the 30 s proxy liveness gate.
+  First packet of a run always writes the snapshot (a restart republishes immediately), a failed
+  write does not advance the timestamp (one transient failure can't suppress it for an extra
+  interval), a backwards clock step forces a write, and `current_interval = 0` restores the
+  S43–S84 behavior. **Measured by simulating a full day at 2.5625 s/packet: 33,717 → 1,405
+  snapshot writes, 67,434 → 35,122 renames/day, 47.9% removed** — matching DEC-0093's projection.
+  8 new tests (23 in the file, **279** suite); three existing tests were reading `current.json` to
+  assert cache/TTL semantics and now read the live feed, which is what they always meant.
+- **The deploy plan was wrong and the check caught it: `loop_json_writer.py` is MOUNTED, not
+  baked.** `nasctl inspect` shows `<project root>/loop_json_writer.py` bind-mounted `ro` over the
+  venv copy, and **the Dockerfile never `COPY`s it** — so "ships with the v2.0.14 image cut", which
+  both DEC-0093 and BOOT had said, **would have been a silent no-op with a green checkmark**
+  (DEC-0046's exact failure). Deploy is a file copy to the **project root** plus a restart; the
+  copy in `weewx-data/bin/user/` is a **decoy**. `CONSTANTS.md`'s deploy-layer table did not list
+  this file at all — now fixed, with `nasctl inspect` named as the authoritative per-file check and
+  the two other mounted modules added.
+- Gates at close: ruff clean, **271/271** pytest (**279/279** after S85's tests), mypy clean over
+  49 files, secret gate clean with
+  its positive control at 54/54. Campaign B verified live at 10:39 EDT (arm B, reception 69–77%
+  [OK], no STOP/PAUSE/lock). PR #158 deliberately still held for the v2.0.14 post-campaign cut.
+
+---
 
 ## [S83] — 2026-08-14 — ops#169 answered: our yield is a near-no-op, the box has a nightly heavy window, and the filesystem was wrong (DEC-0092)
 
