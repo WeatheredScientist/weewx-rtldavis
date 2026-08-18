@@ -47,6 +47,11 @@ MANDATORY OPENING MOVE:**
    (the cadence ping's home; dash#430 is closed as superseded by it).
 4. NAS-side, same window (from ops#169/DEC-0092): `noatime` on `/volume1`, `chattr +C` on the
    archive DB, move our logrotate off 00:05.
+5. **NAS-LEASE first adoption (DEC-0099, S90):** mount `LEASE_DIR` read-only at the recreate;
+   `influx.py` checks it at its own poll, raises `post_interval` while a foreign lease is held; the
+   NAS image build (DEC-0078) wraps `docker build` with acquire→flock→release as weewx's first
+   HOLDER. Renewal in-place only (seek+write+truncate) — **never** `tmp`+`os.replace`, DEC-0051's
+   idiom would silently strand the flock.
 
 **The cut is execution-only, Sonnet-fit.** #144's offset itself is settled (station-side,
 WeatherLink console elevation; ops#168 owner-side, no repo work).
@@ -120,7 +125,7 @@ Everything else is watch- or execution-tier.**
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
 | Branches | **Steady state: exactly `dev` + `main`.** PR #208 (5.5.0 bump) + PR #209 (DEC-0096) merged 08-18, branches deleted. Dependabot #158 **closed with a pointer** — its red `tests` check was an artifact of its only CI run predating the S73 test correction on `main`, not a 5.5.0 problem |
 | Trackers | #158 closed (superseded by #208, commented) · #172/#144 open until v2.0.14 (code done, deploy pending) · **#204 open as the current.json-cadence deploy home** (body is a broken literal file path — `--body @path` misfire, cosmetic) · ops#163/#176 closed |
-| Cross-repo (S88) | **NOTHING OWED BY WEEWX.** S88 swept ops + dashboard + HLF `repo:weewx`: no new items. ops#175 answered (InfluxDB half stays open for the dashboard); ops#169 informational; ops#168 owner-side; ops#110 future-tier |
+| Cross-repo (S90) | **Two threads resolved, both replies drafted not yet posted.** ops#169/NAS-LEASE: OPS-DEC-0107 landed + HLF adopted while BOOT sat stale on it — weewx's own adoption deferred to v2.0.14, concrete plan in queue item 5 (DEC-0099). ops#175: InfluxDB rollup strawman answered — dashboard's to build, weewx declines with reasons (DEC-0100). ops#173/#179/#110 unchanged from S89 |
 
 ## Blockers
 
