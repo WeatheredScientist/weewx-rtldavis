@@ -5932,3 +5932,119 @@ negative, and it was only caught by positive-controlling the method against weew
 pid, which reads empty too. *A zero from a look-alike tool is a claim, not a result* — the third
 instance of that pattern in this repo (`nasctl grep` multi-word, leading-dash globs, host-side `du`
 on a bind mount).
+
+## DEC-0099 — NAS-LEASE adoption deferred to the v2.0.14 window, bundled with weewx's first holder exercise
+
+**Date:** 2026-08-18 (S90) · **Status:** Accepted · **extends** DEC-0092 · **answers** ops#169 /
+OPS-DEC-0107 · **applies** DEC-0051's forbidden-idiom warning
+
+### Where the thread actually stands
+
+OPS-DEC-0107 (NAS-LEASE) landed 2026-08-15. HLF adopted the same window via their own DEC-0177 —
+client live since 2026-08-16, first real acquire/release cycle in the shared log dated 2026-08-18.
+weewx is a named participant in the spec (§6) with an already-scoped-but-unbuilt client shape; the
+spec's own charter (§9) binds a tenant only when that tenant lands its own adopting DEC. This is
+that DEC, and the decision is to defer, not decline.
+
+### What's actually true today, per the spec's own tenant table
+
+weewx has **zero live levers**. The one committed-unbuilt lever — InfluxDB `post_interval`
+deferral, proven safe to ~30 min (DEC-0092: `stale=None`, `max_backlog=1e6`) — needs `influx.py`
+(a `RESTThread` running inside the container) to see `LEASE_DIR`. It can't: the container's mount
+set is fixed at creation and excludes it, so reaching the lever needs a mount that doesn't exist
+today. `weewx_monitor.py` already runs resident host-side on a 30 s poll and sees the whole shared
+volume — but building only that half would let us READ the lease and have nothing to act on.
+Recorded at S85 (BACKLOG.md), true again now.
+
+### The decision: bundle both halves into v2.0.14, don't build a partial piece now
+
+v2.0.14 (~08-23) already recreates the container — weewx 5.5.0, #183's pressure package, DEC-0096's
+stand-down support. That recreate is the first moment a `LEASE_DIR` mount costs nothing extra;
+adding it today would mean a SEPARATE release-class event (kill→rm→run) for a mount that serves
+only this one purpose, ahead of a recreate that's already scheduled.
+
+Concrete plan for that window, recorded now so it isn't re-derived:
+
+1. **Container recreate adds a read-only `LEASE_DIR` mount.** Verify with `nasctl inspect` after,
+   per CONSTANTS.md's standing rule — a claimed mount is unverified until inspected.
+2. **`influx.py` checks the lease at its own post cadence** (its natural checkpoint; the spec's
+   floor is 60 s and explicitly never loop/packet cadence). While a foreign lease is held, raise
+   `post_interval` — the only live-adjustable lever we have, and the only one we're offering.
+3. **weewx's own first HOLDER exercise: the NAS-native image build (DEC-0078)** wraps `docker
+   build` with acquire→flock→release using shell primitives — the spec itself names this as "the
+   protocol's first concrete cross-tenant test case." The shape mirrors `rx_experiment.lock`'s own
+   break-a-stale-holder-loudly behavior, which the spec's stale/steal language credits as prior art
+   from our side.
+4. **Any lease-file write we ever do — renewal, if we hold — is in-place** (seek-0 + write +
+   truncate on the held descriptor), **never** the `tmp` + `os.replace()` idiom
+   `loop_json_writer.py` uses everywhere (DEC-0051's house pattern). The spec's §3 names this exact
+   mistake — a rename replaces the inode and silently strands the holder's `flock` on an unlinked
+   file, degrading validity to TTL-only with no error anywhere. HLF caught it on their own v1
+   review; weewx is the tenant most exposed to it because the wrong idiom is our reflex. Restated
+   here, not just in BACKLOG, because a DEC is where a future session is told **not** to re-derive
+   it.
+
+### What this does NOT do
+
+Adopt a participant role today. Between now and v2.0.14, weewx holds no lease and yields nothing —
+there is nothing built to yield with. ops#169 stays open against weewx until the window actually
+lands the client; this DEC is the plan, not the shipment.
+
+### The one thing that needed no adoption at all
+
+Reading the world-readable attribution log for our own analysis isn't gated behind participation —
+it's the same posture HLF committed to (correlating `tick_step_timings` against the log). Read once
+this session (S90): one real lease-held window exists so far (2026-08-18 00:10–06:10 EDT, HLF's
+`daily-maintenance`), and it's far too small a sample to test anything. The result and its caveats
+are in `BACKLOG.md`'s NAS-LEASE watch entry, not here — this DEC is about the adoption decision, not
+the measurement.
+
+## DEC-0100 — The InfluxDB rollup is dashboard's to build — a Task, not a weewx write-path change
+
+**Date:** 2026-08-18 (S90) · **Status:** Accepted · **completes** DEC-0095's open InfluxDB half ·
+**answers** ops#175 · **applies** DEC-0010
+
+### Context
+
+DEC-0095 settled weewx's own SQLite retention (accept-and-monitor) but left the InfluxDB bucket's
+horizon explicitly "against the dashboard, not us" — a cross-repo interface call under DEC-0010,
+not a unilateral prune of a shared bucket. ops#175 subsequently logged a mutual wait: weewx's
+DEC-0095 comment framed it as the dashboard's call, dashboard's reply said they'd declare a
+consumer-contract DEC "once weewx picks a shape" — each side waiting on the other. ops broke the
+stall with a strawman: accept-and-monitor for Influx too (its own measured tripwire, not SQLite's
+number), plus a permanent daily rollup (hi/lo/mean + running record extremes per station/field) so
+dashboard's `card-records` all-time-window queries (dash DEC-0111) survive whatever eventually
+happens to raw instead of silently reporting wrong answers. "Who builds the rollup" was left open on
+purpose.
+
+### Decision
+
+weewx declines to build it. Recommend dashboard builds it, as an **InfluxDB 2.x Task** — the native
+scheduled-Flux mechanism (confirmed 2.x per `docs/INTERFACES.md` §2; Tasks are 2.x's replacement for
+1.x continuous queries).
+
+### Reasoning
+
+1. **`docs/INTERFACES.md` already draws this exact boundary, unprompted by this thread**: *"The
+   dashboard reads InfluxDB only through its own `eh-proxy`... this repo never sees the dashboard's
+   read path. Our responsibility ends at writing the documented schema."* A derived rollup
+   measurement is a new read-side artifact computed FROM the schema, not part of what we write.
+2. **The rollup protects a dashboard-specific feature** — `card-records`'s all-time windows — that
+   weewx doesn't consume and has no way to validate. We'd be building blind for a consumer's own
+   correctness property.
+3. **dashboard "already runs arbitrary Flux against this bucket"** (ops#175's own strawman, and
+   independently true — INTERFACES §2 notes the dashboard's Flux queries are written against our
+   field names). A Task is Flux-native. `influx.py` has never written a line of Flux; it's a Python
+   `RESTThread` speaking line protocol (DEC-0007). Building this in weewx means this repo learning a
+   query language it has no other use for, to solve a problem it doesn't have.
+4. **A Task changes neither write path.** It reads the existing raw bucket on its own schedule and
+   writes a new measurement, entirely inside InfluxDB. No schema change on our side, nothing for
+   `docs/INTERFACES.md` to record, no DEC needed on the write-contract half.
+
+### What this is not
+
+Not a refusal to help, and not a mandate on dashboard. If dashboard's own investigation finds the
+Task needs something from weewx's write side — a tag, a field, a schema change — that reopens as a
+fresh cross-repo interface conversation under DEC-0010, the same path the still-open station-identity
+tag question (BACKLOG.md) would take. This DEC settles only who builds the rollup as currently
+scoped, not every future ask.
