@@ -73,6 +73,9 @@ HEALTHY = {
     "phantom_rain": "0",
     "archive_rows": "64",
     "remote_elapsed_s": "3",
+    # Measured on the real box 2026-08-17: 33.61 MB archive, 3.69 GiB RAM = 0.9%.
+    "db_bytes": "35241984",
+    "mem_total_kb": "3866684",
 }
 
 
@@ -219,3 +222,38 @@ def test_fresh_archive_record_passes(tmp_path):
     out = run_soak(tmp_path, record_age_s="55")
     assert "archive records still arriving" in out
     assert "ARCHIVE STALLED" not in out
+
+
+# --- DEC-0095's retention tripwire: accept-and-monitor that actually executes ------
+
+
+def test_todays_archive_is_within_budget(tmp_path):
+    """The real 2026-08-17 measurement must sit comfortably inside the budget.
+
+    If this ever fails at 33 MB against 3.69 GiB, the ratio arithmetic is wrong,
+    not the station.
+    """
+    out = run_soak(tmp_path)
+    line = line_for(out, "retention budget")
+    assert "archive within retention budget" in line
+    assert "0.9% of RAM" in line
+
+
+def test_archive_over_ten_percent_of_ram_trips(tmp_path):
+    """POSITIVE CONTROL: DEC-0095 ships its own reversal condition, so the condition
+    has to be reachable. 400 MB against 3.69 GiB is 10.6% — just over.
+    """
+    out = run_soak(tmp_path, db_bytes=str(400 * 1024 * 1024))
+    assert "ARCHIVE OVER RETENTION BUDGET" in out
+    assert "DEC-0095" in out
+
+
+def test_tripwire_says_so_when_it_cannot_measure(tmp_path):
+    """An unmeasurable tripwire must announce itself, not silently read as green.
+
+    The whole point of DEC-0095's monitor half is that it executes; a missing
+    measurement that printed nothing would be the EXPECT_IMAGE failure again.
+    """
+    out = run_soak(tmp_path, db_bytes="0", mem_total_kb="0")
+    assert "retention tripwire unmeasured" in out
+    assert "unmonitored" in out
