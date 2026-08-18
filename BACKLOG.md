@@ -68,6 +68,17 @@ trigger below is plainly satisfied.
   as `ops/stall_baseline.py`/`ops/freeze_baseline.py`, correlating incident count and
   paused-minutes against time-of-day/arm) stays deliberately deferred until enough
   *correctly-handled* incidents accumulate to be worth reading.
+- **NAS-LEASE attribution-log correlation (DEC-0099, new S90)** — the shared `heavy-io.log` now
+  carries real acquire/release timestamps (HLF's `daily-maintenance`, live since 08-16); weewx can
+  correlate its own `freeze_baseline.py`/`stall_baseline.py` events against it for free, same
+  zero-cost method as DEC-0094. **First read, S90: one real lease-held window exists**
+  (2026-08-18 00:10–06:10 EDT) — n=1, nowhere near enough to test anything, but it contains both
+  one RF-dead episode (02:41, 26.3 min span) and one freeze (03:15–03:22, 420 s). A lead, not a
+  finding: a 6 h window is ~25% of a day, so any overlap at all is unremarkable on priors, and this
+  does **not** revise DEC-0094's P=0.29 or the RF-stall P=0.32, both measured on far larger n.
+  Revisit once enough lease cycles accumulate to test the evening/nightly split against real
+  timestamps instead of DEC-0094's fixed schedule — not before HLF's DEC-0173 re-measurement
+  settles their renewal floor.
 
 ✅ **Dropouts watch is CLOSED (DEC-0067)**, replaced by the process-freeze blocker. **Never re-open
 it on a `WINDOW: 0/21` reading**: that metric cannot tell a freeze from deafness, which was the whole
@@ -284,9 +295,11 @@ failed resets currently produce no further action.
   `archive` table is the *deliverable* rather than a regenerable diagnostic, and upstream's 114
   `archive_day_*` summary tables already bound long-read cost. The reversal condition executes in
   `ops/soak_check.sh` (reopen at 10% of MemTotal, ~2.6 yr out) — don't re-derive it here.
-  **Still open, against the DASHBOARD not us:** the InfluxDB bucket's horizon is a cross-repo
-  interface call (DEC-0010); weewx proposes none and requires only that `docs/INTERFACES.md`'s
-  contract is unaffected.
+  **InfluxDB half — ops broke the mutual wait with a strawman (accept-and-monitor + a permanent
+  daily rollup so dashboard's all-time-record queries survive); weewx answered [DEC-0100](docs/DECISIONS.md):
+  decline to build it, recommend dashboard builds it as an InfluxDB 2.x Task** (native scheduled
+  Flux; neither write path changes). Not a mandate — if dashboard's build needs something from our
+  write side, that's a fresh DEC-0010 conversation, not this one reopened.
 - **Tuning infrastructure (owner idea, S34) — control panel and/or designed sweep plan.** Two
   complementary routes to better RF tuning, framing to be discussed in a future session:
   (a) a **front-end control panel** (in this repo or standalone) for live-changing select runtime
@@ -444,26 +457,12 @@ pull an item into ROADMAP.md's P0–P3 when it's actually about to be worked.
   opened S56): IR sky sensor alongside the lightning detector, targeted for the Jan–Feb 2027 winter
   build. Cross-repo with the dashboard (`repo:dashboard, repo:weewx, tier:frontier`). Planning
   horizon only — not scheduled.
-- **NAS-LEASE courtesy protocol — proposed, NOT adopted; weewx binds only via its own DEC** (S85).
-  Spec drafted by coffee-radar for OPS-DEC-0107 (provisional number), durable at
-  [ops#169](https://github.com/WeatheredScientist/eaglehunt-ops/issues/169). weewx is a listed
-  *participant* with declared levers, which commits us to nothing — the spec's own charter says it
-  binds a tenant only when that tenant lands an adopting DEC. Four things S85's review already
-  established, recorded so a future session doesn't re-derive them:
-  - **A client would be HOST-side, not in the container.** `nasctl inspect` shows the container's
-    whole mount set (`weewx-data`, `logs`, four per-file `ro` binds) and `LEASE_DIR` is not among
-    them. Mounts are fixed at creation, so adding one is kill→rm→run — a release-class event.
-    `weewx_monitor.py` already runs resident host-side on a 30 s poll and sees the whole volume.
-  - **But our lever is IN the container.** The InfluxDB uploader is `influx.py`, a RESTThread inside
-    weewx. So host-side gets us *observe + write the attribution log* (most of the protocol's value
-    by its own §4) and **cannot** downshift the uploader. **The unbuilt part is the in-container
-    reach, not the client.**
-  - ⚠️ **Our house atomic-write idiom is FORBIDDEN for the lease file.** Renewal must rewrite in
-    place on the held descriptor (seek-0 + write + truncate); `tmp` + `os.replace()` — what
-    `loop_json_writer.py` does everywhere, and what DEC-0051 established as our pattern — **replaces
-    the inode and silently strands the holder's `flock` on an unlinked file**, degrading validity to
-    TTL-only with no error anywhere. Caught by HLF on their v1 review. weewx is the tenant most
-    exposed to this, because the wrong idiom is our reflex.
-  - **`flock` capability is a non-issue for us**: a Python client uses stdlib `fcntl.flock()`; no
-    binary needed (runtime is `ubuntu:26.04`, so `/usr/bin/flock` is almost certainly there too —
-    inferred from packaging, not runtime-verified).
+- ~~**NAS-LEASE courtesy protocol — proposed, NOT adopted**~~ — **OPS-DEC-0107 LANDED 2026-08-15;
+  HLF adopted (their DEC-0177, live since 08-16). weewx's own adoption is DEFERRED to the v2.0.14
+  window, not declined — [DEC-0099](docs/DECISIONS.md).** The concrete plan (mount `LEASE_DIR`
+  read-only at the recreate; `influx.py` checks it and raises `post_interval` while held; the NAS
+  image build becomes weewx's first HOLDER) lives in BOOT.md's v2.0.14 queue and DEC-0099's full
+  body — do not re-derive it here. S85's four findings (host-side client, in-container lever,
+  forbidden tmp+rename idiom, `fcntl.flock()` needs no binary) are folded into DEC-0099 and pruned
+  from this entry. Durable at [ops#169](https://github.com/WeatheredScientist/eaglehunt-ops/issues/169)
+  (stays open against weewx until the window lands the client).
