@@ -7,6 +7,59 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S85] — 2026-08-16 — DEC-0093's gated half shipped (and its deploy plan was wrong); the NAS-LEASE spec reviewed; a new 02:15 watch
+
+- **`current.json` cadence implemented — the dashboard answered dash#430 with 60 s and asked us to
+  ship it.** `[LoopJsonWriter] current_interval` (default 60 s) throttles `current.json` only;
+  `loop-data.txt` stays per-packet behind its hard 30 s liveness gate. First packet of a run always
+  writes the snapshot; a failed write does not advance the timestamp; a backwards clock step forces
+  one; `0` restores the S43–S84 behavior. **Measured by simulating a full day at 2.5625 s/packet:
+  33,717 → 1,405 snapshot writes, 67,434 → 35,122 renames/day, 47.9% removed.** 8 new tests
+  (**279** suite). Three existing tests were reading `current.json` to assert cache/TTL semantics
+  and now read the live feed — which is what they always meant.
+- **The deploy plan in DEC-0093 and BOOT was wrong, and checking caught it: `loop_json_writer.py`
+  is MOUNTED, not baked.** `nasctl inspect` shows `<project root>/loop_json_writer.py` bind-mounted
+  `ro` over the venv copy, and **the Dockerfile never `COPY`s it** — so "ships with the v2.0.14
+  image cut" would have been **a silent no-op with a green checkmark** (DEC-0046's exact failure).
+  Deploy is a file copy to the **project root** plus a restart; the copy in `weewx-data/bin/user/`
+  is a **decoy**. `CONSTANTS.md`'s deploy-layer table did not list this file at all — now fixed,
+  with `nasctl inspect` named as the authoritative per-file check.
+- **Reviewed coffee-radar's NAS-LEASE spec (ops#169, for OPS-DEC-0107).** Seven findings, all
+  adopted. The consequential one: the draft had Campaign B ending **08-22** and recorded a
+  coffee-radar sweep as "HELD past 08-22" — the square actually runs to **08-23T00:05**, so acting
+  on it would have dropped the box's heaviest foreign job into block 31/32, in the same evening
+  window their own §8 ranks as most implicated. **That same bare date was also in coffee-radar's
+  own `BOOT.md`/`BACKLOG.md`**; reviewing a document caught a live hazard in a neighbour's handoff.
+  Also: `rx_experiment.lock` is ours, not HLF's; and §1's "CoW churn is unreachable by any
+  tenant-side lever" was corrected to "unreachable by any *scheduling* lever — reducible by
+  emitting fewer metadata operations," since our own cut is the counter-example.
+- **Answered a question HLF's phase timeline made askable: is weewx a victim of their nightly
+  window? Not detectably.** RF-stall episodes 4/15 in-window vs 2.9 expected (P=0.32), n=15 over
+  31 days — the **second** independent failure mode to return a negative for that window after
+  DEC-0094's freezes. Power caveat stated. Also flagged the limitation that bounds our value as a
+  witness: **DEC-0067's gap taxonomy cannot distinguish "RF quiet" from "demodulator starved"**, so
+  a weewx "no harm detected" is weak evidence the protocol must not over-trust.
+- ⚠️ **NEW WATCH — the ~02:15–02:45 reception dip repeated on night two, on a different arm.**
+  08-15: PAUSE 02:15/02:30/02:40 (arm A). 08-16: PAUSE 02:15/02:30 (arm B). All five auto-resumed.
+  **A third metric nobody has tested by hour** — DEC-0094 tested freezes and S85 tested stall
+  episodes, both negative; these are *reception-floor dips*. Recorded as a watch, not a finding:
+  `02:15` is partly a 5-minute-tick artifact and two nights is two nights.
+- **Campaign B clean through block 6** (`A`/`B`/`C`/`D` on 08-15, `D→B` and `B→C` on 08-16), every
+  swap on time, none deferred. Settle series now n=6 — 82/139/198/137/197/79 s — confirming the
+  S84 "not a trend" call: all fit `~20 s + k×60 s`, k = 1,2,3,2,3,1.
+- **Cross-repo, all acknowledged:** ops#169 (footprint corrected, the hard 30 s floor declared for
+  the spec, the nightly-window lead retracted, coffee-radar's ~19:00 job reported with limits),
+  **ops#175 filed against us** (archive + InfluxDB retention — acknowledged with measured growth
+  ~0.41 MB/day / ~6.4 yr to 1 GB, **design deferred to `BACKLOG.md`**), ops#173 (BOOT cap, updated
+  figure), **ops#176 filed by us** (a `push-nas-guard` false positive whose printed remedy is to
+  mint a Class C token for a local docs edit), ops#157 (VPN heads-up, ack'd).
+- Docs/process: BOOT job 3 stopped quoting a cap figure that went stale on every edit and gives the
+  measurement command instead; a guard-misfire rung 0 recorded (re-spell before minting); BACKLOG
+  gained the NAS-LEASE adoption prerequisites, including that **our house `tmp`+`os.replace` idiom
+  is forbidden for a lease file** (it strands the holder's `flock` on an unlinked inode).
+- Gates at close: ruff clean, **279/279** pytest, mypy clean over 49 files, secret gate clean with
+  its positive control at 54/54.
+
 ## [S84] — 2026-08-15 — The dataless-write proposal was already fixed in S43; the real amplification is `current.json`, which nothing reads (DEC-0093)
 
 - **Asked (out of ops#169) whether `loop_json_writer.py` should skip dataless LOOP packets — it

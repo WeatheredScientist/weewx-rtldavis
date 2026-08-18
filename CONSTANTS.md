@@ -72,7 +72,7 @@ these.** Re-apply and re-verify after any recreate.
 | Prod image | **`:v2.0.13`**, deployed 2026-08-11 (S73, mid-H-hold), NAS-built from `1530971` (ws.5: child reaping + stall self-classification, DEC-0081) |
 | Docker Hub | `:v2.0.13` pushed at deploy. **`:latest` stays on `:v2.0.12`** until the station proves v2.0.13 (same rule as every release); move it at the next prod touch once the square has run clean on it |
 | Rollback | `:v2.0.12` (config digest `9db5c1…`), on the NAS and Docker Hub |
-| Prod baseline tag | `prod-baseline-20260810` (`main` = `7b6fd42`) — **stale by one release**: v2.0.13 promotion to `main` + `prod-baseline-20260811` pending at S73 close |
+| Prod baseline tag | **`prod-baseline-20260811`** (`main` = `1cc9605`, the v2.0.13 promotion via PR #161) — landed after S73 close, verified S88 |
 | Driver banner | **prod runs `0.20+ws.5`** (shipped in `:v2.0.13`) |
 | Build host | **the NAS, natively** (DEC-0078) — the arm64 laptop's linux/amd64 cross-build fails (tar ENOSYS under emulation). Verify builds by the explicit `BUILD-EXIT` marker in `build.log`, never a pipeline exit |
 | Release mechanics | no git on the NAS; the `docker-compose.yml` there is stale/decorative — always `docker inspect` the live container. `kill` → `rm` → `sleep 3` → `run`, never `compose up` |
