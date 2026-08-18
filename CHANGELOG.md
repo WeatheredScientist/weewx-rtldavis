@@ -56,6 +56,22 @@ under [Pre-S16].
 - **New trap:** `nasctl cat /proc/<pid>/cmdline` returns **empty for a live process** — caught only
   by positive-controlling the method against weewxd's own known-live pid. Third instance of *a zero
   from a look-alike tool is a claim, not a result*.
+- **Gain / receive-window hot-swap filed, not started (PR #212, [ops#179]).** Owner asked what
+  prevents hot-swapping a gain instead of restarting the container every arm swap. **Only the
+  feature.** Gain is a CLI flag on the Go binary carried in the `cmd` string, and `rtldavis.py` has
+  **no concept of it at all** — `grep -i gain` returns five hits, four of which are the word
+  "a*gain*st". The swap path already exists: `ProcManager.startup(cmd, …)` takes the command as a
+  parameter, `shutdown()` kills and reaps, and the 150 s watchdog exercises that respawn cycle
+  routinely (DEC-0081). The gap is only the trigger — config is read once in `__init__`. `-ex`
+  rides the same string, so both axes of the square could swap with no container touch, retiring
+  the 600 s settle window (~2.8% of campaign data) and the abort-on-unhealthy-swap failure class
+  (DEC-0082, DEC-0087). Filed with its constraints attached: **not during campaign B**, the binary
+  sets gain only at startup, it widens the vendored fork, and device re-open time after a
+  deliberate SIGKILL is unmeasured.
+- Campaign B watch: block 14 verified healthy at ~10:00 EDT (soak 16 pass / 2 expected-WARN);
+  block 15 starting at close. Square through `08-23T00:05`, ~4.5 d left, no swap deferred.
+
+[ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
 
 ---
 ## [S88] — 2026-08-18 — weewx 5.5.0 staged for v2.0.14; the schedule gains a stand-down state (DEC-0096)
@@ -128,38 +144,4 @@ under [Pre-S16].
   blocker 1's open question. One instant is not a probe; sampling across a window is the next step.
 
 ---
-## [S86] — 2026-08-17 — Watch-checkpoint discipline, LNA hardware history documented, scheduled ROADMAP reconciliation
-
-- **Three daily-watch checkpoints through campaign B block 11, plus a dated hardware timeline in
-  `CONSTANTS.md` — PR #203, merged.** `BOOT.md` now carries the night-3 finding: the reception-floor
-  PAUSE pattern that hit ~02:15–02:45 on nights 1–2 shifted to ~03:25–04:20 on night 3 (4 cycles,
-  not 2–3) — still n=3, still needs a proper test, but the shift argues against a pure tick-grid
-  artifact. `CONSTANTS.md`'s Hardware/site section gained a dated timeline (station live 05-01,
-  antenna 05-16, LNA ordered 05-27/activated ~06-01, anemometer replaced 06-16/17, LNA removed
-  08-02) and dropped the stale "+ inline LNA" claim — the LNA has been out since 08-02, not
-  present as the line previously implied. Prompted by an owner question re-examining whether the
-  current elevated RF-dead episode rate is caused by the LNA removal: it isn't, directly — DEC-0083's
-  onset (08-10 23:56) is 8 days after removal, and the intervening week was the quietest stretch in
-  the whole 30-day record. Attribution among campaign B's high-gain arms / v2.0.12 / weather stays
-  open, unchanged from DEC-0083.
-- **ops#157 (VPN heads-up) closed** — the owner confirmed being back home off VPN, and NAS access
-  was verified clean throughout the session (nasctl, ssh-backed calls, soak checks, no timeouts).
-- **weewx-rtldavis#74 and #44 retroactively communicated** — both had been closed with zero
-  comments (S52 and S43 respectively). Traced each to its actual fixing commit (`0b1ef85` for #74's
-  calm-windDir log-level fix, `973235b` for #44's windchill/cloudbase fields, the latter's own
-  commit message citing #44 directly) and added a comment naming it, rather than leaving the
-  closure unexplained. Prompted by an owner ask to audit "any other issues we've closed" for the
-  same gap, not just the one named.
-- **`docs/ROADMAP.md`'s scheduled S86 reconciliation ran on time (tripwire: "by S86").** One stale
-  item found and fixed: the freeze P0 item still stopped at DEC-0088's S80 rate correction and
-  never picked up **DEC-0094 (S85)** — the hour-of-day split that refutes the nightly-maintenance
-  hypothesis but finds the evening 18:00–21:00 window significant instead (P=0.0027). Everything
-  else on ROADMAP verified current against DECISIONS.md/CHANGELOG.md/BOOT.md. Next tripwire: S96.
-- **Board review confirmed nothing else is currently actionable for weewx** — checked the
-  cross-project "Claude Code work" board (192 items, 9 not Done) directly rather than relying on
-  `BOOT.md`'s own list. Everything weewx-relevant is either finished-and-queued for the v2.0.14
-  deploy window (#144, #172, #158), explicitly not-owed (ops#169), or deliberately deferred
-  (ops#173). **ops#175 (archive/InfluxDB retention policy) is the one real open item** — scoped
-  for S87 on Opus (see `BOOT.md`'s job list for the reasoning).
-
-*(S73–S85 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S86 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*

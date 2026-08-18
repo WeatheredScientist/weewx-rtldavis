@@ -12,13 +12,20 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S88 → S89)
+## ▶ Resume here (S89 → S90)
+
+### ⏰ FIRST THING NEXT SESSION: harvest the probe before anything else
+
+`proc_probe_nas.sh` (pid **28699**) stops at **08-19 05:00** and its output is **not** backed up
+anywhere. Harvest it read-only, then clean the NAS. Full context in job 2 below — do this before
+the daily watch, because nothing else in the session is time-sensitive and this is.
 
 ### What's settled (do not re-derive)
 
 **Campaign B: v2.0.13/ws.5 in prod, `prod-baseline-20260811` tagged.** Square runs
-**08-15 → 08-23T00:05** — **~4.7 days left as of S88 close (08-18 morning)**, block 14 of 32 in
-progress, every swap on time, none deferred. Live state in the table below.
+**08-15 → 08-23T00:05** — **~4.5 days left as of S89 close (08-18 midday)**, block 15 of 32
+starting (the 12:05|B swap was due at close), every swap on time, none deferred. Live state in the
+table below.
 
 **The v2.0.14 queue (post-campaign, ~08-23) is fully staged on `dev`, and the window has a
 MANDATORY OPENING MOVE:**
@@ -47,7 +54,9 @@ WeatherLink console elevation; ops#168 owner-side, no repo work).
 **Resume machinery (DEC-0087/0089) is proven, not theoretical: 12+ pause/resume cycles across four
 nights, all auto-recovered, zero STOPs** (08-18 added two on arm D). Still unexercised: the 120-min
 ceiling escalation, the swap-deferral path, rotated-log reads across a `.1` boundary.
-*(`.STOP.campaignA` at the project root is campaign **A**'s — not a live sentinel.)*
+*(`rx_experiment.STOP.campaignA` at the project root is campaign **A**'s — not a live sentinel.
+Raised with the owner at S89 close and deliberately left in place; delete it only on an explicit
+say-so, since it is a STOP-named file sitting beside a live campaign.)*
 
 **The nightly-heavy-window confound (ops#169, DEC-0092) is absorbed by design** — each arm takes
 the midnight slot exactly twice. Nothing owed by weewx on that thread; its queue items are line 4
@@ -57,35 +66,41 @@ above.
 elevated stall rate's onset (08-10 23:56) is 8 days after removal, not coincident — attribution
 stays open (DEC-0083), post-campaign characterization question.
 
-### ▶▶ S89 JOB LIST
+### ▶▶ S90 JOB LIST
 
-**Pre-cut is watch-tier; the cut itself is execution-tier. Jobs 2 and 6 are the open
-judgment-tier items — flag for escalation when picking one up.**
+**Job 2 is the session's real work and is judgment-tier — flag the model call when starting it.
+Everything else is watch- or execution-tier.**
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP absent, state matches schedule.
-   **Verified good through block 14 (08-18 ~07:35 EDT)** — `B→D` 00:05:02 settle ~196 s, `D→A`
-   06:05:02 settle ~144 s, both healthy; soak 16 pass / 2 expected-WARN. `remote probe took Ns`
-   ≥20 s is a NAS-load signal, not noise — see job 6.
-2. ✅ **CLOSED (DEC-0097)** — never a reception measurement; RF-dead episodes truncating records.
-   Do not re-open as an RF-dip question; the surviving result moved to blocker 2 below.
+   **Verified good through block 14 (08-18 ~10:00 EDT)** — soak 16 pass / 2 expected-WARN (chatty
+   stdout + ineffective USB hedge are both expected). `remote probe took Ns` ≥20 s is a NAS-load
+   signal, not noise.
+2. ⚠️ **HARVEST + INTERPRET the mechanism probe — the open judgment item (DEC-0098).**
+   `proc_probe_nas.sh` pid **28699**, started 08-18 10:49, **ended/ends 08-19 05:00** →
+   `/volume1/docker/weewx-rtldavis/logs/proc_probe_nas.log` (~400 KB by S89 close, growing).
+   One run covers **both** target windows with control flanks: evening (freezes, DEC-0094) and
+   **00:00–04:00** (DEC-0097's RF-dead cluster, overlapping DEC-0092's tenant maintenance).
+   Harvest read-only into a file (never onto the terminal), then:
+   `ops/proc_probe.py --ingest <pulled> && ops/proc_probe.py --analyze logs/proc_probe.csv`
+   — ingest is idempotent, `--analyze` de-dupes, and gap-spanning deltas are dropped, so a partial
+   or overlapping harvest is safe. **How to read it:** the probe measures **cumulative** per-thread
+   counters, not instantaneous state — DEC-0068's "all `S`, never `D`" was sampling coverage, and
+   `block_max` showed a **4041 ms** block in a 4 h span with no evening in it, so blocking happens
+   at baseline. **The claim under test is that the window is WORSE than its flanks.** Load with a
+   **flat** iowait ratio answers DEC-0068 **NEGATIVE — a real result, not a failed probe.**
+   Then **clean up the NAS**: `proc_probe_nas.sh`, `proc_probe_nas.pid`, and
+   `logs/proc_probe_nas.{log,err}`. Class C, so it needs the in-chat path.
 3. Resume machinery — keep counting cycles; watch for the three untested paths above.
 4. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
-   square's close (~08-23), both sides already agreed.
+   square's close (~08-23), both sides already agreed. **S89 grew it further; the diet is overdue,
+   not optional** — this job list and the gotchas section are the obvious candidates.
 5. **v2.0.14 prep is DONE** — everything staged on dev; nothing to decide before ~08-23. The
    window opens with the DEC-0096 emptying PR (queue item 0 above).
-6. ⚠️ **Mechanism probe RUNNING ON THE NAS (DEC-0098); interpretation is the open judgment item.**
-   `proc_probe_nas.sh` pid **28699**, started 08-18 10:49, **ends 08-19 05:00** (epoch
-   1787130000) → `logs/proc_probe_nas.log` on the NAS. Covers both target windows in one run:
-   evening (freezes) **and 00:00–04:00** (DEC-0097's RF-dead cluster, overlapping DEC-0092's
-   tenant maintenance), with control flanks. Design point: **cumulative per-thread counters, not
-   instantaneous state** — DEC-0068's "all `S`, never `D`" was sampling coverage, and `block_max`
-   showed a **4041 ms** block in a 4 h span with no evening in it. Tool headers carry the rest
-   (no PSI on 4.4, `wchan`=0, `io` denied). **Load with a flat iowait ratio answers DEC-0068
-   NEGATIVE — a real result, not a failed probe.** Harvest read-only, then:
-   `ops/proc_probe.py --ingest <pulled> && ops/proc_probe.py --analyze logs/proc_probe.csv`.
-   Stop early: create `proc_probe.STOP` at the NAS project root. **Clean up the NAS-resident
-   script + its logs once analyzed.**
+6. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
+   [ops#179]. Owner's framing: revisit once the square closes **and** the gated queue clears. Do
+   not start it mid-square (protocol change breaks comparability, DEC-0064).
 
+[ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
 [ops#169]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/169
 [ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
 [ops#175]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/175
@@ -185,14 +200,17 @@ judgment-tier items — flag for escalation when picking one up.**
   `soak_check.sh`'s stdout count is history, not a live crash loop; confirm with `inspect`'s
   unchanged `StartedAt`/`Pid` before alarming (S88).
 
-_Last updated: 2026-08-18 (S89, in progress — Opus). **DEC-0097 closes job 2**: the reception-floor
-dip is not a reception measurement but RF-dead episodes truncating records, and BOOT's own 08-18
-row was wrong (02:55/5 cycles, not 03:30/2), so the "drifting later" premise is retired. What
-survives is a real timing signature for blocker 2 — episodes cluster 00:00–04:00, P=0.00009 on
-stall-bearing rows, zero in the evening freeze window. **Job 6's probe is built and running**
-(`ops/proc_probe.py` + `proc_probe_watch.sh`, cumulative counters over instantaneous state,
-resumable across a dropped shell); interpretation is the open judgment item, now with two target
-windows. S88 landed PR #208 (weewx 5.5.0) and PR #209 / DEC-0096 (stand-down SCHEDULE — the
-emptying PR is still the v2.0.14 window's mandatory first move). ROADMAP: no v2.0.14 line to
-reconcile; scheduled pass S96. **Model note: a bare `/model claude-opus-5` was used, which
-PERSISTS (OPS-DEC-0010) — restore the Sonnet floor at close.**_
+_Last updated: 2026-08-18 (S89 close — Opus). Landed **PR #211** (DEC-0097 + DEC-0098) and
+**PR #212** (BACKLOG), both merged, branches deleted, steady state restored. **DEC-0097 closed the
+reception-dip watch**: never a reception measurement but RF-dead episodes truncating records, and
+BOOT's own 08-18 row was wrong (02:55/5 cycles, not 03:30/2), retiring the "drifting later"
+premise. What survives is a timing signature for blocker 2 — episodes cluster 00:00–04:00
+(P=0.00009 on stall-bearing rows), **zero** in the evening freeze window, so the two blockers keep
+different clocks. **DEC-0098 moved the mechanism probe onto the NAS** after the laptop-side design
+proved infeasible (12+ h awake, and DEC-0097's overnight window unreachable that way); it runs
+unattended to 08-19 05:00 — **job 2 next session is harvesting it.** Gain hot-swap filed
+(BACKLOG + ops#179), deliberately not started. Green gate at close: ruff clean, **299 passed**,
+mypy clean/51 files. ROADMAP: targeted DEC-0057 update to the freeze P0 item; full pass still
+S96. **Model note: `/model claude-opus-5` PERSISTS as the new-session default (OPS-DEC-0010) —
+the Sonnet floor is the owner's to restore in `~/.claude/settings.json`; a repo session may not
+edit the machine-wide floor (OPS-DEC-0060).**_
