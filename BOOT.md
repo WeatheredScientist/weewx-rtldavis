@@ -211,6 +211,9 @@ proved infeasible (12+ h awake, and DEC-0097's overnight window unreachable that
 unattended to 08-19 05:00 — **job 2 next session is harvesting it.** Gain hot-swap filed
 (BACKLOG + ops#179), deliberately not started. Green gate at close: ruff clean, **299 passed**,
 mypy clean/51 files. ROADMAP: targeted DEC-0057 update to the freeze P0 item; full pass still
-S96. **Model note: `/model claude-opus-5` PERSISTS as the new-session default (OPS-DEC-0010) —
-the Sonnet floor is the owner's to restore in `~/.claude/settings.json`; a repo session may not
-edit the machine-wide floor (OPS-DEC-0060).**_
+S96. **Model note (closeout step 6): S89 ran on Opus for the judgment work; the switch was
+SESSION-ONLY and NOTHING NEEDS RESTORING** — verified at close across all four scopes,
+`~/.claude/settings.json` = `sonnet`, no `model` key in `~/.claude/settings.local.json` (absent),
+`.claude/settings.json`, or `.claude/settings.local.json`. *Earlier in the session this was
+asserted the other way, from OPS-DEC-0010's rule rather than from a check — in THIS client a
+`/model <m>` did not touch the floor. Verify the scopes before claiming a restore is owed.*_
