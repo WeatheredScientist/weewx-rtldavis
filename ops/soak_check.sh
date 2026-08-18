@@ -142,6 +142,15 @@ echo \"mon_log_age=\$([ \"\$mlog\" -gt 0 ] && echo \$((\$(date +%s) - mlog)) || 
 echo \"mon_resets=\$(cat \$ML \$ML.1 2>/dev/null | grep -c 'RESET: running')\"
 echo \"mon_reset_bad=\$(cat \$ML \$ML.1 2>/dev/null | grep -c 'RESET ineffective')\"
 
+# --- retention tripwire (DEC-0095 / ops#175) ---
+# DEC-0095 chose accept-and-monitor over archive-then-prune for the SQLite archive,
+# on the measured finding that neither disk nor working set binds. That choice is only
+# honest if the \"monitor\" half EXECUTES -- prose does not (DEC-0040), and this very
+# script has already demonstrated the failure mode: EXPECT_IMAGE sat wrong for five
+# sessions because nobody ran it. So the decision ships its own reversal condition.
+echo \"db_bytes=\$(stat -c %s /volume1/docker/weewx-rtldavis/weewx-data/archive/weewx.sdb 2>/dev/null || echo 0)\"
+echo \"mem_total_kb=\$(awk '/^MemTotal/{print \$2}' /proc/meminfo 2>/dev/null || echo 0)\"
+
 # --- phantom rain: the DEC-0042 signature, auto-detected ---
 # A raw rainRate>0/rain=0 row is NOT itself the signature: the ISS's own rain-rate message
 # (rtldavis.py message_type 5) reports 'time since last tip' for a while after a REAL tip,
@@ -272,6 +281,26 @@ fi
 # genuinely alarming signature is now visible elsewhere: a 'STALL DIAGNOSIS'
 # line with raw_stderr_lines=0 (child mute -> a REAL process/USB fault) in
 # weewx.log, and the episodes.log ledger row counts.
+# 9b. Retention tripwire — DEC-0095's reversal condition, ops#175.
+# The budget is a RATIO of RAM, not a fixed MB figure, because the constraint that
+# would actually force a prune here is the WORKING SET, not disk: HLF's DEC-0174 hit
+# exactly that wall on this same 3.69 GiB box (~8.0 M hot rows) while disk sat at 5.5 TB
+# free. Measured at adoption (2026-08-17): archive 33.61 MB = 0.9% of RAM, 125,613 rows
+# over 90.2 days = 1,392 rows/day at 275 B = 0.37 MB/day, ~7.3 years to 1 GB. Crossing
+# 10% of RAM is the point at which DEC-0095 must be REOPENED, not quietly tolerated.
+dbb=$(get db_bytes); mtk=$(get mem_total_kb)
+if [ "${dbb:-0}" -gt 0 ] && [ "${mtk:-0}" -gt 0 ]; then
+  _mem_b=$(( mtk * 1024 )); _budget=$(( _mem_b / 10 ))
+  _pct=$(awk -v d="$dbb" -v m="$_mem_b" 'BEGIN{printf "%.1f", 100*d/m}')
+  if [ "$dbb" -lt "$_budget" ]; then
+    ok "archive within retention budget" "$((dbb/1048576)) MB = ${_pct}% of RAM (reopen DEC-0095 at 10%)"
+  else
+    note "ARCHIVE OVER RETENTION BUDGET" "$((dbb/1048576)) MB = ${_pct}% of RAM — DEC-0095's accept-and-monitor is due for review (ops#175)"
+  fi
+else
+  note "retention tripwire unmeasured" "db_bytes/mem_total unavailable — DEC-0095 is unmonitored this run"
+fi
+
 mrb=$(get mon_reset_bad)
 if [ "${mrb:-0}" -eq 0 ]; then ok "USB resets: none ineffective" "$(get mon_resets) fired"
 else note "USB hedge reset ineffective" "${mrb} of $(get mon_resets) — expected for RF-dead episodes (S73); check STALL DIAGNOSIS class in weewx.log"; fi
