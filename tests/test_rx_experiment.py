@@ -27,6 +27,8 @@ import textwrap
 import time
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parent.parent
 SCRIPT = REPO / "ops" / "rx_experiment.sh"
 
@@ -118,10 +120,29 @@ def test_refuses_when_duplicate_cmd_lines(tmp_path):
 
 # --- the pre-registration itself is testable ---------------------------------
 
-def _schedule_rows():
-    src = SCRIPT.read_text()
+def _schedule_rows(src: str | None = None):
+    src = SCRIPT.read_text() if src is None else src
     block = re.search(r'^SCHEDULE="\n(.*?)^"', src, re.S | re.M).group(1)
-    return [tuple(row.split("|")) for row in block.strip().split("\n")]
+    return [tuple(row.split("|")) for row in block.strip().split("\n") if row]
+
+
+def _schedule_state(rows, now: str) -> str:
+    """The shipped block's three states (DEC-0096): 'stand-down' (empty — no
+    campaign scheduled, the valid between-campaigns form), 'live' (terminator
+    still ahead), 'stale' (fully elapsed — regenerate before the next launch)."""
+    if not rows:
+        return "stand-down"
+    last_time, last_arm = rows[-1]
+    assert last_arm == "BASELINE", "schedule must end with the self-terminator"
+    return "live" if last_time > now else "stale"
+
+
+def _require_campaign():
+    """Structural tests assert the shape of a SCHEDULED campaign; in the
+    stand-down state there is nothing to assert (and install refuses — tested
+    in the stand-down section below)."""
+    if not _schedule_rows():
+        pytest.skip("stand-down: no campaign scheduled (DEC-0096)")
 
 
 def test_schedule_is_a_balanced_latin_square():
@@ -131,6 +152,7 @@ def test_schedule_is_a_balanced_latin_square():
     runtime would notice. Pilot (P*) and hold (H) rows are campaign B's
     calibration prefix, not square blocks — they are excluded here and asserted
     by their own tests below."""
+    _require_campaign()
     rows = [r for r in _schedule_rows() if r[1] in {"A", "B", "C", "D"}]
     assert len(rows) == 32, f"expected 32 blocks, got {len(rows)}"
 
@@ -151,6 +173,7 @@ def test_schedule_is_a_balanced_latin_square():
 def test_schedule_self_terminates_to_baseline():
     """If everyone forgets this is running it must end on prod config, not an
     experimental arm."""
+    _require_campaign()
     assert _schedule_rows()[-1][1] == "BASELINE"
 
 
@@ -171,6 +194,7 @@ def test_pilot_runs_high_to_low_before_the_morning_notch():
     45-min cadence; and (c) finish before 06:00, clear of the site's hour-07
     reception notch (BACKLOG §Durable RF findings) — pilot numbers are bounding
     input and must not be depressed by a known site artifact."""
+    _require_campaign()
     rows = _schedule_rows()
     pilot = [r for r in rows if r[1].startswith("P")]
     assert len(pilot) == 5, f"expected 5 pilot rows, got {len(pilot)}"
@@ -200,6 +224,7 @@ def test_hold_follows_pilot_and_matches_control_settings():
     under its own tag and can never contaminate arm A's square samples, and
     (c) hand over to the square's first block at the NEXT day's 00:05 (the S57
     clean-day-boundary lesson)."""
+    _require_campaign()
     rows = _schedule_rows()
     holds = [(i, r) for i, r in enumerate(rows) if r[1] == "H"]
     assert len(holds) == 1, f"expected exactly one hold row, got {holds}"
@@ -329,6 +354,7 @@ def _first_row_time() -> str:
 
 def test_schedule_not_started_when_first_row_is_future():
     """The normal case: a schedule whose first row is ahead of now installs."""
+    _require_campaign()
     first = _first_row_time()
     before = first[:-1] + str(int(first[-1]) - 1) if first[-1] != "0" else "2000-01-01T00:00"
     assert _call_schedule_started(before).returncode == 1
@@ -336,6 +362,7 @@ def test_schedule_not_started_when_first_row_is_future():
 
 def test_schedule_started_when_first_row_has_passed():
     """The trap: first row in the past means we would join mid-flight."""
+    _require_campaign()
     assert _call_schedule_started("2099-01-01T00:00").returncode == 0
 
 
@@ -363,18 +390,85 @@ def test_current_schedule_is_not_fully_stale():
     all 9 days of it — conflating "campaign in flight" with "schedule stale."
     In flight (first row past, terminator future) is exactly the state the
     DEC-0066 refusal exists to protect; only a fully-elapsed window is stale.
+
+    S88 (DEC-0096): an EMPTY block is the deliberate between-campaigns
+    stand-down state and passes; the classification lives in _schedule_state
+    so the stale branch stays positively controlled in the section below.
     """
-    import datetime
+    rows = _schedule_rows()
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M")
-    src = SCRIPT.read_text()
-    body = re.search(r'SCHEDULE="\n(.*?)"', src, re.S).group(1)
-    rows = [ln for ln in body.strip().split("\n") if ln]
-    last_time, last_arm = rows[-1].split("|")
-    assert last_arm == "BASELINE", "schedule must end with the self-terminator"
-    assert last_time > now, (
-        f"shipped SCHEDULE is fully elapsed (terminator {last_time} < now {now}) "
-        f"-- regenerate it before the next launch"
+    state = _schedule_state(rows, now)
+    assert state != "stale", (
+        f"shipped SCHEDULE is fully elapsed (terminator {rows[-1][0]} < now {now}) "
+        f"-- empty it (stand-down, DEC-0096) or regenerate it for the next launch"
     )
+
+
+# ── Stand-down: the between-campaigns state (S88, DEC-0096) ──────────────────
+# Once a campaign's terminator passes, the staleness guard above goes red on
+# EVERY pull request (tests is a required check on dev and main) until the
+# block is regenerated -- and between campaigns there is nothing honest to
+# regenerate it to. The stand-down state is an EMPTY block: not-started to
+# schedule_started(), NONE to due_arm(), refused by install, skipped by the
+# structural tests, green to the staleness guard. A stale NON-empty schedule
+# still fails exactly as before -- _schedule_state's stale branch is the
+# positive control (DEC-0045).
+
+def test_schedule_state_classifies_all_three_states():
+    assert _schedule_state([], "2026-01-01T00:00") == "stand-down"
+    live = [("2026-01-01T00:05", "A"), ("2026-01-02T00:05", "BASELINE")]
+    assert _schedule_state(live, "2026-01-01T12:00") == "live"
+    # positive control: fully elapsed must read STALE, never stand-down --
+    # the gate keys on emptiness alone, so age can never slip through it.
+    stale = [("2020-01-01T00:05", "A"), ("2020-01-02T00:05", "BASELINE")]
+    assert _schedule_state(stale, "2026-01-01T00:00") == "stale"
+
+
+def _empty_schedule_script(tmp_path) -> Path:
+    """The real script with its SCHEDULE block emptied -- byte-for-byte the
+    state a post-campaign stand-down commit ships."""
+    src = SCRIPT.read_text()
+    src, n = re.subn(r'^SCHEDULE="\n.*?^"', 'SCHEDULE="\n"', src,
+                     flags=re.S | re.M)
+    assert n == 1, "could not find the SCHEDULE block to empty"
+    script = tmp_path / "rx_experiment.sh"
+    script.write_text(src)
+    script.chmod(0o755)
+    return script
+
+
+def test_empty_schedule_rows_parse_as_empty(tmp_path):
+    """The real parser on the stand-down form is [] -- not [('',)] -- so every
+    emptiness gate keys on the same parse the structural tests use."""
+    script = _empty_schedule_script(tmp_path)
+    assert _schedule_rows(script.read_text()) == []
+
+
+def test_stand_down_reads_as_not_started_even_in_2099(tmp_path):
+    script = _empty_schedule_script(tmp_path)
+    prog = (f'source <(sed "/^# ── Modes/,\\$d" {script}); '
+            f'schedule_started "2099-01-01T00:00"')
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+    assert r.returncode == 1
+
+
+def test_stand_down_due_arm_is_none(tmp_path):
+    script = _empty_schedule_script(tmp_path)
+    prog = f'source <(sed "/^# ── Modes/,\\$d" {script}); due_arm'
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+    assert r.stdout.strip() == "NONE"
+
+
+def test_install_refuses_when_no_campaign_scheduled(tmp_path):
+    """End-to-end on the real script text: stand-down must refuse install
+    loudly, never snapshot a baseline for a campaign that would never tick."""
+    script = _empty_schedule_script(tmp_path)
+    prog = f'BASE_DIR={tmp_path} bash {script} install'
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+    assert r.returncode == 1
+    out = r.stdout + r.stderr
+    assert "REFUSING to install" in out
+    assert "no campaign scheduled" in out
 
 
 # ── RF-dead pause/resume (S79) ────────────────────────────────────────────────
