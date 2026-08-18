@@ -5661,3 +5661,60 @@ stays open against the dashboard, not against us.
 makes no claim about how fragmented the file actually is. That gap does not affect the decision —
 fragmentation is DEC-0092's lever, not retention's — but it does mean DEC-0092's `chattr +C` will
 ship without a before/after extent measurement unless someone builds a FIEMAP probe first.
+
+## DEC-0096 — The campaign harness gains an explicit stand-down state: an empty SCHEDULE is the shipped between-campaigns form
+
+**Date:** 2026-08-18 (S88) · **Status:** Accepted · **Extends** DEC-0066's guard family ·
+**applies** DEC-0045's positive-control rule · **unblocks** the v2.0.14 window
+
+### The problem: the staleness guard has no honest green state between campaigns
+
+`test_current_schedule_is_not_fully_stale` (the S73-corrected form of DEC-0066's guard) requires
+the shipped SCHEDULE's self-terminator to be in the future. That is exactly right while a campaign
+is planned or in flight — a fully-elapsed table sitting in the repo is DEC-0066's trap: `due_arm()`
+selects the latest row already passed, so an `install` against it silently joins mid-square or
+records the campaign complete without running it.
+
+But `tests` is a **required status check on both `dev` and `main`** (enforce_admins on). So from
+the moment a campaign's terminator passes, **every pull request in the repo is red** until the
+block is regenerated — and between campaigns there is nothing honest to regenerate it TO. A
+placeholder future schedule is worse than a red check: it is a live landmine that `install` would
+happily run against prod.
+
+Found at S88 while staging the v2.0.14 window: campaign B's terminator (`2026-08-23T00:05`) **is**
+the window's opening moment. The cut's own PRs would have landed into a red-blocked repo, with the
+fix needed while several other changes were queued behind it.
+
+### The design: empty means stand-down, and every layer knows it
+
+An **empty SCHEDULE block** is the deliberate between-campaigns state:
+
+- `schedule_started()` already returned "not started" on empty (the shell half predated this DEC);
+- new `schedule_has_rows()` names the state, and **`install` refuses it loudly** ("REFUSING to
+  install: no campaign scheduled") — installing would snapshot a baseline and then tick forever
+  doing nothing;
+- `due_arm()` returns `NONE` on empty (now pinned by test);
+- the six structural tests (latin square, self-terminator, pilot, hold, and both
+  `schedule_started` behavior tests) **skip** via `_require_campaign()` — there is no campaign
+  shape to assert;
+- the staleness guard **passes** — its classification is extracted to `_schedule_state()` with
+  three explicit states: `stand-down` (empty), `live` (terminator ahead), `stale` (fully elapsed).
+
+**The stale branch is positively controlled** (DEC-0045): a fully-elapsed non-empty schedule must
+classify `stale`, never slip through the emptiness gate by being old. The gate keys on emptiness
+alone. A stale real schedule fails exactly as before this DEC.
+
+Five new tests, including an end-to-end `install` refusal against the real script text with its
+SCHEDULE block emptied — byte-for-byte the state a post-campaign stand-down commit ships.
+299/299 full suite.
+
+### What this deliberately does not do
+
+The dev schedule itself is **untouched** — campaign B runs to completion on its installed NAS
+copy, and the repo's shipped table stays live until the square closes. The post-square PR that
+empties the literal is a trivial deletion, self-consistently green under this support, and must be
+the **first PR of the v2.0.14 window** so nothing else queues behind a red check.
+
+No `schedule --generate` mode was added (the NOTE comment's dev-side recipe stands); no tick/guard
+behavior changed (the installed copy always has rows — `install` refuses the empty form, so the
+stand-down state can never reach the NAS through the sanctioned path).
