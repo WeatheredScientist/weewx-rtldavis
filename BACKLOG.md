@@ -246,29 +246,17 @@ failed resets currently produce no further action.
   re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
-- **Retention policy for the SQLite archive + the InfluxDB `weewx` bucket — needs its own DEC
-  (raised [ops#175](https://github.com/WeatheredScientist/eaglehunt-ops/issues/175), S85; deferred
-  to a future session on purpose).** Both ongoing-write stores grow unbounded: no
-  `DELETE`/`DROP`/`VACUUM` anywhere in tracked code (verified S85), and the InfluxDB bucket is
-  infinite-retention (DEC-0053 Finding 2, already noted under "Long-term direction" below in the
-  station-identity item). **Measured S85, so the next session starts from numbers, not an
-  estimate:** archive **34.47 MB** on 08-15 against DEC-0070's **29.1 MB** measured 08-02 →
-  **~0.41 MB/day, ~151 MB/yr, ~6.4 years to 1 GB** at ~287 B/row over 1,440 rows/day. *(Two points,
-  not a fitted trend — re-measure before committing to any horizon; HLF's DEC-0156 came in 1.75×
-  over its design assumption for exactly this reason.)*
-  - **The question is NOT disk.** At this rate disk is a non-issue for years. HLF's transferable
-    reframe (their DEC-0156/0174, the prior art worth reading first) is that retention is a
-    **working-set** policy — does the hot data stay in page cache — and page-cache eviction is a
-    measured contention mechanism on this box (DEC-0092).
-  - **The weewx-specific angle to test first:** DEC-0070/0071/0092 all studied this same DB for
-    **lock timeouts and CoW fragmentation** under `journal_mode=DELETE` on btrfs. Unbounded growth
-    on CoW is plausibly a fragmentation cost rather than a space cost — and `chattr +C` is
-    **already queued** for the v2.0.14 recreate. So the live question is whether retention is even
-    the right lever, or whether the fragmentation route already covers it. Answer that before
-    designing a prune.
-  - Scope when taken up: horizon, archive-then-prune vs accept-and-monitor, and whether the two
-    stores need the same answer (the InfluxDB series is the dashboard's history — cross-repo, and
-    a prune there is not weewx's unilateral call, DEC-0010).
+- ~~**Retention policy for the SQLite archive + the InfluxDB `weewx` bucket**~~ — **ANSWERED S87,
+  [DEC-0095](docs/DECISIONS.md).** The weewx half of
+  [ops#175](https://github.com/WeatheredScientist/eaglehunt-ops/issues/175) is settled:
+  **accept-and-monitor, no prune.** Measured 2026-08-17, neither disk nor working set binds by 2–3
+  orders of magnitude (archive 33.61 MB = 0.89% of 3.69 GiB RAM, 0.37 MB/day, ~7.3 yr to 1 GB), the
+  `archive` table is the *deliverable* rather than a regenerable diagnostic, and upstream's 114
+  `archive_day_*` summary tables already bound long-read cost. The reversal condition executes in
+  `ops/soak_check.sh` (reopen at 10% of MemTotal, ~2.6 yr out) — don't re-derive it here.
+  **Still open, against the DASHBOARD not us:** the InfluxDB bucket's horizon is a cross-repo
+  interface call (DEC-0010); weewx proposes none and requires only that `docs/INTERFACES.md`'s
+  contract is unaffected.
 - **Tuning infrastructure (owner idea, S34) — control panel and/or designed sweep plan.** Two
   complementary routes to better RF tuning, framing to be discussed in a future session:
   (a) a **front-end control panel** (in this repo or standalone) for live-changing select runtime

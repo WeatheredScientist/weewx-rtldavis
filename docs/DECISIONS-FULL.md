@@ -5555,3 +5555,109 @@ nothing), and `CONSTANTS.md`'s deploy-layer table did not list this file at all 
 **Deploy timing unchanged in substance:** it still rides the ~08-23 v2.0.14 window, because that is
 when the container is next recreated anyway and mid-square restarts are avoidable churn — but it
 rides as an `scp`, not as a bake, and the v2.0.14 checklist now says so.
+
+## DEC-0095 — Retention: the archive is accepted and monitored, not pruned — and the monitor executes
+
+**Status:** Accepted · **Date:** S87 (2026-08-17)
+**Relations:** **answers** [ops#175](https://github.com/WeatheredScientist/eaglehunt-ops/issues/175)
+for the weewx side · **adopts the METHOD of, and departs from the CONCLUSION of, HLF DEC-0156/0174**
+· **defers to** DEC-0092 on the fragmentation lever · **applies** DEC-0040 (prose does not execute)
+· **respects** DEC-0010 on the InfluxDB half · **does NOT close** ops#175's cross-repo half
+
+### The question was never "what horizon"
+
+ops#175 filed a real gap: neither of this repo's ongoing-write stores has a retention policy, and
+that is the same shape HLF's DEC-0156 (`verification_records`) and DEC-0174 (`observations`) had to
+solve. The filing was careful to caveat scale and to leave the design to us.
+
+The backlog entry that banked it (S85) already refused the obvious framing. The question is not what
+horizon to pick. It is **whether retention is the right lever at all**, and that is answerable only
+by measuring what actually binds. HLF's own DEC-0174 is the model here, and its most transferable
+sentence is the one about its own constraint: *disk measured NOT binding (5.5 TB free) — the working
+set is the why.* Retention is a working-set policy wearing a disk-policy costume.
+
+### Measured, read-only, 2026-08-17
+
+| Question | Measurement | Binds? |
+|---|---|---|
+| Disk | 5.1 TB free on `/volume1` (14 T, 64% used) | **No** |
+| Working set | archive **33.61 MB** = **0.89%** of MemTotal 3.69 GiB; page cache 1.91 GiB | **No** |
+| Growth | **125,613 rows / 90.2 d = 1,392 rows/day** at 275 B/row = **0.37 MB/day** → **~7.3 yr to 1 GB** | — |
+| InfluxDB | engine **14 MB** total, larger bucket 13 MB | **No** |
+| Aggregation | **114** `archive_day_*` tables, 10,624 rows, ~0.1 MB | already bounds long reads |
+| CoW | btrfs confirmed; `lsattr` shows **no `C`** → DEC-0092's `chattr +C` genuinely unapplied | live lever |
+| `journal_mode` | `delete` | DEC-0071's pin holds |
+
+`dbstat` puts **32.94 MB of the 33.61 MB in the single `archive` table** — there is no second
+offender to find. The measured rate came in *below* the banked 0.41 MB/day estimate, not above it;
+the S85 warning that HLF's DEC-0156 landed 1.75× over its design assumption is still the right
+instinct, and is why the tripwire below exists rather than a horizon.
+
+### The decision, and why it is not HLF's
+
+**The SQLite archive is accepted and monitored. No prune, no horizon, no cold export.** Four grounds,
+in descending order of how hard they are to argue with:
+
+1. **Neither constraint binds, by two to three orders of magnitude.** HLF justified retention on the
+   working set at ~8.0 M hot rows against **this same 3.69 GiB box**. We have 125,613 rows — 66×
+   fewer — and the *entire* database is 0.89% of RAM. Both weewx stores together are ~47 MB. The
+   prior art's method transfers exactly; its conclusion does not, because the inputs differ by a
+   factor that no amount of design can make matter.
+2. **The `archive` table is the deliverable, not a diagnostic.** This is the load-bearing asymmetry
+   with HLF. `verification_records` and `observations` are derived, regenerable, and their loss
+   costs diagnostic depth. This repo's stated contract is *the data it emits*; the archive **is** the
+   weather history, and it is irreplaceable — a passively intercepted station cannot backfill. A
+   prune here would destroy the product to reclaim 0.89% of RAM.
+3. **Upstream already solved the working-set problem by aggregation.** WeeWX maintains 114
+   `archive_day_*` summary tables (10,624 rows, ~0.1 MB) precisely so long-range queries never scan
+   the 32.94 MB archive table. The mechanism HLF reached for retention to achieve, we already have,
+   for free, maintained upstream.
+4. **The one cost this database's history actually documents is fragmentation, and retention is the
+   wrong lever for it.** DEC-0070/0071/0092 all studied this DB — lock timeouts, WAL-vs-DELETE, CoW
+   fragmentation on btrfs. `chattr +C` is already queued for the v2.0.14 recreate and is confirmed
+   unapplied. Pruning rows would not defragment an extent.
+
+A fifth, weaker but real: WeeWX ships no prune, so adding one is permanent fork divergence to carry
+(`CHANGES-FROM-UPSTREAM.md`).
+
+### Rejected
+
+- **HLF-shape archive-then-prune** (cold NDJSON, checksum-verified, bounded batches, hot-days
+  horizon) — correct machinery, wrong problem here; building it now costs maintenance against a
+  constraint that is 2.6+ years away at the measured rate, and it would prune the product.
+- **A fixed-MB tripwire** — names a number instead of the constraint. A RAM ratio survives a memory
+  upgrade and states *why* the bound exists.
+- **`VACUUM`** — not proposed, and worth recording as refused: freelist is 0, so there is nothing to
+  reclaim, and a VACUUM rewrites the whole file, which is the fragmentation-maximizing operation on
+  CoW.
+- **Deferring again** — the deferral's condition (measure first) is now met.
+
+### The reversal condition, which executes
+
+Accept-and-monitor is worthless as an intention. DEC-0040 is the rule, and **this very script is the
+cautionary tale**: `EXPECT_IMAGE` sat wrong for five sessions because nobody ran the check, and S87
+opened by finding the soak's monitor check had been emitting a false FAIL for ten days. So the
+decision ships its own reversal condition as code, in the thing that actually runs:
+
+`ops/soak_check.sh` reports `archive within retention budget — N MB = X% of RAM (reopen DEC-0095 at
+10%)`. Crossing **10% of MemTotal** (~386 MB today, ~2.6 years out at 0.37 MB/day) is the point at
+which this DEC is **reopened**, not quietly tolerated. An unmeasurable tripwire says so out loud
+rather than reading as green. All three states are test-pinned with positive controls
+(`tests/test_soak_check.py`).
+
+### The InfluxDB half is not ours to decide
+
+Measured at 14 MB engine total, infinite retention, also not binding. But that series is the
+**dashboard's history** — its Flux queries read it and its charts render from it — so a retention
+change there is a cross-repo interface decision under DEC-0010, not a weewx prune of a shared
+bucket. **weewx's position, filed back to ops#175:** we do not propose a horizon, we will not set one
+unilaterally, and our only requirement on any horizon the dashboard may later want is that the
+loop-JSON and line-protocol contract in `docs/INTERFACES.md` is unaffected. That half of ops#175
+stays open against the dashboard, not against us.
+
+### Stated as unmeasured
+
+`filefrag` is unavailable on this NAS, so the archive's **extent count is unknown** and this DEC
+makes no claim about how fragmented the file actually is. That gap does not affect the decision —
+fragmentation is DEC-0092's lever, not retention's — but it does mean DEC-0092's `chattr +C` will
+ship without a before/after extent measurement unless someone builds a FIEMAP probe first.
