@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S86 → S87)
+## ▶ Resume here (S87 → S88)
 
 ### What's settled (do not re-derive)
 
@@ -53,25 +53,25 @@ proves the FILE, never the PROCESS (DEC-0074). NAS-native build (DEC-0078); the 
 re-verifies CONSTANTS' three live-config deviations **and** the hardware-timeline line still
 reads LNA-out. **The cut is execution-only, Sonnet-fit.**
 
-### ▶▶ S87 JOB LIST
+### ▶▶ S88 JOB LIST
 
-**PRIMARY — [ops#175] retention DEC. Start this session on Opus, deliberately (session-only
-switch, not a bare `/model` — that persists and re-prices later sessions, OPS-DEC-0010).**
-Archive SQLite + shared InfluxDB bucket have no retention policy. Same pattern HLF's DEC-0156/0174
-already solved — read those first, don't design from scratch. Already banked here: measured
-growth ~0.41 MB/day, ~6.4 yr to 1 GB (not urgent, design it properly anyway); ideas parked in
-`BACKLOG.md` Open ideas. **Why Opus over Fable** (asked S86): no documented capability split
-between them for this task shape (checked `eaglehunt-ops/AGENT-ECONOMY.md` §3 directly); Opus
-runs ~half Fable's list cost and has the larger measured context ceiling (~1M vs ~608K,
-DEC-0035) — escalate for capability, never headroom, and there's no capability case for Fable
-here. Nothing blocks starting immediately.
+**No frontier-tier item is queued. S88 is execution-tier unless a watch escalates it.**
+[ops#175]'s weewx half is **answered and closed out** (DEC-0095, S87 — accept-and-monitor, no
+prune; the reversal condition executes in `soak_check.sh` at 10% of MemTotal, ~2.6 yr out). Do not
+re-derive it; the InfluxDB half stays open **against the dashboard**, not us.
 
-**Standing watches — cheap, execution-tier. Pick up whenever it's been a while since the last
-check; not necessarily bundled into the Opus/175 session above.**
+**First job: merge [PR #206]** if it is still open — S87's soak fixes, all checks green, held only
+by the Class C merge boundary.
+
+**Standing watches — cheap, execution-tier.**
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP absent, state matches schedule.
-   **Verified good through block 11 (08-17 12:21 EDT)** — arm `A`, on-schedule swap 12:05:01.
-   Next unobserved window `08-17T18:05`.
+   **Verified good through block 12 (08-17 19:30 EDT)** — arm `B`, on-schedule swap 18:05:02,
+   settle 136 s. Next unobserved window `08-18T00:05`. **The soak's own output is trustworthy
+   again as of S87** — it had been emitting a false `MONITOR LOG STALE … wedged` on a healthy
+   watchdog for ten days, and silently desensitizing the DEC-0036 freeze detector (DEC-0095 commit,
+   [PR #206]). It now also prints `remote probe took Ns`; **≥20 s there is a NAS-load signal, not
+   noise** — see job 6.
 2. ⚠️ **Reception-floor dip, n=3 nights, pattern SHIFTED.** 08-15/08-16 both paused ~02:15–02:45;
    **08-17 paused 03:25–04:20 instead** (4 cycles, not 2–3) — argues against a pure
    tick-grid/fixed-clock artifact. **Still needs the proper statistical test — judgment work**,
@@ -83,26 +83,36 @@ check; not necessarily bundled into the Opus/175 session above.**
    square's close (~08-23), both weewx and ops sides already agreed; the issue can sit until then.
 5. **[dash#430] Answered and implemented, needs DEPLOYING not deciding** — rides the v2.0.14
    window, see queue above.
+6. ⚠️ **NEW (S87) — the evening window has a measured mechanism candidate, and it is a tenant.**
+   At 19:16 EDT, inside DEC-0094's significant 18:00–21:00 band: NAS loadavg **9.05/11.39/8.75** on
+   4 cores, driven by ~220% CPU of **`chrome-headless` (coffee-radar)** plus ~14 MB/s sustained
+   writes on `md2`. **But no process was in `D` state and weewxd's threads were all `S`**, records
+   still arriving — so load is established, *blocking* is not. That is still blocker 1's exact open
+   question (DEC-0068 measured `S`, never `D`). **One instant is not a probe**: the real next step
+   is sampling `/proc` state across a whole evening window, which runs read-only from the laptop
+   over ssh and needs no NAS write. Cheap to build, judgment-tier to interpret.
 
 [ops#169]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/169
+[PR #206]: https://github.com/WeatheredScientist/weewx-rtldavis/pull/206
 [ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
 [ops#175]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/175
 [dash#430]: https://github.com/WeatheredScientist/eaglehunt-weather-dashboard/issues/430
 
-### Current state (S86 close)
+### Current state (S87 close)
 
 | Thing | State |
 |---|---|
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` + `weewx_monitor.py` unchanged since S82/S82b, sha+process verified |
-| Campaign B | **Live and on schedule — 11 of 32 blocks, every swap on time, none deferred.** 08-17: `A→C` 00:05:01 · `C→D` 06:05:02 · `D→A` 12:05:01 (all healthy). **Now on arm `A`, next swap `08-17T18:05`.** Square through `08-23T00:05` (**5d left as of 08-17 12:21**). STOP/lock absent; all PAUSEs auto-resumed — see job 2 for the night-3 reception-floor shift (n=3). Verified 08-17 12:21 EDT |
-| Swap settle time | n=6: 82/139/198/137/197/79 s — **not a trend, do not re-flag** (well supported). Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
+| Campaign B | **Live and on schedule — 12 of 32 blocks, every swap on time, none deferred.** 08-17: `A→C` 00:05:01 · `C→D` 06:05:02 · `D→A` 12:05:01 · `A→B` 18:05:02 (all healthy). **Now on arm `B`, next swap `08-18T00:05`.** Square through `08-23T00:05` (**~5.2d left as of 08-17 19:30**). STOP/lock absent (`.STOP.campaignA` is A's, not live); all PAUSEs auto-resumed — see job 2 for the night-3 reception-floor shift (n=3). Verified 08-17 19:30 EDT |
+| Swap settle time | n=7: 82/139/198/137/197/79/136 s — **not a trend, do not re-flag** (well supported). Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
+| Retention | **SETTLED S87 (DEC-0095)** — accept-and-monitor, no prune. Archive 33.61 MB = 0.89% of 3.69 GiB RAM, 0.37 MB/day, ~7.3 yr to 1 GB; Influx engine 14 MB. Tripwire lives in `soak_check.sh`: reopen at 10% of MemTotal. InfluxDB horizon is the **dashboard's** call, not ours |
 | `dev` beyond prod | **Two different deploy layers, don't conflate them.** #183's pressure package = **baked**, rides the v2.0.14 image cut. `loop_json_writer.py` (incl. `current_interval`) = **mounted**, needs a file copy to the project root (the bake will NOT carry it, DEC-0093). Plus S84–S86 docs |
 | Freeze rate | DEC-0088-corrected (1.31/day), untouched. Hour-of-day split done (DEC-0094): nightly window refuted, evening 18:00–21:00 carries the signal — now also in `docs/ROADMAP.md` (S86 reconciliation caught it missing there) |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md`, now with the hardware timeline alongside |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | `dev` = `origin/dev`, S86's two PRs merged (#203 watch-checkpoints/hardware-timeline + this closeout). Only `dependabot/pip/weewx-5.5.0` (#158) beyond, queued for v2.0.14 — deliberately held, pre-reviewed GREEN, not stalled |
+| Branches | `dev` = `origin/dev`. **[PR #206] (`s87-soak-stale-now`) is OPEN and green — S87's soak fixes + DEC-0095; merge it first next session.** `dependabot/pip/weewx-5.5.0` (#158) queued for v2.0.14 — deliberately held, pre-reviewed GREEN, not stalled |
 | Trackers | #180/#74/#44 closed (latter two retroactively communicated, S86 — were closed with 0 comments, now cite the fixing commits) · #172/#144 open until v2.0.14 (code done, deploy pending) · #158 held for v2.0.14 · ops#163/#176 closed |
-| Cross-repo (S86) | **NOTHING OWED BY WEEWX beyond ops#175, now ACTIVE — see S87 job list.** ops#169 stays open, carries `repo:weewx`, no re-engagement needed. **[ops#157] CLOSED** (VPN window passed, back home confirmed, communicated with a comment). ops#168 owner-side (WL elevation) |
+| Cross-repo (S87) | **NOTHING OWED BY WEEWX.** [ops#175] answered in full from our side (DEC-0095, comment posted) — its InfluxDB half is the dashboard's call and the issue is deliberately left OPEN for them, not closed by us. ops#169 stays open, carries `repo:weewx`, no re-engagement needed. ops#168 owner-side (WL elevation) |
 
 ## Blockers
 
@@ -182,11 +192,12 @@ check; not necessarily bundled into the Opus/175 session above.**
   a foreground retry loop (blocked by design — use a bounded background retry, or let the owner
   merge via the web UI, which isn't behind the same path).
 
-_Last updated: 2026-08-17 (S86 close). Landed: PR #203 (BOOT/CONSTANTS watch checkpoints +
-hardware timeline), ops#157 closed, #74/#44 retroactively communicated, `docs/ROADMAP.md`'s
-scheduled S86 reconciliation (tripwire fired on time, one stale item fixed — see ROADMAP itself).
-Next session (S87) starts on **Opus**, deliberately, for **ops#175**. **Nothing else owed by
-weewx — see the cross-repo row.**_
+_Last updated: 2026-08-17 (S87 close). Landed: [PR #206] — the soak's ages were measured against a
+clock captured before a 15–100 s remote body, so it cried `wedged` at a healthy watchdog for ten
+days and quietly desensitized the DEC-0036 freeze detector; plus **DEC-0095** (retention:
+accept-and-monitor, tripwire executes) and the ops#175 answer. `docs/ROADMAP.md` checked, nothing
+to reconcile — retention was never a line there, and its next scheduled pass is S96.
+**S88 is execution-tier: no frontier item is queued**, so the Sonnet floor is the right default._
 
 _Blocker 1 is narrower but NOT closed: the freeze mechanism is still unproven — DEC-0068 measured
 the main thread `S`, never `D`, so "correlates with" is not "is blocked by". Next step there is a
