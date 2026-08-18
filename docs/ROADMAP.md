@@ -51,6 +51,12 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
   missing from it for one session. Everything else verified current: Campaign B block already
   carried DEC-0094's tenant-window split, DEC-0087/0089/0090 pause/resume and lock fixes, and the
   08-15→08-23T00:05 schedule; the DB-lock, receiveWindow and P3 rows are unchanged and correct.
+- Prior: 2026-08-18 (S89 — targeted line update per DEC-0057, not a full pass; tripwire is still
+  S96): the P0 freeze item gained DEC-0097's discriminator (RF-dead episodes cluster 00:00–04:00,
+  **zero** stall-bearing events in the evening freeze window — the two phenomena keep different
+  clocks, so the overnight dip must not be folded into the freeze item) and DEC-0098's live
+  mechanism probe. No other line moved: DEC-0097 changed no code and closed a `BOOT.md` watch, not
+  a ROADMAP item.
 - Prior: 2026-08-14 (S83 — targeted line update, not a full pass: the campaign-B gate row still
   carried DEC-0083's 1.49/day after DEC-0088 corrected it to 1.31/day at S80, and the freeze row
   gained DEC-0092's hour-of-day hypothesis).
@@ -345,7 +351,15 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       (12 vs 5.0, P=0.0027), corroborating coffee-radar's own ~19:00 correlation (DEC-0068) across
       10 distinct dates. Mechanism still unproven — DEC-0068 measured the main thread `S`, never
       `D`, so "correlates with" is not yet "is blocked by" — next step is a mechanism probe during
-      an evening window, not more timestamp counting.** *When recomputing, drop `interval != 1` rows first: the
+      an evening window, not more timestamp counting.** **S89 (2026-08-18, DEC-0097/0098): the probe
+      exists and is running** (`ops/proc_probe_nas.sh`, NAS-resident, ends 08-19 05:00) — it measures
+      **cumulative** per-thread `iowait_sum`/`block_max`/schedstat rather than instantaneous state,
+      because "`S`, never `D`" is a sampling-coverage artifact: `block_max` shows a **4041 ms** block
+      in a 4 h span with no evening in it, so blocking demonstrably happens. **DEC-0097 also
+      separates the two phenomena by clock** — RF-dead episodes cluster **00:00–04:00**
+      (stall-bearing 7/9 vs 1.50, P=0.00009) with **zero** in this evening freeze window, so the
+      overnight "reception dip" is *not* this item and must not be folded into it. *When
+      recomputing, drop `interval != 1` rows first: the
       S37 backfill wrote `interval=15` rows that read as 28 phantom 900 s freezes and inflate the
       rate ~60 %.* Individual events seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59,
       08-03 23:23 (262 s, S64), and two more caught S65 (08-04 17:48 and 19:13 EDT). All threads stop together and nothing is logged;

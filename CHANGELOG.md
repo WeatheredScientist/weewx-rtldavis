@@ -5,6 +5,59 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S89] — 2026-08-18 — The overnight "reception dip" was never reception (DEC-0097); the mechanism probe moves to the NAS (DEC-0098)
+
+- **DEC-0097 — the reception-floor dip is RF-dead episodes, and BOOT's own record of it was
+  wrong.** A watch carried four sessions ("n=4, window drifting later, needs the proper
+  statistical test") fails on three premises. **The record:** PAUSE/RESUME lines pair one-to-one,
+  so 08-18 was onset **02:55, five cycles**, not the logged "03:30, two" — corrected onsets
+  02:15/02:15/03:25/**02:55** are not monotonic, and the drift was the stated reason for rejecting
+  a fixed-clock artifact. The four nights are arms **A, B, C, D** — every gain × receive-window
+  cell, so not an arm effect. **The measurement:** on per-minute `rxCheckPercent` (DEC-0069/S31 —
+  *not* the monitor's 30-min mean; different instruments, the 50% floor does not transfer), tested
+  on **31 pre-campaign nights the hypothesis was not derived from**, contrasting the window
+  against its flanks *within one arm block* so gain/window/arm are constant: mean d = **−0.01 pts**
+  (Wilcoxon p=0.60, permutation p=0.47). Deepest 30-min mean on campaign nights **68.4%** against
+  DEC-0059's 73.3% baseline; **0 of 35 nights** under 50% while the monitor reported 20–45%.
+  **The mechanism:** every episode reads one pathological value (3–22%), then minutes **absent**,
+  then NULL, then normal 65–90% — `campaign_analyze.py`'s documented truncated-accumulation
+  artifact, which cannot self-identify because `interval` stays 1. Those artifacts feed the laggy
+  30-min mean and trip the floor. The null held-out result *is* the mechanism's confirmation:
+  `partition()` already excludes them. **And night 1 was already classified** — DEC-0094 recorded
+  08-15 02:00–02:22 as RF-dead three sessions before the watch was flagged untested.
+  **What survives, on the right unit** (ledger rows re-clustered per DEC-0083's unit lesson):
+  RF-dead episodes concentrate **00:00–04:00 — 8/19 vs 3.17 expected, P=0.0079**, stable at
+  30/45/60-min clustering; stall-bearing rows only **7/9 vs 1.50, P=0.00009**, and **0/9** in
+  DEC-0094's evening freeze window — different clocks, independent support for the two being
+  separate phenomena. **7 of 7 ledger dates**, including three that **predate the square**.
+  Stated against itself: ledger is 6.5 d, left-censored at ws.5; omnibus does **not** reject
+  uniformity (X²=27.7, df=23, crit 35.2); DEC-0092's tenant maintenance (00:10→~03:00–05:10)
+  overlaps and is not discriminated against. **No code changes** — DEC-0087 scoped the PAUSE to
+  RF-dead episodes and that is exactly what fires it. Job 2 closes; blocker 2 gains a timing
+  signature.
+- **DEC-0098 — the mechanism probe runs on the NAS, because a laptop-side overnight probe is not a
+  limitation but an infeasible design.** `ops/proc_probe.py` was built to BOOT job 6's "read-only
+  from the laptop, no NAS write" scope and hardened inside it (per-batch ssh, a supervisor that
+  relaunches on process death — verified by SIGKILL, rc=137 → auto-resume — idempotent `--resume`,
+  gap-guarded deltas). None of that addresses the real failure mode: it required the owner's laptop
+  awake **12+ hours**, and DEC-0097's second window (00:00–04:00) a laptop-side probe can never
+  sample at all. `ops/proc_probe_nas.sh` now runs under `nohup` on the NAS (pid 28699, ends
+  08-19 05:00) emitting the **same pipe-delimited stream** `proc_probe.py` parses; `--ingest`
+  reuses `parse_line()`, and merging is idempotent. Footprint went **down** — ~2,700 ssh
+  round-trips replaced by `/proc` reads plus an append. Costs recorded: a Class C write approved in
+  chat, a bounded resident process on prod, and **cleanup owed**.
+- **The probe measures cumulative counters, not instantaneous state** — the reason two prior
+  attempts could not settle DEC-0068. `block_max` already showed a **4041 ms** uninterruptible
+  block in a 4 h span containing no evening, so "main thread `S`, never `D`" was sampling coverage,
+  not evidence. Measured before building, not assumed: no PSI (kernel 4.4.302+), `wchan` reads `0`,
+  `/proc/<pid>/io` denied as non-root. A smoke test caught three real bugs pre-flight (a
+  two-column row shift, both md2 fields collapsing to one value, `/wait_sum/` also matching
+  `iowait_sum`).
+- **New trap:** `nasctl cat /proc/<pid>/cmdline` returns **empty for a live process** — caught only
+  by positive-controlling the method against weewxd's own known-live pid. Third instance of *a zero
+  from a look-alike tool is a claim, not a result*.
+
+---
 ## [S88] — 2026-08-18 — weewx 5.5.0 staged for v2.0.14; the schedule gains a stand-down state (DEC-0096)
 
 - **weewx 5.4.0 → 5.5.0 merged to dev (PR #208)** — the deliberate bump behind dependabot #158,
