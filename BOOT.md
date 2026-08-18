@@ -60,8 +60,8 @@ reads LNA-out. **The cut is execution-only, Sonnet-fit.**
 prune; the reversal condition executes in `soak_check.sh` at 10% of MemTotal, ~2.6 yr out). Do not
 re-derive it; the InfluxDB half stays open **against the dashboard**, not us.
 
-**First job: merge [PR #206]** if it is still open — S87's soak fixes, all checks green, held only
-by the Class C merge boundary.
+**Nothing is queued or held.** [PR #206] (S87's soak fixes + DEC-0095) **merged 08-17 23:25 EDT**;
+`dev` is synced and the branch is deleted. Start with the watches below.
 
 **Standing watches — cheap, execution-tier.**
 
@@ -110,7 +110,7 @@ by the Class C merge boundary.
 | Freeze rate | DEC-0088-corrected (1.31/day), untouched. Hour-of-day split done (DEC-0094): nightly window refuted, evening 18:00–21:00 carries the signal — now also in `docs/ROADMAP.md` (S86 reconciliation caught it missing there) |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md`, now with the hardware timeline alongside |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | `dev` = `origin/dev`. **[PR #206] (`s87-soak-stale-now`) is OPEN and green — S87's soak fixes + DEC-0095; merge it first next session.** `dependabot/pip/weewx-5.5.0` (#158) queued for v2.0.14 — deliberately held, pre-reviewed GREEN, not stalled |
+| Branches | **Steady state restored: exactly `dev` + `main`.** [PR #206] merged 08-17 23:25 EDT (S87's soak fixes + DEC-0095), its branch deleted, and S86's two merged leftovers (`s86-close`, `s86-hardware-timeline`) pruned in the same pass. Only `dependabot/pip/weewx-5.5.0` (#158) remains — queued for v2.0.14, deliberately held, pre-reviewed GREEN, not stalled |
 | Trackers | #180/#74/#44 closed (latter two retroactively communicated, S86 — were closed with 0 comments, now cite the fixing commits) · #172/#144 open until v2.0.14 (code done, deploy pending) · #158 held for v2.0.14 · ops#163/#176 closed |
 | Cross-repo (S87) | **NOTHING OWED BY WEEWX.** [ops#175] answered in full from our side (DEC-0095, comment posted) — its InfluxDB half is the dashboard's call and the issue is deliberately left OPEN for them, not closed by us. ops#169 stays open, carries `repo:weewx`, no re-engagement needed. ops#168 owner-side (WL elevation) |
 
@@ -197,7 +197,8 @@ clock captured before a 15–100 s remote body, so it cried `wedged` at a health
 days and quietly desensitized the DEC-0036 freeze detector; plus **DEC-0095** (retention:
 accept-and-monitor, tripwire executes) and the ops#175 answer. `docs/ROADMAP.md` checked, nothing
 to reconcile — retention was never a line there, and its next scheduled pass is S96.
-**S88 is execution-tier: no frontier item is queued**, so the Sonnet floor is the right default._
+**S88 is execution-tier: no frontier item is queued**, so the Sonnet floor is the right default.
+PR #206 merged the same evening (23:25 EDT) and the branch list is back to `dev` + `main`._
 
 _Blocker 1 is narrower but NOT closed: the freeze mechanism is still unproven — DEC-0068 measured
 the main thread `S`, never `D`, so "correlates with" is not "is blocked by". Next step there is a
