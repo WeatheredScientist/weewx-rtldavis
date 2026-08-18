@@ -5718,3 +5718,217 @@ the **first PR of the v2.0.14 window** so nothing else queues behind a red check
 No `schedule --generate` mode was added (the NOTE comment's dev-side recipe stands); no tick/guard
 behavior changed (the installed copy always has rows — `install` refuses the empty form, so the
 stand-down state can never reach the NAS through the sanctioned path).
+
+---
+
+## DEC-0097 — The "reception-floor dip" is not a reception measurement; it is RF-dead episodes, and they cluster post-midnight
+
+**Date:** 2026-08-18 (S89) · **Status:** Accepted (measurement) · **Retires** BOOT job 2's watch as a
+distinct phenomenon · **feeds** blocker 2 / DEC-0081 / DEC-0083 · **extends** DEC-0094's side
+result · **applies** DEC-0069's exclusion rules and DEC-0083's unit lesson · **changes no code**
+
+### The claim under test, and why it was never tested
+
+BOOT carried a watch across four sessions: a reception-floor dip recurring nightly, "window
+drifting later" (02:15 → 03:25 → 03:30), n=4, flagged as needing "the proper statistical test —
+judgment work". DEC-0094 had refuted the nightly lead for *freezes* and S85 for *stall episodes*;
+this reception-floor metric was recorded as the one nobody had tested.
+
+It turns out three of the watch's four premises do not survive contact with the logs.
+
+### Correction 1 — the record itself was wrong
+
+`rx_experiment.log`'s PAUSE/RESUME lines pair one-to-one (the guard cannot log a fresh PAUSE while
+a PAUSE sentinel exists), so cycles are countable exactly:
+
+| Night | Arm | Onset | Cycles | End |
+|---|---|---|---|---|
+| 08-15 | A | 02:15 | 3 | 02:45 |
+| 08-16 | B | 02:15 | 2 | 02:35 |
+| 08-17 | C | 03:25 | 4 | 04:20 |
+| 08-18 | D | **02:55** | **5** | 03:45 |
+
+BOOT and the S88 CHANGELOG entry both record 08-18 as "03:30–03:45, 2 cycles" — the tail of the
+episode, not the episode. Corrected onsets are **02:15, 02:15, 03:25, 02:55**: not monotonic, and
+"drifting later" was the watch's stated reason for rejecting a fixed-clock artifact.
+
+Also visible once the arms are read off: the four nights are arms **A, B, C and D** — every
+gain × receive-window combination in the square. Whatever this is, it is not an arm effect.
+
+### Correction 2 — reception does not dip
+
+Tested on the honest instrument, the archive's per-minute `rxCheckPercent` (DEC-0069/S31), not the
+monitor's 30-min mean that fires the PAUSE. The two are different instruments and the 50% floor
+does not transfer between them.
+
+The window and the notion of "a dip" were both derived from 08-15..08-18, so testing them on those
+same nights is circular. The hypothesis was therefore tested on **31 pre-campaign nights
+(07-15..08-14)** that played no part in generating it, contrasting the dip window against its own
+flanks *within one arm block* (00:05–06:05), which holds gain, receive window and arm constant by
+construction:
+
+    d = mean(rx in [02:00,04:30)) - mean(rx in [00:35,02:00) u [04:30,06:00))
+
+    held-out: n = 31 nights, mean d = -0.01 pts, median +0.10, 12/31 negative
+              Wilcoxon signed-rank p = 0.60 · sign-flip permutation p = 0.47
+
+There is no dip. On the four campaign nights the deepest 30-min rolling mean never fell below
+**68.4%** against DEC-0059's measured 73.3% baseline (sd 4.67), and **0 of 35 nights** in the whole
+34-day record put a 30-min mean under 50% — while the monitor was reporting 20%, 36%, 45%.
+
+### What is actually happening: truncated records, not degraded RF
+
+The raw per-minute rows across every episode have one shape — a pathologically low record, then
+minutes **absent entirely**, then a NULL, then normal values:
+
+    08-15  02:00=17  [02:01-02:07 missing]  02:08=NULL  02:09=14  [...]  02:23=68 → normal
+    08-17  03:17=22  [03:18-03:24 missing]  03:25=NULL  03:26=70 → normal
+    08-18  03:15=3   [03:16-03:21 missing]              03:22=76 → normal
+
+`campaign_analyze.py` already documents this mechanism: a record assembled from a truncated
+accumulation period still divides by the full nominal interval, so it reads artificially low while
+`interval` stays 1 and the row cannot identify itself as contaminated. Those artifacts feed the
+monitor's laggy 30-min mean, which crosses the 50% floor and trips the PAUSE. **Between episodes
+reception is entirely normal (65–90%).**
+
+This also explains why the held-out test found nothing: `partition()` correctly excludes
+gap-adjacent records, so DEC-0069's cleaning removes the artifacts — the null result is
+confirmation of the mechanism, not evidence against a phenomenon.
+
+### Correction 3 — night 1 was already classified, three sessions ago
+
+DEC-0094 recorded, as a side result: *the 08-15 02:00–02:22 blackout was RF-dead, not a freeze* —
+three `rtldavis process stalled` lines inside it, and DEC-0067's rule makes a >150 s gap *with* a
+stall line RF-dead. That is night 1 of this very watch. The resolution was never carried forward,
+and the watch was opened and carried for four sessions as an untested question.
+
+The episode ledger extends it to all four nights: every overnight episode carries `stalls>=1`
+and/or `respawns>=1`.
+
+### The result that does survive, on the right unit
+
+Restated on the episode ledger (`logs/episodes.log`, one row per ALERT→RECOVERY): **do RF-dead
+episodes concentrate post-midnight?** Ledger rows are re-clustered first — DEC-0083's central
+lesson is that the unit dominates the answer, and the monitor opens a fresh row on every flap
+exactly as stall *lines* overcounted one episode 21-fold.
+
+    clustered 30 min → 20 events · 00:00-04:00 holds 9 vs 3.33 expected · P = 0.0028
+    clustered 45 min → 19 events · 00:00-04:00 holds 8 vs 3.17 expected · P = 0.0079
+    clustered 60 min → 19 events · 00:00-04:00 holds 8 vs 3.17 expected · P = 0.0079
+
+    stall-bearing rows only (unambiguously RF-dead under DEC-0067, no reliance on
+    the monitor's reception alerting at all):
+        00:00-04:00 holds 7 of 9 vs 1.50 expected · P = 0.00009
+        18:00-21:00 holds 0 of 9 vs 1.12 expected
+
+Stable across clustering thresholds, as DEC-0083 requires. **The discriminator matters as much as
+the p-value:** DEC-0094's evening window (18:00–21:00), where freezes cluster at P=0.0027, holds
+*zero* stall-bearing RF-dead events. Freezes and RF-dead episodes keep different clocks, which is
+independent support for the DEC-0081/DEC-0067 position that they are separate phenomena.
+
+It is also not a few bad nights: **7 of 7 ledger dates** carry post-midnight events, including
+08-12, 08-13 and 08-14 — which **predate the square**. Campaign B did not cause this, and the
+watch's n=4 undercounted it: three of those nights simply never crossed the PAUSE floor.
+
+### Stated against itself
+
+* The ledger is **6.5 days and left-censored** at the ws.5 deploy — that is the age of the
+  instrument, not the onset of the phenomenon (`stall_baseline.py`'s standing warning).
+* The **24-hour omnibus does not reject uniformity** (X²=27.7, df=23, crit 35.2). Expected counts
+  are ~0.8/hour, so the omnibus is weak by construction. This is the same honesty caveat DEC-0094
+  raised against itself: corroboration of a pre-specified window, not proof of one.
+* The window was **pre-registered by the watch** (BOOT job 2 named 02:15–04:20 across four nights
+  before this test existed), which is what keeps the episode test out of the circularity that
+  sank the reception test.
+* A live alternative explanation is on the table and is **not** discriminated against here:
+  DEC-0092 measured a sibling tenant's nightly maintenance running **00:10 → ~03:00–05:10 every
+  night**, overlapping this window almost exactly.
+
+### Consequences
+
+**No code changes.** The apparatus is behaving as designed: DEC-0087 scoped the PAUSE to RF-dead
+episodes, and RF-dead episodes are precisely what fires it. The flapping (five cycles in one hour
+on 08-18) is the entry/exit-share-one-floor behavior S82 considered and deliberately accepted —
+two log lines per flap, no config or container touch. The error was interpretive, never
+operational.
+
+1. **Retire "reception-floor dip" as a distinct phenomenon.** It is blocker 2 seen through the
+   PAUSE log. BOOT job 2 closes.
+2. **Blocker 2 gains a timing signature** it did not have: RF-dead episodes concentrate in
+   00:00–04:00, on every ledger night, across all four arms. The post-campaign characterization
+   (DEC-0081/DEC-0083, root cause deliberately open) should start from that.
+3. **Job 6's mechanism probe gains a second target window.** The tenant-load hypothesis fits the
+   *post-midnight* window (DEC-0092's maintenance) as naturally as it fits the evening one
+   (coffee-radar, DEC-0068/0094) — and they are different windows for different phenomena. A
+   host starved on I/O could plausibly starve the driver's packet path into the 150 s watchdog,
+   which would read as RF-dead while the RF is fine. `ops/proc_probe.py` should be run across
+   00:00–04:00 with control flanks, not only across the evening.
+4. **The transferable lesson** is DEC-0094's own, re-earned: *read a DEC's resolution before
+   treating its headline finding as live.* A watch was carried for four sessions over a question
+   one of its four nights had already answered — and the answer was one row away in the same
+   decision log the watch cited.
+
+---
+
+## DEC-0098 — The mechanism probe runs ON the NAS: a laptop-side overnight probe is not a limitation, it is an infeasible design
+
+**Date:** 2026-08-18 (S89) · **Status:** Accepted · **Overrides** BOOT job 6's "read-only from the
+laptop, no NAS write" scoping · **required by** DEC-0097's second window · **applies** DEC-0074's
+process-evidence rule
+
+### What was built first, and why it was wrong
+
+BOOT job 6 scoped the probe as "sampling `/proc` state across a whole evening window — read-only
+from the laptop over ssh, no NAS write." `ops/proc_probe.py` was built to that scope and hardened
+inside it: per-batch ssh so a dropped connection costs one batch, a supervisor
+(`proc_probe_watch.sh`) that relaunches on process death, an idempotent `--resume`, gap-guarded
+deltas so a resume cannot charge hours of accumulated iowait to one hour. All of that is real and
+all of it is retained.
+
+None of it addresses the actual failure mode. The design required the owner's laptop to stay awake
+for **12+ hours**, which the owner correctly rejected as infeasible. Nothing scheduled locally runs
+while a laptop is asleep, and `caffeinate -i` holds off idle sleep but not a closed lid.
+
+**It is worse than inconvenient.** DEC-0097 added a second target window at **00:00–04:00** — the
+RF-dead episode cluster. A laptop-side probe can never sample that window at all. So the inherited
+constraint did not make half the measurement awkward; it made it impossible. The constraint was a
+previous session's scoping choice, not a rule, and it should have been challenged the moment the
+overnight window appeared rather than engineered around.
+
+### The design
+
+`ops/proc_probe_nas.sh` runs on the NAS under `nohup`, appending the **same pipe-delimited stream**
+`proc_probe.py` already parses. The laptop is then irrelevant: harvest read-only whenever, and fold
+it in with `--ingest`, which reuses `parse_line()` so there is exactly **one** parser for both
+paths. Merging is idempotent — `--analyze` de-duplicates on `(ts, kind, pid, tid)` — so ingesting
+twice, or ingesting a file overlapping a laptop-side run, cannot double-count.
+
+Deliberately not reinvented: the CSV column padding. The laptop version's first cut mis-aligned
+system rows by two columns because it padded with literal `|` runs and the header made the result
+look correct. Emitting a tagged stream and letting one parser place the fields is what stops that
+bug having a second home.
+
+**The footprint goes down, not up.** Driving the sampler remotely meant ~2,700 ssh round-trips over
+the run; on the NAS it is `/proc` reads plus an append, and `/proc` reads never touch disk.
+
+### What it costs, stated plainly
+
+* **A Class C NAS write**, approved in chat before anything ran — the script itself, its output
+  under `logs/`, and a pidfile at the project root.
+* **A resident process on prod during a live campaign.** It is bounded by an end epoch
+  (`2026-08-19 05:00`, epoch 1787130000) rather than running until someone remembers it, and it
+  checks a `proc_probe.STOP` sentinel every cycle for a clean early stop.
+* **Cleanup is owed**: the script, pidfile and its two logs should come off the NAS once the run
+  is analyzed. Recorded in BOOT job 6 so it is not left behind.
+
+### Verified, not assumed
+
+Liveness was confirmed by **process** evidence per DEC-0074, not by the output file existing:
+`/proc/28699/stat` reads `28699 (proc_probe_nas.) S` and the log grew across two reads.
+
+A trap worth recording: `nasctl cat /proc/<pid>/cmdline` returns **empty** for a live process — the
+NUL-delimited file does not survive that path. Read as "process gone" it would have been a false
+negative, and it was only caught by positive-controlling the method against weewxd's own known-live
+pid, which reads empty too. *A zero from a look-alike tool is a claim, not a result* — the third
+instance of that pattern in this repo (`nasctl grep` multi-word, leading-dash globs, host-side `du`
+on a bind mount).

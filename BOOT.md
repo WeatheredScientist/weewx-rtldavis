@@ -66,23 +66,25 @@ judgment-tier items — flag for escalation when picking one up.**
    **Verified good through block 14 (08-18 ~07:35 EDT)** — `B→D` 00:05:02 settle ~196 s, `D→A`
    06:05:02 settle ~144 s, both healthy; soak 16 pass / 2 expected-WARN. `remote probe took Ns`
    ≥20 s is a NAS-load signal, not noise — see job 6.
-2. ⚠️ **Reception-floor dip, n=4 nights, window drifting later.** 08-15/16 both ~02:15–02:45;
-   08-17 03:25–04:20 (4 cycles); **08-18 03:30–03:45 (2 cycles, arm D)** — argues against a pure
-   tick-grid/fixed-clock artifact. **Still needs the proper statistical test — judgment work**
-   (DEC-0094 refuted the *freeze* nightly lead, S85 the *stall-episode* one; nobody has tested
-   this reception-floor metric). Raw numbers: `logs/rx_experiment.log`.
+2. ✅ **CLOSED (DEC-0097)** — never a reception measurement; RF-dead episodes truncating records.
+   Do not re-open as an RF-dip question; the surviving result moved to blocker 2 below.
 3. Resume machinery — keep counting cycles; watch for the three untested paths above.
 4. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
    square's close (~08-23), both sides already agreed.
 5. **v2.0.14 prep is DONE** — everything staged on dev; nothing to decide before ~08-23. The
    window opens with the DEC-0096 emptying PR (queue item 0 above).
-6. ⚠️ **Evening-window mechanism probe (18:00–21:00, DEC-0094 P=0.0027).** S87 measured a
-   candidate live: NAS loadavg 9.05/11.39/8.75 on 4 cores at 19:16 EDT, ~220% CPU of
-   `chrome-headless` (coffee-radar) + ~14 MB/s sustained writes on `md2` — **but no process in `D`
-   state, weewxd threads all `S`**, records still arriving. Load is established, *blocking* is not
-   (DEC-0068's exact open question). One instant is not a probe: the real next step is sampling
-   `/proc` state across a whole evening window — read-only from the laptop over ssh, no NAS write.
-   Cheap to build, judgment-tier to interpret.
+6. ⚠️ **Mechanism probe RUNNING ON THE NAS (DEC-0098); interpretation is the open judgment item.**
+   `proc_probe_nas.sh` pid **28699**, started 08-18 10:49, **ends 08-19 05:00** (epoch
+   1787130000) → `logs/proc_probe_nas.log` on the NAS. Covers both target windows in one run:
+   evening (freezes) **and 00:00–04:00** (DEC-0097's RF-dead cluster, overlapping DEC-0092's
+   tenant maintenance), with control flanks. Design point: **cumulative per-thread counters, not
+   instantaneous state** — DEC-0068's "all `S`, never `D`" was sampling coverage, and `block_max`
+   showed a **4041 ms** block in a 4 h span with no evening in it. Tool headers carry the rest
+   (no PSI on 4.4, `wchan`=0, `io` denied). **Load with a flat iowait ratio answers DEC-0068
+   NEGATIVE — a real result, not a failed probe.** Harvest read-only, then:
+   `ops/proc_probe.py --ingest <pulled> && ops/proc_probe.py --analyze logs/proc_probe.csv`.
+   Stop early: create `proc_probe.STOP` at the NAS project root. **Clean up the NAS-resident
+   script + its logs once analyzed.**
 
 [ops#169]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/169
 [ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
@@ -94,7 +96,7 @@ judgment-tier items — flag for escalation when picking one up.**
 | Thing | State |
 |---|---|
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` + `weewx_monitor.py` unchanged since S82/S82b, sha+process verified |
-| Campaign B | **Live and on schedule — block 14 of 32 in progress (arm A since 08-18T06:05:02), 13 complete, every swap on time, none deferred.** 08-18: `B→D` 00:05:02 · `D→A` 06:05:02 (both healthy). Next swap `08-18T12:05|B`. Square through `08-23T00:05` (~4.7 d left as of 08-18 ~08:00 EDT). STOP/lock absent; all PAUSEs auto-resumed — job 2 has the n=4 dip watch. Verified 08-18 ~07:35 EDT |
+| Campaign B | **Live and on schedule — block 14 of 32 in progress (arm A since 08-18T06:05:02), 13 complete, every swap on time, none deferred.** 08-18: `B→D` 00:05:02 · `D→A` 06:05:02 (both healthy). Next swap `08-18T12:05|B`. Square through `08-23T00:05` (~4.7 d left as of 08-18 ~08:00 EDT). STOP/lock absent; PAUSEs are RF-dead episodes behaving as DEC-0087 designed, not a reception dip (DEC-0097). Verified 08-18 ~10:00 EDT, soak 16 pass / 2 expected-WARN |
 | Swap settle time | n=9: 82/139/198/137/197/79/136/196/144 s — **not a trend, do not re-flag**. Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
 | Retention | **SETTLED (DEC-0095)** — accept-and-monitor, no prune; tripwire executes in `soak_check.sh`, reopen at 10% of MemTotal (~2.6 yr out). InfluxDB horizon is the **dashboard's** call |
 | `dev` beyond prod | **Everything for v2.0.14 — two deploy layers, don't conflate.** Baked (ride the image cut): weewx 5.5.0 pin, #183 pressure package, DEC-0096 stand-down support. Mounted (needs the project-root file copy): `loop_json_writer.py` incl. `current_interval`. Plus S84–S88 docs |
@@ -123,7 +125,10 @@ judgment-tier items — flag for escalation when picking one up.**
 2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open): interference vs no-LNA
    front-end margin vs site vs condensation. **DEC-0083 adds a dated onset (08-10 23:56) the
    characterization should start from** — it coincides with the campaign-B pilot night and the
-   v2.0.12 promotion, neither of which is established as cause.
+   v2.0.12 promotion, neither of which is established as cause. **DEC-0097 adds a timing
+   signature: episodes cluster 00:00–04:00** (stall-bearing 7/9 vs 1.50, P=0.00009), on every
+   ledger night, across all four arms — start the characterization there. Caveat carried: the
+   ledger is 6.5 d, left-censored at ws.5, and DEC-0092's tenant window overlaps.
 3. **ERR-0005** — largely explained by DEC-0081; not fully closed, its 21-stall episode remains
    the largest on record.
 4. `ppm`/`fc` unmeasured, deliberately unchanged for B.
@@ -180,11 +185,14 @@ judgment-tier items — flag for escalation when picking one up.**
   `soak_check.sh`'s stdout count is history, not a live crash loop; confirm with `inspect`'s
   unchanged `StartedAt`/`Pid` before alarming (S88).
 
-_Last updated: 2026-08-18 (S88 close). Landed: **PR #208** (weewx 5.5.0 — the deliberate bump
-behind dependabot #158, which is closed with a pointer; its red `tests` was a stale-CI artifact,
-not a 5.5.0 problem) and **PR #209 / DEC-0096** (empty SCHEDULE = explicit stand-down state;
-defuses the CI cliff at the square's terminator, which is also the v2.0.14 window's opening
-moment — the emptying PR is the window's mandatory first move). Swaps `B→D` and `D→A` verified
-healthy; reception-floor dip now n=4 (job 2). CONSTANTS' stale "promotion pending" release row
-corrected. ROADMAP: no v2.0.14 line exists to reconcile; scheduled pass S96. **S89 pre-cut is
-watch-tier; the cut is execution-tier/Sonnet-fit; jobs 2 and 6 are the open judgment items.**_
+_Last updated: 2026-08-18 (S89, in progress — Opus). **DEC-0097 closes job 2**: the reception-floor
+dip is not a reception measurement but RF-dead episodes truncating records, and BOOT's own 08-18
+row was wrong (02:55/5 cycles, not 03:30/2), so the "drifting later" premise is retired. What
+survives is a real timing signature for blocker 2 — episodes cluster 00:00–04:00, P=0.00009 on
+stall-bearing rows, zero in the evening freeze window. **Job 6's probe is built and running**
+(`ops/proc_probe.py` + `proc_probe_watch.sh`, cumulative counters over instantaneous state,
+resumable across a dropped shell); interpretation is the open judgment item, now with two target
+windows. S88 landed PR #208 (weewx 5.5.0) and PR #209 / DEC-0096 (stand-down SCHEDULE — the
+emptying PR is still the v2.0.14 window's mandatory first move). ROADMAP: no v2.0.14 line to
+reconcile; scheduled pass S96. **Model note: a bare `/model claude-opus-5` was used, which
+PERSISTS (OPS-DEC-0010) — restore the Sonnet floor at close.**_
