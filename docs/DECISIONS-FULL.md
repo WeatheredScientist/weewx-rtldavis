@@ -6276,3 +6276,67 @@ same omission S85 found for `loop_json_writer.py` — and gains a row in this se
 applying them consistently across two files that do the same kind of work. Porting rather than
 importing accepts a small, documented duplication to protect a stated architectural goal — the
 alternative trades an invisible coupling for twenty lines saved.
+
+---
+
+## DEC-0104 — DEC-0099's gating premise was wrong: weewx's NAS-LEASE client is host-side and unblocked
+
+**Status:** Accepted (correction of record) · **Date:** 2026-08-19 (S94) ·
+**Corrects:** DEC-0099's framing (not its plan's content) · **Applies:** DEC-0074 (verify, don't
+recall) · **Answers:** the weewx half of ops#169 · **Does NOT adopt** — the adopting DEC is S95's
+
+**Context.** The owner raised ops#169's priority at S94 close: act within the next few sessions.
+DEC-0099 (S90) had recorded weewx's adoption as "deferred to the v2.0.14 window", on the grounds that
+the one committed-unbuilt lever — InfluxDB `post_interval` deferral — needs `influx.py`, a RESTThread
+*inside* the container, to see `LEASE_DIR`, which the container's fixed mount set excludes. That
+reasoning is correct **for that lever** and was over-generalized into a gate on the whole client. A
+first S94 attempt to act on it amplified the error into `BOOT.md` as a hard deadline ("ship the mount
+in the v2.0.14 cut or lose a recreate cycle").
+
+**What re-reading the actual spec establishes.** `eaglehunt-ops/NAS-LEASE.md` §9 had already settled
+this, before either framing was written: weewx's client's **"natural home is host-side"**, chosen
+precisely so adoption does not cost a release-class recreate.
+
+| Half | Where it runs | Container change? |
+|---|---|---|
+| **Holder** — wrap the NAS image build (DEC-0078) | the NAS **host** (`docker build`) | **none** |
+| **Observer** — read the lease, append `heavy-io.log` | `weewx_monitor.py`, already host-resident, 30 s poll, sees the volume natively | **none** |
+| **Yield** — InfluxDB `post_interval` downshift | inside the container | **yes** — the only thing the v2.0.14 mount buys |
+
+So adoption is **not** gated on v2.0.14. The mount remains worth taking opportunistically while the
+container is being recreated anyway, but skipping it costs one optional lever, not the client.
+
+**Two further findings from the same read.**
+
+1. **The "two strands" on ops#169 are one strand.** coffee-radar's disk-contention handshake **is**
+   this lease: their DEC-0181 Stage 2 landed *as* OPS-DEC-0107. Stage 1 (`--blkio-weight` caps) is
+   coffee-radar-unilateral and requires nothing from weewx. There is no second protocol pending, and
+   the question S94 nearly posted to ops#169 was already answered in coffee-radar's own `BACKLOG.md`.
+2. **★ weewx's adoption is the event that LOCKS the protocol's constants for every tenant.** §5 holds
+   them UNLOCKED "until the second adopting DEC lands"; HLF's DEC-0177 was the first. This arrives
+   disguised as a merge-order side effect and should be taken deliberately — any amendment weewx
+   wants raised on ops#169 *before* its own client DEC lands.
+
+**Pre-flight, verified rather than assumed (DEC-0074).** `LEASE_DIR` exists at
+`/volume1/docker/nas-lease/`, mode `drwxrwxrwt` (1777, as §5 specifies) — the one-time owner step is
+already done; `heavy-io.log` is live and HLF is renewing against it in production (held ~8.7 h on
+2026-08-19, 04:56Z→13:39Z on an 8 h TTL, released `outcome: step-failures`). A weewx client is Python
+`fcntl.flock()`, no binary (§9). **Still unverified, and owed before any client ships:** that weewx's
+runtime user can create/rename in `LEASE_DIR`; `O_CREAT|O_EXCL` atomicity on the btrfs mount; a
+cross-tenant-visible log append. **weewx has no declared renewal floor** (§5: "none declared") —
+wrapping the build requires declaring one. §8 already ranks that build, ~08-23, as the protocol's
+first cross-tenant exercise.
+
+**Red lines the spec already records for us, restated so they are not re-derived:** the SQLite
+archive commit is **never** deferred (the engine restarts after a 120 s busy wait; this station runs
+a non-stock `timeout=30` because a 6 s reader lock once cost a 5–10 min outage), and `loop-data.txt`
+carries a **hard 30 s ceiling** — the eh-proxy 503s past it and the dashboard treats that as
+authoritative station-down. Any lease write is in-place (seek+write+truncate), **never**
+`loop_json_writer.py`'s tmp+`os.replace` idiom, which the spec names as silently stranding a flock on
+an unlinked inode (DEC-0051).
+
+*Rationale:* DEC-0099 reached the right plan through a premise that would have cost a session waiting
+on a recreate it never needed, and the correction is only visible by reading the shared spec rather
+than this repo's own record of it. Logged as its own entry because `BOOT.md` is rewritten every
+session and a finding left only there evaporates at the next close — while DEC-0099 would have stayed
+greppable and wrong.

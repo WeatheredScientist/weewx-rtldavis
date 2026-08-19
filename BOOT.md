@@ -49,30 +49,49 @@ repo propagates to other repos' sessions within the hour. *(Read with a LEADING 
 ### ▶▶ S95 JOB LIST
 
 1. Daily square watch (~5 min): `ops/soak_check.sh` + a direct `rx_experiment.state` read.
-2. **[ops#169] — OWNER-RAISED PRIORITY (S94): act within the next few sessions, not "when the square
-   closes".** Two strands in one thread: coffee-radar's shared-NAS disk-contention handshake (design
-   session pending, other tenants invited to flag interest), and **NAS-LEASE adoption, which weewx
-   already committed to in DEC-0099 and which is HARD-GATED ON THE v2.0.14 CUT.** The gate is
-   physical, not procedural: `influx.py` runs *inside* the container and cannot see `LEASE_DIR`,
-   a container's mount set is fixed at creation, and v2.0.14 (~08-23) is already a release-class
-   recreate for weewx 5.5.0 — **so it is the one no-extra-cost moment, and shipping the cut without
-   the mount costs a whole extra recreate cycle.** DEC-0099's recorded plan for that window: mount
-   `LEASE_DIR` read-only; `influx.py` raises `post_interval` while a lease is held (safe to ~30 min,
-   DEC-0092); the NAS image build (DEC-0078) becomes weewx's first HOLDER, wrapping `docker build`
-   with acquire→flock→release mirroring `rx_experiment.lock`; **any lease write is in-place
-   (seek+write+truncate), NEVER `loop_json_writer.py`'s tmp+`os.replace` idiom** (DEC-0051 — the
-   spec names it as silently stranding a flock on an unlinked inode). HLF is already live on this
-   (their DEC-0177, since 08-17) and is the working reference. ops#169 stays open against weewx
-   until the mount ships.
+2. **[ops#169] — OWNER-RAISED PRIORITY (S94): act within the next few sessions.** Read
+   `eaglehunt-ops/NAS-LEASE.md` (the spec, OPS-DEC-0107) before planning — **it already answers most
+   of what a session would otherwise re-derive, and it contradicts DEC-0099's framing.**
+   - **The "two strands" are one strand.** coffee-radar's disk-contention handshake IS NAS-LEASE:
+     their DEC-0181 Stage 2 (the handshake) landed *as* OPS-DEC-0107. Stage 1 (`--blkio-weight`
+     caps) is coffee-radar-unilateral and needs nothing from weewx. There is no second protocol to
+     wait for.
+   - **⚠ The v2.0.14 mount is NOT a gate on adoption — S94's earlier claim here was wrong.** §9 has
+     already decided weewx's client's *"natural home is host-side"* **precisely to avoid the
+     container recreate.** The HOLDER role (wrap the NAS image build, `docker build`, DEC-0078) runs
+     on the host; the OBSERVER half (read the lease, append to the log) is `weewx_monitor.py`, which
+     is already resident, polls 30 s, and sees the volume natively. **Neither needs any container
+     change.** Only the InfluxDB `post_interval` downshift — one optional yield lever — needs
+     `LEASE_DIR` inside the container, and that is the *only* thing the v2.0.14 mount buys.
+   - **§8 already designates weewx's ~08-23 v2.0.14 image build as the protocol's FIRST CROSS-TENANT
+     EXERCISE** ("a weewx-held lease coffee-radar and HLF can observe"), ranked #3 of 3. That is the
+     real deadline, and it is a holder-side job needing no mount.
+   - **★ Governance consequence nobody has flagged: §5's constants LOCK when the SECOND adopting DEC
+     lands.** HLF's DEC-0177 was the first. **weewx's would be the second — so weewx's adoption
+     freezes the protocol constants for every tenant.** Treat that as a deliberate act, not a side
+     effect; any amendment weewx wants must be raised on ops#169 *before* its own DEC lands.
+   - **Pre-flight, verified S94:** `LEASE_DIR` = `/volume1/docker/nas-lease/` **exists**, mode
+     `drwxrwxrwt` (1777, as specified) — the one-time owner step is DONE; `heavy-io.log` is live and
+     HLF is actively renewing (held ~8.7 h on 08-19, released `outcome: step-failures`). A weewx
+     client is Python `fcntl.flock()`, no binary needed (§9). **Still unverified:** that weewx's
+     runtime user can create/rename in `LEASE_DIR`, `O_CREAT|O_EXCL` atomicity on the btrfs mount,
+     and a cross-tenant-visible log append. **weewx has NO declared renewal floor** (§5 lists it
+     "none declared") — wrapping the build requires declaring one.
+   - **Red lines the spec already records for us:** SQLite archive commit is **never** deferred, and
+     `loop-data.txt` has a **hard 30 s ceiling** (the eh-proxy 503s past it and the dashboard treats
+     that as station-down). Any lease write is in-place (seek+write+truncate), **never**
+     `loop_json_writer.py`'s tmp+`os.replace` idiom — §3, and DEC-0051 is our local record of why.
 3. Continue #227's sequence: **#224 next** (tier:mid, same file as #223 — `dewpoint_service.py` — so
    it pairs naturally and DEC-0103's context is fresh). **#223 widened its surface:** #224 already
    flagged `MAX_WIND_DELTA = 75.0` as documented-mph and therefore miscalibrated under
    `target_unit=METRIC`, and S94 added `MAX_PLAUSIBLE_WIND_SPEED = 200.0` in the same units — fix
    both constants in the same pass as the `dewpointF`/`heatindexF` unit branch. #225/#226 are lower
    priority (confirmed dormant / cheap-tier) and can ride v2.0.15+.
-4. **v2.0.14 prep is DONE for code**, now also carrying #223's fix — **but job 2 adds a container
-   requirement to the cut itself (the `LEASE_DIR` mount), which is NOT yet staged.** That is the one
-   thing to decide before ~08-23, not after.
+4. **v2.0.14 prep is DONE for code**, now also carrying #223's fix. One optional addition to decide
+   before the cut (not a blocker on job 2, see there): whether to mount `LEASE_DIR` read-only into
+   the container while it is being recreated anyway. That mount buys **only** the InfluxDB
+   `post_interval` yield lever; skipping it costs that one lever until the next recreate, and costs
+   adoption nothing.
 5. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
    [ops#179]. Revisit once the square closes **and** the gated queue clears.
 6. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
