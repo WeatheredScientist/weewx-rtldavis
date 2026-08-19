@@ -6125,3 +6125,82 @@ independent passes each — a finder plus the Opus verification agent — agains
 hard-exclusion list (no DOS, no theoretical/non-concrete findings, no re-litigating a settled DEC).
 Recorded here rather than as their own DEC since nothing changed; the negative result lives in the
 S91 session record.
+
+---
+
+## DEC-0102 — The overnight probe measures DEC-0092's flagged confound directly (11.80x iowait), but a minute-level stall cross-check is mixed, not confirmatory
+
+**Date:** 2026-08-19 (S92) · **Status:** Accepted (measurement) · **extends** DEC-0092/DEC-0097's
+flagged confound with a direct measurement · **corrects** a control-bucketing bug in
+`ops/proc_probe.py` · **does NOT close** blocker 2 / DEC-0081 · **applies** DEC-0074's
+process-evidence rule
+
+### What was measured
+
+Job 6's NAS-side probe (DEC-0098) ran its full scheduled window, 2026-08-19 00:00–05:00 EDT, and
+exited cleanly on schedule — verified by process evidence, not computed: `/proc/28699` gone, its
+pidfile removed, and the script's own `done pid=28699` line timestamped 05:00:25 against a last
+sample at 04:59:49, both in the NAS's own local clock. That resolves DEC-0098's unrecorded-timezone
+gap as EDT, not UTC. Harvested read-only (`nasctl cat`, byte-exact against the NAS's own `ls`),
+ingested and analyzed with `ops/proc_probe.py`.
+
+### The tool bug this ingest exposed
+
+`--analyze`'s "evening window vs control" comparison bucketed control as *every hour not in 18–21*.
+Correct as long as only the evening window had ever been sampled. This session's ingest put
+00:00–04:00 data into the CSV for the first time — hours carrying massive iowait (03:00 alone:
+1169.8s, vs. 25–48s on a normal daytime hour) — and control's own average absorbed the spike it was
+supposed to be a clean baseline against. Printed result: evening ratio 0.43x, readable as a negative
+result. Recomputed against a control that excludes both named windows: the evening ratio is actually
+**1.82x**, not negative — modest but real, consistent with (not proof of) DEC-0094's original
+hypothesis. Fixed in `ops/proc_probe.py`: both windows (`evening` 18–21 DEC-0094, `overnight` 00–05
+DEC-0097/DEC-0092) are now named explicitly and excluded from each other's control, not just their
+own; a `D hits/sample` ratio was added alongside iowait/runq since it's part of what this DEC
+reports. 305/305 tests, ruff/mypy clean.
+
+### The overnight number
+
+Overnight (00:00–05:00) vs. that same clean control: **11.80x iowait ms/sample, 5.82x D-state-hit
+ratio, 1.52x runq-wait** — the strongest signal anywhere in the dataset, far exceeding the evening
+window's 1.82x. Hour 03:00 alone carries 60 D-state hits and 1169.8s of accumulated iowait against a
+normal daytime hour's 1–6 hits and 25–48s.
+
+### What this does and does not tell us
+
+This is the first hard kernel-level measurement of the confound DEC-0092 already named (a sibling
+tenant's recurring nightly maintenance, measured at S83 as 00:10→~03:00–05:10, median ~4h20m, over 6
+nights) and DEC-0097 already flagged as unresolved against the RF-dead cluster ("not discriminated
+against"). The overlap between this measured window and DEC-0092's already-documented span is close
+enough to read as the same phenomenon, not a new one — job 6 was built for exactly this (DEC-0097
+point 3: "a host starved on I/O could plausibly starve the driver's packet path into the 150s
+watchdog... read as RF-dead while the RF is fine").
+
+A second, separate event shares the same night: ops#169 (filed 2026-08-18) documents a coffee-radar
+Stage D `--full-refresh` sweep ("live... tonight") that independently drove this NAS to ~41%
+iowait, and already names weewx's own continuous InfluxDB writes as a suspected, unconfirmed
+contributor. Per coffee-radar's own `BACKLOG.md`, that specific trial was stopped early ("clean at
+4/230") and any relaunch is now explicitly held until Campaign B closes (2026-08-23T00:05), agreed at
+an S186 working-level exchange — so unlike DEC-0092's window, it is not a recurring confound for
+future nights. Its exact stop time isn't pinned down precisely enough here to confirm or rule out
+overlap with this specific probe window; DEC-0092's routine window, ops#169's one-off event, or both
+together all remain consistent with a single night's data.
+
+**Minute-level cross-check, done and mixed, not confirmatory.** Last night's 4 stall lines in
+`weewx.log` (02:55:32, 04:46:57, 05:08:24, 05:29:09) — 2 of 4 fall inside elevated-iowait hours
+(02:00, 04:00), but the single highest-iowait hour in the whole dataset (03:00, 1169.8s/60 D-hits)
+has zero stalls, and 2 of the 4 stalls fall after the probe's last sample (04:59:49), where no direct
+iowait data exists to check them against. This neither confirms nor refutes DEC-0097's
+I/O-starvation-trips-watchdog hypothesis on this single night's data.
+
+### Root cause stays open
+
+Blocker 2 is not closed. What changed: DEC-0092/0097's confound now has a real number (11.80x/5.82x)
+instead of a qualitative flag, and the I/O-starvation mechanism DEC-0097 proposed is plausible and
+un-refuted but not confirmed at minute resolution. A single clean re-run would not settle it either —
+DEC-0092's window recurs every night, so isolating it needs multi-night minute-level stall-vs-iowait
+correlation, not a one-off retry. Recorded here for the next session picking up blocker 2.
+
+### Cross-repo
+
+ops#169 comment posted with this measurement and a pointer to this DEC — informational, no action
+requested from coffee-radar or ops; the existing hold already covers the only lever on their side.
