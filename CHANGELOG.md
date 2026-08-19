@@ -5,6 +5,52 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S94] — 2026-08-19 — Wind-filter redesign shipped (#223, DEC-0103); #227's sequence now 5 of 8
+
+- **#223 (`dewpoint_service.py` wind-plausibility filter, frontier) fixed, tested, PR #241.** Its
+  four defects were one design gap, exactly as the issue argued: `_filter_wind` never adopted the
+  resync-on-reject and co-null behavior `rtldavis.py`'s `SensorQC` already established in this repo.
+  **The fix is one distinction, applied consistently** (DEC-0103): a **bounds** reject — an
+  impossible reading, or a gust below its own speed — is positive proof of corruption, so the
+  baseline is left untouched; a **delta** reject may be a genuine gust front, so the baseline
+  **always resyncs, even when rejecting**. (1) That resync closes the deadlock: previously a
+  rejected step froze `last_wind_speed` permanently and every later reading was nulled against a
+  baseline the weather had left behind, until the weewx process restarted — a 300 s TTL
+  (= `QC_RESEED_SECONDS`) adds a second, independent escape. (2) `windDir` is now co-nulled in every
+  reject branch; a bare heading with no speed previously reached loop-JSON, InfluxDB and every
+  uploader, and this matches the driver's own two precedents while staying narrower than DEC-0054's
+  frame-level co-rejection, which delta correctly still never triggers. (3) Cold-start warmup samples
+  are bounds-checked before they can seed a wrong baseline and trigger (1). (4) `windGust` is
+  bounds-checked independently of `windSpeed`'s presence — unreachable with today's driver, included
+  because the driver-agnostic goal is the same one that decided (below) not to import from the driver.
+  10 new tests (`tests/test_dewpoint_wind_filter_223.py`). 339/339 full suite (329 baseline + 10 new),
+  ruff/mypy clean (57 files), secret scan positive-controlled clean.
+- **The port-vs-import call, decided and recorded (DEC-0103).** Importing `SensorQC` from
+  `rtldavis.py` is the cheaper move and was rejected: `dewpoint_service.py` has zero driver imports
+  today, and `docs/INTERFACES.md` commits it to being re-pointable at non-Davis WeeWX. Coupling a
+  driver-agnostic LOOP-packet service to a vendored fork carrying USB and subprocess concerns, to
+  reuse ~20 lines of pure logic for a single field, costs more than the duplication. Recorded
+  because the reasoning is invisible from the code — a later reader should know the second filter is
+  a considered port, not drift.
+- **The first pre-fix proof was worthless and looked convincing.** All 10 new tests "failed" against
+  the stashed pre-fix file — every one with `TypeError: unexpected keyword argument 'now'`, i.e. the
+  signature change, not the defects. Re-run through a shim giving the old `_filter_wind` the new
+  signature so only behavior was under test: **6 of 8 behavioral checks fail pre-fix with the exact
+  predicted symptom, 0 after**, and the 2 convention locks pass on both sides by design. The
+  generalizable form of DEC-0045's rule, from the other side: *a failing test is no more evidence
+  than a passing one if it fails for the wrong reason.*
+- **`dewpoint_service.py` confirmed BAKED, not mounted** — established with `nasctl inspect` and
+  positive-controlled against a known-mounted file, not assumed from its sibling `pressure_service.py`.
+  `CONSTANTS.md`'s deploy-layer table did not list the file at all (the same omission S85 found for
+  `loop_json_writer.py`, which would let a change "ship" with an image cut and silently do nothing —
+  DEC-0046's exact failure); it gains the row. **Nothing deployed this session**: the fix ships on an
+  image rebuild, gated behind v2.0.14.
+- Daily square watch, checked at start: **arm C**, 16 pass / 2 expected-WARN, reception 71%/62%, no
+  STOP/PAUSE/lock. Untouched by this session's work.
+- ROADMAP checked: DEC-0103 ships/closes no P0–P3 line (#227's remediation is tracked on the issue
+  tracker, not ROADMAP) — nothing to reconcile, tripwire unchanged, still due by S96.
+
+---
 ## [S93] — 2026-08-19 — Channel-gating fixed (#222), #227's sequence now 4 of 8 shipped; #223 scoped
 
 - **#227's sequenced plan: #222 (channel-gating consistency, mid) fixed, tested, merged.** Three
@@ -91,71 +137,5 @@ under [Pre-S16].
   twice this session (start and close), healthy both times, untouched throughout.
 
 ---
-## [S91] — 2026-08-19 — Full code audit (BOOT job 7): security fixes shipped (DEC-0101), 26 correctness findings filed as a sequenced plan (#219–227)
-
-- **The owner's planned focus for the session, decided at S90 close.** Two independent halves, run
-  as separate multi-agent passes rather than one combined effort.
-- **Security pass**: 4 DEC-primed finder agents (one per file: `rtldavis.py`,
-  `pressure_service.py`/`dewpoint_service.py`, `weewx_monitor.py`, `ops/rx_experiment.sh`) + an
-  Opus-tier adversarial verification pass over everything they surfaced. **DEC-0101**: SMTP
-  connections skipped TLS certificate verification at both alert-mail call sites
-  (`weewx_monitor.py`'s continuously-running production monitor, `ops/rx_experiment.sh`'s campaign
-  abort-notification path) — `smtplib`'s default with no `context=` is unverified, exposing
-  `GMAIL_PASS` to an on-path attacker; `influx.py` already does this correctly elsewhere in the
-  repo, this was a regression against an established in-house pattern, not a novel ask. Second
-  finding: the WeatherLink API key could leak into `weewx.log` via exception text on any connection
-  failure (reproduced empirically) — a new gap, not a DEC-0062 regression, since the credential
-  only exists at runtime inside the exception's `__str__()`, invisible to DEC-0062's AST-based
-  regression test. Both fixed, both guarded by new/extended tests with positive controls. **PR
-  #229, merged.**
-- **Bundled into the same PR**: a `docs/DECISIONS.md` structural fix — DEC-0093 through DEC-0101
-  had been sitting under `## Open / deferred` despite every one being `Accepted` (found by the
-  ultrareview cloud pass, which also caught the S91 session's own DEC-0101 addition landing in the
-  same wrong spot). Fixed via a scripted, assertion-guarded reorder rather than a hand-retyped edit
-  — the block was too large to safely retype by hand.
-- **Also merged this session, unrelated to security but surfaced by the same ultrareview pass**: a
-  pre-3.12 Python `SyntaxError` in `ops/proc_probe.py` (a conditional inside an f-string's `{}`
-  spanning two lines needs PEP 701) — would have broken every entrypoint of the tool BOOT job 2
-  depends on, on any pre-3.12 interpreter. All locally-available interpreters here are 3.12+, so
-  this session's own probe harvest was never at risk, but it's a real bug in a public repo. **PR
-  #228, merged.**
-- **Correctness pass**: 10 independent finder angles (5 correctness + 3 cleanup + altitude +
-  conventions, per the local `/code-review` skill's own methodology, adapted for a path-target
-  full-file audit rather than a diff) against `rtldavis.py` + `dewpoint_service.py`, followed by
-  Opus-tier adversarial verification of all 21 surviving candidates (batched by theme into 4
-  verification passes) and a sweep pass that found 6 more. **26 distinct findings survived** (20
-  confirmed, 6 plausible); 2 further candidates were independently **REFUTED** — a suspected
-  packet-duplicate-detector aliasing bug turned out inert, because the Go binary already dedups
-  byte-identical frames upstream and every packet carries monotonic counters that make the
-  equality-based dedup check always-true regardless. **Filed as GitHub issues, not fixed this
-  session** — the volume made same-session fixes impractical, and several (the ProcManager
-  subprocess-lifecycle bugs, the dewpoint wind-filter redesign) are explicitly judgment-tier design
-  work better done as their own deliberate sessions. Grouped into 8 issues (#219–226) by shared root
-  cause rather than filed 1:1; sequenced with model tiers and deploy gating in tracking issue
-  **#227**, the map for the next several sessions of this work.
-- **Standout findings** (full detail in #219–226, not re-narrated here): an uncaught exception on
-  CRC mismatch that can crash the whole weewxd daemon (found independently by 5 of the 5
-  correctness-angle finders); `ProcManager.shutdown()`'s zombie-reap skip on an unguarded
-  `pidof` call (also 5x-corroborated — the repo's own existing test monkeypatches around it with a
-  comment admitting the gap); a regex bug that silently drops an entire transmitter's data whenever
-  its battery goes low, leaving 5 status fields permanently dead; the shipped config-generator
-  template shipping a literal unreplaced `[options]` token that would break any new user's first
-  install; and wind data leaking in from the wrong sensor channel on any station with a separate
-  Anemometer Transport Kit.
-- **Cross-repo heads-up posted**: eaglehunt-ops#180 (informational — the audit methodology may be
-  worth reusing on HLF/dashboard, not a request, no reply expected).
-- **Deploy gate, applies to all of #219–226**: `rtldavis.py` (and likely `dewpoint_service.py`) are
-  baked into the Docker image, so none of it can deploy before Campaign B closes (~08-23) — design
-  and merge to `dev` freely, hold the image cut for v2.0.14 (or v2.0.15+ for the two lowest-priority
-  issues).
-- Green gate at close, on merged `dev`: ruff clean, **305 passed**, mypy clean/52 files.
-- Campaign B checked twice (session start and close), both times healthy and completely off this
-  session's critical path — block 16→17 of 32, a scheduled 00:05 swap into arm A landed clean
-  between the two checks. No code from this session touches the running station.
-- ROADMAP checked: nothing here ships/closes/reprioritizes an existing P0–P3 line (the audit's
-  findings are new work, not a resolution of a tracked item) — nothing to reconcile, tripwire still
-  S96.
-
 ---
----
-*(S73–S90 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S91 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
