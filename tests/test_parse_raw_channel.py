@@ -69,7 +69,7 @@ class _FakeDriver:
     All sensor channels but the ISS are 0 (not present), so a packet on any
     other channel falls through to the unknown-station else branch (H1)."""
     channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0}
+                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
 
 
 def _pkt_on_channel(chan):
