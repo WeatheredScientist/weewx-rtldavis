@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S89 → S90)
+## ▶ Resume here (S90 → S91)
 
 ### ⏰ FIRST THING NEXT SESSION: harvest the probe before anything else
 
@@ -23,9 +23,9 @@ the daily watch, because nothing else in the session is time-sensitive and this 
 ### What's settled (do not re-derive)
 
 **Campaign B: v2.0.13/ws.5 in prod, `prod-baseline-20260811` tagged.** Square runs
-**08-15 → 08-23T00:05** — **~4.5 days left as of S89 close (08-18 midday)**, block 15 of 32
-starting (the 12:05|B swap was due at close), every swap on time, none deferred. Live state in the
-table below.
+**08-15 → 08-23T00:05** — **~4.25 days left as of S90 close (08-18 evening)**, block 16 of 32 in
+progress (arm C since 18:05:02, confirmed directly via `rx_experiment.state` + log, not soak
+inference), 15 complete, every swap on time, none deferred. Live state in the table below.
 
 **The v2.0.14 queue (post-campaign, ~08-23) is fully staged on `dev`, and the window has a
 MANDATORY OPENING MOVE:**
@@ -63,23 +63,26 @@ ceiling escalation, the swap-deferral path, rotated-log reads across a `.1` boun
 Raised with the owner at S89 close and deliberately left in place; delete it only on an explicit
 say-so, since it is a STOP-named file sitting beside a live campaign.)*
 
-**The nightly-heavy-window confound (ops#169, DEC-0092) is absorbed by design** — each arm takes
-the midnight slot exactly twice. Nothing owed by weewx on that thread; its queue items are line 4
-above.
+**Both live cross-repo threads answered S90 — nothing owed by weewx on either.** ops#169/NAS-LEASE:
+OPS-DEC-0107 landed + HLF adopted (their DEC-0177) while this file sat stale on it; weewx's own
+adoption is **deferred, not declined** (DEC-0099) — plan is queue item 5 above. ops#175: the
+InfluxDB rollup question is answered (DEC-0100) — dashboard's to build, as a Task, weewx declined
+with reasons. Both replies posted; PR #215 merged. The nightly-heavy-window confound (DEC-0092) is
+still absorbed by design underneath this — each arm takes the midnight slot exactly twice.
 
 **Hardware history is documented (CONSTANTS.md, S86): LNA in ~01Jun→02Aug, out since.** The
 elevated stall rate's onset (08-10 23:56) is 8 days after removal, not coincident — attribution
 stays open (DEC-0083), post-campaign characterization question.
 
-### ▶▶ S90 JOB LIST
+### ▶▶ S91 JOB LIST
 
 **Job 2 is the session's real work and is judgment-tier — flag the model call when starting it.
 Everything else is watch- or execution-tier.**
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP absent, state matches schedule.
-   **Verified good through block 14 (08-18 ~10:00 EDT)** — soak 16 pass / 2 expected-WARN (chatty
-   stdout + ineffective USB hedge are both expected). `remote probe took Ns` ≥20 s is a NAS-load
-   signal, not noise.
+   **Verified good through block 16 (08-18 evening)** — soak 16 pass / 2 expected-WARN (chatty
+   stdout + ineffective USB hedge are both expected), reception 75%/71%, arm C confirmed live via
+   direct state read. `remote probe took Ns` ≥20 s is a NAS-load signal, not noise.
 2. ⚠️ **HARVEST + INTERPRET the mechanism probe — the open judgment item (DEC-0098).**
    `proc_probe_nas.sh` pid **28699**, started 08-18 10:49, **ended/ends 08-19 05:00** →
    `/volume1/docker/weewx-rtldavis/logs/proc_probe_nas.log` (~400 KB by S89 close, growing).
@@ -97,10 +100,12 @@ Everything else is watch- or execution-tier.**
    `logs/proc_probe_nas.{log,err}`. Class C, so it needs the in-chat path.
 3. Resume machinery — keep counting cycles; watch for the three untested paths above.
 4. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
-   square's close (~08-23), both sides already agreed. **S89 grew it further; the diet is overdue,
-   not optional** — this job list and the gotchas section are the obvious candidates.
-5. **v2.0.14 prep is DONE** — everything staged on dev; nothing to decide before ~08-23. The
-   window opens with the DEC-0096 emptying PR (queue item 0 above).
+   square's close (~08-23), both sides already agreed. **S90 both added (queue item 5, cross-repo
+   resolution) and trimmed (compressed the old NAS-LEASE paragraph, shortened the retention row) —
+   net effect not measured, the diet itself is still owed and still deferred on purpose.**
+5. **v2.0.14 prep is DONE** — everything staged on dev, now including DEC-0099's NAS-LEASE plan
+   (queue item 5); nothing to decide before ~08-23. The window opens with the DEC-0096 emptying PR
+   (queue item 0 above).
 6. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
    [ops#179]. Owner's framing: revisit once the square closes **and** the gated queue clears. Do
    not start it mid-square (protocol change breaks comparability, DEC-0064).
@@ -111,21 +116,21 @@ Everything else is watch- or execution-tier.**
 [ops#175]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/175
 [weewx#204]: https://github.com/WeatheredScientist/weewx-rtldavis/issues/204
 
-### Current state (S88 close)
+### Current state (S90 close)
 
 | Thing | State |
 |---|---|
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` + `weewx_monitor.py` unchanged since S82/S82b, sha+process verified |
-| Campaign B | **Live and on schedule — block 14 of 32 in progress (arm A since 08-18T06:05:02), 13 complete, every swap on time, none deferred.** 08-18: `B→D` 00:05:02 · `D→A` 06:05:02 (both healthy). Next swap `08-18T12:05|B`. Square through `08-23T00:05` (~4.7 d left as of 08-18 ~08:00 EDT). STOP/lock absent; PAUSEs are RF-dead episodes behaving as DEC-0087 designed, not a reception dip (DEC-0097). Verified 08-18 ~10:00 EDT, soak 16 pass / 2 expected-WARN |
-| Swap settle time | n=9: 82/139/198/137/197/79/136/196/144 s — **not a trend, do not re-flag**. Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
-| Retention | **SETTLED (DEC-0095)** — accept-and-monitor, no prune; tripwire executes in `soak_check.sh`, reopen at 10% of MemTotal (~2.6 yr out). InfluxDB horizon is the **dashboard's** call |
-| `dev` beyond prod | **Everything for v2.0.14 — two deploy layers, don't conflate.** Baked (ride the image cut): weewx 5.5.0 pin, #183 pressure package, DEC-0096 stand-down support. Mounted (needs the project-root file copy): `loop_json_writer.py` incl. `current_interval`. Plus S84–S88 docs |
+| Campaign B | **Live and on schedule — block 16 of 32 in progress (arm C since 08-18T18:05:02), 15 complete, every swap on time, none deferred.** Settle 84 s, healthy. Square through `08-23T00:05` (~4.25 d left). STOP/lock absent (confirmed via `rx_experiment.state` + log tail through 19:35, not soak inference); PAUSEs are RF-dead episodes behaving as DEC-0087 designed, not a reception dip (DEC-0097). Soak (run earlier S90): 16 pass / 2 expected-WARN, reception 75%/71% |
+| Swap settle time | n=10: 82/139/198/137/197/79/136/196/144/84 s — **not a trend, do not re-flag**. Budget ~383 s, wide margin — but an unhealthy swap is `trip_abort()`, a sticky STOP DEC-0087 does **not** soften |
+| Retention | **BOTH halves SETTLED.** SQLite (DEC-0095): accept-and-monitor, no prune; tripwire in `soak_check.sh`, reopen at 10% of MemTotal (~2.6 yr out). InfluxDB (DEC-0100, S90): weewx declines to build the rollup dashboard's all-time queries need, recommends dashboard build it as an InfluxDB 2.x Task — posted to ops#175 |
+| `dev` beyond prod | **Everything for v2.0.14 — two deploy layers, don't conflate.** Baked (ride the image cut): weewx 5.5.0 pin, #183 pressure package, DEC-0096 stand-down support. Mounted (needs the project-root file copy): `loop_json_writer.py` incl. `current_interval`. Plus DEC-0099's `LEASE_DIR` mount + image-build holder wrapper (queue item 5). Plus S84–S90 docs |
 | Freeze rate | DEC-0088-corrected (1.31/day), untouched. Hour-of-day split done (DEC-0094): nightly refuted, evening 18:00–21:00 carries the signal — job 6 is its mechanism probe |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md`, hardware timeline alongside |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | **Steady state: exactly `dev` + `main`.** PR #208 (5.5.0 bump) + PR #209 (DEC-0096) merged 08-18, branches deleted. Dependabot #158 **closed with a pointer** — its red `tests` check was an artifact of its only CI run predating the S73 test correction on `main`, not a 5.5.0 problem |
+| Branches | **Steady state: exactly `dev` + `main`.** PR #215 (DEC-0099 + DEC-0100) merged 08-18 (S90), branch deleted both sides |
 | Trackers | #158 closed (superseded by #208, commented) · #172/#144 open until v2.0.14 (code done, deploy pending) · **#204 open as the current.json-cadence deploy home** (body is a broken literal file path — `--body @path` misfire, cosmetic) · ops#163/#176 closed |
-| Cross-repo (S90) | **Two threads resolved, both replies drafted not yet posted.** ops#169/NAS-LEASE: OPS-DEC-0107 landed + HLF adopted while BOOT sat stale on it — weewx's own adoption deferred to v2.0.14, concrete plan in queue item 5 (DEC-0099). ops#175: InfluxDB rollup strawman answered — dashboard's to build, weewx declines with reasons (DEC-0100). ops#173/#179/#110 unchanged from S89 |
+| Cross-repo (S90) | **Two threads resolved and closed out — replies posted, PR merged.** ops#169/NAS-LEASE: weewx's adoption deferred to v2.0.14, concrete plan in queue item 5 (DEC-0099), left open against weewx until the window lands the client. ops#175: InfluxDB rollup answered — dashboard's to build (DEC-0100), left open pending their side. ops#173/#179/#110 unchanged from S89 |
 
 ## Blockers
 
@@ -205,20 +210,23 @@ Everything else is watch- or execution-tier.**
   `soak_check.sh`'s stdout count is history, not a live crash loop; confirm with `inspect`'s
   unchanged `StartedAt`/`Pid` before alarming (S88).
 
-_Last updated: 2026-08-18 (S89 close — Opus). Landed **PR #211** (DEC-0097 + DEC-0098) and
-**PR #212** (BACKLOG), both merged, branches deleted, steady state restored. **DEC-0097 closed the
-reception-dip watch**: never a reception measurement but RF-dead episodes truncating records, and
-BOOT's own 08-18 row was wrong (02:55/5 cycles, not 03:30/2), retiring the "drifting later"
-premise. What survives is a timing signature for blocker 2 — episodes cluster 00:00–04:00
-(P=0.00009 on stall-bearing rows), **zero** in the evening freeze window, so the two blockers keep
-different clocks. **DEC-0098 moved the mechanism probe onto the NAS** after the laptop-side design
-proved infeasible (12+ h awake, and DEC-0097's overnight window unreachable that way); it runs
-unattended to 08-19 05:00 — **job 2 next session is harvesting it.** Gain hot-swap filed
-(BACKLOG + ops#179), deliberately not started. Green gate at close: ruff clean, **299 passed**,
-mypy clean/51 files. ROADMAP: targeted DEC-0057 update to the freeze P0 item; full pass still
-S96. **Model note (closeout step 6): S89 ran on Opus for the judgment work; the switch was
-SESSION-ONLY and NOTHING NEEDS RESTORING** — verified at close across all four scopes,
-`~/.claude/settings.json` = `sonnet`, no `model` key in `~/.claude/settings.local.json` (absent),
-`.claude/settings.json`, or `.claude/settings.local.json`. *Earlier in the session this was
-asserted the other way, from OPS-DEC-0010's rule rather than from a check — in THIS client a
-`/model <m>` did not touch the floor. Verify the scopes before claiming a restore is owed.*_
+_Last updated: 2026-08-18 (S90 close — Sonnet). **Off-cycle start, by design** — no date-gate
+reached (probe harvest waits on 08-19 05:00; the daily watch is cheap and unblocking), so the
+session swept ops + dashboard + HLF for cross-repo messages instead, run further than usual because
+the sweep surfaced two live threads BOOT had gone stale on. **DEC-0099**: OPS-DEC-0107 (NAS-LEASE)
+landed 2026-08-15 and HLF adopted (DEC-0177, live since 08-16) with this file never updated — weewx's
+own adoption deferred (not declined) to the v2.0.14 window, concrete bundled plan now queue item 5.
+**DEC-0100**: ops#175's mutual wait on the InfluxDB retention rollup broke on an ops strawman —
+weewx declined to build it, recommended dashboard build it as a native Task. Landed as **PR #215**,
+merged, branch deleted both sides, steady state restored. Both replies posted (ops#169, ops#175),
+both left open against the other side. **Free correlation, no adoption needed:** read HLF's live
+`heavy-io.log` this session — one real lease-held window exists (n=1, logged as a lead in BACKLOG's
+standing watches, explicitly not revising DEC-0094's P=0.29 or the RF-stall P=0.32). Green gate
+re-verified at close: ruff clean, **299 passed**, mypy clean/51 files. **Campaign B: this session's
+only contact was a soak check plus a direct state/log read at close** (block 16 of 32, arm C,
+healthy) — the originally-planned S90 job list (probe harvest, closer tracking) never ran and
+carries to S91 unchanged. ROADMAP checked: neither DEC touches a P0–P3 line (both live in BACKLOG),
+nothing to reconcile; tripwire still S96. **Model note (closeout step 6): no `/model` switch
+happened this session — ran on Sonnet throughout.** Judgment work was flagged early (the two
+cross-repo design decisions) and escalation was recommended in-chat, but the owner didn't switch;
+nothing to restore._

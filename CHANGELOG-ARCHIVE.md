@@ -7,6 +7,51 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S87] — 2026-08-17 — The soak was lying about a healthy station; retention settled as accept-and-monitor (DEC-0095)
+
+- **`ops/soak_check.sh` measured every age against a clock captured before its own remote body —
+  PR #206.** `now` was taken at the top of the ssh block, then ages were computed against it at the
+  bottom, after `docker logs`, a full `weewx.log` window read and a `docker exec` sqlite loop. Every
+  age was understated by exactly the block's runtime. That runtime was ~2 s historically (every
+  recorded value 1–29 s, all inside the monitor's 30 s poll) and 15–100 s under load by 08-17, so
+  the monitor's log mtime always landed *after* `now`, the age went negative, and the `-ge 0` guard
+  reported a perfectly healthy watchdog as **`MONITOR LOG STALE … wedged`** — for ten days, on every
+  run. The watchdog was in fact polling on the dot: 19:10:17 → :47 → 19:11:18 → :48 → 19:12:18, no
+  gaps. **The quieter half mattered more:** the same stale clock fed `record_age_s`, the DEC-0036
+  freeze detector, whose 180 s threshold silently became 180+runtime (measured 195–280 s) — least
+  sensitive exactly when the box is loaded, which is when freezes happen (DEC-0088: median 240 s).
+  Both ages now read the clock at the point of measurement, the runtime is reported rather than
+  hidden, and the monitor verdict splits into its four real outcomes (dead / no log / clock skew /
+  wedged). Also retires the reception check's hardcoded 80% floor, which read **one** 60 s window of
+  21 packets — sd ~9.7 pts at this station's measured 73.3% baseline (DEC-0059) — and so warned on
+  most healthy runs, 20 pts tighter than the monitor's own `WU_RF_MIN_PCT=60`; the soak now reports
+  the monitor's five-window average and its `[OK]/[LOW]` verdict instead of keeping a second
+  threshold beside it. New `tests/test_soak_check.py` drives the real script with `ssh` stubbed;
+  every "no longer cries wolf" assertion is paired with a positive control that the check still
+  fires, verified by running the suite against the pre-fix script (7 fail, all three teeth-controls
+  pass).
+- **DEC-0095 — retention is accept-and-monitor, not archive-then-prune, and the monitor executes.**
+  Answers the weewx half of ops#175. Measured read-only 08-17: archive **33.61 MB = 0.89% of
+  MemTotal 3.69 GiB**, 5.1 TB free disk, **1,392 rows/day at 275 B = 0.37 MB/day, ~7.3 yr to 1 GB**,
+  InfluxDB engine 14 MB; `dbstat` puts 32.94 of 33.61 MB in the single `archive` table. HLF's
+  DEC-0156/0174 **method** transfers and its **conclusion** does not — DEC-0174 justified retention
+  on the working set at ~8.0 M hot rows against *this same 3.69 GiB box*, and we have 66× fewer
+  rows. Three further grounds: the `archive` table is the deliverable rather than a regenerable
+  diagnostic (a passively intercepted station cannot backfill); upstream already bounds long reads
+  by aggregation (114 `archive_day_*` tables, ~0.1 MB); and the one cost this DB's history documents
+  is CoW fragmentation, for which retention is the wrong lever (`chattr +C` queued, DEC-0092,
+  confirmed unapplied). Because accept-and-monitor is worthless as prose (DEC-0040), the reversal
+  condition ships as code: the soak reports the archive against **10% of MemTotal** (~386 MB, ~2.6 yr
+  out) and crossing it reopens the DEC. The **InfluxDB half is deliberately left open against the
+  dashboard** (DEC-0010) — weewx proposes no horizon for a shared bucket.
+- **Campaign B watch: block 12 of 32**, `A→B` swap on time at 18:05:02, settle 136 s (n=7, still not
+  a trend). STOP/lock absent, arm `B` live, square through `08-23T00:05`.
+- **Recorded as a lead, not a finding:** at 19:16 EDT — inside DEC-0094's significant 18:00–21:00
+  band — NAS loadavg was **9.05/11.39/8.75** on 4 cores, driven by ~220% CPU of `chrome-headless`
+  (coffee-radar) plus ~14 MB/s sustained writes on `md2`. No process was in `D` state and weewxd's
+  threads were all `S`, so tenant load is established but *blocking* is not — which is precisely
+  blocker 1's open question. One instant is not a probe; sampling across a window is the next step.
+
 ## [S86] — 2026-08-17 — Watch-checkpoint discipline, LNA hardware history documented, scheduled ROADMAP reconciliation
 
 - **Three daily-watch checkpoints through campaign B block 11, plus a dated hardware timeline in
