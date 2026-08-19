@@ -901,7 +901,15 @@ class Packet:
 
 
 class DATAPacket(Packet):
-    IDENTIFIER = re.compile(r"^\d\d:\d\d:\d\d.[\d]{6} [0-9A-F][0-7][0-9A-F]{14}")
+    # The 2nd hex digit used to be restricted to [0-7] -- that's the low
+    # nibble of payload byte 0, whose bit 3 is the battery-low flag
+    # (parse_raw's battery_low = (pkt[0] >> 3) & 0x1). Any transmitter
+    # reporting low battery flipped that nibble into 8-F and failed this
+    # dispatch gate, silently dropping the entire frame -- not just battery
+    # status, but wind/temp/humidity/rain too (issue #220). PATTERN below
+    # never had this restriction, so decoding was never actually at risk;
+    # only dispatch was gated on it.
+    IDENTIFIER = re.compile(r"^\d\d:\d\d:\d\d.[\d]{6} [0-9A-F]{16}")
     PATTERN = re.compile(r'([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2}) ([\d]+) ([\d]+) ([\d]+) ([\d]+)')
 
     @staticmethod
