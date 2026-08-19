@@ -476,19 +476,23 @@ def calculate_thermistor_temp(temp_raw):
     # Convert temp_raw to a resistance (R) in kiloOhms
     a = 18.81099
     b = 0.0009988027
-    r = a / (1.0 / temp_raw - b) / 1000 # k ohms
 
     # Steinhart-Hart parameters
     s1 = 0.002783573
     s2 = 0.0002509406
     try:
+        # temp_raw=0 (a real, in-range decode of a shorted/absent sensor,
+        # not one of the driver's own sentinel values) divides by zero here
+        # -- moved inside the try, alongside math.log()'s ValueError, so
+        # both degrade the same way instead of one of them crashing the
+        # driver (issue #221).
+        r = a / (1.0 / temp_raw - b) / 1000 # k ohms
         thermistor_temp = 1 / (s1 + s2 * math.log(r)) - 273
         dbg_parse(3, 'r (k ohm) %s temp_raw %s thermistor_temp %s' %
                   (r, temp_raw, thermistor_temp))
         return thermistor_temp
-    except ValueError as e:
-        logerr('thermistor_temp failed for temp_raw %s r (k ohm) %s'
-               'error: %s' % (temp_raw, r, e))
+    except (ValueError, ZeroDivisionError) as e:
+        logerr('thermistor_temp failed for temp_raw %s: %s' % (temp_raw, e))
     return DEFAULT_SOIL_TEMP
 
 
@@ -695,7 +699,11 @@ class AsyncReader(threading.Thread):
     def run(self):
         logdbg("start async reader for %s" % self.getName())
         self._running = True
-        for line in iter(self._fd.readline, ''):
+        # fd is opened in binary mode (Popen without text=True), so EOF is
+        # b'', never the str '' this compared against -- readline() returns
+        # b'' forever without blocking once the child exits, so the loop
+        # busy-spun instead of stopping (issue #219).
+        for line in iter(self._fd.readline, b''):
             self._queue.put(line)
             if not self._running:
                 break
@@ -783,8 +791,17 @@ class ProcManager():
         loginf('shutdown process %s' % self._cmd)
         self.stderr_reader.stop_running()
         self.stdout_reader.stop_running()
-        # kill existiing rtldavis processes
-        pid_list = self.get_pid("rtldavis")
+        # kill existiing rtldavis processes. Guarded like startup()'s
+        # identical call (issue #219): the common path here is the child
+        # already exited on its own (a stall/reset triggered this shutdown),
+        # so pidof finds nothing and raises -- unguarded, that used to abort
+        # shutdown() before the wait()+reap below ever ran, silently
+        # skipping the S73/DEC-0081 zombie-reap fix for the case it is
+        # actually most needed.
+        try:
+            pid_list = self.get_pid("rtldavis")
+        except Exception:
+            pid_list = []
         for pid in pid_list:
             os.kill(int(pid), signal.SIGKILL)
             loginf("rtldavis with pid %s killed" % pid)
@@ -801,6 +818,15 @@ class ProcManager():
         return self._process.poll() is None
 
     def get_stdout(self):
+        # Only called from the standalone --action show-packets CLI, never
+        # from genLoopPackets -- the bundled Go binary sends everything to
+        # stderr, so stdout_queue stays empty in the live driver path. That
+        # premise is external and unpinned (Dockerfile fetches Go source
+        # from refs/heads/main, nothing vendored here): if it's ever
+        # violated, this queue would grow unbounded for the life of a
+        # long-running child, same shape as issue #219's AsyncReader finding
+        # but from a live process feeding real data, not a dead one
+        # busy-spinning -- AsyncReader's EOF fix does not cover this case.
         lines = []
         while not self.stdout_queue.empty():
             lines.append(self.stdout_queue.get().decode('utf-8'))
@@ -813,9 +839,18 @@ class ProcManager():
         # Therefor a maximum run-time of get_stderr of 10 seconds
         # is invoked to let genLoopPackets process the yielded lines.
         start_time = int(time.time())
-        while self.running() and int(time.time()) - start_time < 10:
+        while self.running():
+            # Budget the blocking get() to what's left of the 10s cap, not a
+            # fresh 10s every call (issue #219): the while guard above was
+            # checked before this call, so a quick line arriving near the
+            # 10s boundary let the old hardcoded get(True, 10) block a full
+            # second 10s, doubling the cap genLoopPackets' 150s stall
+            # watchdog and 300s drought log rely on for their own cadence.
+            remaining = 10 - (int(time.time()) - start_time)
+            if remaining <= 0:
+                break
             try:
-                line = self.stderr_queue.get(True, 10).decode('utf-8')
+                line = self.stderr_queue.get(True, remaining).decode('utf-8')
                 lines.append(line)
                 yield lines
                 lines = []
@@ -870,7 +905,15 @@ class Packet:
 
 
 class DATAPacket(Packet):
-    IDENTIFIER = re.compile(r"^\d\d:\d\d:\d\d.[\d]{6} [0-9A-F][0-7][0-9A-F]{14}")
+    # The 2nd hex digit used to be restricted to [0-7] -- that's the low
+    # nibble of payload byte 0, whose bit 3 is the battery-low flag
+    # (parse_raw's battery_low = (pkt[0] >> 3) & 0x1). Any transmitter
+    # reporting low battery flipped that nibble into 8-F and failed this
+    # dispatch gate, silently dropping the entire frame -- not just battery
+    # status, but wind/temp/humidity/rain too (issue #220). PATTERN below
+    # never had this restriction, so decoding was never actually at risk;
+    # only dispatch was gated on it.
+    IDENTIFIER = re.compile(r"^\d\d:\d\d:\d\d.[\d]{6} [0-9A-F]{16}")
     PATTERN = re.compile(r'([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2}) ([\d]+) ([\d]+) ([\d]+) ([\d]+)')
 
     @staticmethod
@@ -882,7 +925,19 @@ class DATAPacket(Packet):
             raw_msg = [0] * 8
             for i in range(0, 8):
                 raw_msg[i] = chr(int(m.group(i + 1), 16))
-            PacketFactory._check_crc(raw_msg)
+            try:
+                PacketFactory._check_crc(raw_msg)
+            except ValueError as e:
+                # A CRC mismatch is a corrupted/malformed frame, not a
+                # program bug -- log and skip it like the "unrecognized
+                # data" case below, instead of letting it propagate
+                # uncaught out of genLoopPackets and take the whole daemon
+                # down (issue #221). The shipped Go binary already
+                # checksums before emitting, so this is unreachable via the
+                # real driver today; guarded anyway for defense-in-depth.
+                dbg_rtld(1, "DATAPacket: CRC check failed: %s" % e)
+                lines.pop(0)
+                return None
             for i in range(0, 8):
                 raw_msg[i] = m.group(i + 1)
             raw_pkt = bytearray([int(i, base=16) for i in raw_msg])
@@ -1205,7 +1260,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
     def ch_to_xmit(self, iss_channel, anemometer_channel, leaf_soil_channel,
                    temp_hum_1_channel, temp_hum_2_channel):
         transmitters = 0
-        transmitters += 1 << (iss_channel - 1)
+        # Unlike the other 4 channels below, this one had no `!= 0` guard,
+        # even though 0="not present" is documented as valid for iss_channel
+        # too -- 1 << -1 raises ValueError and crashes startup (issue #221).
+        if iss_channel != 0:
+            transmitters += 1 << (iss_channel - 1)
         if anemometer_channel != 0:
             transmitters += 1 << (anemometer_channel - 1)
         if leaf_soil_channel != 0:
@@ -1675,6 +1734,14 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # no rain
                         rain_rate = 0
                         dbg_parse(3, "no_rain=%s mm/h" % rain_rate)
+                    elif time_between_tips_raw == 0:
+                        # Distinct from the 0x3FF no-rain sentinel above --
+                        # both the heavy- and light-rain branches below
+                        # divide by this, which crashes the driver on a
+                        # value 0 tip interval instead of degrading like
+                        # every other malformed-input case (issue #221).
+                        logerr("rain-rate decode: implausible "
+                               "time_between_tips_raw=0, skipping rain_rate")
                     elif pkt[4] & 0x40 == 0:
                         # heavy rain. typical value:
                         # 64/16 - 1020/16 = 4 - 63.8 (180.0 - 11.1 mm/h)
