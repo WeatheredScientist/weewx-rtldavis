@@ -1,5 +1,6 @@
 import hmac
 import hashlib
+import re
 import time
 import threading
 import weewx
@@ -15,6 +16,21 @@ try:
 except ImportError:
     REQUESTS_AVAILABLE = False
     log.error("requests module not available")
+
+# S91: requests/urllib3 embed the full request URL -- credential and all --
+# in the string form of any connection-level exception (ConnectionError,
+# SSLError, MaxRetryError). fetch_pressure() puts api-key and api-signature
+# in that URL's query string, so an ordinary DNS blip or WeatherLink outage
+# put the live key into weewx.log at ERROR level -- a channel DEC-0047's
+# read-guard does not cover. Redact by query-param NAME, not by a known
+# value: get_signature() can itself raise before `sig` is ever bound, so
+# there is no local variable guaranteed to be in scope at the failure point.
+_SECRET_PARAM_RE = re.compile(r'(api-key|api-signature)=[^&\s]*')
+
+
+def _redact_secrets(text):
+    return _SECRET_PARAM_RE.sub(r'\1=REDACTED', text)
+
 
 class DavisPressureFetcher(StdService):
     def __init__(self, engine, config_dict):
@@ -80,7 +96,7 @@ class DavisPressureFetcher(StdService):
                         return
             log.warning("DavisPressureFetcher: no pressure found in response")
         except Exception as e:
-            log.error("DavisPressureFetcher: error fetching pressure: %s", e)
+            log.error("DavisPressureFetcher: error fetching pressure: %s", _redact_secrets(str(e)))
 
     def new_loop_packet(self, event):
         now = time.time()
