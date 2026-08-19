@@ -39,7 +39,7 @@ DEC-0046).**
 
 | Layer | Wins in prod | The silent no-op |
 |---|---|---|
-| Driver (`rtldavis.py`), `pressure_service.py` | the **image** | an `scp` to `weewx-data/bin/user/` does nothing — needs a rebuild |
+| Driver (`rtldavis.py`), `pressure_service.py`, **`dewpoint_service.py`** (verified S94) | the **image** | an `scp` to `weewx-data/bin/user/` does nothing — needs a rebuild |
 | `weewx.conf` and other mounted config | the **mount** | an image rebuild does nothing — needs a live edit on the NAS |
 | `influx.py` | mounted → `scp` **is** correct | — |
 | **`loop_json_writer.py`** (verified S85) | the **mount** — `<project root>/loop_json_writer.py`, bind-mounted `ro` over the venv copy | **an image rebuild does nothing** — the Dockerfile never `COPY`s this file. Deploy = `scp` to the **project root** + restart. **The copy in `weewx-data/bin/user/` is a DECOY**: it is not the mount source and editing it changes nothing |
