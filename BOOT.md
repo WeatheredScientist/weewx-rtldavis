@@ -26,8 +26,8 @@ zero coupling to the driver, because `docs/INTERFACES.md` commits it to being re
 non-Davis WeeWX; the small duplication is the cheaper cost and is deliberate. Also: `windDir` now
 co-nulled in every reject branch (the one consumer-visible change — a bare heading used to reach
 loop-JSON, InfluxDB and every uploader), warmup samples bounds-checked before seeding, `windGust`
-bounds-checked independently. 10 tests, **PR #241**. 339/339, ruff/mypy clean (57 files), secret scan
-positive-controlled.
+bounds-checked independently. 10 tests. **PR #241, merged (`592064b`); #223 closed on GitHub with an
+explanatory comment.** 339/339, ruff/mypy clean (57 files), secret scan positive-controlled.
 
 **`dewpoint_service.py` is BAKED, not mounted** — verified by `nasctl inspect` + positive control,
 not assumed from `pressure_service.py`. `CONSTANTS.md`'s deploy-layer table was missing the file
@@ -70,8 +70,8 @@ not come back on its own.** This is closeout step 6 and it is genuinely outstand
 | Freeze rate | DEC-0088-corrected (1.31/day); DEC-0102 adds the overnight-window confound number |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | `s94-wind-filter-223` → PR #241. **Delete it, local + remote, once merged** — steady state is exactly `dev` + `main` |
-| Trackers | **#227: 5/8 done.** #233 open (follow-up from #219, tier:mid) · #172/#144 open until v2.0.14 · #204 open (current.json cadence) · **#223 to close on GitHub with a comment once #241 merges** — `Closes #N` does NOT auto-fire here (PRs land on `dev`, not the default branch), and S93 found #219/#220/#221 silently unclosed for exactly this reason |
+| Branches | **Steady state restored: exactly `dev` + `main`.** S94's feature branch merged and deleted, remote + local, same session |
+| Trackers | **#227: 5/8 done, merged and closed on GitHub.** #233 open (follow-up from #219, tier:mid) · #172/#144 open until v2.0.14 · #204 open (current.json cadence). Recently-closed issues audited at close: all carry an explanatory comment, no silent closes. Remember `Closes #N` does NOT auto-fire here (PRs land on `dev`, not the default branch) — S93 found #219/#220/#221 silently unclosed for exactly that reason |
 | Cross-repo (S94) | Swept. **[ops#169] is NEW since S93's sweep** — coffee-radar found live shared-NAS disk contention (~41% iowait) and names weewx's InfluxDB ingestion as an unconfirmed contributor; a design session is coming and other tenants may flag interest. Explicitly *not decided today*, no action taken, informational only. Everything else unchanged |
 
 ## Blockers
@@ -96,6 +96,11 @@ not come back on its own.** This is closeout step 6 and it is genuinely outstand
   `TypeError: unexpected keyword argument 'now'` — the signature change, not the defects. **When a
   fix changes a signature AND behavior, shim the signature so only behavior is under test**, then
   re-run. Post-shim: 6 of 8 failed for the right reason, 0 after the fix.
+- **Write the BOOT handoff AFTER the merge, not before.** S94 wrote it while the PR was still open,
+  so it shipped telling the next session to delete a branch already gone and close an issue already
+  closed — needing a second doc-only PR to correct. The closeout ritual's step order (BOOT at 2,
+  commit/push at 7) reads as if BOOT comes first; for anything whose truth depends on the merge
+  landing (branch state, tracker state, merge commit sha), it does not.
 - **A `grep -o 'DEC-0[0-9]*' | tail` to find the next DEC number returns OTHER REPOS' numbers** —
   cross-repo references (HLF DEC-0177, ops DEC-0107) are quoted verbatim inside this repo's own DEC
   bodies and sort highest. Read the index table's last row instead. Same false-signal family as the
