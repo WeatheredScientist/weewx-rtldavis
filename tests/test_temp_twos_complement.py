@@ -123,7 +123,7 @@ class _FakeDriver:
     Only the ISS is present, so a type-8 frame on channel 1 lands in
     data['temperature'] rather than temp_1/temp_2."""
     channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0}
+                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
 
 
 def _temp_frame(temp_raw, digital=True):
