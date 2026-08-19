@@ -476,19 +476,23 @@ def calculate_thermistor_temp(temp_raw):
     # Convert temp_raw to a resistance (R) in kiloOhms
     a = 18.81099
     b = 0.0009988027
-    r = a / (1.0 / temp_raw - b) / 1000 # k ohms
 
     # Steinhart-Hart parameters
     s1 = 0.002783573
     s2 = 0.0002509406
     try:
+        # temp_raw=0 (a real, in-range decode of a shorted/absent sensor,
+        # not one of the driver's own sentinel values) divides by zero here
+        # -- moved inside the try, alongside math.log()'s ValueError, so
+        # both degrade the same way instead of one of them crashing the
+        # driver (issue #221).
+        r = a / (1.0 / temp_raw - b) / 1000 # k ohms
         thermistor_temp = 1 / (s1 + s2 * math.log(r)) - 273
         dbg_parse(3, 'r (k ohm) %s temp_raw %s thermistor_temp %s' %
                   (r, temp_raw, thermistor_temp))
         return thermistor_temp
-    except ValueError as e:
-        logerr('thermistor_temp failed for temp_raw %s r (k ohm) %s'
-               'error: %s' % (temp_raw, r, e))
+    except (ValueError, ZeroDivisionError) as e:
+        logerr('thermistor_temp failed for temp_raw %s: %s' % (temp_raw, e))
     return DEFAULT_SOIL_TEMP
 
 
@@ -882,7 +886,19 @@ class DATAPacket(Packet):
             raw_msg = [0] * 8
             for i in range(0, 8):
                 raw_msg[i] = chr(int(m.group(i + 1), 16))
-            PacketFactory._check_crc(raw_msg)
+            try:
+                PacketFactory._check_crc(raw_msg)
+            except ValueError as e:
+                # A CRC mismatch is a corrupted/malformed frame, not a
+                # program bug -- log and skip it like the "unrecognized
+                # data" case below, instead of letting it propagate
+                # uncaught out of genLoopPackets and take the whole daemon
+                # down (issue #221). The shipped Go binary already
+                # checksums before emitting, so this is unreachable via the
+                # real driver today; guarded anyway for defense-in-depth.
+                dbg_rtld(1, "DATAPacket: CRC check failed: %s" % e)
+                lines.pop(0)
+                return None
             for i in range(0, 8):
                 raw_msg[i] = m.group(i + 1)
             raw_pkt = bytearray([int(i, base=16) for i in raw_msg])
@@ -1205,7 +1221,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
     def ch_to_xmit(self, iss_channel, anemometer_channel, leaf_soil_channel,
                    temp_hum_1_channel, temp_hum_2_channel):
         transmitters = 0
-        transmitters += 1 << (iss_channel - 1)
+        # Unlike the other 4 channels below, this one had no `!= 0` guard,
+        # even though 0="not present" is documented as valid for iss_channel
+        # too -- 1 << -1 raises ValueError and crashes startup (issue #221).
+        if iss_channel != 0:
+            transmitters += 1 << (iss_channel - 1)
         if anemometer_channel != 0:
             transmitters += 1 << (anemometer_channel - 1)
         if leaf_soil_channel != 0:
@@ -1675,6 +1695,14 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # no rain
                         rain_rate = 0
                         dbg_parse(3, "no_rain=%s mm/h" % rain_rate)
+                    elif time_between_tips_raw == 0:
+                        # Distinct from the 0x3FF no-rain sentinel above --
+                        # both the heavy- and light-rain branches below
+                        # divide by this, which crashes the driver on a
+                        # value 0 tip interval instead of degrading like
+                        # every other malformed-input case (issue #221).
+                        logerr("rain-rate decode: implausible "
+                               "time_between_tips_raw=0, skipping rain_rate")
                     elif pkt[4] & 0x40 == 0:
                         # heavy rain. typical value:
                         # 64/16 - 1020/16 = 4 - 63.8 (180.0 - 11.1 mm/h)
