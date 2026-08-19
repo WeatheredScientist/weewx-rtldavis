@@ -5,6 +5,72 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S91] — 2026-08-19 — Full code audit (BOOT job 7): security fixes shipped (DEC-0101), 26 correctness findings filed as a sequenced plan (#219–227)
+
+- **The owner's planned focus for the session, decided at S90 close.** Two independent halves, run
+  as separate multi-agent passes rather than one combined effort.
+- **Security pass**: 4 DEC-primed finder agents (one per file: `rtldavis.py`,
+  `pressure_service.py`/`dewpoint_service.py`, `weewx_monitor.py`, `ops/rx_experiment.sh`) + an
+  Opus-tier adversarial verification pass over everything they surfaced. **DEC-0101**: SMTP
+  connections skipped TLS certificate verification at both alert-mail call sites
+  (`weewx_monitor.py`'s continuously-running production monitor, `ops/rx_experiment.sh`'s campaign
+  abort-notification path) — `smtplib`'s default with no `context=` is unverified, exposing
+  `GMAIL_PASS` to an on-path attacker; `influx.py` already does this correctly elsewhere in the
+  repo, this was a regression against an established in-house pattern, not a novel ask. Second
+  finding: the WeatherLink API key could leak into `weewx.log` via exception text on any connection
+  failure (reproduced empirically) — a new gap, not a DEC-0062 regression, since the credential
+  only exists at runtime inside the exception's `__str__()`, invisible to DEC-0062's AST-based
+  regression test. Both fixed, both guarded by new/extended tests with positive controls. **PR
+  #229, merged.**
+- **Bundled into the same PR**: a `docs/DECISIONS.md` structural fix — DEC-0093 through DEC-0101
+  had been sitting under `## Open / deferred` despite every one being `Accepted` (found by the
+  ultrareview cloud pass, which also caught the S91 session's own DEC-0101 addition landing in the
+  same wrong spot). Fixed via a scripted, assertion-guarded reorder rather than a hand-retyped edit
+  — the block was too large to safely retype by hand.
+- **Also merged this session, unrelated to security but surfaced by the same ultrareview pass**: a
+  pre-3.12 Python `SyntaxError` in `ops/proc_probe.py` (a conditional inside an f-string's `{}`
+  spanning two lines needs PEP 701) — would have broken every entrypoint of the tool BOOT job 2
+  depends on, on any pre-3.12 interpreter. All locally-available interpreters here are 3.12+, so
+  this session's own probe harvest was never at risk, but it's a real bug in a public repo. **PR
+  #228, merged.**
+- **Correctness pass**: 10 independent finder angles (5 correctness + 3 cleanup + altitude +
+  conventions, per the local `/code-review` skill's own methodology, adapted for a path-target
+  full-file audit rather than a diff) against `rtldavis.py` + `dewpoint_service.py`, followed by
+  Opus-tier adversarial verification of all 21 surviving candidates (batched by theme into 4
+  verification passes) and a sweep pass that found 6 more. **26 distinct findings survived** (20
+  confirmed, 6 plausible); 2 further candidates were independently **REFUTED** — a suspected
+  packet-duplicate-detector aliasing bug turned out inert, because the Go binary already dedups
+  byte-identical frames upstream and every packet carries monotonic counters that make the
+  equality-based dedup check always-true regardless. **Filed as GitHub issues, not fixed this
+  session** — the volume made same-session fixes impractical, and several (the ProcManager
+  subprocess-lifecycle bugs, the dewpoint wind-filter redesign) are explicitly judgment-tier design
+  work better done as their own deliberate sessions. Grouped into 8 issues (#219–226) by shared root
+  cause rather than filed 1:1; sequenced with model tiers and deploy gating in tracking issue
+  **#227**, the map for the next several sessions of this work.
+- **Standout findings** (full detail in #219–226, not re-narrated here): an uncaught exception on
+  CRC mismatch that can crash the whole weewxd daemon (found independently by 5 of the 5
+  correctness-angle finders); `ProcManager.shutdown()`'s zombie-reap skip on an unguarded
+  `pidof` call (also 5x-corroborated — the repo's own existing test monkeypatches around it with a
+  comment admitting the gap); a regex bug that silently drops an entire transmitter's data whenever
+  its battery goes low, leaving 5 status fields permanently dead; the shipped config-generator
+  template shipping a literal unreplaced `[options]` token that would break any new user's first
+  install; and wind data leaking in from the wrong sensor channel on any station with a separate
+  Anemometer Transport Kit.
+- **Cross-repo heads-up posted**: eaglehunt-ops#180 (informational — the audit methodology may be
+  worth reusing on HLF/dashboard, not a request, no reply expected).
+- **Deploy gate, applies to all of #219–226**: `rtldavis.py` (and likely `dewpoint_service.py`) are
+  baked into the Docker image, so none of it can deploy before Campaign B closes (~08-23) — design
+  and merge to `dev` freely, hold the image cut for v2.0.14 (or v2.0.15+ for the two lowest-priority
+  issues).
+- Green gate at close, on merged `dev`: ruff clean, **305 passed**, mypy clean/52 files.
+- Campaign B checked twice (session start and close), both times healthy and completely off this
+  session's critical path — block 16→17 of 32, a scheduled 00:05 swap into arm A landed clean
+  between the two checks. No code from this session touches the running station.
+- ROADMAP checked: nothing here ships/closes/reprioritizes an existing P0–P3 line (the audit's
+  findings are new work, not a resolution of a tracked item) — nothing to reconcile, tripwire still
+  S96.
+
+---
 ## [S90] — 2026-08-18 — NAS-LEASE adoption deferred to v2.0.14 (DEC-0099); the InfluxDB rollup answered as dashboard's build (DEC-0100)
 
 - **Off-cycle start, by design.** BOOT's resume pointer had no date-gate reached yet (probe harvest
@@ -115,74 +181,4 @@ under [Pre-S16].
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
 
 ---
-## [S88] — 2026-08-18 — weewx 5.5.0 staged for v2.0.14; the schedule gains a stand-down state (DEC-0096)
-
-- **weewx 5.4.0 → 5.5.0 merged to dev (PR #208)** — the deliberate bump behind dependabot #158,
-  per the issue-#78 flow (the dependabot PR is the notification; #158 closed with a pointer).
-  Rides the v2.0.14 image cut. Upstream 5.5.0 notably adds retry-on-database-locked — the
-  DEC-0070 failure class. Corrected en route: #158's red `tests` check was an artifact of its
-  only CI run predating the S73 test correction on `main` (the pre-S73 first-row assertion
-  against a schedule that had legitimately launched), not a 5.5.0 problem — current `main` would
-  pass it today.
-- **DEC-0096 (PR #209): an empty SCHEDULE block is now the explicit between-campaigns stand-down
-  state.** Campaign B's terminator (08-23T00:05) is the v2.0.14 window's opening moment, and
-  `tests` is a required check on both branches — without this, every PR of the cut would have
-  queued behind a red staleness guard, with nothing honest to regenerate the table to. `install`
-  refuses the empty block loudly; six structural tests skip on emptiness; the staleness guard's
-  classification moved to `_schedule_state()` with its stale branch positively controlled
-  (DEC-0045) so a fully-elapsed real schedule still fails exactly as before. The live schedule is
-  untouched; the post-square emptying PR must land FIRST in the window. 299/299.
-- Watches: 08-18 swaps `B→D` 00:05:02 (settle ~196 s) and `D→A` 06:05:02 (~144 s) both healthy,
-  block 14 of 32 in progress; reception-floor dip recurred 03:30–03:45 ×2 on arm D — watch n=4,
-  window still drifting later (02:15 → 03:25 → 03:30). Soak 16 pass / 2 expected-WARN.
-- Docs: CONSTANTS' release row corrected — `prod-baseline-20260811` (`main` = `1cc9605`) landed
-  at S73, the "promotion pending" note was stale. ROADMAP checked: no v2.0.14 line to reconcile,
-  scheduled pass S96.
-
-## [S87] — 2026-08-17 — The soak was lying about a healthy station; retention settled as accept-and-monitor (DEC-0095)
-
-- **`ops/soak_check.sh` measured every age against a clock captured before its own remote body —
-  PR #206.** `now` was taken at the top of the ssh block, then ages were computed against it at the
-  bottom, after `docker logs`, a full `weewx.log` window read and a `docker exec` sqlite loop. Every
-  age was understated by exactly the block's runtime. That runtime was ~2 s historically (every
-  recorded value 1–29 s, all inside the monitor's 30 s poll) and 15–100 s under load by 08-17, so
-  the monitor's log mtime always landed *after* `now`, the age went negative, and the `-ge 0` guard
-  reported a perfectly healthy watchdog as **`MONITOR LOG STALE … wedged`** — for ten days, on every
-  run. The watchdog was in fact polling on the dot: 19:10:17 → :47 → 19:11:18 → :48 → 19:12:18, no
-  gaps. **The quieter half mattered more:** the same stale clock fed `record_age_s`, the DEC-0036
-  freeze detector, whose 180 s threshold silently became 180+runtime (measured 195–280 s) — least
-  sensitive exactly when the box is loaded, which is when freezes happen (DEC-0088: median 240 s).
-  Both ages now read the clock at the point of measurement, the runtime is reported rather than
-  hidden, and the monitor verdict splits into its four real outcomes (dead / no log / clock skew /
-  wedged). Also retires the reception check's hardcoded 80% floor, which read **one** 60 s window of
-  21 packets — sd ~9.7 pts at this station's measured 73.3% baseline (DEC-0059) — and so warned on
-  most healthy runs, 20 pts tighter than the monitor's own `WU_RF_MIN_PCT=60`; the soak now reports
-  the monitor's five-window average and its `[OK]/[LOW]` verdict instead of keeping a second
-  threshold beside it. New `tests/test_soak_check.py` drives the real script with `ssh` stubbed;
-  every "no longer cries wolf" assertion is paired with a positive control that the check still
-  fires, verified by running the suite against the pre-fix script (7 fail, all three teeth-controls
-  pass).
-- **DEC-0095 — retention is accept-and-monitor, not archive-then-prune, and the monitor executes.**
-  Answers the weewx half of ops#175. Measured read-only 08-17: archive **33.61 MB = 0.89% of
-  MemTotal 3.69 GiB**, 5.1 TB free disk, **1,392 rows/day at 275 B = 0.37 MB/day, ~7.3 yr to 1 GB**,
-  InfluxDB engine 14 MB; `dbstat` puts 32.94 of 33.61 MB in the single `archive` table. HLF's
-  DEC-0156/0174 **method** transfers and its **conclusion** does not — DEC-0174 justified retention
-  on the working set at ~8.0 M hot rows against *this same 3.69 GiB box*, and we have 66× fewer
-  rows. Three further grounds: the `archive` table is the deliverable rather than a regenerable
-  diagnostic (a passively intercepted station cannot backfill); upstream already bounds long reads
-  by aggregation (114 `archive_day_*` tables, ~0.1 MB); and the one cost this DB's history documents
-  is CoW fragmentation, for which retention is the wrong lever (`chattr +C` queued, DEC-0092,
-  confirmed unapplied). Because accept-and-monitor is worthless as prose (DEC-0040), the reversal
-  condition ships as code: the soak reports the archive against **10% of MemTotal** (~386 MB, ~2.6 yr
-  out) and crossing it reopens the DEC. The **InfluxDB half is deliberately left open against the
-  dashboard** (DEC-0010) — weewx proposes no horizon for a shared bucket.
-- **Campaign B watch: block 12 of 32**, `A→B` swap on time at 18:05:02, settle 136 s (n=7, still not
-  a trend). STOP/lock absent, arm `B` live, square through `08-23T00:05`.
-- **Recorded as a lead, not a finding:** at 19:16 EDT — inside DEC-0094's significant 18:00–21:00
-  band — NAS loadavg was **9.05/11.39/8.75** on 4 cores, driven by ~220% CPU of `chrome-headless`
-  (coffee-radar) plus ~14 MB/s sustained writes on `md2`. No process was in `D` state and weewxd's
-  threads were all `S`, so tenant load is established but *blocking* is not — which is precisely
-  blocker 1's open question. One instant is not a probe; sampling across a window is the next step.
-
----
-*(S73–S86 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S88 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
