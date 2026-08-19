@@ -76,8 +76,9 @@ stays open (DEC-0083), post-campaign characterization question.
 
 ### ▶▶ S91 JOB LIST
 
-**Jobs 2 and 7 are judgment-tier — flag the model call when starting either. Everything else is
-watch- or execution-tier.**
+**Job 2 is judgment-tier for the INTERACTIVE session — flag the model call when starting it. Job
+7's model split is agent-scoped, not session-scoped (see below) — start it on the normal Sonnet
+floor. Everything else is watch- or execution-tier.**
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP absent, state matches schedule.
    **Verified good through block 16 (08-18 evening)** — soak 16 pass / 2 expected-WARN (chatty
@@ -113,7 +114,13 @@ watch- or execution-tier.**
    started).** Model split: **Opus** for the orchestrating/judgment layer — this repo's ~100 DECs
    mean most "looks like a bug" needs weighing against already-settled reasoning (DEC-0071's WAL
    rollback, DEC-0044's parked coupling filter, the DEC-0068→0094→0097 chain) — **Sonnet** for the
-   mechanical per-file/per-dimension finder subagents (cheapest-capable-tier). Organization:
+   mechanical per-file/per-dimension finder subagents (cheapest-capable-tier).
+   **⚠️ That split is AGENT-scoped, not session-scoped — start S91 interactively on Sonnet as
+   normal, escalate only if asked for something specific mid-audit.** A `Workflow` agent's
+   `model:` override (or `/code-review ultra`'s own internal allocation) is call-scoped and never
+   touches the session's persistent `/model` floor; only a manual `/model` switch does that
+   (OPS-DEC-0036/0062, desktop-app-specific — an earlier draft of this row conflated the two).
+   Owner's own plan, stated at S90 close: start Sonnet, escalate on request. Organization:
    `/code-review ultra` pointed at a **path target** (driver + services + `ops/`, not a diff) as
    the engine, plus a separate `/security-review` pass (public repo, distinct failure mode from
    general quality). **The one repo-specific must-do: prime whatever reviews `rtldavis.py`,
