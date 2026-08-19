@@ -398,12 +398,23 @@ def analyze(path):
     print(f"\nsampling interval {interval}s -> {expected} samples/hour at full coverage")
     print(f"{'hour':<6}{'samples':>8}{'cover':>7}{'load1 avg':>11}{'procs_blkd':>12}"
           f"{'iowait s':>10}{'runq s':>9}{'D hits':>8}")
+    NAMED_WINDOWS = (
+        ("evening", 18, 21, "DEC-0094"),
+        ("overnight", 0, 5, "DEC-0097/DEC-0092"),
+    )
+
+    def window_mark(h):
+        for name, lo, hi, _ in NAMED_WINDOWS:
+            if lo <= h < hi:
+                return f"  <== {name} window"
+        return ""
+
     for h in sorted(per_hour):
         v = per_hour[h]
         lo = sum(v["load"]) / len(v["load"]) if v["load"] else 0
         pb = sum(v["pb"]) / len(v["pb"]) if v["pb"] else 0
         cov = (100.0 * v["n"] / expected) if expected else 0.0
-        mark = "  <== evening window" if 18 <= h < 21 else ""
+        mark = window_mark(h)
         if v["spanned"]:
             mark += f"  [{v['spanned']} gap-spanning deltas dropped]"
         print(f"{h:02d}:00{v['n']:>8}{cov:>6.0f}%{lo:>11.2f}{pb:>12.2f}"
@@ -414,28 +425,43 @@ def analyze(path):
               f"{', '.join(f'{h:02d}:00' for h in sorted(thin))} -- rates per sample")
         print("  remain comparable, but treat these hours as weakly measured.")
 
-    win = [h for h in per_hour if 18 <= h < 21]
-    ctl = [h for h in per_hour if h not in win]
-    if win and ctl:
-        def rate(hs, key):
-            tot = sum(per_hour[h][key] for h in hs)
-            n = sum(per_hour[h]["n"] for h in hs)
-            return tot / n if n else 0.0
-        print("\nEVENING WINDOW vs CONTROL HOURS (per system sample)")
-        for key, label, div in (("iowait", "iowait ms/sample", 1),
-                                ("runq", "runq-wait ms/sample", 1)):
-            w_, c_ = rate(win, key) / div, rate(ctl, key) / div
+    # S92: control used to be "every hour outside the evening window", which was
+    # correct until job 6 grew a second named window (DEC-0097/DEC-0098). The
+    # first run that ingested 00:00-04:00 data pooled it straight into "control"
+    # -- the evening ratio silently inverted (0.43x printed vs. the true 1.82x)
+    # because control's own average absorbed the overnight spike it was supposed
+    # to be a clean baseline against. Both windows are now excluded from each
+    # other's control, not just from their own.
+    all_window_hours = {h for _, lo, hi, _ in NAMED_WINDOWS for h in range(lo, hi)}
+    ctl = [h for h in per_hour if h not in all_window_hours]
+
+    def rate(hs, key):
+        tot = sum(per_hour[h][key] for h in hs)
+        n = sum(per_hour[h]["n"] for h in hs)
+        return tot / n if n else 0.0
+
+    for name, lo, hi, dec in NAMED_WINDOWS:
+        win = [h for h in per_hour if lo <= h < hi]
+        if not (win and ctl):
+            continue
+        print(f"\n{name.upper()} WINDOW ({dec}) vs CLEAN CONTROL HOURS (per system sample)")
+        for key, label in (("iowait", "iowait ms/sample"),
+                            ("runq", "runq-wait ms/sample"),
+                            ("d", "D hits/sample")):
+            w_, c_ = rate(win, key), rate(ctl, key)
             ratio = (w_ / c_) if c_ else float("inf")
             print(f"  {label:<24} window {w_:9.1f}   control {c_:9.1f}   "
                   f"ratio {ratio:5.2f}x")
         wl = [x for h in win for x in per_hour[h]["load"]]
         cl = [x for h in ctl for x in per_hour[h]["load"]]
-        print(f"  {'loadavg1':<24} window {sum(wl)/len(wl):9.2f}   "
-              f"control {sum(cl)/len(cl):9.2f}")
-        print("\n  Interpretation is NOT automatic: high load with a flat iowait ratio")
-        print("  means the tenant is loud but not blocking us -- DEC-0068's open")
-        print("  question answered NEGATIVE, which is a real result. Only a raised")
-        print("  iowait/runq ratio supports the blocking mechanism.")
+        if wl and cl:
+            print(f"  {'loadavg1':<24} window {sum(wl)/len(wl):9.2f}   "
+                  f"control {sum(cl)/len(cl):9.2f}")
+
+    print("\n  Interpretation is NOT automatic: high load with a flat iowait ratio")
+    print("  means the tenant is loud but not blocking us -- DEC-0068's open")
+    print("  question answered NEGATIVE, which is a real result. Only a raised")
+    print("  iowait/runq ratio supports the blocking mechanism.")
 
 
 def ingest(src, out):
