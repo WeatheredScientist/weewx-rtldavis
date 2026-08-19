@@ -346,9 +346,13 @@ def analyze(path):
     t0 = dt.datetime.fromtimestamp(int(sysrows[0]["ts"]))
     t1 = dt.datetime.fromtimestamp(int(sysrows[-1]["ts"]))
     print(f"span {t0:%Y-%m-%d %H:%M} -> {t1:%H:%M} local, {len(sysrows)} system samples")
-    print(f"weewxd pids seen: {', '.join(pids)}"
-          f"{'  <-- RESTART inside the span; deltas are not differenced across it'
-             if len(pids) > 1 else ''}")
+    # S91: the conditional used to live inside the f-string's {} braces,
+    # spanning two lines -- that needs PEP 701 (Python 3.12+) to parse and is
+    # a plain SyntaxError on older Python, at import time, before argparse
+    # even runs. Hoisted to a local so this parses on 3.9+.
+    restart_note = ('  <-- RESTART inside the span; deltas are not differenced across it'
+                     if len(pids) > 1 else '')
+    print(f"weewxd pids seen: {', '.join(pids)}{restart_note}")
 
     # Sampling interval, inferred rather than assumed -- the file may span runs
     # started with different --interval values.
