@@ -14,18 +14,20 @@ is a **separate repo** — don't make dashboard changes here.
 
 ## ▶ Resume here (S92 → S93)
 
-### ⚠️ FIRST THING NEXT SESSION: review/merge the 4 open PRs
-
-S92 shipped four independent pieces of work as open PRs, none merged yet (merge is the owner's,
-not the agent's, by design): **#231** (DEC-0102, overnight-probe finding + a `proc_probe.py` tool
-fix), **#232** (#219, ProcManager lifecycle), **#234** (#220, battery-low dispatch fix), **#235**
-(#221, four crash guards). All four green (ruff/mypy/pytest) on their own branch; none touches the
-live station — every one holds its deploy until the v2.0.14 image cut (~08-23) per DEC-0064.
-**Re-`git fetch`/`pull` before merging more than one in sequence** — a second same-session PR
-branched before the first merges sits `BLOCKED` by branch protection (gotcha below), and this
-session has four candidates for that, not just two.
-
 ### What's settled (do not re-derive)
+
+**All five S92 PRs merged same session — steady state restored.** #231 (DEC-0102 +
+`proc_probe.py` fix), #232 (#219), #234 (#220), #235 (#221), #236 (this closeout) all merged to
+`dev` in that order, each verified via `gh pr view --json state,mergedAt` (never trusted `gh pr
+merge`'s own output, which was silent on every one). Four of the five hit the expected
+"branch behind base" gotcha once an earlier one landed — fixed each with
+`gh api -X PUT .../update-branch` + wait-for-CI, no real textual conflicts despite #220 and #221
+both touching the `DATAPacket` class. **Re-verified on the actual merged `dev`, not just per-PR:**
+ruff clean, mypy clean (55 files), **320/320 tests** (305 baseline + 4 + 3 + 8) — confirms all four
+fixes work correctly together. All five feature branches deleted, remote and local (git's own safe
+`-d` refused anything not actually merged — an independent confirmation). **None of this deploys
+yet** — still holds for the v2.0.14 image cut (~08-23) per DEC-0064; merging to `dev` doesn't touch
+the live station.
 
 **Job 2 (overnight probe) is CLOSED.** `proc_probe_nas.sh` stopped cleanly on schedule at 05:00
 EDT — resolved DEC-0098's unrecorded-timezone gap (confirmed by process evidence: pidfile gone,
@@ -40,10 +42,9 @@ ops#169 coffee-radar event and a mixed, not-confirmatory, minute-level stall-tim
 updated** (targeted, not the full pass — tripwire still S96). **Root cause of blocker 2 stays
 open** — a single clean re-run will NOT settle it, since DEC-0092's confound recurs every night;
 the real next step is multi-night minute-level stall-vs-iowait correlation, not a retry.
-**NAS cleanup still owed** (`proc_probe_nas.sh`, `logs/proc_probe_nas.{log,err}` on the NAS) —
-Class C, mint refused twice this session (ordinary outcome, ~even odds per this environment's own
-tracked stats) and not retried after — pick this up early next session, ideally alongside another
-Class C need rather than alone.
+**NAS cleanup done** — `proc_probe_nas.sh` + `logs/proc_probe_nas.{log,err}` deleted from the NAS
+same session (mint refused twice, then succeeded on a third attempt — matches the documented
+~even-odds pattern, not a signal anything was wrong), verified gone via read-only `nasctl ls`.
 
 **Job 7 (S91 audit remediation, #227's sequenced plan): 3 of 8 done.** #219 (ProcManager
 lifecycle, frontier — Opus, explicit user-approved escalation): validated the design with a
@@ -75,22 +76,18 @@ was off its critical path.
 
 ### ▶▶ S93 JOB LIST
 
-1. **Review/merge the 4 open PRs first** (#231/#232/#234/#235) — owner's action; re-fetch/pull
-   before merging more than one in sequence.
-2. Daily square watch (~5 min): `ops/soak_check.sh` + a direct `rx_experiment.state` read.
-3. NAS cleanup retry (Class C): `proc_probe_nas.sh` + `logs/proc_probe_nas.{log,err}` off the NAS
-   — harvest has been confirmed complete and byte-exact since S92.
-4. Model-tier restore check — verify the actual running tier before starting judgment work;
+1. Model-tier restore check — verify the actual running tier before starting judgment work;
    restore to Sonnet if still elevated from S92's #219 escalation.
-5. Continue #227's sequence: **#222 next** (channel-gating consistency, mid), then #223 (frontier
+2. Daily square watch (~5 min): `ops/soak_check.sh` + a direct `rx_experiment.state` read.
+3. Continue #227's sequence: **#222 next** (channel-gating consistency, mid), then #223 (frontier
    — `dewpoint_service.py` wind-filter redesign, deserves its own unhurried session per #227's own
    note), #224 (mid, pairs naturally with #223 — same file), #225/#226 (lower priority, confirmed
    dormant / cheap-tier — can ride v2.0.15+, don't compete for v2.0.14 scope).
-6. **v2.0.14 prep is DONE**, now also carrying #219/#220/#221's fixes once merged (queue item 6,
+4. **v2.0.14 prep is DONE**, now also carrying #219/#220/#221's merged fixes (queue item 6,
    unchanged from S91/S90). Nothing to decide before ~08-23.
-7. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
+5. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
    [ops#179]. Revisit once the square closes **and** the gated queue clears.
-8. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
+6. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
    square's close (~08-23), still deferred on purpose. This rewrite trimmed the now-resolved S91
    narrative (audit methodology, security-pass detail — durable in DEC-0101/#219-227 already) in
    exchange for S92's own outcomes; net effect not measured.
@@ -107,12 +104,12 @@ was off its critical path.
 | Campaign B | **Live and on schedule — arm B since 08-19T06:06:26.** Square through `08-23T00:05` (~3.2 d left at close). STOP/PAUSE/lock absent. Soak (re-run S92 close): 16 pass / 2 expected-WARN, reception 57–69% |
 | Swap settle time | n=10 (unchanged since S90): 82/139/198/137/197/79/136/196/144/84 s — not a trend |
 | Retention | **BOTH halves SETTLED** (DEC-0095/DEC-0100), unchanged since S90 |
-| `dev` beyond prod | Everything for v2.0.14 (unchanged) **plus** DEC-0102 + #219/#220/#221's fixes — all four as **open, unmerged** PRs (#231/#232/#234/#235), not yet on `dev` |
+| `dev` beyond prod | Everything for v2.0.14 (unchanged) **plus** DEC-0102 + #219/#220/#221's fixes — **all merged to `dev`** same session (PRs #231/#232/#234/#235), verified together: 320/320 tests, ruff/mypy clean |
 | Freeze rate | DEC-0088-corrected (1.31/day); DEC-0102 adds the overnight-window confound number, does not change the rate |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Branches | **4 open PRs, steady-state NOT restored this session** — `dev` + `main` + `s92-overnight-probe-dec-0102` + `s92-procmanager-lifecycle-219` + `s92-battery-low-regex-220` + `s92-crash-guards-221`, all awaiting owner merge |
-| Trackers | **#227's plan: 3/8 done (#219/#220/#221, all as open PRs).** New: **#233** (follow-up from #219, open, tier:mid). #158 closed · #172/#144 open until v2.0.14 · #204 open (current.json cadence heads-up) · ops#163/#176 closed · ops#180/ops#169-thread informational, no action expected |
+| Branches | **Steady state restored: exactly `dev` + `main`.** All 5 S92 feature branches (probe/#219/#220/#221/close) merged and deleted, remote + local, same session |
+| Trackers | **#227's plan: 3/8 done and merged (#219/#220/#221).** New: **#233** (follow-up from #219, open, tier:mid). #158 closed · #172/#144 open until v2.0.14 · #204 open (current.json cadence heads-up) · ops#163/#176 closed · ops#180/ops#169-thread informational, no action expected |
 | Cross-repo (S92) | One comment posted: ops#169 heads-up with DEC-0102's finding, linking PR #231 — informational, no action requested |
 
 ## Blockers
@@ -197,17 +194,19 @@ was off its critical path.
   name in a polling loop.
 
 _Last updated: 2026-08-19 (S92 close — Sonnet for job 2 and initial job 7 setup; Opus for #219's
-design/implementation on explicit user escalation; tier uncertain for #220/#221, see the model-tier
-note above — verify/restore next session).
-Green gate re-verified at close, independently on each branch: ruff clean, mypy clean, pytest green
-(dev's 305-test baseline + each branch's own new tests: +4 for #219 = 309, +3 for #220 = 308, +8 for
-#221 = 313 — the differing totals are expected, each branch forked from `dev` before any of the
-others merged). This session's planned focus (from S91 close): resolve DEC-0098's probe-timing
-question, then job 7. Both done and then some — job 2 fully closed with a real, honestly-hedged
-finding (DEC-0102), and job 7 advanced 3 of 8 items, each with regression tests independently
-confirmed to fail against git-stashed pre-fix code before committing. Nothing merged yet by
-design — four PRs open for owner review, none touching the live station regardless. Campaign B
-checked twice this session (start and close), both times healthy, untouched by any of this
-session's work. ROADMAP.md reconciled: DEC-0102 updated the P0 freeze line (targeted update, not
-the full pass — tripwire still S96); #219/#220/#221 don't touch a ROADMAP line (tracked via #227
-instead, which needed no edit — its own sequenced table stays accurate as written)._
+design/implementation on explicit user escalation; tier uncertain for #220/#221 and everything
+after, see the model-tier note above — verify/restore next session).
+Green gate re-verified twice: independently on each branch before merging, then again on the
+actual merged `dev` after all five PRs landed — ruff clean, mypy clean (55 files), **320/320
+tests** (305 baseline + 4 + 3 + 8), confirming the four fixes compose correctly, not just pass in
+isolation. This session's planned focus (from S91 close): resolve DEC-0098's probe-timing question,
+then job 7. Both done and then some — job 2 fully closed with a real, honestly-hedged finding
+(DEC-0102), job 7 advanced 3 of 8 items with pre-fix-verified regression tests, and — beyond the
+original plan — all five PRs merged same session plus the NAS probe-artifact cleanup, on explicit
+owner instruction after review. Campaign B checked twice this session (start and close), both times
+healthy, untouched by any of this session's work. ROADMAP.md reconciled: DEC-0102 updated the P0
+freeze line (targeted update, not the full pass — tripwire still S96); #219/#220/#221 don't touch a
+ROADMAP line (tracked via #227 instead, which needed no edit — its own sequenced table stays
+accurate as written). CHANGELOG.md entry written after the merges landed (deliberately held until
+then — its own convention marks entries "merged," and nothing was until this point); S89 rolled to
+`CHANGELOG-ARCHIVE.md` verbatim in the same pass, keeping the ~3-session window (S92/S91/S90)._
