@@ -49,13 +49,33 @@ repo propagates to other repos' sessions within the hour. *(Read with a LEADING 
 ### ▶▶ S95 JOB LIST
 
 1. Daily square watch (~5 min): `ops/soak_check.sh` + a direct `rx_experiment.state` read.
-2. Continue #227's sequence: **#224 next** (tier:mid, same file as #223 — `dewpoint_service.py` — so
-   it pairs naturally and the context is fresh in DEC-0103). #225/#226 are lower priority (confirmed
-   dormant / cheap-tier) and can ride v2.0.15+; they don't compete for v2.0.14 scope.
-3. **v2.0.14 prep is DONE**, now also carrying #223's fix. Nothing to decide before ~08-23.
-4. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
+2. **[ops#169] — OWNER-RAISED PRIORITY (S94): act within the next few sessions, not "when the square
+   closes".** Two strands in one thread: coffee-radar's shared-NAS disk-contention handshake (design
+   session pending, other tenants invited to flag interest), and **NAS-LEASE adoption, which weewx
+   already committed to in DEC-0099 and which is HARD-GATED ON THE v2.0.14 CUT.** The gate is
+   physical, not procedural: `influx.py` runs *inside* the container and cannot see `LEASE_DIR`,
+   a container's mount set is fixed at creation, and v2.0.14 (~08-23) is already a release-class
+   recreate for weewx 5.5.0 — **so it is the one no-extra-cost moment, and shipping the cut without
+   the mount costs a whole extra recreate cycle.** DEC-0099's recorded plan for that window: mount
+   `LEASE_DIR` read-only; `influx.py` raises `post_interval` while a lease is held (safe to ~30 min,
+   DEC-0092); the NAS image build (DEC-0078) becomes weewx's first HOLDER, wrapping `docker build`
+   with acquire→flock→release mirroring `rx_experiment.lock`; **any lease write is in-place
+   (seek+write+truncate), NEVER `loop_json_writer.py`'s tmp+`os.replace` idiom** (DEC-0051 — the
+   spec names it as silently stranding a flock on an unlinked inode). HLF is already live on this
+   (their DEC-0177, since 08-17) and is the working reference. ops#169 stays open against weewx
+   until the mount ships.
+3. Continue #227's sequence: **#224 next** (tier:mid, same file as #223 — `dewpoint_service.py` — so
+   it pairs naturally and DEC-0103's context is fresh). **#223 widened its surface:** #224 already
+   flagged `MAX_WIND_DELTA = 75.0` as documented-mph and therefore miscalibrated under
+   `target_unit=METRIC`, and S94 added `MAX_PLAUSIBLE_WIND_SPEED = 200.0` in the same units — fix
+   both constants in the same pass as the `dewpointF`/`heatindexF` unit branch. #225/#226 are lower
+   priority (confirmed dormant / cheap-tier) and can ride v2.0.15+.
+4. **v2.0.14 prep is DONE for code**, now also carrying #223's fix — **but job 2 adds a container
+   requirement to the cut itself (the `LEASE_DIR` mount), which is NOT yet staged.** That is the one
+   thing to decide before ~08-23, not after.
+5. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
    [ops#179]. Revisit once the square closes **and** the gated queue clears.
-5. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
+6. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
    square's close (~08-23), still deferred on purpose.
 
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
@@ -76,7 +96,7 @@ repo propagates to other repos' sessions within the hour. *(Read with a LEADING 
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
 | Branches | **Steady state restored: exactly `dev` + `main`.** S94's feature branch merged and deleted, remote + local, same session |
 | Trackers | **#227: 5/8 done, merged and closed on GitHub.** #233 open (follow-up from #219, tier:mid) · #172/#144 open until v2.0.14 · #204 open (current.json cadence). Recently-closed issues audited at close: all carry an explanatory comment, no silent closes. Remember `Closes #N` does NOT auto-fire here (PRs land on `dev`, not the default branch) — S93 found #219/#220/#221 silently unclosed for exactly that reason |
-| Cross-repo (S94) | Swept. **[ops#169] is NEW since S93's sweep** — coffee-radar found live shared-NAS disk contention (~41% iowait) and names weewx's InfluxDB ingestion as an unconfirmed contributor; a design session is coming and other tenants may flag interest. Explicitly *not decided today*, no action taken, informational only. Everything else unchanged |
+| Cross-repo (S94) | Swept. **[ops#169] — the owner raised its priority at S94 close: "must prioritize more highly very soon, next few sessions for sure."** Promoted out of this row into **job 2**, where the v2.0.14 hard gate is spelled out. coffee-radar found live shared-NAS disk contention (~41% iowait) naming weewx's InfluxDB ingestion an unconfirmed contributor; weewx's S92 probe measured 11.80x overnight iowait into the same thread. Everything else unchanged |
 
 ## Blockers
 
