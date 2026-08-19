@@ -77,7 +77,7 @@ class _FakeDriver:
     run at all -- plain dicts so arbitrary-index assignment never raises,
     unlike the real list-shaped stats)."""
     channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0}
+                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
     rain_per_tip = 0.2
     stats: dict = {'activeTrIds': {}, 'activeTrIdPtrs': {}}
 
