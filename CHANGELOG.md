@@ -5,6 +5,51 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S93] — 2026-08-19 — Channel-gating fixed (#222), #227's sequence now 4 of 8 shipped; #223 scoped
+
+- **#227's sequenced plan: #222 (channel-gating consistency, mid) fixed, tested, merged.** Three
+  instances of the same root cause — channel routing not consistently enforced across sibling
+  decode/config paths. (1) Wind bytes decoded unconditionally from any of 4 configured channel
+  roles instead of gating on the already-computed `wind_channel` — fixed by wrapping the decode
+  block in the missing gate, sibling to the message_type dispatch that follows it. (2) `rain_count`
+  (message_type 0xE) had no channel check, unlike its sibling `rain_rate` a few lines earlier —
+  fixed by copying that existing gate. (3) `ch_to_xmit()` accumulated transmitter bits with no
+  check the 5 configured channel numbers are pairwise distinct, so a duplicate silently corrupted
+  the `-tr` bitmask into a different channel than either role was configured for — fixed with an
+  explicit `ValueError` in `__init__`, matching the sibling frequency-validation two lines above it.
+  9 new tests (`tests/test_channel_gating.py`), all 4 bug-repro cases confirmed to fail pre-fix via
+  `git stash`. Wiring `wind_channel` into `parse_raw()` broke 13 pre-existing tests across 4 files
+  whose minimal fake-driver fixtures predated the change and had no `wind_channel` key — fixed by
+  adding it to each, not a behavior change. **PR #238, merged** (`f31438d`). 329/329 full suite
+  (320 baseline + 9 new), ruff/mypy clean (56 files), secret scan positive-controlled clean.
+- **#219/#220/#221 closed on GitHub** — merged in S92 but never explicitly closed (this repo's
+  `Closes #N` doesn't auto-fire since `dev`, not `main`, is where PRs land). Each closed with a
+  comment cross-referencing its PR and merge commit, per `CONVENTIONS.md`'s explicit rule. #227's
+  sequence now correctly reads 4 of 8 shipped on GitHub, not just in `BOOT.md`'s own tally.
+- **#223 (`dewpoint_service.py` wind-filter redesign, frontier) scoped, not implemented** — read
+  and grounded all 4 sub-bugs against current code (deadlock from missing resync-on-reject with no
+  TTL; `windDir` surviving a rejected `windSpeed`/`windGust`, confirmed by the two existing tests
+  that seed a `windDir` value and assert nothing about it; the unfiltered warmup buffer that seeds
+  bug 1; `windGust` unguarded when `windSpeed` is `None`, confirmed unreachable by this repo's own
+  driver today). Identified the fix pattern to port (`SensorQC.check()`'s always-resync-the-baseline
+  + TTL-gated reseed) and flagged one open design call for the actual session: porting the pattern
+  locally vs. importing `SensorQC` from `rtldavis.py`, which would break `dewpoint_service.py`'s
+  current zero-coupling to the driver. Deliberately held for its own dedicated session per #227's
+  own note and the frontier tag — no code written.
+- **Session survived a mid-session crash cleanly** — verified on resume that nothing drifted (git
+  state, PR #238's CI/mergeability all exactly as left) before continuing, rather than assuming the
+  transcript was still ground truth.
+- Daily square watch (once, session start): 16 pass / 2 expected-WARN (chatty stdout + ineffective
+  USB hedge, both already-known), reception 75% 5-window avg / 62% last window, arm B unchanged
+  since 08-19T06:06:26, no STOP/PAUSE/lock. Model tier confirmed Sonnet at session start (fresh
+  session, nothing elevated to restore from S92's #219 escalation).
+- **None of #222 deploys yet** — `rtldavis.py` is baked into the image, holds for the v2.0.14 cut
+  (~08-23) same as the rest of #227's plan.
+- ROADMAP checked: nothing this session ships/closes/reprioritizes a P0–P3 line — no DEC logged
+  (routine audit-remediation fixes don't generate their own DEC, same as #219/#220/#221 in S92).
+  Tripwire unchanged, still due by S96.
+
+---
 ## [S92] — 2026-08-19 — Overnight-probe finding shipped (DEC-0102); 3 of 8 code-audit fixes merged (#219/#220/#221)
 
 - **Job 2 closes: DEC-0098's probe ran, and DEC-0102 records what it found.** Resolved the
@@ -112,46 +157,5 @@ under [Pre-S16].
   S96.
 
 ---
-## [S90] — 2026-08-18 — NAS-LEASE adoption deferred to v2.0.14 (DEC-0099); the InfluxDB rollup answered as dashboard's build (DEC-0100)
-
-- **Off-cycle start, by design.** BOOT's resume pointer had no date-gate reached yet (probe harvest
-  waits on the 08-19 05:00 stop; the daily watch is cheap and unblocking). Session instead swept
-  ops + dashboard + HLF for cross-repo messages — the routine `repo:weewx` check, run further than
-  usual because the sweep surfaced a live thread nobody had caught yet.
-- **DEC-0099 — OPS-DEC-0107 (NAS-LEASE) landed 2026-08-15 and HLF adopted (their DEC-0177, live
-  since 08-16) while `BOOT.md` sat completely stale on both.** weewx has zero live levers today —
-  the one committed-unbuilt lever (InfluxDB `post_interval` deferral, safe to ~30 min per DEC-0092)
-  needs `influx.py` inside the container to see `LEASE_DIR`, which isn't mounted and can't be
-  without a release-class recreate. **Deferred, not declined: v2.0.14 already recreates the
-  container**, so that's the no-extra-cost moment to add the mount — bundled plan now in BOOT's
-  v2.0.14 queue (mount `LEASE_DIR`; `influx.py` checks it and raises `post_interval` while held; the
-  NAS image build becomes weewx's first HOLDER via acquire→flock→release; renewal in-place only,
-  **never** `loop_json_writer.py`'s tmp+`os.replace` idiom, which the spec names as the exact way to
-  strand a flock on an unlinked inode). Posted to ops#169, left open against weewx until the window
-  lands the client.
-- **Free correlation, no adoption needed:** read the live world-readable `heavy-io.log` this
-  session — one real lease-held window exists so far (HLF's `daily-maintenance`, 2026-08-18
-  00:10–06:10 EDT), containing both one RF-dead episode (02:41, 26.3 min) and one freeze
-  (03:15–03:22, 420 s). n=1, far too small to test anything — logged as a lead in BACKLOG's standing
-  watches, explicitly **not** revising DEC-0094's P=0.29 or the RF-stall P=0.32.
-- **DEC-0100 — ops#175's mutual wait (weewx: "dashboard's call"; dashboard: "waiting on weewx to
-  propose a shape") broke on an ops strawman; weewx answered.** Accept-and-monitor for InfluxDB
-  agreed. On who builds the permanent daily rollup dashboard's all-time-record queries need: weewx
-  declines, recommends dashboard build it as a native InfluxDB 2.x Task — `docs/INTERFACES.md`
-  already draws the boundary ("our responsibility ends at writing the documented schema"), dashboard
-  already runs Flux against this bucket and `influx.py` never has, and a Task changes neither write
-  path. Posted to ops#175.
-- **PR #215 merged (`b5c1be5`)** — both DECs, BACKLOG/BOOT synced to current reality, steady state
-  restored. Green gate at close: ruff clean, 299 passed, mypy clean/51 files.
-- **Campaign B watch, at close: block 16 of 32, arm C** (swapped 18:05:02, settled 84s — confirmed
-  directly via `rx_experiment.state` + log, not derived). Soak run earlier the same session: 16
-  pass / 2 expected-WARN (chatty stdout + ineffective USB hedge, both already-known), reception 75%
-  5-window avg / 71% last window, 0 stalls, no STOP/lock. This was the session's only contact with
-  the running square — the originally-planned S90 job list (probe harvest, closer campaign
-  tracking) is untouched and carries to S91.
-- ROADMAP checked: neither DEC touches a P0–P3 line item (both live in BACKLOG, not ROADMAP) —
-  nothing to reconcile. Tripwire unchanged, still due by S96.
-
 ---
----
-*(S73–S89 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S90 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
