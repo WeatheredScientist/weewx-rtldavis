@@ -83,7 +83,7 @@ class _FakeDriver:
     here too keeps it unbound so the explicit-self call matches, same as a
     real RtldavisDriver instance would resolve it."""
     channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0}
+                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
     parse_raw = staticmethod(RtldavisDriver.parse_raw)
 
 
