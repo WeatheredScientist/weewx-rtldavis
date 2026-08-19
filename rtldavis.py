@@ -1219,6 +1219,12 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         channels['leaf_soil'] = int(stn_dict.get('leaf_soil_channel', 0))
         channels['temp_hum_1'] = int(stn_dict.get('temp_hum_1_channel', 0))
         channels['temp_hum_2'] = int(stn_dict.get('temp_hum_2_channel', 0))
+        nonzero_channels = [c for c in (
+            channels['iss'], channels['anemometer'], channels['leaf_soil'],
+            channels['temp_hum_1'], channels['temp_hum_2']) if c != 0]
+        if len(nonzero_channels) != len(set(nonzero_channels)):
+            raise ValueError("duplicate channel number in station config: %s" %
+                              sorted(nonzero_channels))
         if channels['anemometer'] == 0:
             channels['wind_channel'] = channels['iss']
         else:
@@ -1626,58 +1632,59 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # message examples:
             # 51 06 B2 FF 73 00 76 61
             # E0 00 00 4E 05 00 72 61 (no sensor)
-            wind_speed_raw = pkt[1]
-            wind_dir_raw = pkt[2]
-            # Calm-air gate: raw speed <= 2 with dir == 0 is the 6410 hall
-            # effect sensor floor (EC table has zero correction for raw 1-2;
-            # calc_wind_speed_ec returns raw unchanged for raw_mph < 3).
-            # Null both fields rather than recording a false 2 mph from north.
-            if wind_speed_raw <= 2 and wind_dir_raw == 0:
-                # Calm air: sensor floor, not real wind. Write explicit 0 so
-                # charts stay continuous, but null direction (no direction when calm).
-                data['wind_speed'] = 0.0
-                data['wind_speed_ec'] = 0
-                data['wind_speed_raw'] = wind_speed_raw
-                data['wind_dir'] = None
-                data['windBatteryStatus'] = data.get('windBatteryStatus')
-            elif not(wind_speed_raw == 0 and wind_dir_raw == 0):
-                """ The elder Vantage Pro and Pro2 stations measured
-                the wind direction with a potentiometer. This type has
-                a fairly big dead band around the North. The Vantage
-                Vue station uses a hall effect device to measure the
-                wind direction. This type has a much smaller dead band,
-                so there are two different formulas for calculating
-                the wind direction. To be able to select the right
-                formula the Vantage type must be known.
-                For now we use the traditional 'pro' formula for all
-                wind directions.
-                """
-                dbg_parse(2, "wind_speed_raw=%03x wind_dir_raw=0x%03x" %
-                          (wind_speed_raw, wind_dir_raw))
+            if data['channel'] == self.channels['wind_channel']:
+                wind_speed_raw = pkt[1]
+                wind_dir_raw = pkt[2]
+                # Calm-air gate: raw speed <= 2 with dir == 0 is the 6410 hall
+                # effect sensor floor (EC table has zero correction for raw 1-2;
+                # calc_wind_speed_ec returns raw unchanged for raw_mph < 3).
+                # Null both fields rather than recording a false 2 mph from north.
+                if wind_speed_raw <= 2 and wind_dir_raw == 0:
+                    # Calm air: sensor floor, not real wind. Write explicit 0 so
+                    # charts stay continuous, but null direction (no direction when calm).
+                    data['wind_speed'] = 0.0
+                    data['wind_speed_ec'] = 0
+                    data['wind_speed_raw'] = wind_speed_raw
+                    data['wind_dir'] = None
+                    data['windBatteryStatus'] = data.get('windBatteryStatus')
+                elif not(wind_speed_raw == 0 and wind_dir_raw == 0):
+                    """ The elder Vantage Pro and Pro2 stations measured
+                    the wind direction with a potentiometer. This type has
+                    a fairly big dead band around the North. The Vantage
+                    Vue station uses a hall effect device to measure the
+                    wind direction. This type has a much smaller dead band,
+                    so there are two different formulas for calculating
+                    the wind direction. To be able to select the right
+                    formula the Vantage type must be known.
+                    For now we use the traditional 'pro' formula for all
+                    wind directions.
+                    """
+                    dbg_parse(2, "wind_speed_raw=%03x wind_dir_raw=0x%03x" %
+                              (wind_speed_raw, wind_dir_raw))
 
-                # Vantage Pro and Pro2
-                if wind_dir_raw == 0:
-                    wind_dir_pro = 5.0
-                elif wind_dir_raw == 255:
-                    wind_dir_pro = 355.0
-                else:
-                    wind_dir_pro = 9.0 + (wind_dir_raw - 1) * 342.0 / 253.0
+                    # Vantage Pro and Pro2
+                    if wind_dir_raw == 0:
+                        wind_dir_pro = 5.0
+                    elif wind_dir_raw == 255:
+                        wind_dir_pro = 355.0
+                    else:
+                        wind_dir_pro = 9.0 + (wind_dir_raw - 1) * 342.0 / 253.0
 
-                # Vantage Vue
-                wind_dir_vue = wind_dir_raw * 1.40625 + 0.3
+                    # Vantage Vue
+                    wind_dir_vue = wind_dir_raw * 1.40625 + 0.3
 
-                # wind error correction is by raw byte values
-                wind_speed_ec = round(calc_wind_speed_ec(wind_speed_raw, wind_dir_raw))
+                    # wind error correction is by raw byte values
+                    wind_speed_ec = round(calc_wind_speed_ec(wind_speed_raw, wind_dir_raw))
 
-                data['wind_speed_ec'] = wind_speed_ec
-                data['wind_speed_raw'] = wind_speed_raw
-                data['wind_dir'] = wind_dir_pro
-                data['wind_speed'] = wind_speed_ec * MPH_TO_MPS
-                dbg_parse(2, "WS=%s WD=%s WS_raw=%s WS_ec=%s WD_raw=%s WD_pro=%s WD_vue=%s" %
-                          (data['wind_speed'], data['wind_dir'],
-                           wind_speed_raw, wind_speed_ec,
-                           wind_dir_raw if wind_dir_raw <= 180 else 360 - wind_dir_raw,
-                           wind_dir_pro, wind_dir_vue))
+                    data['wind_speed_ec'] = wind_speed_ec
+                    data['wind_speed_raw'] = wind_speed_raw
+                    data['wind_dir'] = wind_dir_pro
+                    data['wind_speed'] = wind_speed_ec * MPH_TO_MPS
+                    dbg_parse(2, "WS=%s WD=%s WS_raw=%s WS_ec=%s WD_raw=%s WD_pro=%s WD_vue=%s" %
+                              (data['wind_speed'], data['wind_dir'],
+                               wind_speed_raw, wind_speed_ec,
+                               wind_dir_raw if wind_dir_raw <= 180 else 360 - wind_dir_raw,
+                               wind_dir_pro, wind_dir_vue))
 
             # data from both iss sensors and extra sensors on
             # Anemometer Transport Kit
@@ -1881,16 +1888,17 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 # message examples:
                 # E0 00 00 05 05 00 9F 3D
                 # E1 00 DB 80 03 00 16 8D (no sensor)
-                rain_count_raw = pkt[3]
-                """We have seen rain counters wrap around at 127 and
-                others wrap around at 255.  When we filter the highest
-                bit, both counter types will wrap at 127.
-                """
-                if rain_count_raw != 0x80:
-                    rain_count = rain_count_raw & 0x7F  # skip high bit
-                    data['rain_count'] = rain_count
-                    dbg_parse(2, "rain_count_raw=0x%02x value=%s" %
-                              (rain_count_raw, rain_count))
+                if data['channel'] == self.channels['iss']:  # rain sensor is present
+                    rain_count_raw = pkt[3]
+                    """We have seen rain counters wrap around at 127 and
+                    others wrap around at 255.  When we filter the highest
+                    bit, both counter types will wrap at 127.
+                    """
+                    if rain_count_raw != 0x80:
+                        rain_count = rain_count_raw & 0x7F  # skip high bit
+                        data['rain_count'] = rain_count
+                        dbg_parse(2, "rain_count_raw=0x%02x value=%s" %
+                                  (rain_count_raw, rain_count))
             else:
                 # unknown message type
                 logerr("unknown message type 0x%01x" % message_type)
