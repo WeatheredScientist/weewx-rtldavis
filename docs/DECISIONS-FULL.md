@@ -6048,3 +6048,80 @@ Task needs something from weewx's write side — a tag, a field, a schema change
 fresh cross-repo interface conversation under DEC-0010, the same path the still-open station-identity
 tag question (BACKLOG.md) would take. This DEC settles only who builds the rollup as currently
 scoped, not every future ask.
+
+## DEC-0101 — SMTP TLS went unverified at both alert-mail call sites; the WeatherLink key could leak into weewx.log via exception text
+
+**Date:** 2026-08-18 (S91) · **Status:** Accepted · **extends** DEC-0062's log-egress rule ·
+**fixes an unverified-TLS regression** against the pattern `influx.py` already uses · **applies**
+DEC-0045's positive-control rule
+
+### Context
+
+S91 ran the full-repo security audit BOOT job 7 scoped at S90 close: four Sonnet-tier finder agents,
+each DEC-primed and each covering one file (`rtldavis.py`; `pressure_service.py` +
+`dewpoint_service.py`; `weewx_monitor.py`; `ops/rx_experiment.sh`), followed by one Opus-tier
+verification pass over everything the finders surfaced. Two files came back clean — `rtldavis.py`,
+and `weewx_monitor.py`'s own privilege boundary (the sudo-gated USB reset call DEC-0075 governs).
+Two independent findings survived verification at 9/10 confidence, both fixed on the same branch
+this session.
+
+### Decision
+
+**1. TLS certificate verification, both SMTP call sites.** `weewx_monitor.py`'s `send_email()`
+(`smtplib.SMTP_SSL('smtp.gmail.com', 465)`, the continuously-running production monitor) and
+`ops/rx_experiment.sh`'s `send_mail()` (`s.starttls()`, the campaign abort-notification path) both
+omitted `context=`. Verified directly against the installed CPython 3.14.5 stdlib, not recalled from
+memory: smtplib's fallback (`ssl._create_stdlib_context()`) is an unconditional alias for
+`ssl._create_unverified_context()` — `CERT_NONE`, `check_hostname=False`. An on-path attacker
+(compromised router, ARP spoofing, DNS spoofing of `smtp.gmail.com`) can complete the handshake with
+any certificate and either capture `GMAIL_PASS` (a full-mailbox app password, bypasses 2FA) or
+silently swallow the message — for `rx_experiment.sh`, that message is the one channel designed to
+reach a human independent of the monitor itself, the same "the alert path looked configured and was
+never exercised" shape DEC-0061 already found once via a different bug (env-export, not TLS).
+`influx.py`'s `post_request()` already passes `ssl.create_default_context()`; this is a regression
+against a pattern this codebase already established, not a novel hardening ask. Fix: `context=
+ssl.create_default_context()` at both sites (`import ssl` added to each), guarded by
+`tests/test_smtp_tls_verification.py` — AST-checking the `.py` site, text-checking the bash-heredoc
+site (the same split this repo already uses for `rx_experiment.sh` elsewhere) — each half
+positive-controlled per DEC-0045.
+
+**2. WeatherLink API key redacted before it can reach `weewx.log`.** `pressure_service.py`'s
+`fetch_pressure()` builds its request URL with `api-key`/`api-signature` in the query string, then
+its broad `except Exception as e:` logged `e` directly via `%s`. `requests`/`urllib3` embed the full
+request URL in the string form of any connection-level failure (`ConnectionError`, `SSLError`,
+`MaxRetryError`) — reproduced empirically in an isolated venv: DNS failure, connection-refused, TLS
+failure, and connect-timeout all leaked the key, 4/4. **New gap, not a DEC-0062 regression**: that
+decision fixed a different log line (the startup log) and shipped an AST-based regression test
+(`tests/test_pressure_service_no_key_logging.py`) that structurally cannot see this one — the
+credential exists only at runtime, inside the exception's `__str__()`, never as a source-level
+`self.api_key`/`self.api_secret` reference the checker greps for. `weewx.log` also sits outside
+DEC-0047's read-guard (configs only), and DEC-0062's own history records this exact log being tailed
+into an agent transcript twice already, for the older, now-fixed leak. **Narrower than DEC-0062's
+case, though:** only `api-key` and a timestamp-bound `api-signature` are ever in the URL —
+`api_secret` (the HMAC key) never is — so a captured line permits replaying that one exact request,
+not minting new ones; real but bounded. Fix: `_redact_secrets()`, a module-level regex scrubbing
+`api-key=`/`api-signature=` values by query-param NAME rather than by a known local value
+(`get_signature()` can itself raise before `sig` is bound, so no local variable is guaranteed in
+scope at the failure point), applied to the exception string before it reaches `log.error`.
+`tests/test_pressure_service_no_key_logging.py` gained a second rule: a raw exception object, or a
+bare `str()` of one, reaching a log call is now flagged on its own, independent of whether it
+mentions `api_key`/`api_secret` by name — positive-controlled against the exact pre-fix line.
+
+### Why this needed a DEC and not just a commit
+
+Both fixes establish a pattern future sessions should reuse rather than re-derive: **(a)** any new
+`smtplib` call site in this repo must carry `context=`, now mechanically enforced; **(b)** an
+exception object is credential-shaped whenever the code that can raise it built a credential-bearing
+URL/command, which an attribute-name-based secret checker cannot see on its own — redact by shape
+(query-param name) when the exact secret value may not be reliably in scope, not only by known
+variable.
+
+### What was checked and not flagged
+
+`rtldavis.py` (subprocess construction, path/device handling, credential handling, deserialization,
+crypto/randomness) and `weewx_monitor.py`'s sudo-gated USB-reset invocation and Gmail-credential
+handling end-to-end (DEC-0075's grant, DEC-0076/0084's gate history) both came back clean under two
+independent passes each — a finder plus the Opus verification agent — against the audit's
+hard-exclusion list (no DOS, no theoretical/non-concrete findings, no re-litigating a settled DEC).
+Recorded here rather than as their own DEC since nothing changed; the negative result lives in the
+S91 session record.
