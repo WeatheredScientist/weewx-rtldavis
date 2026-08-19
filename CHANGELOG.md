@@ -5,6 +5,47 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S90] — 2026-08-18 — NAS-LEASE adoption deferred to v2.0.14 (DEC-0099); the InfluxDB rollup answered as dashboard's build (DEC-0100)
+
+- **Off-cycle start, by design.** BOOT's resume pointer had no date-gate reached yet (probe harvest
+  waits on the 08-19 05:00 stop; the daily watch is cheap and unblocking). Session instead swept
+  ops + dashboard + HLF for cross-repo messages — the routine `repo:weewx` check, run further than
+  usual because the sweep surfaced a live thread nobody had caught yet.
+- **DEC-0099 — OPS-DEC-0107 (NAS-LEASE) landed 2026-08-15 and HLF adopted (their DEC-0177, live
+  since 08-16) while `BOOT.md` sat completely stale on both.** weewx has zero live levers today —
+  the one committed-unbuilt lever (InfluxDB `post_interval` deferral, safe to ~30 min per DEC-0092)
+  needs `influx.py` inside the container to see `LEASE_DIR`, which isn't mounted and can't be
+  without a release-class recreate. **Deferred, not declined: v2.0.14 already recreates the
+  container**, so that's the no-extra-cost moment to add the mount — bundled plan now in BOOT's
+  v2.0.14 queue (mount `LEASE_DIR`; `influx.py` checks it and raises `post_interval` while held; the
+  NAS image build becomes weewx's first HOLDER via acquire→flock→release; renewal in-place only,
+  **never** `loop_json_writer.py`'s tmp+`os.replace` idiom, which the spec names as the exact way to
+  strand a flock on an unlinked inode). Posted to ops#169, left open against weewx until the window
+  lands the client.
+- **Free correlation, no adoption needed:** read the live world-readable `heavy-io.log` this
+  session — one real lease-held window exists so far (HLF's `daily-maintenance`, 2026-08-18
+  00:10–06:10 EDT), containing both one RF-dead episode (02:41, 26.3 min) and one freeze
+  (03:15–03:22, 420 s). n=1, far too small to test anything — logged as a lead in BACKLOG's standing
+  watches, explicitly **not** revising DEC-0094's P=0.29 or the RF-stall P=0.32.
+- **DEC-0100 — ops#175's mutual wait (weewx: "dashboard's call"; dashboard: "waiting on weewx to
+  propose a shape") broke on an ops strawman; weewx answered.** Accept-and-monitor for InfluxDB
+  agreed. On who builds the permanent daily rollup dashboard's all-time-record queries need: weewx
+  declines, recommends dashboard build it as a native InfluxDB 2.x Task — `docs/INTERFACES.md`
+  already draws the boundary ("our responsibility ends at writing the documented schema"), dashboard
+  already runs Flux against this bucket and `influx.py` never has, and a Task changes neither write
+  path. Posted to ops#175.
+- **PR #215 merged (`b5c1be5`)** — both DECs, BACKLOG/BOOT synced to current reality, steady state
+  restored. Green gate at close: ruff clean, 299 passed, mypy clean/51 files.
+- **Campaign B watch, at close: block 16 of 32, arm C** (swapped 18:05:02, settled 84s — confirmed
+  directly via `rx_experiment.state` + log, not derived). Soak run earlier the same session: 16
+  pass / 2 expected-WARN (chatty stdout + ineffective USB hedge, both already-known), reception 75%
+  5-window avg / 71% last window, 0 stalls, no STOP/lock. This was the session's only contact with
+  the running square — the originally-planned S90 job list (probe harvest, closer campaign
+  tracking) is untouched and carries to S91.
+- ROADMAP checked: neither DEC touches a P0–P3 line item (both live in BACKLOG, not ROADMAP) —
+  nothing to reconcile. Tripwire unchanged, still due by S96.
+
+---
 ## [S89] — 2026-08-18 — The overnight "reception dip" was never reception (DEC-0097); the mechanism probe moves to the NAS (DEC-0098)
 
 - **DEC-0097 — the reception-floor dip is RF-dead episodes, and BOOT's own record of it was
