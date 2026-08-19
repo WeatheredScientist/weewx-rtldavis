@@ -7,6 +7,32 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S88] — 2026-08-18 — weewx 5.5.0 staged for v2.0.14; the schedule gains a stand-down state (DEC-0096)
+
+- **weewx 5.4.0 → 5.5.0 merged to dev (PR #208)** — the deliberate bump behind dependabot #158,
+  per the issue-#78 flow (the dependabot PR is the notification; #158 closed with a pointer).
+  Rides the v2.0.14 image cut. Upstream 5.5.0 notably adds retry-on-database-locked — the
+  DEC-0070 failure class. Corrected en route: #158's red `tests` check was an artifact of its
+  only CI run predating the S73 test correction on `main` (the pre-S73 first-row assertion
+  against a schedule that had legitimately launched), not a 5.5.0 problem — current `main` would
+  pass it today.
+- **DEC-0096 (PR #209): an empty SCHEDULE block is now the explicit between-campaigns stand-down
+  state.** Campaign B's terminator (08-23T00:05) is the v2.0.14 window's opening moment, and
+  `tests` is a required check on both branches — without this, every PR of the cut would have
+  queued behind a red staleness guard, with nothing honest to regenerate the table to. `install`
+  refuses the empty block loudly; six structural tests skip on emptiness; the staleness guard's
+  classification moved to `_schedule_state()` with its stale branch positively controlled
+  (DEC-0045) so a fully-elapsed real schedule still fails exactly as before. The live schedule is
+  untouched; the post-square emptying PR must land FIRST in the window. 299/299.
+- Watches: 08-18 swaps `B→D` 00:05:02 (settle ~196 s) and `D→A` 06:05:02 (~144 s) both healthy,
+  block 14 of 32 in progress; reception-floor dip recurred 03:30–03:45 ×2 on arm D — watch n=4,
+  window still drifting later (02:15 → 03:25 → 03:30). Soak 16 pass / 2 expected-WARN.
+- Docs: CONSTANTS' release row corrected — `prod-baseline-20260811` (`main` = `1cc9605`) landed
+  at S73, the "promotion pending" note was stale. ROADMAP checked: no v2.0.14 line to reconcile,
+  scheduled pass S96.
+
+---
+
 ## [S87] — 2026-08-17 — The soak was lying about a healthy station; retention settled as accept-and-monitor (DEC-0095)
 
 - **`ops/soak_check.sh` measured every age against a clock captured before its own remote body —
