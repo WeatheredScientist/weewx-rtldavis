@@ -31,8 +31,12 @@ test_parse_raw_channel / test_rain_filter).
 
 Run:  python3 -m pytest tests/   OR   python3 tests/test_stderr_drain.py
 """
+import inspect
+import itertools
 import os
+import queue
 import sys
+import time
 import types
 
 # --- stub the weewx deps so rtldavis.py imports without weewx installed ---
@@ -78,7 +82,7 @@ _wlog = _mod("weeutil.logger")
 _weeutil.weeutil, _weeutil.logger = _wu, _wlog
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rtldavis import ProcManager  # noqa: E402
+from rtldavis import ProcManager, RtldavisDriver  # noqa: E402
 
 
 class _DeadProcess:
@@ -151,6 +155,55 @@ def test_running_reflects_poll():
     assert mgr.running() is False
     mgr._process = _LiveProcess()
     assert mgr.running() is True
+
+
+class _RecordingEmptyQueue:
+    """Records every timeout it's called with; always raises queue.Empty
+    immediately -- no real blocking. This test is about what timeout value
+    get_stderr() PASSES, not about real queue/wall-clock timing."""
+    def __init__(self):
+        self.timeouts = []
+
+    def get(self, block, timeout):
+        self.timeouts.append(timeout)
+        raise queue.Empty()
+
+
+def test_get_stderr_budgets_remaining_time_not_a_fresh_10s(monkeypatch):
+    """Finding #4 (issue #219): the while guard checked elapsed time BEFORE
+    each blocking get(), but the call itself used a hardcoded 10s timeout --
+    a quick arrival near the 10s boundary let the guard pass with e.g. 9s
+    elapsed, then the hardcoded get(True, 10) could block a full second 10s,
+    letting one get_stderr() call run up to ~20s. genLoopPackets' 150s stall
+    watchdog and 300s drought log only re-check once per full get_stderr()
+    exhaustion (rtldavis.py ~1457-1479), so this doubled how late those
+    checks could fire.
+
+    time.time() sequence: 0 (start_time), 9 (1st budget check -- 9s
+    elapsed, 1s left), 10+ (2nd check -- budget exhausted, loop exits).
+    Pre-fix, the recorded timeout is always the hardcoded 10, ignoring the
+    1s actually left. Post-fix, it's budgeted down to 1."""
+    times = iter(itertools.chain([0, 9], itertools.repeat(10)))
+    monkeypatch.setattr(time, "time", lambda: next(times))
+    mgr = ProcManager()
+    mgr._process = _LiveProcess()
+    fake_q = _RecordingEmptyQueue()
+    mgr.stderr_queue = fake_q
+    list(mgr.get_stderr())
+    assert fake_q.timeouts == [1], (
+        "get_stderr() must budget its blocking get() to the time left in "
+        "its 10s cap, not a fresh 10s every call -- got %r" % fake_q.timeouts)
+
+
+def test_get_stdout_not_wired_into_the_live_driver_path():
+    """Fix #3 (issue #219): stdout_queue is safe to leave undrained only
+    because nothing in the live driver path ever calls get_stdout() -- a
+    documented, unpinned assumption (see the comment on ProcManager.
+    get_stdout()). Tripwire, not a fix: if someone wires get_stdout() into
+    genLoopPackets later, this fails and points back at that assumption
+    instead of the queue growth showing up as a mystery leak first."""
+    src = inspect.getsource(RtldavisDriver.genLoopPackets)
+    assert "get_stdout" not in src
 
 
 if __name__ == "__main__":
