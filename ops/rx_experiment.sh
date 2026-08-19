@@ -290,13 +290,15 @@ send_mail() {
   say_dry "email '$subj'" && return 0
   load_env || { log "MAIL SKIPPED (no $ENVFILE)"; return 1; }
   python3 - "$subj" "$body" <<'PYEOF' 2>>"$XLOG" || log "MAIL FAILED"
-import os, smtplib, sys
+import os, smtplib, ssl, sys
 from email.message import EmailMessage
 m = EmailMessage()
 m['Subject'] = f"{os.environ.get('STATION_NAME','PWS')} RX-EXPERIMENT: {sys.argv[1]}"
 m['From'] = os.environ['ALERT_FROM']; m['To'] = os.environ['ALERT_TO']
 m.set_content(sys.argv[2])
-s = smtplib.SMTP('smtp.gmail.com', 587); s.starttls()
+# S91: explicit verifying context -- see weewx_monitor.py's send_email() for
+# the same fix and why (bare starttls() defaults to no cert/hostname check).
+s = smtplib.SMTP('smtp.gmail.com', 587); s.starttls(context=ssl.create_default_context())
 s.login(os.environ['ALERT_FROM'], os.environ['GMAIL_PASS']); s.send_message(m); s.quit()
 PYEOF
 }
