@@ -6204,3 +6204,75 @@ correlation, not a one-off retry. Recorded here for the next session picking up 
 
 ops#169 comment posted with this measurement and a pointer to this DEC — informational, no action
 requested from coffee-radar or ops; the existing hold already covers the only lever on their side.
+
+---
+
+## DEC-0103 — The bounds/delta split is the repo's QC convention, and it is ported, not imported
+
+**Status:** Accepted · **Date:** 2026-08-19 (S94) · **Extends:** DEC-0054, DEC-0029 ·
+**Applies:** DEC-0006 (honest nulls), DEC-0045 (positive controls) · **Closes:** issue #223 ·
+**Part of:** issue #227's remediation sequence (5 of 8)
+
+**Context.** Issue #223 (tier:frontier, from the S91 full-repo audit) bundled four defects in
+`dewpoint_service.py`'s `_filter_wind` and argued they were one design gap, not four patches: the
+filter never adopted the resync-on-reject and co-null behavior that `rtldavis.py`'s `SensorQC` had
+already established as correct in this same repo. The issue left two calls open, and this DEC makes
+both.
+
+**Decision 1 — the two reject classes are different things, and the difference is the fix.**
+`SensorQC.check()` and DEC-0054 already draw a line this filter did not:
+
+| Class | Meaning | Baseline action |
+|---|---|---|
+| **Bounds** | the reading is impossible per sensor spec, or internally inconsistent (a gust below its own speed) — positive proof of corruption | leave the baseline **untouched**: the value carries no information |
+| **Delta** | the reading is an implausibly large *step* — may be a genuine gust front | **always resync** the baseline, even when rejecting |
+
+That single distinction is what fixes #223's item 1 at the root rather than by whack-a-mole. A delta
+reject that does not resync freezes the baseline permanently: every later reading is then measured
+against a value the weather has left behind, and real wind is nulled until the weewx process
+restarts. `SensorQC.check()` says so in its own comment — *"always resync, even on reject... no
+stale-baseline deadlock"* — and this filter simply never inherited it. A 300 s TTL
+(`WIND_BASELINE_TTL_SECONDS`, deliberately the same number as `QC_RESEED_SECONDS` and this file's own
+`CACHE_TIMEOUT_SECONDS`) adds the second, independent escape: a baseline older than the reception gap
+that made it stale is reseeded rather than enforced.
+
+**Decision 2 — port the pattern locally; do NOT import `SensorQC` from `rtldavis.py`.**
+The cheaper move is `from rtldavis import SensorQC`: one source of truth, less code. Rejected.
+`dewpoint_service.py` today has **zero** imports from the driver, and `docs/INTERFACES.md` states the
+repo's contract is the data it emits, not any one consumer or producer — the service is meant to
+survive being re-pointed at non-Davis WeeWX, and eventually CumulusMX (PRINCIPLES §1). Importing
+would couple a driver-agnostic LOOP-packet service to a vendored fork carrying USB and subprocess
+concerns, to reuse ~20 lines of pure logic, for a single field where `SensorQC`'s multi-key
+generality is not needed. **The duplication is the cheaper of the two costs, and it is deliberate.**
+Recorded here because the reasoning is invisible from the code: a later reader seeing two similar
+filters should know the second is a considered port, not drift.
+
+**Consequences — one is consumer-visible.** `windDir` is now nulled in every branch that nulls
+`windSpeed` (#223 item 2). Previously a rejected speed left a bare heading to reach loop-JSON,
+InfluxDB and every uploader, where it reads downstream as real wind. This follows the driver's own
+convention in both places it appears (`_data_to_packet`'s *"the same-packet direction byte is equally
+suspect"*, and the calm-air gate's *"no direction when calm"*), and it is narrower than DEC-0054's
+frame-level co-rejection — which delta rejects correctly still never trigger. Also fixed: the
+cold-start warmup buffer is bounds-checked before it can seed a wrong baseline (item 3), and
+`windGust` is bounds-checked independently of `windSpeed`'s presence (item 4) — confirmed unreachable
+with today's driver, included anyway because the driver-agnostic goal in decision 2 is the entire
+reason this file does not import from the driver.
+
+**Evidence.** 10 tests; 6 of 8 behavioral checks confirmed to fail against the pre-fix file via
+`git stash`. **The first attempt at that proof was worthless and looked fine**: all 10 tests failed
+pre-fix with `TypeError: unexpected keyword argument 'now'` — the signature change, not the defects.
+Re-run with a shim giving the old `_filter_wind` the new signature, so only behavior was under test:
+6 fail pre-fix with the exact predicted symptom, 0 after, and the 2 convention locks pass on both
+sides by design. Full suite 339/339, ruff/mypy clean (57 files, up from 56 — the count is the only
+proof the new file was not silently skipped), secret gate positive-controlled.
+
+**Deploy.** `dewpoint_service.py` is **BAKED into the image**, not mounted — established by
+`nasctl inspect` and positive-controlled against a known-mounted file rather than assumed from its
+sibling `pressure_service.py`. It ships on an image rebuild, gated behind v2.0.14; an `scp` would be
+a silent no-op (DEC-0031). `CONSTANTS.md`'s deploy-layer table did not list this file at all — the
+same omission S85 found for `loop_json_writer.py` — and gains a row in this session.
+
+*Rationale:* the repo already had the right pattern and the right reasons; #223 was the cost of not
+applying them consistently across two files that do the same kind of work. Porting rather than
+importing accepts a small, documented duplication to protect a stated architectural goal — the
+alternative trades an invisible coupling for twenty lines saved.
