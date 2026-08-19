@@ -34,24 +34,28 @@ not assumed from `pressure_service.py`. `CONSTANTS.md`'s deploy-layer table was 
 entirely (the S85 `loop_json_writer.py` omission again) and now carries the row. **Nothing deployed
 this session** — ships on an image rebuild behind v2.0.14.
 
-**⚠ MODEL TIER: A RESTORE IS OWED.** S94 escalated to Opus for #223's design work via a **bare
-`/model claude-opus-5`, which PERSISTS** as the new-session default (OPS-DEC-0010) — unlike S92/S93's
-session-only switches, which had nothing to restore. `~/.claude/settings.json` still read
-`"model": "sonnet"` when checked mid-session, so the floor file may be intact and only the client's
-own default moved. **Verify the running model at S95 start and restore the Sonnet floor if it did
-not come back on its own.** This is closeout step 6 and it is genuinely outstanding, not a formality.
+**Model tier: nothing to restore — and that answer came from the files, not from the rule.** S94
+escalated to Opus for #223's design work with a bare `/model claude-opus-5`. OPS-DEC-0010 says that
+form persists as the new-session default, so the reflex is to declare a restore owed. **That reflex
+was already wrong once here (S89): asserted three times from the rule, shipped into this very footer,
+and corrected only when ops reported back.** So it was checked instead — all five scopes:
+`~/.claude/settings.json` = `sonnet`; `~/.claude/settings.local.json` absent; `.claude/settings.json`
+and `.claude/settings.local.json` carry no `model` key; canonical
+`eaglehunt-ops/global/settings.json` = `sonnet`. **In this client that switch touched no floor file.**
+Answer closeout step 6 from the files every time — a wrong tier claim in a tier-1 doc of a public
+repo propagates to other repos' sessions within the hour. *(Read with a LEADING `command jq -r
+'.model' <file>`; nested in a subshell or loop the read-guard still blocks.)*
 
 ### ▶▶ S95 JOB LIST
 
 1. Daily square watch (~5 min): `ops/soak_check.sh` + a direct `rx_experiment.state` read.
-2. **Confirm the model tier first** (see the warning above) — before picking up anything billable.
-3. Continue #227's sequence: **#224 next** (tier:mid, same file as #223 — `dewpoint_service.py` — so
+2. Continue #227's sequence: **#224 next** (tier:mid, same file as #223 — `dewpoint_service.py` — so
    it pairs naturally and the context is fresh in DEC-0103). #225/#226 are lower priority (confirmed
    dormant / cheap-tier) and can ride v2.0.15+; they don't compete for v2.0.14 scope.
-4. **v2.0.14 prep is DONE**, now also carrying #223's fix. Nothing to decide before ~08-23.
-5. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
+3. **v2.0.14 prep is DONE**, now also carrying #223's fix. Nothing to decide before ~08-23.
+4. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
    [ops#179]. Revisit once the square closes **and** the gated queue clears.
-6. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
+5. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
    square's close (~08-23), still deferred on purpose.
 
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
@@ -159,8 +163,9 @@ not come back on its own.** This is closeout step 6 and it is genuinely outstand
   mutation failed either way.
 - **zsh reserves `$status` as an alias for `$?`** — a loop variable named `status` fails to assign.
 
-_Last updated: 2026-08-19 (S94 close — **escalated to Opus for #223's frontier design work via a
-bare `/model`, which persists; the restore is owed, see the warning above**). Green gate run on the
+_Last updated: 2026-08-19 (S94 close — escalated to Opus for #223's frontier design work; **the
+floor was verified intact across all five scopes at close, nothing to restore** — see above, and
+note the S89 precedent for why that is checked rather than inferred). Green gate run on the
 branch: ruff clean, mypy clean (**57 files**, up from 56 — the count is the only proof the new test
 file was not silently skipped), **339/339 tests**, secret gate positive-controlled with a planted
 payload and the file verified byte-identical afterward. #223 shipped end-to-end: design discussed and
