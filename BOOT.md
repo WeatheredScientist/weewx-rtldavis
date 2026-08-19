@@ -76,8 +76,8 @@ stays open (DEC-0083), post-campaign characterization question.
 
 ### ▶▶ S91 JOB LIST
 
-**Job 2 is the session's real work and is judgment-tier — flag the model call when starting it.
-Everything else is watch- or execution-tier.**
+**Jobs 2 and 7 are judgment-tier — flag the model call when starting either. Everything else is
+watch- or execution-tier.**
 
 1. Daily square watch (~5 min): `ops/soak_check.sh`; STOP absent, state matches schedule.
    **Verified good through block 16 (08-18 evening)** — soak 16 pass / 2 expected-WARN (chatty
@@ -109,6 +109,17 @@ Everything else is watch- or execution-tier.**
 6. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
    [ops#179]. Owner's framing: revisit once the square closes **and** the gated queue clears. Do
    not start it mid-square (protocol change breaks comparability, DEC-0064).
+7. **Full code audit — the owner's planned focus for this session, decided at S90 close (not
+   started).** Model split: **Opus** for the orchestrating/judgment layer — this repo's ~100 DECs
+   mean most "looks like a bug" needs weighing against already-settled reasoning (DEC-0071's WAL
+   rollback, DEC-0044's parked coupling filter, the DEC-0068→0094→0097 chain) — **Sonnet** for the
+   mechanical per-file/per-dimension finder subagents (cheapest-capable-tier). Organization:
+   `/code-review ultra` pointed at a **path target** (driver + services + `ops/`, not a diff) as
+   the engine, plus a separate `/security-review` pass (public repo, distinct failure mode from
+   general quality). **The one repo-specific must-do: prime whatever reviews `rtldavis.py`,
+   `pressure_service.py`, `dewpoint_service.py`, `ops/rx_experiment.sh`/`weewx_monitor.py` with
+   `docs/DECISIONS-FULL.md` first** — a generic reviewer blind to this repo's history will re-flag
+   already-settled decisions as bugs instead of finding anything new.
 
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
 [ops#169]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/169
