@@ -51,6 +51,11 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
   missing from it for one session. Everything else verified current: Campaign B block already
   carried DEC-0094's tenant-window split, DEC-0087/0089/0090 pause/resume and lock fixes, and the
   08-15→08-23T00:05 schedule; the DB-lock, receiveWindow and P3 rows are unchanged and correct.
+- Prior: 2026-08-19 (S92 — targeted line update per DEC-0057, not a full pass; tripwire is still
+  S96): the P0 freeze item gained DEC-0102's overnight probe result — 11.80x iowait vs. a clean
+  daytime baseline, the first hard number on the confound DEC-0092/0097 already flagged, but
+  confounded itself by a concurrent ops#169 coffee-radar event and a mixed (not confirmatory)
+  stall-timestamp cross-check. Root cause stays open. No other line moved.
 - Prior: 2026-08-18 (S89 — targeted line update per DEC-0057, not a full pass; tripwire is still
   S96): the P0 freeze item gained DEC-0097's discriminator (RF-dead episodes cluster 00:00–04:00,
   **zero** stall-bearing events in the evening freeze window — the two phenomena keep different
@@ -358,7 +363,15 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       in a 4 h span with no evening in it, so blocking demonstrably happens. **DEC-0097 also
       separates the two phenomena by clock** — RF-dead episodes cluster **00:00–04:00**
       (stall-bearing 7/9 vs 1.50, P=0.00009) with **zero** in this evening freeze window, so the
-      overnight "reception dip" is *not* this item and must not be folded into it. *When
+      overnight "reception dip" is *not* this item and must not be folded into it. **S92
+      (2026-08-19, DEC-0102): the probe ran its full window and found its first hard number** —
+      overnight (00:00–05:00) iowait is **11.80x** a clean daytime baseline (5.82x D-state-hit
+      ratio), the strongest signal in the whole dataset, directly measuring the confound DEC-0092
+      already named (sibling-tenant maintenance) and DEC-0097 flagged as undischarged. A
+      minute-level cross-check against that night's actual RF-dead stall timestamps was mixed, not
+      confirmatory (the single highest-iowait hour has zero stalls) — **root cause stays open**;
+      DEC-0102 has the full record, including a concurrent ops#169 coffee-radar event that may or
+      may not overlap this specific measurement. *When
       recomputing, drop `interval != 1` rows first: the
       S37 backfill wrote `interval=15` rows that read as 28 phantom 900 s freezes and inflate the
       rate ~60 %.* Individual events seen 07-30 08:04 (**LNA in**), 08-02 13:46, 08-03 02:59,
