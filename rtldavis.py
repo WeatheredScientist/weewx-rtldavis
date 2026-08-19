@@ -699,7 +699,11 @@ class AsyncReader(threading.Thread):
     def run(self):
         logdbg("start async reader for %s" % self.getName())
         self._running = True
-        for line in iter(self._fd.readline, ''):
+        # fd is opened in binary mode (Popen without text=True), so EOF is
+        # b'', never the str '' this compared against -- readline() returns
+        # b'' forever without blocking once the child exits, so the loop
+        # busy-spun instead of stopping (issue #219).
+        for line in iter(self._fd.readline, b''):
             self._queue.put(line)
             if not self._running:
                 break
@@ -787,8 +791,17 @@ class ProcManager():
         loginf('shutdown process %s' % self._cmd)
         self.stderr_reader.stop_running()
         self.stdout_reader.stop_running()
-        # kill existiing rtldavis processes
-        pid_list = self.get_pid("rtldavis")
+        # kill existiing rtldavis processes. Guarded like startup()'s
+        # identical call (issue #219): the common path here is the child
+        # already exited on its own (a stall/reset triggered this shutdown),
+        # so pidof finds nothing and raises -- unguarded, that used to abort
+        # shutdown() before the wait()+reap below ever ran, silently
+        # skipping the S73/DEC-0081 zombie-reap fix for the case it is
+        # actually most needed.
+        try:
+            pid_list = self.get_pid("rtldavis")
+        except Exception:
+            pid_list = []
         for pid in pid_list:
             os.kill(int(pid), signal.SIGKILL)
             loginf("rtldavis with pid %s killed" % pid)
@@ -805,6 +818,15 @@ class ProcManager():
         return self._process.poll() is None
 
     def get_stdout(self):
+        # Only called from the standalone --action show-packets CLI, never
+        # from genLoopPackets -- the bundled Go binary sends everything to
+        # stderr, so stdout_queue stays empty in the live driver path. That
+        # premise is external and unpinned (Dockerfile fetches Go source
+        # from refs/heads/main, nothing vendored here): if it's ever
+        # violated, this queue would grow unbounded for the life of a
+        # long-running child, same shape as issue #219's AsyncReader finding
+        # but from a live process feeding real data, not a dead one
+        # busy-spinning -- AsyncReader's EOF fix does not cover this case.
         lines = []
         while not self.stdout_queue.empty():
             lines.append(self.stdout_queue.get().decode('utf-8'))
@@ -817,9 +839,18 @@ class ProcManager():
         # Therefor a maximum run-time of get_stderr of 10 seconds
         # is invoked to let genLoopPackets process the yielded lines.
         start_time = int(time.time())
-        while self.running() and int(time.time()) - start_time < 10:
+        while self.running():
+            # Budget the blocking get() to what's left of the 10s cap, not a
+            # fresh 10s every call (issue #219): the while guard above was
+            # checked before this call, so a quick line arriving near the
+            # 10s boundary let the old hardcoded get(True, 10) block a full
+            # second 10s, doubling the cap genLoopPackets' 150s stall
+            # watchdog and 300s drought log rely on for their own cadence.
+            remaining = 10 - (int(time.time()) - start_time)
+            if remaining <= 0:
+                break
             try:
-                line = self.stderr_queue.get(True, 10).decode('utf-8')
+                line = self.stderr_queue.get(True, remaining).decode('utf-8')
                 lines.append(line)
                 yield lines
                 lines = []
@@ -874,7 +905,15 @@ class Packet:
 
 
 class DATAPacket(Packet):
-    IDENTIFIER = re.compile(r"^\d\d:\d\d:\d\d.[\d]{6} [0-9A-F][0-7][0-9A-F]{14}")
+    # The 2nd hex digit used to be restricted to [0-7] -- that's the low
+    # nibble of payload byte 0, whose bit 3 is the battery-low flag
+    # (parse_raw's battery_low = (pkt[0] >> 3) & 0x1). Any transmitter
+    # reporting low battery flipped that nibble into 8-F and failed this
+    # dispatch gate, silently dropping the entire frame -- not just battery
+    # status, but wind/temp/humidity/rain too (issue #220). PATTERN below
+    # never had this restriction, so decoding was never actually at risk;
+    # only dispatch was gated on it.
+    IDENTIFIER = re.compile(r"^\d\d:\d\d:\d\d.[\d]{6} [0-9A-F]{16}")
     PATTERN = re.compile(r'([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2}) ([\d]+) ([\d]+) ([\d]+) ([\d]+)')
 
     @staticmethod

@@ -76,6 +76,20 @@ def _quiet_manager(monkeypatch):
     return mgr
 
 
+def _raising_manager(monkeypatch):
+    """A ProcManager whose get_pid ALWAYS raises -- the shape when pidof
+    finds nothing, which is the common case (the child already exited on
+    its own). Unlike _quiet_manager, get_pid here never returns quietly, so
+    it can see the gap _quiet_manager's own docstring admits the suite was
+    blind to (issue #219, finding #1)."""
+    mgr = rtldavis.ProcManager()
+
+    def _raise(self, name):
+        raise rtldavis.subprocess.CalledProcessError(1, ["pidof", name])
+    monkeypatch.setattr(rtldavis.ProcManager, "get_pid", _raise)
+    return mgr
+
+
 def _drain_registry():
     """Isolate each test from children other tests left registered."""
     rtldavis._SPAWNED_CHILDREN.clear()
@@ -152,6 +166,24 @@ def test_reap_returns_count_and_keeps_the_living(monkeypatch):
         live.kill()
         live.wait(timeout=5)
         _drain_registry()
+
+
+def test_shutdown_reaps_even_when_get_pid_raises(monkeypatch):
+    """Finding #1 (issue #219): shutdown()'s get_pid() call was unguarded,
+    unlike startup()'s identical call. The common trigger is the child
+    already having exited on its own (a stall/reset) -- pidof then finds
+    nothing and raises, which used to abort shutdown() BEFORE the wait()+
+    reap below ever ran, silently skipping the S73/DEC-0081 zombie-reap fix
+    for exactly the case it is most needed. Pre-fix this test fails with
+    the natural CalledProcessError traceback; post-fix, shutdown() reaps."""
+    _drain_registry()
+    mgr = _raising_manager(monkeypatch)
+    mgr.startup("/bin/sleep 0.1")
+    p = mgr._process
+    p.wait(timeout=5)          # let it genuinely exit before shutdown() runs
+    mgr.shutdown()              # must NOT raise, even though get_pid() does
+    assert p.returncode is not None
+    assert rtldavis._SPAWNED_CHILDREN == []
 
 
 if __name__ == "__main__":
