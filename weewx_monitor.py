@@ -4,6 +4,7 @@
 
 import time
 import smtplib
+import ssl
 import os
 import sys
 import re
@@ -178,7 +179,14 @@ def send_email(subject, body):
         msg['Subject'] = subject
         msg['From'] = GMAIL_USER
         msg['To'] = ALERT_TO
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+        # S91: explicit verifying context -- smtplib's default (no context=)
+        # falls back to ssl._create_stdlib_context(), an alias for
+        # _create_unverified_context() (no cert chain check, no hostname
+        # check). Without this, an on-path attacker can intercept the
+        # handshake with any certificate and capture GMAIL_PASS. See
+        # influx.py's post_request() for the same pattern already in use
+        # elsewhere in this repo.
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ssl.create_default_context()) as s:
             s.login(GMAIL_USER, GMAIL_PASS)
             s.send_message(msg)
         log(f"EMAIL sent: {subject}")
