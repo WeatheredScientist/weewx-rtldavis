@@ -438,6 +438,12 @@ defaults false), which likely absorbs offset anyway.
   The S30 `MAX_WIND_DELTA` unit-mismatch lead was disproven (post-StdConvert = mph). Ships with the
   v2.0.4 rebuild. Follow-ups live in DEC-0029/STATUS: cross-sensor consistency checks (UV↔radiation),
   monitor alert on the new rejection signature.
+- ~~**[PROPOSED — S98, in response to ERR-0006] Reception-quality-correlated wind guard.**~~
+  **DONE S98 (DEC-0110):** measured first (93 days, 129,607 records) — genuine high wind and severe
+  reception collapse have never co-occurred at this station, so the design couldn't false-null a
+  real gust. Shipped as `dewpoint_service.py`'s `new_archive_record` (`rxCheckPercent<20%` AND
+  `windGust>10mph` → null the wind triple + derived fields), 11 new tests including both incidents
+  replayed verbatim. Ships with the ~08-23 v2.0.14 build (baked into the image). See DEC-0110.
 
 ## Long-term direction (moved from ROADMAP.md's P4 + "Longer horizon", DEC-0058, S56)
 
