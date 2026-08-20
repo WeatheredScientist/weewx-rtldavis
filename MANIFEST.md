@@ -2,9 +2,11 @@
 
 **Always-load, tier 1.** What to pull on demand, and when — never read at session start. *"Working
 near it" means read it.* **Classes, not instances** (rule 9): a row names a set and its convention;
-instances self-describe at source. **A file in no class gets its own row.** *~1.1K tok vs a 1000
+instances self-describe at source. **A file in no class gets its own row.** *~1.18K tok vs a 1000
 cap — carried, not shaved: coverage beats cap (OPS-DEC-0101), `docs/` rows are rule 9's reserved
-exception, and the sweep matches bare filenames. See ops#158/#165.*
+exception, and the sweep matches bare filenames. See ops#158/#165. **+82 at S94** for the
+`docs/GOTCHAS.md` row — the deliberate other half of BOOT.md's diet: an unindexed artifact is a lost
+one, and 82 tokens here bought ~1,700 out of the always-load tier.*
 
 ## Governance & history
 
@@ -15,6 +17,7 @@ exception, and the sweep matches bare filenames. See ops#158/#165.*
 | `docs/ROADMAP.md` — the sequenced plan, P0–P3 (DEC-0058) | choosing what's next; **updating a line a DEC just shipped (DEC-0057)**. Has its own next-check tripwire |
 | `BACKLOG.md` — open ideas · durable RF findings · **standing watches** · long-term direction | RF work, anything horizon-scale, or whether a watch has fired |
 | `docs/CONVENTIONS.md` — git workflow, secrets, **the exact gates and the only interpreter with the tooling** | before any gate; before any commit |
+| `docs/GOTCHAS.md` — how tools and signals **mislead** (the other rows say what things *are*); §-indexed, ex-`BOOT.md` S94 | **before trusting any tool's zero/empty/green** (§1); a PR/merge or handoff write (§2); any NAS/campaign task (§3); judging a component live or shipped (§4). **New traps land here, never in `BOOT.md`** |
 | `docs/PRINCIPLES.md` — durable intent · `docs/ASSESSMENT.md` — governance anchor | weighing a new decision. ASSESSMENT is a dated S23 audit, **pre-DEC-0063** |
 | `docs/UPSTREAM-THREADS.md` — the four open upstream threads, and the etiquette | replying upstream, or checking whether one moved |
 
