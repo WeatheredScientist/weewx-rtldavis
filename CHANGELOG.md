@@ -5,6 +5,74 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S96] — 2026-08-20 — ops#169 closed end-to-end (DEC-0107); #224 unit systems fixed; ROADMAP tripwire fired
+
+- **ops#169 / NAS-LEASE: every open item closed in one session, and all three box-level fixes rest on
+  direct observation rather than report.** The round was run session-to-session with coffee-radar
+  (their S205) at the owner's direction, with eaglehunt-ops informed throughout. Landed: `chmod 666`
+  on `heavy-io.log`, `chmod 0777` on `LEASE_DIR` (sticky dropped), `chattr +a` on the log,
+  `NAS-LEASE.md` **v1.4 / OPS-DEC-0110**, and HLF's create-mode patch (their PR #388, `066bbf9f`).
+- **The finding that moved it: both weewx lease roles run non-root, and neither is what the other
+  tenants assumed.** coffee-radar reasoned the uid gaps were moot for us because our client would run
+  as root "like your `rx_experiment` tasks" — those *are* DSM root tasks, but neither is the lease
+  client. The observer is `weewx-monitor` (uid 1031, DEC-0009 least-privilege) and the holder is a
+  separate non-root account, established from the ownership of every `build-v2.0.*` directory rather
+  than inferred. **weewx is the first tenant the gaps actually bite** — HLF and coffee-radar are both
+  uid 0, which is exactly why three nights of clean production never surfaced them. Widening the
+  monitor's sudo grant to dodge a file mode was considered and **rejected**: it trades a documented
+  security decision for a `chmod` someone else can make.
+- **`chattr +a` was deliberately not closed on its no-error exit.** That is its normal success
+  signature and coffee-radar's reading was reasonable — but **this box is the origin of our
+  accepts-and-silently-ignores precedent** (DEC-0036: Synology's `db` driver takes `max-size` and
+  discards it, 7 h of prod lost to a cap that was never real). One owner-run `lsattr` returned
+  `-----a------------` and converted inference to observation. A write-based probe was explicitly
+  refused — it would confirm the attribute by attacking the attribution record.
+- **We priced the cost of our own recommendation in writing.** Dropping sticky widens §11's already-
+  accepted wrong-lease-deletion race from same-owner to any-tenant: a buggy unlink of a *valid* lease
+  leaves the holder renewing into an unlinked inode while every observer reads the slot free. Still
+  the right trade against option (b)'s *guaranteed* silent stranding of the least-privileged tenant,
+  but recorded rather than discovered later. Break-by-takeover-in-place was considered and
+  **discarded with the reason**, checked against HLF's real acquire/release code, so it stays dead.
+- **Two findings came from the other tenants looking at our situation, and both changed what
+  shipped.** coffee-radar noticed sticky was *incidentally* the only thing protecting the log from
+  unlink — unpriced because it had only ever been weighed against §3's break clause — and flagged
+  that the holder's literal account name was heading into a persisted record. That name is the
+  owner's personal login, absent from all tracked files, and our adopting DEC lands in a **public,
+  permanent** repo: the hazard was ahead, not behind. HLF, patching the line we reported, found **a
+  second create we had not flagged** (the steal-then-acquire retry) — the branch that only runs after
+  a crash, i.e. when the lease matters most.
+- **DEC-0107 is deliberately NOT the adopting DEC.** Landing one locks §5's constants for every
+  tenant (HLF's DEC-0177 was the first), so it must lock a *corrected* spec. Adoption now waits on
+  nobody but us and lands with the client at the **~08-23 v2.0.14 build**, which §8 designates as the
+  protocol's first cross-tenant holder exercise. Declared floor 600 s / TTL 3600 s, flagged as dated
+  data to be re-pinned against that build's real duration.
+- **#224 shipped: `dewpoint_service.py` now branches on `usUnits`** (PR #255). The file had no
+  `usUnits` check anywhere — `dewpointF`/`heatindexF` unconditionally, plus two wind thresholds
+  documented in mph compared against packet values that are km/h or m/s under
+  `target_unit=METRIC`/`METRICWX`, both documented options in our own `weewx.conf.example`. Masked in
+  prod only by the shipped US default. **Fixed the way WeeWX's own `wxxtypes.py` does, NOT via the
+  issue's proposed `weewx.units.to_US()`** — `loop_json_writer.py` uses to_US legitimately because it
+  *emits* US-suffixed fields, but this service writes into the live packet, so a to_US fix without
+  the return trip would put degF into a metric packet: the same bug one layer along.
+- **The wind half failed in both directions, each silently** — as m/s the 200 mph ceiling is ~447 mph
+  and the guard was **inert**; as km/h it is ~124 mph and the guard **nulled real weather**. Readings
+  are now normalised to mph at each comparison, keeping one documented threshold set instead of three
+  to keep in sync. Pre-fix logs printed km/h values labelled `mph`; they now carry the reading's own
+  unit. Suite **339 → 349**.
+- **Two process findings from doing it.** The mutation check corrected our own documentation: 7 of 10
+  new tests fail against the pre-fix file, not the 8 the docstring claimed. And the new tests **passed
+  in isolation while asserting nothing in the full suite** — the weewx stubs live in `sys.modules` and
+  are shared, so `dewpoint_service.weewx` is whichever stub won the import race; fixed by patching
+  through the module under test and restoring after.
+- **ROADMAP scheduled reconciliation ran — tripwire fired on time, three stale items fixed** (PR
+  #256, bumped to S106). The most interesting: **the "Last updated" banner had itself gone stale.**
+  S89 and S92 recorded targeted passes in the guardrail section without promoting them into the top
+  block, so the banner read S86 while content was current through S92 — the freshness signal aged
+  while the file did not. Also: P2 asserted the Campaign A arm-winner seal held, which DEC-0069 broke
+  as a side effect **30 sessions ago**; and P3's INTERFACES citation list was three DECs out of date
+  (verified against `git log -- docs/INTERFACES.md`, not inferred).
+
+---
 ## [S95] — 2026-08-20 — The reported crash-loop was scheduled swaps (DEC-0106); `soak_check.sh` gains a restart-loop detector
 
 - **#245 / ops#184 (tier:frontier) refuted on measurement, and closed.** The report — `RestartCount: 0`
@@ -164,50 +232,5 @@ under [Pre-S16].
   rather than trusting the edits.
 
 ---
-## [S93] — 2026-08-19 — Channel-gating fixed (#222), #227's sequence now 4 of 8 shipped; #223 scoped
-
-- **#227's sequenced plan: #222 (channel-gating consistency, mid) fixed, tested, merged.** Three
-  instances of the same root cause — channel routing not consistently enforced across sibling
-  decode/config paths. (1) Wind bytes decoded unconditionally from any of 4 configured channel
-  roles instead of gating on the already-computed `wind_channel` — fixed by wrapping the decode
-  block in the missing gate, sibling to the message_type dispatch that follows it. (2) `rain_count`
-  (message_type 0xE) had no channel check, unlike its sibling `rain_rate` a few lines earlier —
-  fixed by copying that existing gate. (3) `ch_to_xmit()` accumulated transmitter bits with no
-  check the 5 configured channel numbers are pairwise distinct, so a duplicate silently corrupted
-  the `-tr` bitmask into a different channel than either role was configured for — fixed with an
-  explicit `ValueError` in `__init__`, matching the sibling frequency-validation two lines above it.
-  9 new tests (`tests/test_channel_gating.py`), all 4 bug-repro cases confirmed to fail pre-fix via
-  `git stash`. Wiring `wind_channel` into `parse_raw()` broke 13 pre-existing tests across 4 files
-  whose minimal fake-driver fixtures predated the change and had no `wind_channel` key — fixed by
-  adding it to each, not a behavior change. **PR #238, merged** (`f31438d`). 329/329 full suite
-  (320 baseline + 9 new), ruff/mypy clean (56 files), secret scan positive-controlled clean.
-- **#219/#220/#221 closed on GitHub** — merged in S92 but never explicitly closed (this repo's
-  `Closes #N` doesn't auto-fire since `dev`, not `main`, is where PRs land). Each closed with a
-  comment cross-referencing its PR and merge commit, per `CONVENTIONS.md`'s explicit rule. #227's
-  sequence now correctly reads 4 of 8 shipped on GitHub, not just in `BOOT.md`'s own tally.
-- **#223 (`dewpoint_service.py` wind-filter redesign, frontier) scoped, not implemented** — read
-  and grounded all 4 sub-bugs against current code (deadlock from missing resync-on-reject with no
-  TTL; `windDir` surviving a rejected `windSpeed`/`windGust`, confirmed by the two existing tests
-  that seed a `windDir` value and assert nothing about it; the unfiltered warmup buffer that seeds
-  bug 1; `windGust` unguarded when `windSpeed` is `None`, confirmed unreachable by this repo's own
-  driver today). Identified the fix pattern to port (`SensorQC.check()`'s always-resync-the-baseline
-  + TTL-gated reseed) and flagged one open design call for the actual session: porting the pattern
-  locally vs. importing `SensorQC` from `rtldavis.py`, which would break `dewpoint_service.py`'s
-  current zero-coupling to the driver. Deliberately held for its own dedicated session per #227's
-  own note and the frontier tag — no code written.
-- **Session survived a mid-session crash cleanly** — verified on resume that nothing drifted (git
-  state, PR #238's CI/mergeability all exactly as left) before continuing, rather than assuming the
-  transcript was still ground truth.
-- Daily square watch (once, session start): 16 pass / 2 expected-WARN (chatty stdout + ineffective
-  USB hedge, both already-known), reception 75% 5-window avg / 62% last window, arm B unchanged
-  since 08-19T06:06:26, no STOP/PAUSE/lock. Model tier confirmed Sonnet at session start (fresh
-  session, nothing elevated to restore from S92's #219 escalation).
-- **None of #222 deploys yet** — `rtldavis.py` is baked into the image, holds for the v2.0.14 cut
-  (~08-23) same as the rest of #227's plan.
-- ROADMAP checked: nothing this session ships/closes/reprioritizes a P0–P3 line — no DEC logged
-  (routine audit-remediation fixes don't generate their own DEC, same as #219/#220/#221 in S92).
-  Tripwire unchanged, still due by S96.
-
 ---
----
-*(S73–S92 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S93 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
