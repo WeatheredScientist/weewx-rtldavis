@@ -6340,3 +6340,64 @@ on a recreate it never needed, and the correction is only visible by reading the
 than this repo's own record of it. Logged as its own entry because `BOOT.md` is rewritten every
 session and a finding left only there evaporates at the next close — while DEC-0099 would have stayed
 greppable and wrong.
+
+---
+
+## DEC-0105 — `docs/GOTCHAS.md`: traps are durable, so they leave the always-load tier
+
+**Status:** Accepted · **Date:** 2026-08-19 (S94) · **Follows:** DEC-0072 (standing watches →
+`BACKLOG.md`, S67) · **Serves:** DEC-0063's tiering · **Applies:** STANDARD rules 1 and 5 ·
+**Answers:** ops#173 (weewx half)
+
+**Context.** `BOOT.md` reached **4,866 tok against a 2,500 cap — 195%**, worse than the 4,427 ops#173
+last recorded, because S94 itself added ~1,000 (two DECs and an owner-raised cross-repo item). Four
+prior trimming passes (S84) had applied rule 1 as written and moved the number ~50 tok net: deleting
+resolved items cannot keep pace with a file that absorbs a session's state every close.
+
+**Decision.** The gotchas block — ~1,700 tok, **41% of the file** — moves to `docs/GOTCHAS.md`, an
+on-demand artifact with a `MANIFEST.md` row. The test that justifies it: **BOOT holds what expires at
+a session close; a trap in reading a signal never expires.** Nothing in that block was session state,
+so none of it belonged in the always-load tier — the same reasoning DEC-0072 used for standing
+watches, applied to the other large durable block BOOT had accumulated.
+
+Organized into four sections (false signals · git/PR/handoff · NAS and campaign · liveness and
+deployment) so the MANIFEST row can name a **trigger** rather than a topic. An index entry that says
+"read this sometimes" is not lazily loaded, it is unread.
+
+**The structural claim, and its one condition.** The cap holds only if **new traps are appended to
+`GOTCHAS.md`, never to `BOOT.md`**. That instruction is stated in both files, but `BOOT.md` is
+rewritten every session and cannot carry a durable rule — so `MANIFEST.md`'s row is the load-bearing
+copy. If a future session appends traps to BOOT again, this decision has failed and the file will
+re-cross the cap within a few sessions at S94's observed growth rate.
+
+**Rejected: distributing the entries into the canonical docs** (`CONVENTIONS.md`, `ARCHITECTURE.md`,
+`CAMPAIGN-B-RUNBOOK.md`) by topic. Each entry would land in a defensible home, but the *class* would
+stop existing — and the class is the point: these are traps in **using a tool or reading a signal**,
+not facts about how the system is built. The canonical docs say what things are; this one says how
+they mislead. Splitting them also multiplies the chance one is silently lost in a move.
+
+**A rule-5 trap found while doing this, worth recording because the remedy text does not warn about
+it.** The first draft of the new file also pulled in the gate commands, the baked-vs-mounted deploy
+table, and the pyc cache from `CONVENTIONS.md` / `CONSTANTS.md` / `ARCHITECTURE.md` — it read as
+completeness. It is STANDARD rule 5's defect exactly: a second copy is not redundancy, it is what
+drifts. Eight entries removed, and the file now states the exclusion inline so the next editor does
+not re-add them. **Generalizable: moving content OUT of a tier-1 file invites duplicating the
+canonical docs INTO the new one, because the new file feels like it should stand alone. It should
+not.**
+
+**Cost, taken deliberately.** `MANIFEST.md` goes **1,096 → 1,226 tok** (+130) for the row plus an
+honest restatement of its own carried figure, which said "~1.1K" and would otherwise have kept saying
+so — the carried-stale-figure shape DEC-0083 exists to stop. That file remains over its own 1,000 cap
+under the documented OPS-DEC-0101 carry, where `docs/` rows are named as rule 9's reserved exception.
+**130 tokens there bought ~1,700 out of the always-load tier**, and an unindexed artifact is a lost
+one.
+
+**Result:** `BOOT.md` **4,866 → 2,406 tok**, under cap for the first time since before S83, measured
+the sweep's way (`LC_ALL=en_US.UTF-8 wc -m` / 4, OPS-DEC-0089) against the pushed `dev` tip.
+**ops#173 deliberately left OPEN** — the result was posted to the thread rather than the issue closed,
+because `MANIFEST.md` is still over its own cap and the automated sweep, not this repo, is the thing
+that should call it green.
+
+*Rationale:* rule 1's "delete resolved items" is necessary and, at this file's size, insufficient —
+four passes proved it. The remaining bulk was not stale, it was **misfiled**: durable content sitting
+in the tier reserved for what changes every session.
