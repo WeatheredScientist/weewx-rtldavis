@@ -146,6 +146,12 @@ fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.
   absent field costs nothing and normal queries never see it. **Consumers must treat `*_qc` as optional**: its absence is
   the common case and means "not corrected". It is a *pointer* to the errata log, not a substitute for
   it — the flag says *that* a point was corrected, DATA_ERRATA says *what, why, and how far it spread*.
+  **The SQLite archive itself carries no equivalent flag** (DEC-0053 Finding 3) — a correction lands
+  in InfluxDB's `*_qc` field and in `docs/DATA_ERRATA.md`; the archive row it corrects is left
+  unchanged and indistinguishable from one that was never corrected. A reader treating the archive as
+  ground truth should know the provenance lives downstream of it, not in it. Deliberate, not an
+  oversight — a schema change here isn't currently justified, and SQLite isn't one of this doc's two
+  published surfaces to begin with.
 
 - **No station identity in the series key (DEC-0053 Finding 2 — decided S48, never actually written
   here until now).** `influx.py` supports `tags = station=...`, but the live config sets none — the
