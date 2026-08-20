@@ -6661,3 +6661,96 @@ The second lesson is procedural and worth as much: the two findings that most im
 (sticky was also protecting the log; the account name was about to be published) each came from the
 *other* tenant looking at our situation, and both arrived because the round was conducted directly
 between sessions rather than as alternating comments on an issue.
+
+## DEC-0108 — weewx's NAS-LEASE holder client ships as `ops/nas_build.py`, scoped to the wrapper alone
+
+**Status:** Accepted (design + build) · **Date:** 2026-08-20 (S97) ·
+**Follows:** DEC-0107 · **Implements:** the holder half of `NAS-LEASE.md` §6/§9 ·
+**Deliberately NOT the adopting DEC** — see §What this does not do
+
+### Context
+
+DEC-0107 closed the round of spec corrections with coffee-radar: "weewx's adoption is no longer
+blocked on anyone else... waits only on our own client." This session built that client, ahead of
+the ~08-23 v2.0.14 build so the mechanism is tested and boring by the time it runs for real,
+rather than assembled under time pressure on the night itself.
+
+### What shipped: `ops/nas_build.py`
+
+A generic lease-holder wrapper: `python3 ops/nas_build.py --job <name> -- <command>`. Acquire is
+`O_CREAT|O_EXCL` on `heavy-io.lease`, immediate explicit `fchmod 0644` (§3 v1.4's own rule — a
+shell/language default takes `0666 & ~umask`, and a restrictive holder-side umask would silently
+ship an unreadable lease, exactly the near-miss DEC-0107 found and fixed on the box), then an
+exclusive `flock` held for the wrapped command's whole run. Release removes the lease file and
+appends a `released` event with a truthful `outcome` (`clean` / `build-failed` / `crashed`),
+wrapped in `try/finally` so a crash still releases rather than abandoning the file to sit until TTL
+expiry. A stale foreign lease (flock free **and** `expires_at` passed — both, not either) is broken
+and logged as `broken`, naming the stale tenant/job; anything else — a valid lease, or one that
+can't be read at all — defers, never proceeds un-announced.
+
+**Generic on purpose, not build-specific:** `NAS-LEASE.md` §6 names TWO holder cases for weewx —
+the NAS image build, and manual bulk historical analysis. A wrapper that only knew about `docker
+build` would need a second implementation for the other case; wrapping an arbitrary command serves
+both from one script.
+
+**Language: Python**, matching two independent signals rather than either alone: `NAS-LEASE.md` §9
+already assumed "a weewx client would be Python via `fcntl`, no binary involved" during the
+original design round, and this repo's own `ops/` already splits work that way — Python for
+protocol/data logic (`campaign_analyze.py`, `freeze_baseline.py`), bash for process orchestration
+(`rx_experiment.sh`, `soak_check.sh`).
+
+**Preserves the existing `BUILD-EXIT` marker convention** (`CONSTANTS.md`: verify a build by that
+marker, never a pipeline exit code) — but implemented correctly via `subprocess.Popen`'s own
+`returncode`, which has no pipeline stage to lose the real exit code in. The manual convention
+exists specifically because `docker build ... | tee build.log; echo $?` reports `tee`'s exit code,
+not the build's; a Python wrapper reading `Popen.returncode` directly never has that failure mode
+to guard against in the first place.
+
+### Scope decision: holder only — the observer side is recorded, not built
+
+`NAS-LEASE.md` §3's read protocol (checking OTHER tenants' leases and downshifting) is explicitly
+optional infrastructure for weewx today, for a concrete reason rather than a deferral-by-default:
+**weewx has no live downshift lever to act on a "held" verdict.** §6 lists weewx's levers as *live
+today: none*; the `current.json` cadence lever is already spent (~1,150/day residual headroom,
+nobody plans around it); the InfluxDB `post_interval` deferral is committed-unbuilt and needs
+in-container reach this host-side client doesn't have. A courtesy read that can only ever log
+`observed-held` and take no other action has a real but currently-unclear benefit — it produces a
+data point for the correlation work §4/§8 describe, but nothing this session could point to as
+using it. Building it now would be scope growth past "first holder exercise" for a benefit not yet
+established. **Recorded here so the option isn't silently lost**, not because it's rejected — the
+natural trigger to revisit is the InfluxDB deferral lever actually getting built, at which point an
+observer with something to act on is a different, stronger case.
+
+### Provisional constants, to be re-pinned
+
+`RENEWAL_FLOOR_S = 600` / `TTL_S = 3600`, taken as-is from §5's table — DEC-0078's ~10 min v2.0.12
+build, explicitly marked there as "placeholder, not measured on the wrapped build." They ship
+unchanged in this commit. The ~08-23 v2.0.14 build run under this wrapper produces the first real
+measured duration for weewx's holder shape; re-pinning these two literals against that number is
+the one piece of this work that cannot happen before the event itself, and is what the eventual
+adopting DEC's own numbers rest on.
+
+### What this does not do
+
+- **Does not touch the rest of the ~08-23 release sequence.** `CAMPAIGN-B-RUNBOOK.md`'s existing
+  "Release mechanics" list (promote+tag, rebuild, push, regenerate `SCHEDULE=` dates, bump
+  `EXPECT_IMAGE`/`EXPECT_DRIVER`) stays exactly as manual as it is today — this wraps only the
+  `docker build` invocation itself, not the pipeline around it.
+- **Does not build the observer/downshift side** — see above.
+- **Is not the adopting DEC.** `NAS-LEASE.md` §5's constants stay UNLOCKED until that DEC lands
+  with the ~08-23 build, carrying the real measured floor/TTL and taking the next free DEC number
+  at that time.
+
+### Testing
+
+14 new tests (`tests/test_nas_build.py`), exercising a real `flock()` against a `tmp_path` lease
+directory rather than mocking it — `flock` is real POSIX and behaves identically on macOS and the
+NAS's Linux/btrfs. Covers: explicit `fchmod` winning against a hostile umask (the exact production
+near-miss `NAS-LEASE.md` v1.4 documents and DEC-0107 found on the live box); validity as
+flock-held-**OR**-unexpired, not either alone (a wedged-but-alive holder past its own TTL must not
+be broken); a stale break firing only when both conditions hold; a torn/malformed lease read as
+"couldn't tell," never "free" (never broken on a guess); the real subprocess exit code surviving
+through to both the `BUILD-EXIT` marker and the log's `outcome` field; and the lease releasing
+(outcome `crashed`) even when the wrapped command can't start at all. 373/373 full suite, ruff
+clean, mypy clean (61 files, confirming both new files were checked, not skipped), secret gate
+clean.
