@@ -6754,3 +6754,58 @@ through to both the `BUILD-EXIT` marker and the log's `outcome` field; and the l
 (outcome `crashed`) even when the wrapped command can't start at all. 373/373 full suite, ruff
 clean, mypy clean (61 files, confirming both new files were checked, not skipped), secret gate
 clean.
+
+## DEC-0109 — Retire P0.5's last follow-on: Keep-a-Changelog headings + DECISIONS entry-skeleton convergence
+
+**Status:** Accepted (retirement) · **Date:** 2026-08-20 (S98) ·
+**Closes:** ROADMAP.md's P0.5 (the only remaining checkbox)
+
+### Context
+
+ROADMAP.md's P0.5 section ("Governance alignment across the family") has carried one unchecked
+follow-on since S25 (2026-07-05, ~72 sessions ago): "Keep-a-Changelog headings + DECISIONS
+entry-skeleton convergence (proposed S25, never picked up)." S98's job list flagged it for a
+discovery pass before any scoping — check what S25 actually proposed before building anything.
+
+### The original proposal is unrecoverable
+
+No session transcript survives: local retention for this repo's Claude sessions starts
+2026-07-21, sixteen days after S25. S25's own `CHANGELOG-ARCHIVE.md` entry (`[S25] — 2026-07-05 —
+Finish the S24 review fixes`) is entirely about unrelated code-quality fixes (owm.py RESTThread
+rebase, influx.py TLS verification, dead-code removal, SPDX headers) — the changelog-format idea
+was never written up anywhere beyond ROADMAP's own one-line bullet. That bullet is the entire
+surviving record of what was proposed.
+
+### Checked: is this repo behind a family standard? No.
+
+- weewx's own `CHANGELOG.md`: free-form narrative prose per session, no Keep-a-Changelog-style
+  headings (Added/Changed/Deprecated/Removed/Fixed/Security).
+- eaglehunt-weather-dashboard's `CHANGELOG.md`: same — free-form prose, no such headings.
+- hyperlocal-forecast: no separate `CHANGELOG.md` at all; `docs/DECISIONS.md`/`-FULL.md` serve
+  that role.
+
+Nobody in the family adopted this. There is no existing target to converge toward, so
+"convergence" cannot mean catching up to a sibling.
+
+### The DECISIONS half is separately moot
+
+`docs/DECISIONS-FULL.md` has, since S25, organically grown its own working skeleton — a
+`**Status:**`/`**Date:**`/`**Follows:**`/`**Answers:**` metadata line plus a `### Context` section,
+consistent across recent entries (DEC-0107, DEC-0108, this one). That happened entirely
+independently of `CHANGELOG.md`. It converged with itself; there is nothing left to reconcile.
+
+### The judgment call: not just absence of evidence
+
+Beyond the missing rationale and the lack of a family precedent, retrofitting Keep-a-Changelog's
+Added/Changed/Deprecated/Removed/Fixed/Security categories onto this repo's actual entries would
+likely make them worse. Entries here are dense, cross-referencing narratives — a single bullet
+routinely spans a shipped fix, the measurement behind it, the PR, and a cross-repo pointer (see
+DEC-0108's own CHANGELOG entry, above). A rigid single-facet schema built for simpler,
+one-thing-per-line projects would fragment that causal narrative rather than clarify it. 72
+sessions unclaimed, zero family adoption, and an architectural reason it likely never took hold
+are read together as a real signal, not a gap waiting to be filled.
+
+### Disposition
+
+ROADMAP.md's P0.5 line struck through as retired (not done); P0.5 as a whole is now fully closed —
+nothing carries forward.
