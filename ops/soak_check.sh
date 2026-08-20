@@ -87,6 +87,22 @@ ln=\$(grep -n \"^\$(date -d \"@\$t0\" '+%Y-%m-%d %H' 2>/dev/null)\" \"\$L\" | he
 win=\$(tail -n +\$ln \"\$L\")
 
 echo \"banner=\$(printf '%s' \"\$win\" | grep -c 'weewxd .*Initializing weewxd version')\"
+# --- restart-loop detector (S95, #245) ---
+# Deliberately NOT windowed to container start. entrypoint.sh execs weewxd, so
+# weewxd IS pid 1 and its death takes the container with it -- every container
+# lifetime holds exactly ONE startup banner. A restart loop is therefore
+# structurally invisible inside the default window; it only shows ACROSS
+# container lifetimes, which is why this reads the log on its own 6 h window.
+# The signature, measured S95: scheduled campaign swaps sit 6 h apart, while
+# 2026-08-06's journal_mode crash-loop ran 7 starts in 7 min (60-90 s apart).
+# Reads yesterday's rotated file too: weewx.log rotates daily, so a 6 h window
+# run just after midnight spans TWO files and would silently under-count from
+# one -- the same trap the mon_resets check below already documents, and the
+# worst possible one here, since the overnight stall cluster (DEC-0097) sits
+# at 00:00-04:00. Yesterday first, so the timestamps stay chronological.
+loop_t0=\$((now - 21600))
+LY=\$L.\$(date -d yesterday '+%Y-%m-%d' 2>/dev/null)
+echo \"restart_times=\$(cat \$LY \$L 2>/dev/null | grep 'Initializing weewxd version' | cut -c1-19 | while read -r ts; do tt=\$(date -d \"\$ts\" +%s 2>/dev/null || echo 0); [ \"\$tt\" -ge \"\$loop_t0\" ] && printf '%s ' \"\$tt\"; done)\"
 echo \"drv_ver=\$(printf '%s' \"\$win\" | grep -o 'driver version is [^ ]*' | tail -1 | sed 's/.* //')\"
 echo \"qc_ok=\$(printf '%s' \"\$win\" | grep -c 'sensor_qc True')\"
 echo \"hraw_on=\$(printf '%s' \"\$win\" | grep -c 'log_humidity_raw True')\"
@@ -204,6 +220,29 @@ else bad "ARCHIVE STALLED" "last record ${ra}s ago — this is the DEC-0036 sign
 sl=$(get stdout_lines)
 [ "${sl:-999}" -lt 50 ] && ok "stdout quiet" "${sl} lines (DEC-0041)" || note "stdout is chatty" "${sl} lines — the freeze fuel is back?"
 [ "$(get banner)" != "0" ] && ok "weewxd startup banner in weewx.log" "(DEC-0043)" || note "no startup banner in window" "(only expected right after a restart)"
+# 3b. Restart-loop detector (S95, #245). The banner check above passes on PRESENCE:
+# it counts with grep -c and then only tests non-zero, so one banner and fifty read
+# identically green. That blind spot is why a reported "crash loop" reached the owner
+# as a frontier-tier alarm before anything here could tell it from routine swaps --
+# and the container's own RestartCount was no help either, since `docker restart`
+# never increments it. This asks the question the count was never asked: how close
+# together are the restarts? Scheduled swaps are 6 h apart; a real loop is seconds.
+rt="$(get restart_times)"
+rn=$(printf '%s' "$rt" | wc -w | tr -d ' ')
+if [ "${rn:-0}" -le 1 ]; then
+  ok "no weewxd restart loop" "${rn:-0} start(s) in 6h"
+else
+  _mg=999999; _pv=""
+  for _t in $rt; do
+    [ -n "$_pv" ] && { _d=$((_t - _pv)); [ "$_d" -lt "$_mg" ] && _mg=$_d; }
+    _pv=$_t
+  done
+  if [ "$_mg" -lt 1800 ]; then
+    bad "WEEWXD RESTART LOOP" "${rn} starts in 6h, closest ${_mg}s apart — the 2026-08-06 signature (an attended deploy looks like this too)"
+  else
+    ok "no weewxd restart loop" "${rn} starts in 6h, closest $((_mg/60))min apart (scheduled swaps are 6h)"
+  fi
+fi
 
 # 4. Driver identity (DEC-0031 — the stock-driver trap)
 # Report the version the driver ACTUALLY announces, rather than grepping for an
