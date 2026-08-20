@@ -5,7 +5,7 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
-## [S94] — 2026-08-19 — Wind-filter redesign shipped (#223, DEC-0103); ops#169 unblocked by correcting our own DEC-0099 (DEC-0104)
+## [S94] — 2026-08-19 — #223 shipped (DEC-0103); ops#169 unblocked by correcting our own DEC-0099 (DEC-0104); BOOT.md diet, under cap (DEC-0105)
 
 - **#223 (`dewpoint_service.py` wind-plausibility filter, frontier) fixed, tested, PR #241.** Its
   four defects were one design gap, exactly as the issue argued: `_filter_wind` never adopted the
@@ -83,6 +83,30 @@ under [Pre-S16].
   narrative record, not as a line item) — nothing to reconcile, tripwire unchanged, still due by S96.
 - Model tier: escalated to Opus for #223's frontier design work. **Floor verified intact across all
   five scopes at close — nothing to restore** (see #243 above for why that is checked, not inferred).
+- **`BOOT.md` diet done on owner instruction — 4,866 → 2,406 tok, under the 2,500 cap for the first
+  time since before S83 (DEC-0105, ops#173).** Done days ahead of the ~08-23 plan. The starting point
+  was worse than ops#173 last recorded (4,427 at S86) because this session added ~1,000 of its own.
+  **Four prior rule-1 trimming passes at S84 had moved the file ~50 tok net** — deleting resolved
+  items cannot keep pace with a file that absorbs a session's state every close, so the remaining
+  bulk was diagnosed as *misfiled rather than stale*: the gotchas block was **41% of the file** and
+  nothing in it expires at a session close. Moved to **`docs/GOTCHAS.md`**, four sections deep, with
+  a `MANIFEST.md` row whose "load when" names a trigger rather than a topic — an index entry saying
+  "read this sometimes" is unread, not lazily loaded. Then What's-settled and job 2 compressed to
+  conclusions now that DEC-0103/DEC-0104 hold the detail (the ops#169 briefing alone was ~700 tok
+  restating DEC-0104). **Rejected:** distributing the entries into `CONVENTIONS.md`/`ARCHITECTURE.md`
+  by topic — each would land in a defensible home but the class would stop existing, and the class is
+  the point. **A rule-5 trap caught mid-task:** the first draft of the new file also copied in the
+  gate commands, the baked-vs-mounted deploy table and the pyc cache from the canonical docs; it read
+  as completeness and is precisely STANDARD rule 5's defect (a second copy is what drifts). Eight
+  entries removed, exclusion stated inline. **Cost taken deliberately:** `MANIFEST.md` 1,096 → 1,226,
+  including correcting its own stale "~1.1K" self-figure — 130 tok there bought ~1,700 out of the
+  always-load tier. **ops#173 left open on purpose**, result posted to the thread: `MANIFEST.md` is
+  still over its own cap, and the automated sweep — not this repo — should be what calls it green.
+- **A second follow-up PR (#249) fixed two stale references the diet itself created** — job 6 still
+  read "diet at the square's close, still deferred on purpose", and the gotchas pointer cited a §5
+  that no longer existed after the rule-5 removals merged it into §4. Same shape as #242: a doc
+  describing a state that changed while it was being written. Caught by re-reading the finished file
+  rather than trusting the edits.
 
 ---
 ## [S93] — 2026-08-19 — Channel-gating fixed (#222), #227's sequence now 4 of 8 shipped; #223 scoped
