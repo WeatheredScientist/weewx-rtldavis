@@ -374,6 +374,12 @@ SENSOR_QC_DEFAULTS = {
     'wind_speed':      (0.0, 89.4, 20.0),     # 6410 spec 0..200 mph (89.4 m/s)
     'uv':              (0.0, 16.0, 8.0),      # spec 0..16; real cloud flicker <=~5.5 observed
     'solar_radiation': (0.0, 1800.0, None),   # spec 0..1800; no delta (cloud edges genuine)
+    'rain_rate':       (0.0, 406.4, None),    # matches weewx.conf.example's StdQC backstop
+                                                # (0-16 in/h); no delta -- a downpour's onset is genuine
+    'temp_1':          (-40.0, 65.0, 4.0),    # same decode/bounds as temperature
+    'temp_2':          (-40.0, 65.0, 4.0),
+    'humid_1':         (0.0, 100.0, 10.0),    # identical decode expression to humidity
+    'humid_2':         (0.0, 100.0, 10.0),
 }
 
 # Frame-level co-rejection (DEC-0054): every weather-observation key a single
@@ -1003,12 +1009,23 @@ class CHANNELPacket(Packet):
                     raise weewx.WeeWxIOError("RESTART RTLDAVIS PROGRAM: abs freqOffset channel %s too big (> 20000): %s" % (m.group(1), m.group(3)))
                 # save frequency errors only for EU band
                 if self.frequency in ['EU', 'US', 'NZ']:
-                    pkt['dateTime'] = int(time.time() + 0.5)
-                    pkt['usUnits'] = weewx.METRICWX
-                    for y in range(0, 5):
-                        if int(m.group(1)) == y:
-                            pkt['freqError%d' % y] = int(m.group(3))
-                    dbg_rtld(3, "chan_pkt: %s" % pkt)
+                    # Unlike PATTERNv13 above, this protocol has no
+                    # Transmitter field to gate on -- with more than one
+                    # active transmitter there is no way to know which one
+                    # a v12 freqError came from, so storing it would
+                    # silently mix transmitters' data into the same
+                    # per-transmitter fields.
+                    if self.tr_count > 1:
+                        dbg_rtld(1, "CHANNELPacket: v12 protocol has no "
+                                    "per-transmitter field; not storing "
+                                    "freqError with tr_count=%d" % self.tr_count)
+                    else:
+                        pkt['dateTime'] = int(time.time() + 0.5)
+                        pkt['usUnits'] = weewx.METRICWX
+                        for y in range(0, 5):
+                            if int(m.group(1)) == y:
+                                pkt['freqError%d' % y] = int(m.group(3))
+                        dbg_rtld(3, "chan_pkt: %s" % pkt)
                 else:
                     dbg_rtld(3, "Don't store freqErrors for frequency band %s" % self.frequency)
                 lines.pop(0)
@@ -1492,8 +1509,12 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 for tr in range(0, 4):
                     data = 'pct_good_%s' % tr
                     for k in self.sensor_map:
-                        # Test if sensor is in the sensor map.
-                        if self.sensor_map[k] in data:
+                        # Test if sensor is in the sensor map. `data` is a
+                        # plain string here ('pct_good_%s' % tr), not the
+                        # packet dict -- equality, not substring containment,
+                        # is what's meant (an empty-string or truncated
+                        # sensor_map value would otherwise match every tr).
+                        if self.sensor_map[k] == data:
                             if tr == 0 and self.tr_count > 1:
                                 # When tr_count = 1 we don't store the pct_good of transmitter 1
                                 # because the value is the same as in rxCheckPercent
@@ -1522,14 +1543,22 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         # change the presentation of the FrequencyErrors of the transmitters
         #  each period
         periodShowOneTransm = 2*24*3600  # 2 days
-        rel_transm_to_store = int(((time_last_received-(3*3600)) % (periodShowOneTransm * self.tr_count)) / periodShowOneTransm)
-        self.transm_to_store = self.stats['activeTrIds'][rel_transm_to_store]
-        dbg_parse(1, "Number of transmitters: %s, store freqError data for transmitter with ID=%s" % (self.tr_count, self.transm_to_store))
+        self.transm_to_store = None  # forces the first loop pass to log below
 
         while self._mgr.running():
             # the stalled timeout must be greater than the init period
             # init period is EU: 16 s, US, AU and NZ: 133 s
             _now = int(time.time())
+            # Recomputed every iteration (a few integer ops -- the loop
+            # already blocks up to 10s per get_stderr() call, so this is
+            # not a meaningful cost) so the rotation actually happens
+            # while the driver keeps running, not only across a process
+            # restart.
+            rel_transm_to_store = int(((_now-(3*3600)) % (periodShowOneTransm * self.tr_count)) / periodShowOneTransm)
+            new_transm_to_store = self.stats['activeTrIds'][rel_transm_to_store]
+            if new_transm_to_store != self.transm_to_store:
+                dbg_parse(1, "Number of transmitters: %s, store freqError data for transmitter with ID=%s" % (self.tr_count, new_transm_to_store))
+            self.transm_to_store = new_transm_to_store
             if _now - time_last_received > 150:
                 # Classify before raising (S73, ws.5): raw_since_data == 0
                 # means the child went totally mute (process/USB class);
