@@ -10,6 +10,8 @@ log = logging.getLogger(__name__)
 # Maximum plausible wind speed change per LOOP packet (2.5 seconds)
 # Based on Davis anemometer response time and worst-case meteorological events
 # 75 mph/sample = 1800 mph/min -- already well beyond any real event
+# STATED IN MPH: readings are converted to mph before the test (#224, _WIND_TO_MPH),
+# because under target_unit=METRIC/METRICWX the packet carries km/h or m/s.
 MAX_WIND_DELTA = 75.0
 
 # Number of packets to collect before trusting last_wind_speed for delta filter
@@ -23,6 +25,9 @@ WIND_WARMUP_PACKETS = 3
 # of corruption and carries no information, whereas a large delta may be a
 # genuine gust front. Only the former is safe to treat as "learn nothing from
 # this packet" (DEC-0054, and SensorQC.check()'s same split).
+# STATED IN MPH, converted at the point of use (#224). Left uncorrected this
+# bound fails in BOTH directions: read as m/s it is ~447 mph and the guard is
+# inert, read as km/h it is ~124 mph and the guard starts nulling real readings.
 MAX_PLAUSIBLE_WIND_SPEED = 200.0
 
 # How long last_wind_speed may serve as a delta baseline before it is treated as
@@ -47,6 +52,39 @@ CACHE_TIMEOUT_SECONDS = 300
 # LOOP fields bridged across the ISS message-type rotation
 CACHED_FIELDS = ('outTemp', 'outHumidity', 'radiation', 'UV')
 
+# --- Unit systems (#224) ----------------------------------------------------
+# This service runs in process_services, AFTER StdConvert, so every packet
+# arrives already in the configured target_unit: US (degF, mph), METRIC (degC,
+# km/h) or METRICWX (degC, m/s). Nothing below may assume US. `target_unit` is a
+# documented option in this repo's own weewx.conf.example, and the shipped
+# default (US) is the only reason an unconditional Fahrenheit assumption
+# survived here as long as it did.
+#
+# Comparisons against these keys are SYMBOLIC (`weewx.US`, never the integer) so
+# this file never depends on weewx's constant VALUES -- which is also what lets
+# the offline test stubs pick their own without the code noticing.
+#
+# StdConvert normalises every packet to one system for the life of the process,
+# so `last_wind_speed` (held in packet units) cannot go mixed-unit mid-run:
+# changing target_unit is a config edit and needs a restart.
+
+# Factor converting a packet's windSpeed/windGust to mph -- the unit the two
+# wind thresholds are documented in, and the unit the 6410's spec ceiling is
+# quoted in. Converting the READING rather than the thresholds keeps ONE
+# documented constant set instead of three that would have to be kept in sync.
+_WIND_TO_MPH = {
+    weewx.US:       1.0,        # already mph
+    weewx.METRIC:   0.621371,   # km/h -> mph
+    weewx.METRICWX: 2.2369363,  # m/s  -> mph
+}
+
+# So a rejection is logged in the units the reading was actually taken in.
+_WIND_LABEL = {
+    weewx.US:       'mph',
+    weewx.METRIC:   'km/h',
+    weewx.METRICWX: 'm/s',
+}
+
 
 class DewpointCacher(StdService):
     def __init__(self, engine, config_dict):
@@ -56,6 +94,7 @@ class DewpointCacher(StdService):
         self.last_wind_speed  = None
         self.last_wind_time   = None # when last_wind_speed was accepted/resynced
         self.wind_warmup      = []   # short buffer for cold-start seeding
+        self._warned_units    = False  # usUnits complaint is once-per-run, #224
         self.bind(weewx.NEW_LOOP_PACKET, self.new_loop_packet)
 
     def _cache_get(self, field, now):
@@ -67,6 +106,27 @@ class DewpointCacher(StdService):
         if now - seen > self.cache_timeout:
             return None
         return value
+
+    def _packet_units(self, packet):
+        """The packet's unit system, falling back to US if it is missing/unknown.
+
+        Falling back to US reproduces the pre-#224 behaviour EXACTLY, so this fix
+        cannot regress the shipped default (target_unit=US) even if a packet turns
+        up without usUnits. That is a contract violation by whatever produced the
+        packet, though, so it is said out loud -- once per run, because a LOOP-rate
+        warning is its own outage (DEC-0043's logging-error class).
+        """
+        us = packet.get('usUnits')
+        if us in _WIND_TO_MPH:
+            return us
+        if not self._warned_units:
+            log.warning(
+                "DewpointCacher: packet has no usable usUnits (%r) — assuming US. "
+                "dewpoint/heatindex and the wind bounds are unit-sensitive (#224)",
+                us
+            )
+            self._warned_units = True
+        return weewx.US
 
     def _null_wind(self, packet):
         """Null the whole wind triple, direction included.
@@ -106,26 +166,33 @@ class DewpointCacher(StdService):
         ws = packet.get('windSpeed')
         wg = packet.get('windGust')
 
+        # Both thresholds are documented in mph, so every comparison below runs
+        # on the mph-normalised value while the PACKET keeps its own units (#224).
+        units  = self._packet_units(packet)
+        to_mph = _WIND_TO_MPH[units]
+        label  = _WIND_LABEL[units]
+
         # --- Bounds: each reading must be physically possible on its own ---
         # Checked independently per field, not gated on windSpeed being present:
         # this service is driver-agnostic by design (docs/INTERFACES.md), and a
         # driver that reports a gust without a speed must not go unguarded. The
         # current driver never does, so this is a contract guard, not a live path.
         for field, value in (('windSpeed', ws), ('windGust', wg)):
-            if value is not None and not 0.0 <= value <= MAX_PLAUSIBLE_WIND_SPEED:
+            if value is not None and not 0.0 <= value * to_mph <= MAX_PLAUSIBLE_WIND_SPEED:
                 log.warning(
-                    "DewpointCacher: %s %.1f mph outside 0..%.0f "
-                    "— corrupt packet, nulling wind", field, value,
+                    "DewpointCacher: %s %.1f %s outside 0..%.0f mph "
+                    "— corrupt packet, nulling wind", field, value, label,
                     MAX_PLAUSIBLE_WIND_SPEED
                 )
                 self._null_wind(packet)
                 return
 
         # --- Bounds: gust must be >= speed ---
+        # No conversion needed: both sides are the same field's own unit system.
         if ws is not None and wg is not None and wg < ws:
             log.warning(
-                "DewpointCacher: windGust %.1f < windSpeed %.1f "
-                "— corrupt packet, nulling wind", wg, ws
+                "DewpointCacher: windGust %.1f < windSpeed %.1f %s "
+                "— corrupt packet, nulling wind", wg, ws, label
             )
             self._null_wind(packet)
             return
@@ -154,10 +221,11 @@ class DewpointCacher(StdService):
             # step is then accepted on the very next reading (no deadlock).
             self.last_wind_speed = ws
             self.last_wind_time  = now
-            if delta > MAX_WIND_DELTA:
+            if delta * to_mph > MAX_WIND_DELTA:
                 log.warning(
-                    "DewpointCacher: rejecting windSpeed %.1f mph "
-                    "(delta %.1f mph from last %.1f mph)", ws, delta, last
+                    "DewpointCacher: rejecting windSpeed %.1f %s "
+                    "(delta %.1f from last %.1f, limit %.0f mph)",
+                    ws, label, delta, last, MAX_WIND_DELTA
                 )
                 self._null_wind(packet)
             return
@@ -203,5 +271,17 @@ class DewpointCacher(StdService):
         temp = self._cache_get('outTemp', now)
         humidity = self._cache_get('outHumidity', now)
         if temp is not None and humidity is not None:
-            packet['dewpoint']  = weewx.wxformulas.dewpointF(temp, humidity)
-            packet['heatindex'] = weewx.wxformulas.heatindexF(temp, humidity)
+            # Branch on the packet's unit system rather than converting it, the way
+            # WeeWX's own wxxtypes.py does (#224). The tempting alternative --
+            # loop_json_writer.py's weewx.units.to_US(pkt) -- does NOT transfer to
+            # this file: that service EMITS US-suffixed fields and so never converts
+            # back, whereas this one writes into the LIVE packet, which has to stay
+            # in its own system. A to_US() fix that forgot the return trip would put
+            # degF into a metric packet -- the same bug, moved one layer along.
+            # METRIC and METRICWX both carry outTemp in degC, so they share a branch.
+            if self._packet_units(packet) == weewx.US:
+                packet['dewpoint']  = weewx.wxformulas.dewpointF(temp, humidity)
+                packet['heatindex'] = weewx.wxformulas.heatindexF(temp, humidity)
+            else:
+                packet['dewpoint']  = weewx.wxformulas.dewpointC(temp, humidity)
+                packet['heatindex'] = weewx.wxformulas.heatindexC(temp, humidity)
