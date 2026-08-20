@@ -7,6 +7,48 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S92] — 2026-08-19 — Overnight-probe finding shipped (DEC-0102); 3 of 8 code-audit fixes merged (#219/#220/#221)
+
+- **Job 2 closes: DEC-0098's probe ran, and DEC-0102 records what it found.** Resolved the
+  probe's unrecorded-timezone question by process evidence, not computation — `proc_probe_nas.sh`
+  stopped cleanly on schedule at 05:00 EDT. Ingesting its data exposed and fixed a real bug in
+  `proc_probe.py --analyze`: a second named window's data was silently absorbed into "control" the
+  first time both existed in the same CSV, inverting the evening-window ratio. Headline result:
+  overnight (00:00–05:00) iowait is **11.80x** a clean daytime baseline — the first hard number on
+  the confound DEC-0092/DEC-0097 already flagged — but confounded itself by a concurrent ops#169
+  coffee-radar event, and a minute-level cross-check against that night's actual stall timestamps
+  came back mixed, not confirmatory. **Root cause of blocker 2 stays open**; a single clean re-run
+  won't settle it, since DEC-0092's confound recurs every night. ROADMAP's P0 freeze line updated;
+  ops#169 notified. **PR #231, merged.**
+- **Job 7 (S91 audit remediation, #227's sequenced plan): 3 of 8 items fixed, tested, and merged.**
+  **#219** (ProcManager subprocess-lifecycle, frontier — Opus, explicit user-approved escalation):
+  `shutdown()`'s unguarded `get_pid()` call skipped the S73/DEC-0081 zombie-reap fix on exactly the
+  case it's most needed; `AsyncReader`'s EOF-sentinel bug (`''` vs binary `b''`) busy-spun a reader
+  thread on every child exit and — worse than filed — left abandoned `ProcManager` instances' reader
+  threads with no termination path at all; `get_stderr()` could block ~2x its documented 10s cap.
+  Design validated with a Plan-agent pass before implementation; 4 new tests, each confirmed to fail
+  against git-stashed pre-fix code. **PR #232, merged.** **#220** (`DATAPacket.IDENTIFIER` silently
+  dropped every battery-low frame — not just battery status, but wind/temp/humidity/rain too, mid):
+  one-line regex fix, dispatch-ambiguity rigorously verified against the only other packet type
+  first; 3 new tests. **PR #234, merged.** **#221** (4 unguarded divide-by-zero/negative-shift
+  crashes — thermistor, both rain-rate branches, `iss_channel=0`, an unhandled CRC `ValueError`
+  confirmed to exit the daemon entirely, mid): guard-and-degrade, matching the pattern already
+  established elsewhere in the file; 8 new tests. **PR #235, merged.** Follow-up issue **#233**
+  filed (`shutdown()` has no direct kill/terminate, tier:mid, not urgent) — found pressure-testing
+  #219, kept out of its scope.
+- **All 5 PRs merged same session** (the four above plus this session's own closeout, #236), each
+  verified via `gh pr view --json state,mergedAt` rather than `gh pr merge`'s own untrustworthy
+  output; four hit the expected branch-behind-base gotcha once an earlier one landed, fixed with
+  `update-branch` + wait-for-CI each time. Re-verified on the real merged `dev`: **320/320 tests**,
+  ruff/mypy clean. All 5 feature branches deleted, steady state restored to exactly `dev` + `main`.
+- NAS cleanup: `proc_probe_nas.sh` + its two logs removed from the NAS on owner instruction,
+  verified gone via read-only `nasctl ls`.
+- **None of this deploys yet** — `rtldavis.py`/`proc_probe.py` changes hold for the v2.0.14 image
+  cut (~08-23) per DEC-0064; merging to `dev` doesn't touch the live station. Campaign B checked
+  twice this session (start and close), healthy both times, untouched throughout.
+
+---
+
 ## [S91] — 2026-08-19 — Full code audit (BOOT job 7): security fixes shipped (DEC-0101), 26 correctness findings filed as a sequenced plan (#219–227)
 
 - **The owner's planned focus for the session, decided at S90 close.** Two independent halves, run
