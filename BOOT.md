@@ -34,6 +34,13 @@ not assumed from `pressure_service.py`. `CONSTANTS.md`'s deploy-layer table was 
 entirely (the S85 `loop_json_writer.py` omission again) and now carries the row. **Nothing deployed
 this session** — ships on an image rebuild behind v2.0.14.
 
+**ops#169 is UNBLOCKED, and DEC-0104 records why — do not re-derive this.** The owner raised its
+priority, then corrected the method: *ask the repo, don't ask another repo.* Reading
+`eaglehunt-ops/NAS-LEASE.md` overturned this repo's own DEC-0099: adoption is **not** gated on the
+v2.0.14 container recreate, because §9 had already placed weewx's client host-side precisely to avoid
+one. Full detail in **job 2** below and in DEC-0104; **DEC-0099's index row now carries a correction
+pointer** so a reader who greps it is warned. Position posted to ops#169.
+
 **Model tier: nothing to restore — and that answer came from the files, not from the rule.** S94
 escalated to Opus for #223's design work with a bare `/model claude-opus-5`. OPS-DEC-0010 says that
 form persists as the new-session default, so the reflex is to declare a restore owed. **That reflex
@@ -106,7 +113,7 @@ repo propagates to other repos' sessions within the hour. *(Read with a LEADING 
 | Thing | State |
 |---|---|
 | Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` + `weewx_monitor.py` unchanged since S82/S82b |
-| Campaign B | **Live and on schedule — arm C since 08-19T12:07:28.** Square through `08-23T00:05`. STOP/PAUSE/lock absent. Soak (S94 start): 16 pass / 2 expected-WARN, reception 71%/62% |
+| Campaign B | **Live and on schedule — arm D since 08-19T18:08:23 EDT** (scheduled mid-session swap from C; confirmed against the state file *and* 19-min container uptime, not inferred from fresh soak counters). Square through `08-23T00:05`. STOP/PAUSE/lock absent. Soak (S94 close): 16 pass / 2 expected-WARN, reception 72%/86% |
 | Swap settle time | n=10 (unchanged since S90): 82/139/198/137/197/79/136/196/144/84 s — not a trend |
 | Retention | **BOTH halves SETTLED** (DEC-0095/DEC-0100), unchanged since S90 |
 | `dev` beyond prod | Everything for v2.0.14 **plus** DEC-0102, #219–#222, and **DEC-0103 / #223** |
@@ -115,7 +122,7 @@ repo propagates to other repos' sessions within the hour. *(Read with a LEADING 
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
 | Branches | **Steady state restored: exactly `dev` + `main`.** S94's feature branch merged and deleted, remote + local, same session |
 | Trackers | **#227: 5/8 done, merged and closed on GitHub.** #233 open (follow-up from #219, tier:mid) · #172/#144 open until v2.0.14 · #204 open (current.json cadence). Recently-closed issues audited at close: all carry an explanatory comment, no silent closes. Remember `Closes #N` does NOT auto-fire here (PRs land on `dev`, not the default branch) — S93 found #219/#220/#221 silently unclosed for exactly that reason |
-| Cross-repo (S94) | Swept. **[ops#169] — the owner raised its priority at S94 close: "must prioritize more highly very soon, next few sessions for sure."** Promoted out of this row into **job 2**, where the v2.0.14 hard gate is spelled out. coffee-radar found live shared-NAS disk contention (~41% iowait) naming weewx's InfluxDB ingestion an unconfirmed contributor; weewx's S92 probe measured 11.80x overnight iowait into the same thread. Everything else unchanged |
+| Cross-repo (S94) | Swept. **[ops#169] — owner-raised priority; now job 2, researched, and answered (DEC-0104).** Position posted to the thread: our DEC-0099 correction, the not-blocked-on-v2.0.14 conclusion, the constants-lock heads-up, and verified pre-flight status. No questions asked of other repos — the one we had was already answered in `coffeeradar/BACKLOG.md`. Everything else unchanged |
 
 ## Blockers
 
@@ -213,5 +220,11 @@ shim after the naive attempt proved nothing, landed as PR #241. DEC-0103 written
 same session). CONSTANTS.md gains the `dewpoint_service.py` deploy-layer row. ROADMAP.md checked:
 DEC-0103 ships/closes no P0–P3 line — nothing to reconcile, tripwire unchanged at S96. CHANGELOG.md
 entry written; S91 rolled to `CHANGELOG-ARCHIVE.md` verbatim (64 lines, byte-identical, verified
-before write), keeping the ~3-session window (S92/S93/S94). Campaign B checked at session start,
-healthy, untouched by any of this session's work._
+before write), keeping the ~3-session window (S92/S93/S94). **DEC-0104 added late in the session**
+after the owner raised ops#169 and corrected the method (*ask the repo, not another repo*): reading
+`NAS-LEASE.md` overturned our own DEC-0099's gating premise, so ops#169 is unblocked — see job 2.
+Campaign B checked twice (start arm C, close arm D after a scheduled swap), healthy both times,
+untouched by any of this session's work. **Six PRs, three of them corrections of this session's own
+errors** (#242 stale handoff, #243 a false tier claim repeating S89's exact mistake, #246 the
+DEC-0099 correction) — each caught by re-reading rather than by getting it right the first time, which
+is the honest characterization of how this session ran._

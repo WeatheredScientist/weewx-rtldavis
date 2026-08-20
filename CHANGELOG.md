@@ -5,7 +5,7 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
-## [S94] — 2026-08-19 — Wind-filter redesign shipped (#223, DEC-0103); #227's sequence now 5 of 8
+## [S94] — 2026-08-19 — Wind-filter redesign shipped (#223, DEC-0103); ops#169 unblocked by correcting our own DEC-0099 (DEC-0104)
 
 - **#223 (`dewpoint_service.py` wind-plausibility filter, frontier) fixed, tested, PR #241.** Its
   four defects were one design gap, exactly as the issue argued: `_filter_wind` never adopted the
@@ -45,10 +45,44 @@ under [Pre-S16].
   `loop_json_writer.py`, which would let a change "ship" with an image cut and silently do nothing —
   DEC-0046's exact failure); it gains the row. **Nothing deployed this session**: the fix ships on an
   image rebuild, gated behind v2.0.14.
-- Daily square watch, checked at start: **arm C**, 16 pass / 2 expected-WARN, reception 71%/62%, no
-  STOP/PAUSE/lock. Untouched by this session's work.
-- ROADMAP checked: DEC-0103 ships/closes no P0–P3 line (#227's remediation is tracked on the issue
-  tracker, not ROADMAP) — nothing to reconcile, tripwire unchanged, still due by S96.
+- **[ops#169] promoted to job 2 on owner instruction — and researching it overturned our own
+  DEC-0099, logged as DEC-0104.** The owner raised its priority ("next few sessions for sure") and
+  then corrected the approach: *"ask the repo… you have coded all of this, so you should be able to
+  find answers."* Re-reading `eaglehunt-ops/NAS-LEASE.md` against our own record found three things.
+  (1) **DEC-0099's gating premise was wrong.** It deferred adoption to the v2.0.14 container recreate
+  because `influx.py` cannot see `LEASE_DIR` from inside the container — true for that one lever,
+  over-generalized into a gate on the whole client (and an earlier commit this session amplified it
+  into `BOOT.md` as a hard deadline). §9 had already settled it the other way: weewx's client's
+  *"natural home is host-side"*, chosen precisely to avoid a release-class recreate. **Holder** (wrap
+  the NAS image build) runs on the host; **observer** (read lease, append `heavy-io.log`) is
+  `weewx_monitor.py`, already resident with a 30 s poll — neither needs a container change. Only the
+  InfluxDB `post_interval` **yield** lever does. (2) **The "two strands" are one:** coffee-radar's
+  disk-contention handshake IS this lease — their DEC-0181 Stage 2 landed *as* OPS-DEC-0107. The
+  question we nearly posted to ops#169 was already answered in coffee-radar's own `BACKLOG.md`, one
+  grep away. (3) **★ weewx's adoption LOCKS §5's constants for every tenant** (unlocked "until the
+  second adopting DEC"; HLF's DEC-0177 was first) — a governance act arriving disguised as merge
+  order, flagged to ops so other tenants can amend first. Pre-flight verified rather than assumed
+  (DEC-0074): `LEASE_DIR` exists at `/volume1/docker/nas-lease/` mode 1777 (owner step already done),
+  `heavy-io.log` live with HLF renewing in production (~8.7 h held 08-19, released
+  `outcome: step-failures`). **DEC-0099's index row gains a correction pointer rather than being
+  edited** — a decision is superseded, never rewritten in place. Position posted to ops#169.
+- **Three of this session's six PRs were corrections of its own errors, each caught by re-reading
+  rather than by getting it right first.** #242: `BOOT.md` was written before the merge landed, so it
+  shipped telling S95 to delete a branch already gone and close an issue already closed. #243: the
+  model-tier line asserted "a restore is owed" from OPS-DEC-0010's rule while a read already showed
+  `sonnet` — **the identical mistake S89 made and was corrected on by ops**; all five scopes verified
+  intact, nothing owed. #246: the DEC-0099 correction above. The generalizable lesson, now in
+  `BOOT.md`: for anything whose truth depends on a merge landing, the handoff is written *after* it,
+  even though the closeout ritual lists BOOT at step 2 and push at step 7.
+- Daily square watch, checked twice. Start: **arm C**, 16 pass / 2 expected-WARN, reception 71%/62%.
+  Close: **arm D as of 08-19T18:08:23 EDT** — a scheduled swap mid-session, confirmed against the
+  state file *and* container uptime (19 min) rather than inferred from the fresh counters; 16 pass /
+  2 expected-WARN, reception 72%/86%. No STOP/PAUSE/lock either time. Untouched by this session's work.
+- ROADMAP checked: neither DEC-0103 nor DEC-0104 ships/closes/reprioritizes a P0–P3 line (#227's
+  remediation is tracked on the issue tracker, and ops#169 appears on ROADMAP only inside DEC-0102's
+  narrative record, not as a line item) — nothing to reconcile, tripwire unchanged, still due by S96.
+- Model tier: escalated to Opus for #223's frontier design work. **Floor verified intact across all
+  five scopes at close — nothing to restore** (see #243 above for why that is checked, not inferred).
 
 ---
 ## [S93] — 2026-08-19 — Channel-gating fixed (#222), #227's sequence now 4 of 8 shipped; #223 scoped
