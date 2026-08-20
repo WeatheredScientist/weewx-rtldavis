@@ -45,6 +45,21 @@ alone did not catch.
 - **A SessionStart concurrency FYI can name a session that does not exist.** Seen twice (S93
   post-crash, S94 clean start): the hook flagged a "live peer" that `ListAgents` did not list at all.
   Do the check — `git status` + `ListAgents` — but treat the FYI as a claim, not a fact.
+- **An undated log tail reads accumulated HISTORY as current activity** (S95, DEC-0106). Container
+  stdout has no timestamps, **`docker restart` never increments `RestartCount`** (so a truthful
+  `RestartCount: 0` says nothing about the process), and a container that was *restarted* rather than
+  recreated accumulates every restart into one stream. ~32 routine 6-hourly restarts stacked
+  consecutively read as a tight crash-loop in a 30-line tail and reached the owner as a tier:frontier
+  alarm. **Get timestamps before judging any rate:** `weewx.log`'s `Initializing weewxd version` lines
+  are timestamped and daily-rotated, so restart history is countable per day — container stdout is not.
+  Healthy vs pathological here differ by three orders of magnitude (6 h apart vs 43–90 s), but only
+  once you can see the clock.
+- **`weewx.log` rotates daily, so ANY window longer than "since midnight" spans two files.** S95's
+  restart detector returned the right answer only because it also reads the rotated
+  `weewx.log.YYYY-MM-DD`; the single-file draft would have returned a **false zero on its first live
+  run** — at exactly DEC-0097's 00:00–04:00 hour, where the real trouble clusters. `soak_check.sh`'s
+  `mon_resets` check already documents this trap for `weewx_monitor.log`; the same applies to
+  `weewx.log`, and the soak's own window computation still has it (filed, not fixed).
 
 ## §2 Git, PRs, and the handoff
 
