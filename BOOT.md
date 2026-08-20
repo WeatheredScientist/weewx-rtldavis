@@ -115,6 +115,7 @@ DEC-0104 — which corrects this repo's own DEC-0099. Campaign B checked twice (
 scheduled swap), healthy both times. ROADMAP checked for both DECs: nothing to reconcile, tripwire
 S96. **Seven PRs, three of them corrections of this session's own errors** (#242 stale handoff, #243
 a false tier claim repeating S89's mistake, #246 the DEC-0099 premise) — each caught by re-reading,
-not by getting it right first. **`BOOT.md` diet done (ops#173):** ~1,700 tok of durable gotchas moved
-to `docs/GOTCHAS.md`, and the #223/ops#169 write-ups compressed to conclusions now that DEC-0103 and
-DEC-0104 hold the detail. Full session narrative in `CHANGELOG.md`._
+not by getting it right first. **`BOOT.md` diet done (DEC-0105, ops#173): 4,866 → 2,406 tok, under
+cap for the first time since before S83** — ~1,700 tok of durable gotchas to `docs/GOTCHAS.md`, the
+rest compressed to conclusions now that DEC-0103/DEC-0104 hold the detail. **That only holds if new
+traps go to `GOTCHAS.md`, never here.** Full session narrative in `CHANGELOG.md`._
