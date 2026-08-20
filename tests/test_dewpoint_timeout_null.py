@@ -35,6 +35,12 @@ def _mod(name):
 
 weewx = _pkg("weewx")
 weewx.NEW_LOOP_PACKET = "NEW_LOOP_PACKET"
+# Unit systems (#224). dewpoint_service builds module-level lookup tables keyed on
+# these AT IMPORT TIME, so the stub has to carry them or the import fails. Values
+# mirror weewx's own; the service compares symbolically and never depends on them.
+weewx.US = 1
+weewx.METRIC = 16
+weewx.METRICWX = 17
 
 weewx_engine = _mod("weewx.engine")
 
@@ -53,6 +59,10 @@ weewx.engine = weewx_engine
 weewx_wxformulas = _mod("weewx.wxformulas")
 weewx_wxformulas.dewpointF = lambda t, h: round(t - (100 - h) / 5.0, 2)
 weewx_wxformulas.heatindexF = lambda t, h: t
+# Celsius pair (#224). These tests all exercise the US branch, but the service now
+# references both, so both must exist.
+weewx_wxformulas.dewpointC = lambda t, h: round(t - (100 - h) / 5.0, 2)
+weewx_wxformulas.heatindexC = lambda t, h: t
 weewx.wxformulas = weewx_wxformulas
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
