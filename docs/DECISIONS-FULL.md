@@ -6754,3 +6754,167 @@ through to both the `BUILD-EXIT` marker and the log's `outcome` field; and the l
 (outcome `crashed`) even when the wrapped command can't start at all. 373/373 full suite, ruff
 clean, mypy clean (61 files, confirming both new files were checked, not skipped), secret gate
 clean.
+
+## DEC-0109 — Retire P0.5's last follow-on: Keep-a-Changelog headings + DECISIONS entry-skeleton convergence
+
+**Status:** Accepted (retirement) · **Date:** 2026-08-20 (S98) ·
+**Closes:** ROADMAP.md's P0.5 (the only remaining checkbox)
+
+### Context
+
+ROADMAP.md's P0.5 section ("Governance alignment across the family") has carried one unchecked
+follow-on since S25 (2026-07-05, ~72 sessions ago): "Keep-a-Changelog headings + DECISIONS
+entry-skeleton convergence (proposed S25, never picked up)." S98's job list flagged it for a
+discovery pass before any scoping — check what S25 actually proposed before building anything.
+
+### The original proposal is unrecoverable
+
+No session transcript survives: local retention for this repo's Claude sessions starts
+2026-07-21, sixteen days after S25. S25's own `CHANGELOG-ARCHIVE.md` entry (`[S25] — 2026-07-05 —
+Finish the S24 review fixes`) is entirely about unrelated code-quality fixes (owm.py RESTThread
+rebase, influx.py TLS verification, dead-code removal, SPDX headers) — the changelog-format idea
+was never written up anywhere beyond ROADMAP's own one-line bullet. That bullet is the entire
+surviving record of what was proposed.
+
+### Checked: is this repo behind a family standard? No.
+
+- weewx's own `CHANGELOG.md`: free-form narrative prose per session, no Keep-a-Changelog-style
+  headings (Added/Changed/Deprecated/Removed/Fixed/Security).
+- eaglehunt-weather-dashboard's `CHANGELOG.md`: same — free-form prose, no such headings.
+- hyperlocal-forecast: no separate `CHANGELOG.md` at all; `docs/DECISIONS.md`/`-FULL.md` serve
+  that role.
+
+Nobody in the family adopted this. There is no existing target to converge toward, so
+"convergence" cannot mean catching up to a sibling.
+
+### The DECISIONS half is separately moot
+
+`docs/DECISIONS-FULL.md` has, since S25, organically grown its own working skeleton — a
+`**Status:**`/`**Date:**`/`**Follows:**`/`**Answers:**` metadata line plus a `### Context` section,
+consistent across recent entries (DEC-0107, DEC-0108, this one). That happened entirely
+independently of `CHANGELOG.md`. It converged with itself; there is nothing left to reconcile.
+
+### The judgment call: not just absence of evidence
+
+Beyond the missing rationale and the lack of a family precedent, retrofitting Keep-a-Changelog's
+Added/Changed/Deprecated/Removed/Fixed/Security categories onto this repo's actual entries would
+likely make them worse. Entries here are dense, cross-referencing narratives — a single bullet
+routinely spans a shipped fix, the measurement behind it, the PR, and a cross-repo pointer (see
+DEC-0108's own CHANGELOG entry, above). A rigid single-facet schema built for simpler,
+one-thing-per-line projects would fragment that causal narrative rather than clarify it. 72
+sessions unclaimed, zero family adoption, and an architectural reason it likely never took hold
+are read together as a real signal, not a gap waiting to be filled.
+
+### Disposition
+
+ROADMAP.md's P0.5 line struck through as retired (not done); P0.5 as a whole is now fully closed —
+nothing carries forward.
+
+## DEC-0110 — Archive-level reception-quality wind guard, in response to ERR-0004/ERR-0006
+
+**Status:** Accepted (design + build) · **Date:** 2026-08-20 (S98) ·
+**Follows:** ERR-0004, ERR-0006 (`docs/DATA_ERRATA.md`) ·
+**Implements:** the `BACKLOG.md` "Reception-quality-correlated wind guard" proposal
+
+### Context
+
+`ERR-0004` (2026-07-27) and `ERR-0006` (2026-08-20) are the same blind spot recurring
+independently: a mid-magnitude phantom wind reading (37–39 mph from calm) that passes both
+`rtldavis.py`'s bounds check (0–200 mph) and `dewpoint_service.py`'s 75 mph/packet delta cap,
+because a genuine squall gust of similar size is real and routine — tightening either threshold
+risks false-rejecting real weather, and `ERR-0004`'s own writeup already established that. Neither
+incident had another field in the same corrupted frame also fail bounds, so DEC-0054's frame
+co-rejection had nothing to trigger on.
+
+Both incidents share a signal neither filter consults: `rxCheckPercent` for that one archive
+minute collapsed to 13.2%/9.2%, against a 60–90%+ baseline every surrounding minute.
+
+### Measurement (owner-requested before any design was fixed)
+
+Queried the full archive (93 days, 129,607 records, 87,310 with non-null `rxCheckPercent`) to
+check the one thing that would have made this design actively harmful: does genuine severe
+weather also degrade reception at this station (e.g. rain/wind attenuating 915 MHz)? If so, a
+reception-based guard would silently discard exactly the extreme-weather data a station exists to
+capture.
+
+- **`rxCheckPercent` distribution:** p50=72.7%, p25=66.7%, p10=62.8%, p5=60.0%, p1=55.0%.
+  Records under 20% are genuinely rare: 89/129,607 (0.10%).
+- **The key check — high wind vs. reception, cross-referenced both directions:**
+  - Of 220 archive records with `windGust>=10 mph` (post-correction), the LOWEST
+    `rxCheckPercent` among them is 54.5% — nowhere near the collapse range. (`windGust>=15 mph`,
+    n=14: minimum 63.6%.)
+  - Of the 89 records with `rxCheckPercent<20%`, 87 recorded `windGust` of 0–4 mph — genuinely
+    calm. The only two exceptions were `ERR-0004` and `ERR-0006` themselves (both since
+    corrected to NULL, which is why they show as absent wind in this same query — verified by
+    hand-checking their known original values instead).
+- **Conclusion:** at this station, severe reception collapse and genuine high wind have never
+  co-occurred in 93 days of history. A guard combining both signals would not have touched any
+  known-good gust on record, with wide margins on both sides (>2.5× on the wind threshold,
+  >2.7× on the reception threshold — see thresholds below).
+
+### Design
+
+Two-factor guard, checked once per archive interval:
+`rxCheckPercent < 20.0` **and** `windGust > 10.0 mph` → null the wind triple for that record.
+
+- **20.0% threshold:** both known incidents (13.2%, 9.2%) sit well under half of it; only 0.10%
+  of all records fall under it at all.
+- **10.0 mph threshold:** >2.5× the observed benign-collapse ceiling (4 mph) and well under
+  half of both known corrupt values (37/39 mph) — wide margin against false-nulling a real gust
+  during a coincidental reception dip, while still catching a smaller future corruption event
+  than either historical incident.
+- **Why not tighten the existing bounds/delta checks instead:** already tried and explicitly
+  rejected by `ERR-0004` — the wind value alone cannot distinguish the two cases at this
+  magnitude. This guard uses an orthogonal signal (reception quality) instead of a tighter
+  version of the same one.
+- **Why archive-record time, not loop-packet time:** `rxCheckPercent` is an interval statistic,
+  not final until the interval closes — a per-loop-packet filter (`_filter_wind`) structurally
+  cannot know it yet. Archive-record time is also the correct choke point regardless:
+  `user.dewpoint_service.DewpointCacher` sits in `weewx.conf`'s `process_services`, which runs
+  before `archive_services` (`StdArchive`'s own DB write) and `restful_services` (every
+  uploader — Wunderground, CWOP, PWSWeather, OWM, WOW, WOW-BE, Ogoxe, Influx), confirmed
+  directly against the live `[Engine][Services]` ordering rather than assumed.
+- **What this does NOT reach:** Wunderground's RapidFire feed publishes near-instantly per loop
+  packet, before the interval even closes — a live ticker, constantly overwritten, not an
+  archive of record, and outside what an archive-time guard can affect. Named explicitly so it
+  isn't mistaken for a gap in this fix.
+
+### Implementation
+
+`dewpoint_service.py`: `DewpointCacher` gains a `NEW_ARCHIVE_RECORD` binding
+(`new_archive_record`), nulling `windSpeed`/`windGust`/`windDir`/`windGustDir` plus the
+archive-only derived fields `ET`/`appTemp`/`windrun` (DEC-0037) — the same field set the
+`ERR-0004`/`ERR-0006` manual corrections used by hand. `RXCHECK_COLLAPSE_PCT`/
+`COLLAPSE_WIND_GUST_MPH` module constants carry the measurement above as inline comments, so the
+numbers don't decay into unexplained magic values. Threshold comparisons run on the
+mph-normalized reading (`_WIND_TO_MPH`, #224), so the guard is unit-system-correct for
+METRIC/METRICWX configs too, not just this station's US default.
+
+11 new tests (`tests/test_dewpoint_archive_rxcheck_guard.py`): both incidents replayed verbatim
+as positive controls (`ERR-0004`'s and `ERR-0006`'s exact recorded values, pre-correction);
+genuine high gust at normal reception survives untouched (the station's actual day-max, 19 mph
+@ 72.7%); a moderate gust just outside the collapse threshold survives; calm wind during a
+benign collapse survives; both thresholds' exact boundary (strict `<`/`>`, matching this file's
+existing bounds-check convention) is pinned in both directions; missing `rxCheckPercent`/
+`windGust` is a no-op, not a crash; unit conversion is exercised in both directions (METRICWX)
+so a corrupt event doesn't slip through unconverted and a calm reading isn't inflated past the
+threshold by a units bug. The four existing `dewpoint_service` test files needed a
+`weewx.NEW_ARCHIVE_RECORD` stub addition (their `weewx` module mock didn't carry it, and
+`DewpointCacher.__init__` now binds to it unconditionally) — mechanical, no behavior change to
+what they test.
+
+**Verified:** 397/397 full suite (was 386; +11 new, 0 regressions), ruff clean, mypy clean (63
+files, `.mypy_cache` cleared first per this repo's own gotcha), secret gate clean.
+
+### Deploy gate
+
+`dewpoint_service.py` is baked into the Docker image (same layer as the driver, DEC-0031) — this
+ships with the same ~08-23 v2.0.14 build already gated for `#225`'s fixes, not before. No urgency
+to force an earlier cut for this alone; the guard protects going forward once it deploys, and
+does not (cannot) retroactively touch anything published before that.
+
+### What this does not do
+
+Does not attempt a third occurrence's root cause (the underlying RF corruption mechanism itself
+remains uncharacterized, same as `ERR-0004`/`DEC-0081`'s broader RF-dead-episode work). This is a
+detection/suppression guard at the archive choke point, not a decode-layer fix.
