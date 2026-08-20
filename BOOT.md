@@ -38,9 +38,10 @@ tenant** (HLF's DEC-0177 was first), so it must lock a corrected spec. Adoption 
 
 ### ▶▶ S97 JOB LIST
 
-1. **CONFIRM THE MERGES FIRST — three PRs were left open at S96 close, all CI-green:** **#254**
-   (DEC-0107), **#255** (#224), **#256** (ROADMAP). Steady state is exactly `dev` + `main`; if the
-   branches survived, delete them. `Closes #N` does **not** auto-fire here — PRs land on `dev`.
+1. **S96's work is all MERGED — #254 (DEC-0107), #255 (#224), #256 (ROADMAP), #257 (this closeout).**
+   Nothing left open from S96. Confirm steady state is exactly `dev` + `main` and no `s96-*` branch
+   survived the auto-delete. `Closes #N` does **not** auto-fire here — PRs land on `dev`, so any
+   issue those PRs addressed still needs closing by hand with an explanatory comment.
 2. **Daily square watch** (~5 min): `ops/soak_check.sh` + a direct `rx_experiment.state` read.
    **Campaign B ENDS 08-23T00:05 — imminent.** Rotation-artifact WARNs after midnight are #252, not
    findings; the `stdout is chatty` WARN is #253 and is permanent until the next container recreate.
@@ -81,7 +82,7 @@ tenant** (HLF's DEC-0177 was first), so it must lock a corrected spec. Adoption 
 | Campaign B | **Live, arm B since `08-20T00:07:30` EDT.** Square through **08-23T00:05**. Soak at S96: **17 pass / 2 warn / 0 fail** — both warns known (#253 chatty stdout; USB hedge 4/4, expected during RF-dead per S73) |
 | Restart rate | DEC-0106 baseline: 4/day during a campaign (all at HH:05), **0/day between**. A real loop is 7 starts in 7 min |
 | Retention | **BOTH halves SETTLED** (DEC-0095/DEC-0100), unchanged since S90 |
-| `dev` beyond prod | Everything for v2.0.14 **plus** DEC-0102/0103/0104/0106 and, once #254–#256 merge, **DEC-0107 + #224 + the ROADMAP pass** |
+| `dev` beyond prod | Everything for v2.0.14 **plus** DEC-0102/0103/0104/0106 **and DEC-0107 + #224 + the S96 ROADMAP pass** (all merged at S96 close) |
 | Freeze rate | DEC-0088-corrected (1.31/day); DEC-0102 adds the overnight-window confound. Unrelated to DEC-0106 |
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
@@ -118,5 +119,6 @@ _Last updated: 2026-08-20 (S96 close). Green gate: ruff clean, **349/349**, mypy
 secret gate clean **and positive-controlled** (harness 54/54; `scripts/.identifiers` confirmed
 present, without which the personal-identifier half silently skips). Shipped **DEC-0107** —
 ops#169 closed end-to-end, all three box fixes on direct observation — plus **#224** and the
-**S96 ROADMAP reconciliation** (tripwire → S106). Three PRs left open and green: **#254, #255,
-#256**. Full narrative in `CHANGELOG.md`._
+**S96 ROADMAP reconciliation** (tripwire → S106). **All four PRs merged at close (#254–#257)**;
+each needed a `gh pr update-branch` first, since every merge left the next one `BEHIND` under this
+repo's up-to-date-branch protection. Full narrative in `CHANGELOG.md`._
