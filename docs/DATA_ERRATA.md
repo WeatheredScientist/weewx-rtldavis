@@ -400,3 +400,47 @@ backlog — its packet counts and `rxCheckPercent` are inflated. Both artifacts 
 weather, and neither is corrected in the archive. Treat freeze-adjacent records as suspect rather
 than nulling them: the underlying observations are real, only their timestamps are wrong. Known
 freezes so far: **2026-07-30 08:04 (218 s), 2026-08-02 13:46 (209 s), 2026-08-03 02:59 (208 s)**.
+
+---
+
+## ERR-0006 — 2026-08-20 phantom 37 mph wind gust (calm, light rain)
+
+| Field | Value |
+|---|---|
+| **Observed (bad)** | `windGust = 37 mph` (windGustDir 175.3°) in the single archive record at **2026-08-20 11:12:00 EDT** (epoch `1787238720`); `windSpeed = 3.64 mph` (the interval mean, contaminated by the same ~1 sample at 37). Surrounding minutes both sides: 1–2 mph. |
+| **Corrected** | `windSpeed`, `windDir`, `windGust`, `windGustDir` → **NULL**, plus the derived `ET`, `appTemp`, `windrun` (DEC-0037). Day-max `windGust` for 2026-08-20 now **19 mph**, genuine. |
+| **Actual weather** | Light, continuous rain throughout (rainRate 0.2–0.4 in/h, `rain` accumulating 0.01–0.02 in/min) — a real shower, but **rainRate itself shows no corruption signature**: no absurd spike, no gap, no StdQC nulling. Wind baseline 0–2 mph both sides of the event; no supporting pressure jump or temperature drop in the same record — the signature of an isolated corrupt sample, not a squall front (a genuine gust front usually perturbs at least one other field). |
+| **Root cause** | Same class as `ERR-0004`: `rxCheckPercent` for this one minute collapsed to **9.2%** (vs. 60–90% every surrounding minute) — a reception collapse. `weewx.log` is silent 11:11:35→11:15:22 (3 min 47 s), confirmed RF-dead (no restart banner anywhere near the window — checked directly, this is not a container/process restart). Among the few packets that passed CRC that minute, at least one carried a corrupted wind byte; every *other* field in the archive row (temp, humidity, pressure, rainRate) reads normally, so nothing else in the frame tripped a bounds check for DEC-0054's frame co-rejection to catch. |
+| **Why the filter didn't catch it** | Identical gap to `ERR-0004`, confirmed still open: 37 mph is inside the 6410's 0–200 mph spec (bounds pass), and the ~35 mph delta from a calm baseline is under `dewpoint_service.py`'s 75 mph/packet delta cap (deliberately loose so a genuine squall gust is never false-rejected). **Investigated and ruled out as the mechanism here:** issue `#225` item 2 (rain-rate corruption failing to co-reject sibling wind fields, fixed same-day in PR #260/dev, not yet deployed to prod) — checked `rainRate` directly for this exact window and it's clean, so that specific gap is not what happened this time. This is `ERR-0004`'s already-documented residual risk (mid-magnitude, single-field corruption during a reception collapse) recurring independently — not a new bug, and tightening thresholds still can't close it without risking false rejection of real squall gusts. |
+
+**Provenance:** found by the owner directly on the dashboard, ~5 h after publication. Cross-checked independently in parallel by an eaglehunt-weather-dashboard session (InfluxDB via its own query path — exact same 37.0/3.64 values, confirming two independent read paths agree) and an eaglehunt-ops session (raised issue `#225` item 2 as a candidate mechanism and a possible container-restart confound; both checked directly and ruled out for this specific incident — see cross-repo thread, ops issue `#192`). No new code shipped; this is a straight data correction against an already-understood, already-accepted gap.
+
+**Propagation & correction status:**
+
+- **local-archive:** ✅ **applied 2026-08-20 (S98)** — guarded `UPDATE archive SET windSpeed=NULL,
+  windDir=NULL, windGust=NULL, windGustDir=NULL, ET=NULL, appTemp=NULL, windrun=NULL WHERE
+  dateTime=1787238720 AND windGust>30` (rows_changed=1), then `weectl database rebuild-daily
+  --date=2026-08-20`. Verified: row reads all-NULL; day-max gust now 19 mph. Backup:
+  `weewx.sdb.bak-err0006-20260820`.
+- **influxdb:** ✅ **applied 2026-08-20 (S98)** — point at `record,binding=archive` 15:12:00Z deleted
+  and rewritten minus `windGust_mph`, `windGustDir`, `windSpeed_mph`, `windDir`, `appTemp_F`, `ET_in`,
+  `windrun_mile`, with sparse **`windGust_qc = 1`** and **`windSpeed_qc = 1`** flags (the
+  DEC-0032/DEC-0099 contract). `windchill_F` kept — at 70.1 °F it is wind-independent (weewx returns
+  temperature above 50 °F). **Note:** the dashboard's own read-only proxy token cannot write/delete
+  (403, confirmed) — the correction used `weewx.conf`'s `[[Influx]]` uploader token instead. Verified
+  via direct query: 24 fields, both flags present, matches `ERR-0004`'s own field count exactly.
+- **external:** ⛔ immutable — published within minutes to all configured sinks: Wunderground (PWS
+  *and* RapidFire, at the corrupt frame's own near-instant cadence — RapidFire is a live ticker, not
+  an archive of record, so it isn't reachable by this correction regardless), PWSWeather, OWM,
+  CWOP → NOAA MADIS, AWEKAS, Windy, WOW, WOW-BE, Ogoxe. As with `ERR-0004`, MADIS's buddy-check on
+  wind gives CWOP's copy a real chance of being auto-flagged downstream; every other external copy
+  stands permanently.
+
+**Lesson:** the exact same blind spot as `ERR-0004` — bounds-and-delta-only wind QC cannot
+distinguish a genuine sudden gust from a corrupted single sample of similar magnitude, and no other
+field happened to co-fail this time either. The one signal that WOULD discriminate the two cases and
+isn't yet used: `rxCheckPercent` collapsed to 9.2% (`ERR-0004`: 13.2%) in the exact same minute as
+the bad reading, against a 60–90% baseline every other minute — reception quality is an independent,
+already-computed corroborating signal that neither the driver's frame co-rejection nor
+`dewpoint_service.py`'s delta filter currently consults. See `BACKLOG.md` for a proposed
+reception-quality-correlated wind guard raised in response to this incident.
