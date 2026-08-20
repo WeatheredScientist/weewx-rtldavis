@@ -6401,3 +6401,90 @@ that should call it green.
 *Rationale:* rule 1's "delete resolved items" is necessary and, at this file's size, insufficient —
 four passes proved it. The remaining bulk was not stale, it was **misfiled**: durable content sitting
 in the tier reserved for what changes every session.
+
+---
+
+## DEC-0106 — The crash-loop that wasn't: an undated, accumulating log tail reads history as now
+
+**Status:** Accepted (measurement + fix) · **Date:** 2026-08-20 (S95) · **Refutes:** #245 / ops#184's
+crash-loop reading, **not** the owner's trend observation · **Applies:** DEC-0045 (positive control),
+DEC-0074 (a file/counter proves the artifact, never the process) · **Extends:** DEC-0067's freeze
+taxonomy with a fourth class · **Does NOT touch:** blockers 1 and 2
+
+**Context.** #245, cross-tracked as ops#184 and labelled tier:frontier, reported `weewx-rtldavis-v2`
+crash-looping: `RestartCount: 0` while the container's stdout showed RTL-SDR re-detection cycling
+repeatedly inside a 30-line tail, with HLF observing stale rows downstream. The owner added the part
+that mattered more than the snapshot: *"I have been noticing a lot more crashes of weewx lately, it
+used to be super stable."* A trend claim, not a one-off.
+
+**The measurement.** weewxd logs `Initializing weewxd version` once per start, timestamped, and
+`weewx.log` rotates daily — so the restart history is directly countable, per day, for a month.
+Aug 15–19 returned **exactly 4 startups a day, every one at HH:05 ±30 s**: 00:05, 06:05, 12:05,
+18:05. Those are precisely the four scheduled Campaign B arm swaps, 6 h apart. **Zero off-schedule
+restarts in five days.** The contrast case sits in our own history: 2026-08-06's `journal_mode`
+crash-loop ran **07:18:55, 07:20:18, 07:21:39, 07:22:25, 07:23:08, 07:23:58, 07:25:48** — seven
+starts in seven minutes, 43–90 s apart. **The healthy and pathological signatures differ by three
+orders of magnitude**, which is why this was answerable at all.
+
+**Why the report looked exactly like a loop — three things compounding, none of them a misreading.**
+Container stdout carries **no timestamps**. **`docker restart` does not increment `RestartCount`**,
+so the reported `RestartCount: 0` was truthful *and* carried no information about the process. And
+the container object was **8 days old and restarted rather than recreated**, so its stdout
+accumulated every restart into a single stream. Net effect: ~32 routine restarts stack up
+consecutively, and a 30-line tail shows about four of them back-to-back that are in fact **six hours
+apart**. Corroborated by count: in a `--tail 200` window the three restart markers (`Starting
+weewx`, `Bias-tee`, tuner detection) each appear **exactly 27** times — 27 × ~7 lines ≈ 189 against a
+200-line cap, so 27 is itself truncation and the true figure is ~32 = 8 days × 4/day.
+
+**The owner's trend observation is correct, and the cause is benign.** Restarts per day, measured
+across the rotated logs: **0/day Jul 20–24** (no campaign), 1–5/day Jul 25–Aug 2 (Campaign A),
+**mostly 0/day Aug 3–14** (between campaigns), **4/day Aug 15–19** (Campaign B). So "it used to be
+super stable" is literally accurate — between campaigns the rate is *zero*, and Campaign B introduced
+four deliberate restarts a day. Every elevated non-campaign day has a known cause: Aug 6 = 7 (the WAL
+loop), Aug 11 = 10 (the v2.0.13 deploy), Aug 10 = 3 (v2.0.12). **The zeros were positive-controlled,
+not assumed** (DEC-0045): Aug 3's log is full of normal data through 23:59 and contains zero `weewxd`
+events, so the zero is real rather than a grep artifact.
+
+**HLF's staleness is not ours.** Through their reported window (19:45–20:07Z = 15:45–16:07 EDT) weewx
+was adding archive records **every minute** and publishing to InfluxDB **every minute, successfully**
+— `Influx: Published record`, no errors in-window. The day's four driver stalls sat at 02:55, 04:46,
+05:08 and 05:29 EDT, DEC-0097's overnight cluster, hours away. The weewx side was healthy end to end
+during that window, so the staleness originates downstream — InfluxDB ingest/query or HLF's own read
+path. Redirected on the thread rather than left filed against this repo.
+
+**The defect this exposed is structural, and the obvious fix would not have worked.**
+`soak_check.sh` computed a real banner count with `grep -c` and then tested only non-zero, so one
+banner and fifty read identically green — the gap the S94 session's own soak ran through twice while
+#245 was live. But **raising that to a count would still have failed**, because `entrypoint.sh`
+`exec`s weewxd: weewxd *is* pid 1, its death takes the container with it, and therefore **every
+container lifetime contains exactly one startup banner.** A restart loop is structurally invisible
+inside a "since container start" window; it exists only *across* container lifetimes. **So the
+detector reads a fixed 6 h window instead**, and fails when two consecutive starts are **<1800 s
+apart** — scheduled swaps are 21,600 s apart and real loops are 43–90 s, so the threshold sits in a
+gap two orders of magnitude wide. Positive-controlled over 7 cases against the real Aug-6 timestamps,
+including both sides of the boundary (1799 s fires, 1800 s does not) and a loop hidden beside a
+legitimate swap.
+
+**A rotation trap, caught in verification and proven in production.** The first draft grepped only
+the current `weewx.log`. But that file **rotates daily**, so a 6 h window run after midnight spans
+two files — the same trap the `mon_resets` check already documents for `weewx_monitor.log`, and the
+worst possible place to repeat it, since DEC-0097's stalls cluster at 00:00–04:00. The fix reads
+yesterday's rotated file first, and the very first live run (00:0x EDT) proved it was load-bearing:
+the window's only start lived in the **rotated** file, so the unfixed version would have reported
+**0 starts — a false green** at exactly the hour the real trouble happens.
+
+**Found and filed, not fixed here.** The same rotation blindness affects the soak's *pre-existing*
+window computation, which cuts from the first line matching the container-start hour and so collapses
+to the new day's log after midnight; four window-scoped checks (startup banner, driver version,
+`sensor_qc`, `log_humidity_raw`) currently WARN as artifacts of that, not as findings. Separately,
+the long-standing `stdout is chatty — 162 lines` WARN is now **explained**: it is accumulated restart
+output on an 8-day-old container, permanent until the next recreate, and not "freeze fuel". Both are
+follow-ups rather than in-scope edits, per DEC-0014.
+
+*Rationale:* the reusable lesson is not about Docker. It is that **an unbounded, undated log tail
+silently reports history as though it were now**, and every instinct available at the time — the tail
+looked frantic, the counter said zero, the soak said green — pointed the same wrong way. What broke
+the tie was the one signal carrying *timestamps*, which turned an unfalsifiable impression into
+arithmetic. DEC-0074 said a file proves the file and never the process; this extends the same shape
+to counters and tails. The owner's "more crashes lately" was the most reliable instrument in the
+report, and it deserved a measured answer rather than a reassurance.

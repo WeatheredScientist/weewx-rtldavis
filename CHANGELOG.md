@@ -5,6 +5,61 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S95] — 2026-08-20 — The reported crash-loop was scheduled swaps (DEC-0106); `soak_check.sh` gains a restart-loop detector
+
+- **#245 / ops#184 (tier:frontier) refuted on measurement, and closed.** The report — `RestartCount: 0`
+  while stdout showed RTL-SDR re-detection cycling inside a 30-line tail — was read as a crash loop.
+  It was not. **Aug 15–19: exactly 4 weewxd startups a day, every one at HH:05 ±30 s**, which is
+  precisely Campaign B's four scheduled arm swaps, 6 h apart, with **zero off-schedule restarts in
+  five days**. The contrast case is in our own history: 2026-08-06's `journal_mode` crash-loop ran
+  **7 starts in 7 minutes** (43–90 s apart). The healthy and pathological signatures differ by three
+  orders of magnitude — the evidence was never ambiguous, nothing had ever put the two side by side.
+- **Why it looked exactly like a loop — three things compounding, none of them careless.** Container
+  stdout carries no timestamps; **`docker restart` never increments `RestartCount`**, so the reported
+  zero was truthful *and* uninformative about the process; and the container object was 8 days old and
+  *restarted* rather than recreated, so its stdout accumulated every restart into one stream. ~32
+  routine restarts stack consecutively, and a 30-line tail catches ~4 of them that are in fact six
+  hours apart. Corroborated by count: all three restart markers read **exactly 27** in a `--tail 200`
+  window — itself truncation at ~7 lines/start, so the true figure is ~32 = 8 days × 4/day.
+- **The owner's "a lot more crashes lately, it used to be super stable" is correct, and the cause is
+  benign.** Measured across a month of rotated daily logs: **0/day between campaigns** (Jul 20–24,
+  Aug 3–14), **4/day during them** (Aug 15–19). Every elevated non-campaign day has a known cause —
+  Aug 6 = 7 (the WAL loop), Aug 11 = 10 (the v2.0.13 deploy), Aug 10 = 3 (v2.0.12). The zeros were
+  **positive-controlled** (DEC-0045), not assumed: Aug 3's log runs full of data through 23:59 with
+  zero `weewxd` events. So the rate genuinely rose; every one of the new restarts is deliberate.
+- **HLF's staleness is not ours — redirected, not absorbed.** Through their reported window
+  (19:45–20:07Z) weewx was adding archive records **and** publishing to InfluxDB every minute,
+  successfully, no errors. The day's four driver stalls sat at 02:55–05:29 EDT (DEC-0097's overnight
+  cluster), hours away. ops#184 deliberately **left open** — its HLF redirect is still an open action
+  item for another repo, and closing it would bury that.
+- **The monitoring gap this exposed, fixed (DEC-0106).** `soak_check.sh` counted startup banners with
+  `grep -c` then tested only non-zero — 1 and 50 read identically green, which is what the S94 soaks
+  ran through twice while #245 was live. **Raising it to a count would not have worked:**
+  `entrypoint.sh` `exec`s weewxd, so weewxd is pid 1, its death takes the container with it, and
+  every container lifetime holds **exactly one** banner. A loop is structurally invisible inside a
+  per-container window. The detector therefore reads a **fixed 6 h window** and fails when consecutive
+  starts are **<1800 s apart** — swaps are 21,600 s, loops are 43–90 s, so the threshold sits in a gap
+  two orders of magnitude wide. **Positive-controlled over 7 cases** against the real Aug-6
+  timestamps, including both sides of the boundary (1799 s fires, 1800 s does not) and a loop hidden
+  beside a legitimate swap.
+- **A rotation trap, caught in verification and proven in production.** The first draft grepped only
+  the current `weewx.log` — which **rotates daily**, so a 6 h window run after midnight spans two
+  files. The first live run (00:0x EDT) found the window's only start in the **rotated** file, so the
+  unfixed version would have returned **0 — a false green**, at exactly the hour DEC-0097's stalls
+  cluster. Now reads yesterday's rotated file first. Same trap the `mon_resets` check already
+  documented for `weewx_monitor.log`; `docs/GOTCHAS.md` §1 gains both.
+- **Found, filed, deliberately not fixed here** (DEC-0014, keep the change small): the soak's
+  *pre-existing* window computation has the same rotation blindness — after midnight it collapses to
+  the new day's log, which is why four window-scoped checks currently WARN as artifacts rather than
+  findings. And the long-standing `stdout is chatty — 162 lines` WARN is now **explained**: accumulated
+  restart output on a long-lived container, permanent until the next recreate, not "freeze fuel" —
+  it has been read as expected noise for weeks.
+- **Nothing deployed.** `ops/soak_check.sh` is a laptop-side diagnostic; prod remains **v2.0.13** /
+  driver ws.5, untouched. Campaign B checked during the session, healthy. Gates: ruff clean,
+  **339/339**, mypy clean (57 files), secret gate clean **and positive-controlled** (all three planted
+  payload shapes caught, exit 1).
+
+---
 ## [S94] — 2026-08-19 — #223 shipped (DEC-0103); ops#169 unblocked by correcting our own DEC-0099 (DEC-0104); BOOT.md diet, under cap (DEC-0105)
 
 - **#223 (`dewpoint_service.py` wind-plausibility filter, frontier) fixed, tested, PR #241.** Its
@@ -154,46 +209,5 @@ under [Pre-S16].
   Tripwire unchanged, still due by S96.
 
 ---
-## [S92] — 2026-08-19 — Overnight-probe finding shipped (DEC-0102); 3 of 8 code-audit fixes merged (#219/#220/#221)
-
-- **Job 2 closes: DEC-0098's probe ran, and DEC-0102 records what it found.** Resolved the
-  probe's unrecorded-timezone question by process evidence, not computation — `proc_probe_nas.sh`
-  stopped cleanly on schedule at 05:00 EDT. Ingesting its data exposed and fixed a real bug in
-  `proc_probe.py --analyze`: a second named window's data was silently absorbed into "control" the
-  first time both existed in the same CSV, inverting the evening-window ratio. Headline result:
-  overnight (00:00–05:00) iowait is **11.80x** a clean daytime baseline — the first hard number on
-  the confound DEC-0092/DEC-0097 already flagged — but confounded itself by a concurrent ops#169
-  coffee-radar event, and a minute-level cross-check against that night's actual stall timestamps
-  came back mixed, not confirmatory. **Root cause of blocker 2 stays open**; a single clean re-run
-  won't settle it, since DEC-0092's confound recurs every night. ROADMAP's P0 freeze line updated;
-  ops#169 notified. **PR #231, merged.**
-- **Job 7 (S91 audit remediation, #227's sequenced plan): 3 of 8 items fixed, tested, and merged.**
-  **#219** (ProcManager subprocess-lifecycle, frontier — Opus, explicit user-approved escalation):
-  `shutdown()`'s unguarded `get_pid()` call skipped the S73/DEC-0081 zombie-reap fix on exactly the
-  case it's most needed; `AsyncReader`'s EOF-sentinel bug (`''` vs binary `b''`) busy-spun a reader
-  thread on every child exit and — worse than filed — left abandoned `ProcManager` instances' reader
-  threads with no termination path at all; `get_stderr()` could block ~2x its documented 10s cap.
-  Design validated with a Plan-agent pass before implementation; 4 new tests, each confirmed to fail
-  against git-stashed pre-fix code. **PR #232, merged.** **#220** (`DATAPacket.IDENTIFIER` silently
-  dropped every battery-low frame — not just battery status, but wind/temp/humidity/rain too, mid):
-  one-line regex fix, dispatch-ambiguity rigorously verified against the only other packet type
-  first; 3 new tests. **PR #234, merged.** **#221** (4 unguarded divide-by-zero/negative-shift
-  crashes — thermistor, both rain-rate branches, `iss_channel=0`, an unhandled CRC `ValueError`
-  confirmed to exit the daemon entirely, mid): guard-and-degrade, matching the pattern already
-  established elsewhere in the file; 8 new tests. **PR #235, merged.** Follow-up issue **#233**
-  filed (`shutdown()` has no direct kill/terminate, tier:mid, not urgent) — found pressure-testing
-  #219, kept out of its scope.
-- **All 5 PRs merged same session** (the four above plus this session's own closeout, #236), each
-  verified via `gh pr view --json state,mergedAt` rather than `gh pr merge`'s own untrustworthy
-  output; four hit the expected branch-behind-base gotcha once an earlier one landed, fixed with
-  `update-branch` + wait-for-CI each time. Re-verified on the real merged `dev`: **320/320 tests**,
-  ruff/mypy clean. All 5 feature branches deleted, steady state restored to exactly `dev` + `main`.
-- NAS cleanup: `proc_probe_nas.sh` + its two logs removed from the NAS on owner instruction,
-  verified gone via read-only `nasctl ls`.
-- **None of this deploys yet** — `rtldavis.py`/`proc_probe.py` changes hold for the v2.0.14 image
-  cut (~08-23) per DEC-0064; merging to `dev` doesn't touch the live station. Campaign B checked
-  twice this session (start and close), healthy both times, untouched throughout.
-
 ---
----
-*(S73–S91 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S92 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
