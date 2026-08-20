@@ -7,6 +7,52 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S93] — 2026-08-19 — Channel-gating fixed (#222), #227's sequence now 4 of 8 shipped; #223 scoped
+
+- **#227's sequenced plan: #222 (channel-gating consistency, mid) fixed, tested, merged.** Three
+  instances of the same root cause — channel routing not consistently enforced across sibling
+  decode/config paths. (1) Wind bytes decoded unconditionally from any of 4 configured channel
+  roles instead of gating on the already-computed `wind_channel` — fixed by wrapping the decode
+  block in the missing gate, sibling to the message_type dispatch that follows it. (2) `rain_count`
+  (message_type 0xE) had no channel check, unlike its sibling `rain_rate` a few lines earlier —
+  fixed by copying that existing gate. (3) `ch_to_xmit()` accumulated transmitter bits with no
+  check the 5 configured channel numbers are pairwise distinct, so a duplicate silently corrupted
+  the `-tr` bitmask into a different channel than either role was configured for — fixed with an
+  explicit `ValueError` in `__init__`, matching the sibling frequency-validation two lines above it.
+  9 new tests (`tests/test_channel_gating.py`), all 4 bug-repro cases confirmed to fail pre-fix via
+  `git stash`. Wiring `wind_channel` into `parse_raw()` broke 13 pre-existing tests across 4 files
+  whose minimal fake-driver fixtures predated the change and had no `wind_channel` key — fixed by
+  adding it to each, not a behavior change. **PR #238, merged** (`f31438d`). 329/329 full suite
+  (320 baseline + 9 new), ruff/mypy clean (56 files), secret scan positive-controlled clean.
+- **#219/#220/#221 closed on GitHub** — merged in S92 but never explicitly closed (this repo's
+  `Closes #N` doesn't auto-fire since `dev`, not `main`, is where PRs land). Each closed with a
+  comment cross-referencing its PR and merge commit, per `CONVENTIONS.md`'s explicit rule. #227's
+  sequence now correctly reads 4 of 8 shipped on GitHub, not just in `BOOT.md`'s own tally.
+- **#223 (`dewpoint_service.py` wind-filter redesign, frontier) scoped, not implemented** — read
+  and grounded all 4 sub-bugs against current code (deadlock from missing resync-on-reject with no
+  TTL; `windDir` surviving a rejected `windSpeed`/`windGust`, confirmed by the two existing tests
+  that seed a `windDir` value and assert nothing about it; the unfiltered warmup buffer that seeds
+  bug 1; `windGust` unguarded when `windSpeed` is `None`, confirmed unreachable by this repo's own
+  driver today). Identified the fix pattern to port (`SensorQC.check()`'s always-resync-the-baseline
+  + TTL-gated reseed) and flagged one open design call for the actual session: porting the pattern
+  locally vs. importing `SensorQC` from `rtldavis.py`, which would break `dewpoint_service.py`'s
+  current zero-coupling to the driver. Deliberately held for its own dedicated session per #227's
+  own note and the frontier tag — no code written.
+- **Session survived a mid-session crash cleanly** — verified on resume that nothing drifted (git
+  state, PR #238's CI/mergeability all exactly as left) before continuing, rather than assuming the
+  transcript was still ground truth.
+- Daily square watch (once, session start): 16 pass / 2 expected-WARN (chatty stdout + ineffective
+  USB hedge, both already-known), reception 75% 5-window avg / 62% last window, arm B unchanged
+  since 08-19T06:06:26, no STOP/PAUSE/lock. Model tier confirmed Sonnet at session start (fresh
+  session, nothing elevated to restore from S92's #219 escalation).
+- **None of #222 deploys yet** — `rtldavis.py` is baked into the image, holds for the v2.0.14 cut
+  (~08-23) same as the rest of #227's plan.
+- ROADMAP checked: nothing this session ships/closes/reprioritizes a P0–P3 line — no DEC logged
+  (routine audit-remediation fixes don't generate their own DEC, same as #219/#220/#221 in S92).
+  Tripwire unchanged, still due by S96.
+
+---
+
 ## [S92] — 2026-08-19 — Overnight-probe finding shipped (DEC-0102); 3 of 8 code-audit fixes merged (#219/#220/#221)
 
 - **Job 2 closes: DEC-0098's probe ran, and DEC-0102 records what it found.** Resolved the
