@@ -6488,3 +6488,169 @@ the tie was the one signal carrying *timestamps*, which turned an unfalsifiable 
 arithmetic. DEC-0074 said a file proves the file and never the process; this extends the same shape
 to counters and tails. The owner's "more crashes lately" was the most reliable instrument in the
 report, and it deserved a measured answer rather than a reassurance.
+
+---
+
+## DEC-0107 — ops#169 pre-flight: both weewx lease roles are non-root, and the spec gets corrected before adoption locks it
+
+**Status:** Accepted (pre-flight + negotiated positions) · **Date:** 2026-08-20 (S96) ·
+**Follows:** DEC-0104 · **Answers:** ops#169's second-tenant round ·
+**Deliberately NOT the adopting DEC** — see §What is still owed
+
+### Context
+
+DEC-0104 corrected DEC-0099's gating premise and established that weewx's `NAS-LEASE` client is
+host-side and unblocked. It left four things explicitly owed before any client ships: that our
+runtime user can create/rename in `LEASE_DIR`, `O_CREAT|O_EXCL` atomicity on the btrfs mount, a
+cross-tenant-visible log append, and a declared renewal floor. This session ran that pre-flight
+against the live box and settled the resulting spec corrections directly with coffee-radar (their
+S205), at the owner's direction, with eaglehunt-ops kept informed throughout.
+
+### The decisive finding: both weewx lease roles run non-root
+
+coffee-radar's ops#169 comment reasoned that both uid gaps would be moot for weewx *"if your client
+runs as root under DSM the way your rx_experiment tasks do."* Those tasks **are** DSM root tasks —
+but neither of them is the lease client. The two halves that would carry it are **two different
+non-root accounts**:
+
+| Role | Runs as | Established by |
+|---|---|---|
+| **Observer** — read the lease, append `heavy-io.log` | `weewx-monitor`, uid 1031 | DEC-0009's least-privilege account; sudo scoped to `usb_reset.sh` alone |
+| **Holder** — wrap the NAS image build (DEC-0078) | the owner's own NAS account, non-root — **named only in the gitignored local-infra doc** | ownership of every `build-v2.0.*` directory under the project root, read this session |
+
+So **weewx is the first tenant these gaps actually bite.** HLF and coffee-radar are both uid 0 today,
+which is precisely why three nights of production never surfaced them — every writer so far happened
+to be root, so the mechanism looked proven in the one dimension nobody had tested.
+
+**Widening the monitor's sudo grant to work around a file mode was considered and rejected outright.**
+That trades a documented security decision (DEC-0009) for a `chmod` somebody else can make.
+
+### The two gaps, and what each costs us
+
+- **Gap A — `heavy-io.log` is `root:root 0644`.** Any non-root tenant gets `EACCES` on append. This
+  blocks our holder's **mandatory** `acquired`/`released` events (§4), which is the entire artifact
+  §8 designates our ~08-23 image build to produce.
+- **Gap B — `LEASE_DIR` is `1777`.** The sticky bit restricts unlink to the file's owner, so §3's
+  *"any tenant may break a stale lease"* is unexecutable for us: a stale root-owned lease blocks our
+  `O_CREAT|O_EXCL` acquire for the whole 8 h TTL and we run permanently un-announced.
+
+**Gap A is worse than `EACCES` makes it sound, and this is the repo's signature failure shape.**
+HLF's client appends under `|| :` and reports `log append failed (non-fatal)` (`hlf_capture.sh:837`)
+— correct for their nightly, but it means a non-root tenant does not *error*, it **silently writes
+nothing and exits green**. Our whole cross-tenant exercise could complete "successfully" and produce
+no artifact at all. A green result from a path nobody has exercised is not evidence (DEC-0045).
+
+### Positions weewx took, and why
+
+1. **Gap B → option (a), drop the sticky bit to `0777`.** Not hypothetical: of the three nightly
+   holds in the live log (08-18/19/20), **both that had completed released `outcome: step-failures`**
+   — the third was still held when we read it. A nightly that routinely ends in step failures is one
+   whose launcher dying mid-hold is a real shape, not a thought experiment. Option (b) — document the asymmetry and let unprivileged tenants
+   proceed un-announced — trades a *possibility* for a *certainty*, and lands that certainty on the
+   least-privileged tenant.
+2. **`chattr +a` on `heavy-io.log`, proposed as optional hardening.** Sticky was *incidentally* the
+   only thing protecting the log from unlink — a fact nobody had priced, because sticky had only ever
+   been weighed against §3's break clause. Append-only is strictly better than sticky was here: it
+   blocks unlink **and** truncate, needs root to set or clear, survives `0777`, and it *enforces*
+   §4's "append-only JSONL" instead of leaving it a convention. **Support on this DSM/btrfs build was
+   unverified when proposed**, so (a) was deliberately chosen to stand on its own without it. It has
+   since been run **and confirmed set by direct observation** — see §What is still owed.
+3. **Sequencing: the spec edits and both chmods land BEFORE either client DEC.** §5's constants lock
+   at the *second* adopting DEC; locking a spec both tenants already agree is wrong, purely to unlock
+   and re-amend it, is churn. Fixing first also **dissolves the who-goes-second question**, which was
+   otherwise about to be settled by date coincidence. weewx stated deliberately that it does not care
+   whether it goes second, rather than defaulting into it.
+
+### The cost of our own recommendation, priced in writing
+
+Dropping sticky **widens an already-accepted §11 gap**. Under `1777`, unlink is owner-or-root only,
+so a non-root tenant cannot remove a *valid* foreign lease even by accident. Under `0777` any tenant
+can unlink any lease at any time, including one actively held — after which the holder keeps its
+flock on the now-unlinked inode and renews into it unaware, every observer reads the slot as **free**,
+and a second heavy job starts. That is exactly the state §3's in-place-renewal rule exists to prevent,
+reached by a different route.
+
+This does not change the recommendation — §11 already accepts wrong-lease deletion at these stakes,
+and (a) widens it from a same-owner race to an any-tenant one, against (b)'s guaranteed silent
+stranding. A low-probability failure that leaves evidence beats a certainty that leaves a hole. But
+it is recorded because **naming the cost of your own preferred option is the only way it gets weighed
+at all**; `chattr +a` does not cover this, since it protects the log and not the lease.
+
+### Considered and discarded, so it stays discarded
+
+**Break-by-takeover-in-place** — instead of unlinking a stale lease, open `O_RDWR`, take the flock,
+re-verify expiry *under* the lock, and rewrite in place. It fixes Gap B without touching sticky and is
+genuinely more atomic than rm-then-create. **It fails at release:** a non-root tenant that takes over
+a root-owned lease can never unlink it afterward under sticky, so the file becomes permanent and every
+subsequent `O_CREAT|O_EXCL` acquire fails **protocol-wide**. Checked against HLF's real acquire and
+release code (`hlf_capture.sh:864-876`) before discarding, not reasoned about in the abstract.
+
+### Our declared renewal floor — dated DATA, not a constant (§5's own rule)
+
+`docker build` is a **single invocation with no natural mid-job checkpoint**, so our holder never
+renews. This is a third holder shape the spec does not describe — §5's `TTL ≥ 3× renewal_floor_s`
+reads as though renewal were mandatory. Our honest declaration is `renewal_floor_s` = the whole
+expected job duration. From DEC-0078's ~10 min v2.0.12 build: **floor 600 s, TTL 3600 s** (above the
+naive 1800 s, for cold-cache and slower-build margin). **To be re-pinned against the real ~08-23
+wrapped build** rather than letting one release's number harden into a constant.
+
+### A secret-hygiene near-miss, caught by another tenant
+
+Verifying the holder's uid meant reading it off the NAS build directories, and the literal account
+name then went into three peer messages. **coffee-radar flagged it unprompted**, applying their own
+repo's never-commit reflex to a shared surface. Verified rather than assumed: that name appears in
+**zero tracked files** here, and our commits are authored under a GitHub `users.noreply` address, so
+it is not in the public history either — it is the owner's personal login *and* the local part of the
+personal email.
+
+**The hazard was ahead, not behind:** weewx's adopting DEC lands in a **public, permanent** repo, so
+the literal name would have travelled from a transcript into published history. The working line,
+now applied in this file: **the build account never; `weewx-monitor` and its uid whenever useful**,
+since those are deliberately documented already (`docs/ARCHITECTURE.md`, DEC-0009). Nothing to rotate
+— a login name is not a credential. This is DEC-0047's rule arriving from an unexpected direction:
+the gate guards commits, and the exposure route was a *read* that fed a *future* commit.
+
+### What is still owed, and why this is not the adopting DEC
+
+**Landing an adopting DEC is the event that locks §5's constants for every tenant** (HLF's DEC-0177
+was the first). It must therefore lock a *corrected* spec. Items 1 and 2 below closed during this
+same session; **item 3 is the only one still open**, and it is not ours:
+
+1. ~~Owner runs `chmod 666` on the log and `chmod 0777` on `LEASE_DIR`.~~ **DONE, same session, and
+   verified independently rather than taken on report** (a peer's "it's live" is a claim, not a
+   result): `nasctl ls` returns `drwxrwxrwx` on `LEASE_DIR` — sticky dropped — and `-rw-rw-rw-` on
+   `heavy-io.log`. **Both gaps are closed on the box before our holder exercise ever runs.**
+   **`chattr +a` is also CONFIRMED SET** — owner-run `lsattr` returns `-----a------------`. It got
+   there the long way, and the detour is the point: it was run under sudo and reported no error,
+   which coffee-radar read as its success signature (correct as a general rule). We declined to
+   close on that, because **this box is the origin of our sharpest counter-example** — Synology's
+   `db` log driver **accepts `max-size` and silently ignores it** (DEC-0036: 7 h of prod lost to a
+   cap that was never real). On *this* hardware, absence of an error is weaker evidence than
+   elsewhere. The cost of converting inference into observation was **one read-only command**;
+   a write-based probe was explicitly rejected, since it would confirm the attribute by attacking
+   the attribution record. **All three fixes now rest on direct observation, none on report.**
+   The existing `heavy-io.lease` remains 0644 from its pre-change creation, which is harmless
+   (world-readable is all an observer needs) and is exactly what item 3 future-proofs.
+   **NAS mutations on a shared resource stayed owner-run throughout — neither tenant session
+   executed them.**
+2. ~~eaglehunt-ops lands the `NAS-LEASE.md` diff.~~ **DONE, same session — `NAS-LEASE.md` v1.4,
+   commit `63e2afc`, `OPS-DEC-0110`**: §4 log kept 0666 · §5 dir cell `1777`→`0777` · §3 holders set
+   the lease mode explicitly after create · §5 non-renewing-holder line · §5 weewx floor row · §11
+   the widened-unlink sentence. Identities kept generic in the spec text, as asked.
+3. HLF patches `hlf_capture.sh:872` — the `set -C` create takes `0666 & ~umask`, so today's 0644 is
+   root's umask being lucky, not a rule; under a stricter umask it yields 0600 and silently degrades
+   **every** observer to `couldn't tell` for the whole hold. Routed to HLF directly rather than via a
+   mirrored comment, because it is a patch and not a status update.
+
+Only then does weewx's adopting DEC land, taking **the next free number at that time** — not reserved
+here, since the gap between now and the ~08-23 build may hold other decisions.
+
+*Rationale:* the reusable lesson is that **a mechanism can look production-proven and still be
+untested in the only dimension that matters.** Three nights of `heavy-io.log` proved the protocol
+worked *for root*, and every tenant reasoned from that — including, initially, about weewx.
+What broke it was not cleverness but reading the actual uid off the actual box instead of inferring it
+from a sibling script's behavior, which is DEC-0074's file-proves-the-file rule applied to identity.
+The second lesson is procedural and worth as much: the two findings that most improved the outcome
+(sticky was also protecting the log; the account name was about to be published) each came from the
+*other* tenant looking at our situation, and both arrived because the round was conducted directly
+between sessions rather than as alternating comments on an issue.
