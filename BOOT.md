@@ -62,8 +62,10 @@ was wrong at S89 and again at S94, both times shipped into this file before bein
    adoption nothing.
 5. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
    [ops#179]. Revisit once the square closes **and** the gated queue clears.
-6. **[ops#173] BOOT.md over cap — TRACKED, do not re-derive or open a second issue.** Diet at the
-   square's close (~08-23), still deferred on purpose.
+6. **[ops#173] — DIET DONE at S94: `BOOT.md` 4,866 → 2,346 tok, under the 2,500 cap.** Issue left
+   **open on purpose** for the automated sweep to close, not asserted green: `MANIFEST.md` sits at
+   1,226 vs its 1,000 cap (the documented OPS-DEC-0101 carry, +130 for the `GOTCHAS.md` row). Result
+   posted to the thread. **Nothing to do here unless the sweep re-flags** — do not re-derive the diet.
 
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
 [ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
@@ -104,8 +106,8 @@ was wrong at S89 and again at S94, both times shipped into this file before bein
 **~1,700 tokens of durable traps moved out of the always-load tier** under STANDARD rule 1 (ops#173).
 None of it was session state, so none of it belonged here. **Read it when:** trusting any tool's
 zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) · any NAS or campaign task
-(§3) · concluding a component is dead or a change has shipped (§4) · reaching for a shell/interpreter
-(§5). Indexed in `MANIFEST.md`. New traps are appended THERE, not here.
+(§3) · judging a component live, dead, or shipped (§4). Indexed in `MANIFEST.md`. **New traps are
+appended THERE, not here** — that is what keeps this file under cap.
 
 _Last updated: 2026-08-19 (S94 close). Green gate: ruff clean, **339/339**, mypy clean (57 files),
 secret gate positive-controlled. Shipped #223 (DEC-0103) and, after the owner raised ops#169,
