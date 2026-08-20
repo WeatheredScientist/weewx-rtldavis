@@ -3,7 +3,18 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-17 (S86 — **scheduled full reconciliation, tripwire fired on time**: the
+**Last updated:** 2026-08-20 (S96 — **scheduled full reconciliation, tripwire fired on time**:
+three stale items fixed — this banner itself (two targeted passes never promoted out of the
+guardrail's shadow log), the Campaign A arm-winner **seal**, which DEC-0069 broke as a side effect
+30 sessions ago while this file still asserted it held, and P3's INTERFACES citation list, three
+DECs out of date. See the guardrail section for detail).
+Prior: 2026-08-19 (S92 — targeted line update, not a full pass: the P0 freeze item gained
+DEC-0102's 11.80x overnight iowait number. **Recorded only in the guardrail section at the time,
+never promoted here — corrected at S96.**)
+Prior: 2026-08-18 (S89 — targeted line update, not a full pass: the P0 freeze item gained
+DEC-0097's RF-dead/freeze clock discriminator and DEC-0098's live probe. **Same omission as S92,
+corrected at S96.**)
+Prior: 2026-08-17 (S86 — **scheduled full reconciliation, tripwire fired on time**: the
 freeze item (P0, line below) gained DEC-0094's evening-window finding, missing since S85; everything
 else diffed clean against DECISIONS.md/CHANGELOG.md/BOOT.md — see the guardrail section for detail).
 Prior: 2026-08-14 (S82b — targeted line update, not a full pass: the campaign-B entry's
@@ -39,11 +50,28 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S96** (~10 sessions out). If the session counter is
-  at or past S96 and this line still says S96, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76 and S86 did (diff every open/pending item here against DECISIONS.md,
-  CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S86, 2026-08-17** — tripwire fired on time. One stale item found and
+- **Next scheduled reconciliation check: by S106** (~10 sessions out). If the session counter is
+  at or past S106 and this line still says S106, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86 and S96 did (diff every open/pending item here against
+  DECISIONS.md, CHANGELOG.md and `BOOT.md`).
+- Last full reconciliation: **S96, 2026-08-20** — tripwire fired on time. **Three stale items found
+  and fixed**, and the most interesting one is a failure mode this guardrail did not anticipate:
+  **the top-of-file "Last updated" banner had itself gone stale.** S89 and S92 both ran targeted
+  passes and recorded them *in this section* without promoting them into the top block, so the
+  banner still read S86 while the content was current through S92 — the freshness signal aged while
+  the file did not. A reader checking staleness the cheap way (read the banner) would have been
+  told the file was three sessions more out of date than it was. **Rule going forward: a targeted
+  pass writes BOTH places, or it is not done.** Second: P2's Campaign A block asserted *"Arm winner
+  stays sealed until after B"* — DEC-0069 (S66) unsealed it as a side effect of validating
+  `campaign_analyze.py` and published the per-arm ranking in the same breath, so the claim had been
+  false for 30 sessions. Third: P3's INTERFACES item cited only DEC-0032/0053 as partial progress,
+  missing DEC-0086, DEC-0091 and DEC-0093, all of which landed in that file since (verified against
+  `git log -- docs/INTERFACES.md`, not inferred). Everything else diffed clean — 15 items checked
+  (6 open, 9 done reverse-checked); the P0 freeze row is current through DEC-0102, the DB-lock and
+  receiveWindow rows are unchanged and correct, and this session's own DEC-0107 (NAS-LEASE
+  pre-flight) and issue #224 (dewpoint unit systems) touch no line here yet — the first because
+  weewx has not adopted, the second because it is a bug fix inside a P1 arc already marked done.
+- Prior full reconciliation: **S86, 2026-08-17** — tripwire fired on time. One stale item found and
   fixed: the freeze P0 item (line below) still stopped at DEC-0088's S80 rate correction and never
   picked up **DEC-0094 (S85)** — the hour-of-day split that refutes the nightly-maintenance-window
   hypothesis (9/40 freezes vs 7.2 expected, P=0.29) but finds the **evening 18:00–21:00 window
@@ -195,8 +223,13 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       and none existed in the window (last 00:04:20, next 01:24:24), so DEC-0061's budget
       arithmetic is upheld, not implicated. STOP sentinel left in place deliberately; A is not
       resuming. Its surviving value is what DEC-0064 always said it was — the LNA-in
-      characterization (922 samples, mean 72.4) and the multi-day drift error bar. **Arm winner
-      stays sealed until after B.** Settles DEC-0017 (**absorbed**). Tracked at
+      characterization (922 samples, mean 72.4) and the multi-day drift error bar. **The arm-winner
+      seal is BROKEN and has been since S66** — DEC-0069 unsealed it as a side effect of validating
+      `campaign_analyze.py` (the recomputed ranking A 74.81 / C 74.37 / D 74.17 / B 73.87, spread
+      0.94 pts, no arm near adoption) and says so on the record: *"it was a side effect, not a
+      decision."* What survives is the calendar condition, not the secrecy: the formal A-vs-B
+      comparison still waits for B's close, and must be read on the same per-minute metric.
+      Settles DEC-0017 (**absorbed**). Tracked at
       [ops#114](https://github.com/WeatheredScientist/eaglehunt-ops/issues/114).
 - [x] **v2.0.12 release — DEPLOYED to prod 2026-08-10 (S70); Hub push PENDING.** Promoted via
       PR #151 (`main` = `7b6fd42`), built **natively on the NAS** (`9db5c1ddaac3` — the arm64
@@ -442,9 +475,11 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
 
 ## P3 — Modularity toward multi-source (PRINCIPLES §1)
 - [ ] Harden INTERFACES.md as the stable contract; document it well enough for a non-Davis WeeWX or
-      CumulusMX producer to satisfy it. (Partial progress: DEC-0032's `rain_qc` flag and DEC-0053's
-      station-identity/correction-flag findings are already documented there — this item is about
-      closing the remaining gaps, not starting from zero.)
+      CumulusMX producer to satisfy it. (Partial progress, and more than this line used to claim:
+      DEC-0032's `rain_qc` flag, DEC-0053's station-identity/correction-flag findings, DEC-0086's
+      `barometer_inHg` WeatherLink-passthrough provenance, DEC-0091's `barometer_fetch_epoch` +
+      honest-null pressure/altimeter, and DEC-0093's `current.json` cadence decoupling are all
+      documented there — this item is about closing the remaining gaps, not starting from zero.)
 - [x] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005) — done S47.
 
 ---
