@@ -6637,13 +6637,20 @@ same session; **item 3 is the only one still open**, and it is not ours:
    commit `63e2afc`, `OPS-DEC-0110`**: §4 log kept 0666 · §5 dir cell `1777`→`0777` · §3 holders set
    the lease mode explicitly after create · §5 non-renewing-holder line · §5 weewx floor row · §11
    the widened-unlink sentence. Identities kept generic in the spec text, as asked.
-3. HLF patches `hlf_capture.sh:872` — the `set -C` create takes `0666 & ~umask`, so today's 0644 is
-   root's umask being lucky, not a rule; under a stricter umask it yields 0600 and silently degrades
-   **every** observer to `couldn't tell` for the whole hold. Routed to HLF directly rather than via a
-   mirrored comment, because it is a patch and not a status update.
+3. ~~HLF patches `hlf_capture.sh:872`.~~ **DONE, same session — their PR #388, merged and deployed
+   (`066bbf9f`).** The `set -C` create takes `0666 & ~umask`, so today's 0644 was root's umask being
+   lucky, not a rule; under a stricter umask it yields 0600 and silently degrades **every** observer
+   to `couldn't tell` for the whole hold. Routed to HLF directly rather than through the issue
+   mirror, because a patch needs a file and a line and that does not survive a paraphrase — which
+   is also what let them find **a second create we had not flagged**: the steal-then-acquire retry
+   path. Had they patched exactly what we reported, the bug would have survived in the branch that
+   only runs after a crash, i.e. precisely when the lease matters most. Their fix covers both and
+   carries a 0077-umask regression test.
 
-Only then does weewx's adopting DEC land, taking **the next free number at that time** — not reserved
-here, since the gap between now and the ~08-23 build may hold other decisions.
+**So all three closed inside this one session, and the round is fully closed** — nothing outstanding
+on the NAS-LEASE front from any tenant. weewx's adopting DEC is therefore no longer blocked on anyone
+else; it waits only on our own client, and lands with the ~08-23 image build, taking **the next free
+number at that time** (not reserved here, since the gap may hold other decisions).
 
 *Rationale:* the reusable lesson is that **a mechanism can look production-proven and still be
 untested in the only dimension that matters.** Three nights of `heavy-io.log` proved the protocol
