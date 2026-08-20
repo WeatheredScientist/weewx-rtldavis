@@ -161,7 +161,7 @@ open threads) lives in `BOOT.md`, not here.
 Prod-truth reconcile + `prod-baseline-20260704`, nine-file governance, CI/pre-commit + secret gate,
 independent session numbering. See CHANGELOG-ARCHIVE `[S16]`–`[S20]`, DEC-0010…0017, DEC-0023.
 
-## P0.5 — Governance alignment across the family (S23–S56) — ✅ DONE except one follow-on
+## P0.5 — Governance alignment across the family (S23–S56) — ✅ DONE
 Brought this repo's *form* into line with the sibling repos and external best practice, keeping
 content isolated (ASSESSMENT.md §2): `docs/ASSESSMENT.md` cross-repo audit + Governance Standard v1,
 GPLv3 `LICENSE`, `AGENTS.md` cross-agent entrypoint, ROADMAP restructured to shared P-tiers,
@@ -169,8 +169,10 @@ STATUS.md promoted to single source of truth for the session number, `cleanup_ba
 into BACKLOG (S27), docs diet (DEC-0030, S35 — the family-wide pattern: dash DEC-0081 → hyperlocal
 DEC-0095 → here), remote URL casing + stale-branch cleanup (S56). See CHANGELOG-ARCHIVE `[S23]` and
 ASSESSMENT.md for detail — not re-narrated here.
-- [ ] **Keep-a-Changelog headings + DECISIONS entry-skeleton convergence** (proposed S25, never
-      picked up).
+- [x] ~~**Keep-a-Changelog headings + DECISIONS entry-skeleton convergence** (proposed S25, never
+      picked up).~~ **RETIRED S98** — original rationale unrecoverable, no family-wide adoption to
+      converge toward, and DEC-0109 judges it would fragment this repo's dense narrative style
+      rather than help. See DEC-0109.
 - [x] ~~**Session-context tiering migration — DEC-0063, decided S59, execute S60.**~~ **DONE S60**
       (this row said so in its own body while staying unchecked — caught by the S66 full pass). The third
       generation of the docs-diet idea (dash DEC-0081 → hyperlocal DEC-0095 → DEC-0030 here →
