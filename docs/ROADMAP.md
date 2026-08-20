@@ -476,10 +476,15 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
 ## P3 — Modularity toward multi-source (PRINCIPLES §1)
 - [ ] Harden INTERFACES.md as the stable contract; document it well enough for a non-Davis WeeWX or
       CumulusMX producer to satisfy it. (Partial progress, and more than this line used to claim:
-      DEC-0032's `rain_qc` flag, DEC-0053's station-identity/correction-flag findings, DEC-0086's
-      `barometer_inHg` WeatherLink-passthrough provenance, DEC-0091's `barometer_fetch_epoch` +
-      honest-null pressure/altimeter, and DEC-0093's `current.json` cadence decoupling are all
-      documented there — this item is about closing the remaining gaps, not starting from zero.)
+      DEC-0032's `rain_qc` flag, DEC-0086's `barometer_inHg` WeatherLink-passthrough provenance,
+      DEC-0091's `barometer_fetch_epoch` + honest-null pressure/altimeter, and DEC-0093's
+      `current.json` cadence decoupling are all documented there. **Corrected S97:** this line
+      previously also claimed DEC-0053's station-identity finding was documented — it was not; only
+      DEC-0053's cache-bounding finding (Finding 1) had actually made it into the doc. §2 now carries
+      the missing station-identity/series-key trap (Finding 2), closing that gap for real. Finding 3
+      (the SQLite archive's own missing correction flag) stays in `DATA_ERRATA.md` on purpose —
+      INTERFACES.md scopes itself to the two *published* surfaces, and SQLite is neither. This item
+      is about closing what remains, not starting from zero.)
 - [x] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005) — done S47.
 
 ---
