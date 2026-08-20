@@ -3,7 +3,11 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-20 (S96 — **scheduled full reconciliation, tripwire fired on time**:
+**Last updated:** 2026-08-20 (S97 — targeted line update, not a full pass: P3's INTERFACES.md line
+corrected again — it claimed DEC-0053's station-identity finding (Finding 2) was already documented
+in INTERFACES.md; it wasn't, until this session actually wrote it in, along with a Finding 3
+pointer. See the guardrail section for detail.)
+Prior: 2026-08-20 (S96 — **scheduled full reconciliation, tripwire fired on time**:
 three stale items fixed — this banner itself (two targeted passes never promoted out of the
 guardrail's shadow log), the Campaign A arm-winner **seal**, which DEC-0069 broke as a side effect
 30 sessions ago while this file still asserted it held, and P3's INTERFACES citation list, three
@@ -54,6 +58,14 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
   at or past S106 and this line still says S106, that itself is the signal it's overdue — run the
   same pass as S56, S66, S76, S86 and S96 did (diff every open/pending item here against
   DECISIONS.md, CHANGELOG.md and `BOOT.md`).
+- Prior: 2026-08-20 (S97 — targeted line update per DEC-0057, not a full pass; tripwire still
+  S106): P3's INTERFACES.md line corrected. It had claimed DEC-0053's station-identity finding
+  (Finding 2) was already documented in `INTERFACES.md` — checked directly against the file rather
+  than taken on the line's own word, and it wasn't: only Finding 1 (the bounded cache) had actually
+  made it in. `INTERFACES.md` §2 now carries Finding 2 (the series-key fork trap) and, as a bonus
+  while touching the same paragraph, a one-line pointer for Finding 3 (SQLite's own missing
+  correction flag, which stays in `DATA_ERRATA.md` on purpose). No other line moved; this was found
+  while doing the P3 discovery pass itself, not by a scheduled audit.
 - Last full reconciliation: **S96, 2026-08-20** — tripwire fired on time. **Three stale items found
   and fixed**, and the most interesting one is a failure mode this guardrail did not anticipate:
   **the top-of-file "Last updated" banner had itself gone stale.** S89 and S92 both ran targeted

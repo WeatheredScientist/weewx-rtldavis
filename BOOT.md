@@ -12,82 +12,75 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S96 → S97)
+## ▶ Resume here (S97 → S98)
 
 ### What's settled (do not re-derive)
 
-**ops#169 / NAS-LEASE is CLOSED end-to-end — `DEC-0107` holds the whole record.** Every item landed
-in one session and **all three box-level fixes rest on direct observation, none on report**:
-`LEASE_DIR` is `drwxrwxrwx` (sticky dropped), `heavy-io.log` is `0666`, `chattr +a` reads
-`-----a------------`. Spec is **`NAS-LEASE.md` v1.4 / OPS-DEC-0110**; HLF patched their create mode
-(their PR #388). Do not re-measure any of it.
+**The S91 audit's whole 8-issue sequence (#219–226) is CLOSED — tracking issue #227 closed with
+it.** #225 and #226 (this session) were the last two. Nothing left to pick up from that audit.
 
-**Both weewx lease roles run NON-ROOT** — observer `weewx-monitor` (uid 1031, DEC-0009), holder a
-**separate** non-root account whose name lives **only in the gitignored local-infra doc**: it is the
-owner's personal login, absent from every tracked file, and this repo is public and permanent.
-Describe it by function, never by name. Widening the monitor's sudo grant to dodge a file mode was
-considered and **rejected** — it trades DEC-0009 for a `chmod` someone else can make.
+**`ops/nas_build.py` — weewx's NAS-LEASE holder client — is built, tested, and verified live
+against the real NAS (DEC-0108).** Generic lease-wrapper (`--job <name> -- <command>`); 14 local
+tests against a real `flock()`, plus one real dry-run against the actual shared `LEASE_DIR` this
+session — clean `acquired`/`released` pair, no stray lease file left behind. **Not built on
+purpose:** the observer/downshift side — no live lever to act on a "held" verdict yet. **Still
+waits for the ~08-23 event itself:** the real build's measured duration (floor/TTL ship
+provisional at 600s/3600s, re-pin same day) and the adopting DEC (locks §5 for every tenant, takes
+the next free number that day — DEC-0109+, since DEC-0108 is used).
 
-**★ DEC-0107 is deliberately NOT the adopting DEC.** Landing one **LOCKS §5's constants for every
-tenant** (HLF's DEC-0177 was first), so it must lock a corrected spec. Adoption is now blocked on
-**nobody but us**.
+**`INTERFACES.md` now actually documents DEC-0053's two open findings — ROADMAP had been
+overclaiming this since S48.** §2 carries the missing-station-identity gap (Finding 2, the
+series-fork trap) and a pointer to Finding 3 (SQLite's own missing correction flag, which stays in
+`DATA_ERRATA.md` on purpose). Do not re-open either without new reason — DEC-0053 already declined
+Finding 3's schema change deliberately.
 
-**#224 shipped** (PR #255): `dewpoint_service.py` branches on `usUnits` per WeeWX's own
-`wxxtypes.py` — *not* `to_US()`, which is right for `loop_json_writer.py` only because that service
-*emits* US and never converts back. Suite **339 → 349**.
+### ▶▶ S98 JOB LIST
 
-### ▶▶ S97 JOB LIST
-
-1. **S96's work is all MERGED — #254 (DEC-0107), #255 (#224), #256 (ROADMAP), #257 (this closeout).**
-   Nothing left open from S96. Confirm steady state is exactly `dev` + `main` and no `s96-*` branch
-   survived the auto-delete. `Closes #N` does **not** auto-fire here — PRs land on `dev`, so any
-   issue those PRs addressed still needs closing by hand with an explanatory comment.
+1. Confirm steady state is exactly `dev` + `main`, no stray `s97-*` branch (checked clean at S97
+   close). Nothing else carries over from S97 — all five PRs merged, both trackers touched (#225,
+   #227) closed with explanatory comments.
 2. **Daily square watch** (~5 min): `ops/soak_check.sh` + a direct `rx_experiment.state` read.
-   **Campaign B ENDS 08-23T00:05 — imminent.** Rotation-artifact WARNs after midnight are #252, not
-   findings; the `stdout is chatty` WARN is #253 and is permanent until the next container recreate.
-3. **★ The ~08-23 v2.0.14 build is now a THREE-purpose event — plan it as one.**
-   - It carries **#224** (baked in the image, so this is how it reaches prod).
-   - It is the lease protocol's **first cross-tenant holder exercise** (§8): wrap `docker build`
-     with acquire → flock → release. **Red lines:** lease writes **in place** (seek+write+truncate),
-     **never** tmp+`os.replace` — that strands the flock on an unlinked inode (§3, DEC-0051); SQLite
-     archive commit **never** deferred; `loop-data.txt` hard 30 s ceiling.
-   - It is when **weewx's adopting DEC lands and LOCKS §5 for every tenant.** Take the next free DEC
-     number then. Declared floor **600 s / TTL 3600 s** — dated data from DEC-0078's ~10 min
-     v2.0.12 build, **to be re-pinned against this build's measured duration**.
-   - Optional call: mount `LEASE_DIR` read-only while the container is being recreated anyway. Buys
-     **only** the InfluxDB `post_interval` yield lever; skipping costs adoption nothing.
-4. **Continue #227's sequence: #225/#226 remain** — lower priority, can ride v2.0.15+.
-5. **Watch for HLF's ~08-23 floor re-measure.** Their blend-refresh ran 88 min → 155m31s → 275m33s.
-   We read the near-identical ratios (1.767, 1.772) as compounding; **they explained it better** —
-   the three points bracket exactly two feature landings (their DEC-0173, DEC-0178), so two
-   similarly-shaped layers give two similar multipliers as *steps*. Their re-measure with no new
-   layer is the discriminating test. **Either way their 8 h TTL goes out of spec the moment they
-   declare honestly** (3 × 275 min = 13.8 h), and **a raised TTL is a cross-tenant cost** — the slot
-   is single, so a wedged holder blocks our build for the entire TTL. We argued for lowering the
-   floor (intra-step heartbeat) over raising the TTL; they noted, correctly, that this changes the
-   declared floor's meaning from "longest step" to "heartbeat cadence".
+   **Campaign B ENDS 08-23T00:05 — very imminent now.** Interim readout at S97 (22/32 blocks, via
+   `ops/campaign_analyze.py --since <live attempt's epoch>` — the raw log still pools 6 aborted
+   attempts back to 08-11, the tool's own warning catches it): gain 496 leads 372 by a margin past
+   DEC-0059's 2.0-pt adoption bar at **both** ex levels tested; the ex axis itself is a wash. **Not
+   a verdict** — square isn't done, don't read partial results, DEC-0102's overnight-iowait confound
+   is still open. Rotation-artifact WARNs after midnight are #252; `stdout is chatty` is #253,
+   permanent until the next container recreate.
+3. **★ The ~08-23 v2.0.14 build is still a THREE-purpose event.** The holder wrapper is now ready
+   (job above) — this reduces to: run `ops/nas_build.py --job nas-image-build -- docker build ...`
+   for the actual build, measure its real duration, re-pin `RENEWAL_FLOOR_S`/`TTL_S` in that file
+   against it, and write the adopting DEC same day. Carries **#224** into prod (baked in the image).
+   Optional call unchanged: mounting `LEASE_DIR` read-only only buys the InfluxDB `post_interval`
+   yield lever; skipping costs adoption nothing.
+4. **P0.5 — Keep-a-Changelog headings + DECISIONS entry-skeleton convergence, owner-requested next
+   round.** Proposed S25 (~72 sessions ago), never picked up. Needs a discovery pass first — check
+   what S25 actually proposed (session transcript / `DECISIONS-FULL.md` context) before scoping any
+   change; nothing concrete queued yet.
+5. **Watch for HLF's ~08-23 floor re-measure.** Their blend-refresh ran 88 min → 155m31s → 275m33s
+   (ratios 1.767, 1.772 — read as compounding steps across their DEC-0173/0178 landings, not
+   settling). **Their 8h TTL goes out of spec the moment they declare an honest floor** (3×275min =
+   13.8h) — unresolved, their thread to close.
 6. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
    [ops#179]. Revisit once the square closes **and** the gated queue clears.
-7. **[ops#173]** — diet done at S94; left open on purpose for the automated sweep to close. Nothing
-   to do unless it re-flags.
+7. **[ops#173]** — left open on purpose for the automated sweep to close. Nothing to do unless it
+   re-flags.
 
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
 [ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
 
-### Current state (S96 close)
+### Current state (S97 close)
 
 | Thing | State |
 |---|---|
-| Prod | **v2.0.13**, driver **ws.5**; NAS-resident `rx_experiment.sh` + `weewx_monitor.py` unchanged since S82/S82b |
-| Campaign B | **Live, arm B since `08-20T00:07:30` EDT.** Square through **08-23T00:05**. Soak at S96: **17 pass / 2 warn / 0 fail** — both warns known (#253 chatty stdout; USB hedge 4/4, expected during RF-dead per S73) |
-| Restart rate | DEC-0106 baseline: 4/day during a campaign (all at HH:05), **0/day between**. A real loop is 7 starts in 7 min |
-| Retention | **BOTH halves SETTLED** (DEC-0095/DEC-0100), unchanged since S90 |
-| `dev` beyond prod | Everything for v2.0.14 **plus** DEC-0102/0103/0104/0106 **and DEC-0107 + #224 + the S96 ROADMAP pass** (all merged at S96 close) |
-| Freeze rate | DEC-0088-corrected (1.31/day); DEC-0102 adds the overnight-window confound. Unrelated to DEC-0106 |
-| Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
-| Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
-| Trackers | **#252/#253** open (soak follow-ups) · #233 open · #172/#144 open until v2.0.14 · #204 open · #227 at 6/8 (#224 done, #225/#226 left). **ops#184 open on purpose** (HLF redirect). ops#169 **CLOSED** |
-| Cross-repo (S96) | ops#169 closed with coffee-radar + ops + HLF; nothing owed to anyone. HLF's floor re-measure is the only live thread (job 5) |
+| Prod | **v2.0.13**, driver **ws.5**; unchanged this session |
+| Campaign B | **Live.** Square through **08-23T00:05**, imminent. Interim S97 readout: see job 2. Soak at S97: **17 pass / 2 warn / 0 fail** — both warns known (#253 chatty stdout; USB hedge 6/7, expected during RF-dead per S73) |
+| Restart rate | DEC-0106 baseline unchanged: 4/day during a campaign, 0/day between |
+| `dev` beyond prod | Everything for v2.0.14 **plus S97's 5 merged PRs** (#258–262: #226, DEC-0108, #225, INTERFACES.md ×2) |
+| S91 audit | **CLOSED** — #219–227 all closed, nothing left |
+| NAS-LEASE | Holder client built + verified live (DEC-0108); adopting DEC still waits for ~08-23 |
+| Trackers | #233 open · #172/#144 open until v2.0.14 · #204 open · **#227 CLOSED** (was open) · ops#184 open on purpose (HLF redirect) |
+| Cross-repo (S97) | coffee-radar (`coffeeradar-28`) confirmed the ~08-23 timeline mid-session; told them the holder client is verified, not just designed. A secret-read-guard false-positive gotcha flagged to ops via `spawn_task` |
 
 ## Blockers
 
@@ -100,13 +93,9 @@ tenant** (HLF's DEC-0177 was first), so it must lock a corrected spec. Adoption 
 3. **ERR-0005** — largely explained by DEC-0081; its 21-stall episode remains the largest on record.
 4. `ppm`/`fc` unmeasured, deliberately unchanged for B.
 
-## Model tier — ACTION OWED
+## Model tier
 
-**S96 ran on Opus 5, escalated mid-session via a bare `/model claude-opus-5`, which PERSISTS as the
-new-session default (OPS-DEC-0010).** In the desktop app the floor is inert and every switch persists
-in app state that `settings.json` does not reflect (OPS-DEC-0036/0062) — so a file check will look
-clean while sessions still start on Opus. **Restore to Sonnet in the app by hand.** A repo session
-may not edit the machine-wide floor itself (OPS-DEC-0060).
+Ran on Sonnet 5 throughout S97, confirmed directly (not inferred) — nothing to restore.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -115,10 +104,10 @@ zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) ·
 task (§3) · judging a component live, dead, or shipped (§4). Indexed in `MANIFEST.md`. **New traps
 are appended THERE, not here** — that is what keeps this file under cap.
 
-_Last updated: 2026-08-20 (S96 close). Green gate: ruff clean, **349/349**, mypy clean (57 files),
-secret gate clean **and positive-controlled** (harness 54/54; `scripts/.identifiers` confirmed
-present, without which the personal-identifier half silently skips). Shipped **DEC-0107** —
-ops#169 closed end-to-end, all three box fixes on direct observation — plus **#224** and the
-**S96 ROADMAP reconciliation** (tripwire → S106). **All four PRs merged at close (#254–#257)**;
-each needed a `gh pr update-branch` first, since every merge left the next one `BEHIND` under this
-repo's up-to-date-branch protection. Full narrative in `CHANGELOG.md`._
+_Last updated: 2026-08-20 (S97 close). Green gate: ruff clean, **386/386**, mypy clean (62 files),
+secret gate clean **and positive-controlled** (planted a fake key mid-session, confirmed the catch,
+restored from a pre-mutation backup rather than `git checkout` since the index held the payload).
+Shipped: **S91 audit fully closed** (#225/#226, PRs #258/#260) · **DEC-0108** NAS-LEASE holder
+client, built and verified live on the real NAS · **INTERFACES.md hardened** — both DEC-0053
+findings actually documented (PRs #261/#262), correcting ROADMAP's own overclaim. **Five PRs merged
+(#258–262)**, steady state verified after each. Full narrative in `CHANGELOG.md`._
