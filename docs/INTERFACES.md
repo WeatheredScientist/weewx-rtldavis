@@ -1,7 +1,7 @@
 # Interfaces — weewx-rtldavis
 
 **Status:** Source of truth (the contract consumers depend on)
-**Last updated:** 2026-08-14 (S82b)
+**Last updated:** 2026-08-20 (S97)
 
 This repo's real product is **data**, not weewx internals. Two published surfaces make up the
 contract; changing either can break downstream consumers (currently: the Eagle Hunt dashboard, dev
@@ -146,6 +146,17 @@ fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.
   absent field costs nothing and normal queries never see it. **Consumers must treat `*_qc` as optional**: its absence is
   the common case and means "not corrected". It is a *pointer* to the errata log, not a substitute for
   it — the flag says *that* a point was corrected, DATA_ERRATA says *what, why, and how far it spread*.
+
+- **No station identity in the series key (DEC-0053 Finding 2 — decided S48, never actually written
+  here until now).** `influx.py` supports `tags = station=...`, but the live config sets none — the
+  only tag is `binding=archive`, so every point in this infinite-retention bucket is anonymous.
+  **Adding one later is a trap, not a config tweak:** a point's series key is measurement *plus its
+  full tag set*, so adding a tag **forks a parallel series** rather than annotating the existing
+  one — splitting historical continuity and orphaning every Flux query written against the untagged
+  series, the same hazard §2's series-key rule above already states for corrections/backfills.
+  Harmless today with one producer, one station. **A second producer writing to this bucket needs a
+  coordinated interface change here first**, not a unilateral tag addition on either side — the
+  presence or absence of a station tag is part of what makes this a contract.
 
 > The dashboard reads InfluxDB only through its own `eh-proxy` (token injected server-side there);
 > this repo never sees the dashboard's read path. Our responsibility ends at writing the documented
