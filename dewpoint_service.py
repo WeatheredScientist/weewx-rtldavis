@@ -85,6 +85,35 @@ _WIND_LABEL = {
     weewx.METRICWX: 'm/s',
 }
 
+# --- Archive-level reception-quality guard (docs/DATA_ERRATA.md ERR-0004/ERR-0006) --
+# Neither the bounds check above (0-200 mph) nor MAX_WIND_DELTA (75 mph/packet) can
+# catch a mid-magnitude phantom wind reading from a corrupted-but-CRC-valid frame,
+# because a genuine squall gust of the same size (25-40 mph from calm) is real and
+# routine -- ERR-0004's own writeup, confirmed again independently by ERR-0006.
+# Both known incidents share a signal neither filter consults: rxCheckPercent for
+# that ONE archive minute collapsed to 13.2%/9.2%, against a 60-90%+ baseline every
+# surrounding minute. This is deliberately a DIFFERENT axis from the wind value
+# itself -- reception quality -- measured uncorrelated with genuine high wind at
+# this station (93-day history, 129,607 records): 0 of 220 archive records with
+# windGust>=10 mph fell under RXCHECK_COLLAPSE_PCT; conversely 87 of 89 intervals
+# under that threshold recorded windGust of 0-4 mph, genuinely calm. Runs at
+# archive-record time, not loop-packet time, because rxCheckPercent isn't final
+# until the interval closes -- and that is also the correct choke point: this
+# class sits in weewx.conf's process_services, which runs before archive_services
+# (StdArchive's own write) and restful_services (every uploader), so nulling here
+# reaches all of them, not just the local archive.
+#
+# Rare and comfortably encompasses both known incidents with margin: only 0.10%
+# of records (89/87,310 non-null) fall under this threshold, and both incidents
+# (13.2%/9.2%) sit well under half of it.
+RXCHECK_COLLAPSE_PCT = 20.0
+
+# Comfortably above the observed benign-collapse ceiling (4 mph, >2.5x margin) and
+# well below both known corrupt values (37/39 mph, >3.7x margin) -- also catches a
+# smaller future corruption event this station hasn't measured yet. Stated in mph,
+# converted at the point of use like the other wind thresholds (#224).
+COLLAPSE_WIND_GUST_MPH = 10.0
+
 
 class DewpointCacher(StdService):
     def __init__(self, engine, config_dict):
@@ -96,6 +125,7 @@ class DewpointCacher(StdService):
         self.wind_warmup      = []   # short buffer for cold-start seeding
         self._warned_units    = False  # usUnits complaint is once-per-run, #224
         self.bind(weewx.NEW_LOOP_PACKET, self.new_loop_packet)
+        self.bind(weewx.NEW_ARCHIVE_RECORD, self.new_archive_record)
 
     def _cache_get(self, field, now):
         """Cached value for field, or None if absent or older than the timeout."""
@@ -285,3 +315,42 @@ class DewpointCacher(StdService):
             else:
                 packet['dewpoint']  = weewx.wxformulas.dewpointC(temp, humidity)
                 packet['heatindex'] = weewx.wxformulas.heatindexC(temp, humidity)
+
+    def new_archive_record(self, event):
+        """Null the wind triple for one archive interval if it shows the
+        ERR-0004/ERR-0006 signature: an unremarkable-looking wind reading that
+        arrived during a severe reception collapse, with nothing else in the
+        frame corrupted enough to trip the driver's own frame co-rejection
+        (DEC-0054). See RXCHECK_COLLAPSE_PCT/COLLAPSE_WIND_GUST_MPH above for why
+        rxCheckPercent -- not tighter wind bounds -- is the discriminating signal.
+
+        Both `rx` and `wg` absent is normal (a driver that doesn't report
+        rxCheckPercent, or a null-wind interval already) -- nothing to guard.
+        """
+        record = event.record
+        rx = record.get('rxCheckPercent')
+        wg = record.get('windGust')
+        if rx is None or wg is None:
+            return
+
+        units  = self._packet_units(record)
+        to_mph = _WIND_TO_MPH[units]
+        if rx < RXCHECK_COLLAPSE_PCT and wg * to_mph > COLLAPSE_WIND_GUST_MPH:
+            log.warning(
+                "DewpointCacher: windGust %.1f %s during a %.1f%% rxCheckPercent "
+                "collapse (baseline 60-90%% at this station) -- ERR-0004/ERR-0006 "
+                "class corrupt-frame signature, nulling wind for this interval",
+                wg, _WIND_LABEL[units], rx
+            )
+            # Matches the exact field set the ERR-0004/ERR-0006 manual corrections
+            # nulled: the wind triple plus its archive-only derived fields
+            # (windGustDir/ET/appTemp/windrun don't exist on a LOOP packet, so
+            # _null_wind() above doesn't touch them -- this is the archive-record
+            # equivalent, DEC-0037).
+            record['windSpeed']   = None
+            record['windGust']    = None
+            record['windDir']     = None
+            record['windGustDir'] = None
+            record['ET']          = None
+            record['appTemp']     = None
+            record['windrun']     = None

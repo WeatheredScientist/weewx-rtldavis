@@ -35,6 +35,7 @@ def _mod(name):
 
 weewx = _pkg("weewx")
 weewx.NEW_LOOP_PACKET = "NEW_LOOP_PACKET"
+weewx.NEW_ARCHIVE_RECORD = "NEW_ARCHIVE_RECORD"
 # Unit systems (#224). dewpoint_service builds module-level lookup tables keyed on
 # these AT IMPORT TIME, so the stub has to carry them or the import fails. Values
 # mirror weewx's own; the service compares symbolically and never depends on them.
