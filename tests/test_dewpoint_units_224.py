@@ -63,6 +63,7 @@ def _mod(name):
 
 weewx = _pkg("weewx")
 weewx.NEW_LOOP_PACKET = "NEW_LOOP_PACKET"
+weewx.NEW_ARCHIVE_RECORD = "NEW_ARCHIVE_RECORD"
 # Unit systems. dewpoint_service builds module-level lookup tables keyed on these
 # AT IMPORT TIME, so they must exist before the import below. Values mirror
 # weewx's own; the service compares symbolically and never depends on them.
