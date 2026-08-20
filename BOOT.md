@@ -66,12 +66,14 @@ next session may still start on Opus: state the running model in your first repl
 6. **[ops#173]** — diet done at S94, `BOOT.md` under cap. Left **open on purpose** for the automated
    sweep to close (`MANIFEST.md` carries its documented OPS-DEC-0101 overage). **Nothing to do
    unless the sweep re-flags.**
-7. **NEW from S95 — two follow-ups, NOT yet filed as issues** (both in DEC-0106's closing paragraph):
-   **(a)** the soak's pre-existing window computation has the same daily-rotation blindness the new
-   detector had to fix, producing job 1's artifact WARNs; **(b)** `stdout is chatty — 162 lines` is
-   accumulated restart output on a long-lived container, **permanent until the next recreate**, not
-   "freeze fuel" — it has been dismissed as expected noise for weeks and should be re-tuned or
-   scoped. File both, or fix (a) with the same rotation pattern already used twice.
+7. **NEW from S95 — two follow-ups, both FILED** (context in DEC-0106's closing paragraph):
+   **[#252]** (tier:mid) the soak's *pre-existing* window computation has the same daily-rotation
+   blindness the new detector had to fix — after midnight it silently widens to the whole day, which
+   is what produces job 1's artifact WARNs, and it leaves DEC-0031's driver-identity canary
+   asserting nothing in that band. The fix pattern is already established twice in this file.
+   **[#253]** (tier:cheap) `stdout is chatty — 162 lines` counts accumulated restart banners, is
+   **permanent until the next container recreate**, and is not "freeze fuel" — the cry-wolf shape
+   the script's own header warns about, and it already cost one real signal being dismissed.
 
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
 [ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
@@ -90,7 +92,7 @@ next session may still start on Opus: state the running model in your first repl
 | Live-config deviations | unchanged: `timeout=30`, `[[[pragmas]]] journal_mode=DELETE`, DEC-0080 radiation zero. Table in `CONSTANTS.md` |
 | Hub | `:v2.0.13` pushed; `:latest` still `:v2.0.12` until the square proves ws.5 |
 | Branches | S95 worked on `s95-restart-loop-detector-245`; **confirm it merged and was deleted, then steady state is exactly `dev` + `main`** |
-| Trackers | **#245 CLOSED** with an explanatory comment. **ops#184 OPEN on purpose** (HLF redirect). #233 open (from #219, tier:mid) · #172/#144 open until v2.0.14 · #204 open · #227 at 5/8. Remember `Closes #N` does **not** auto-fire here — PRs land on `dev` |
+| Trackers | **#245 CLOSED** with an explanatory comment. **ops#184 OPEN on purpose** (HLF redirect). **#252/#253 NEW from S95** (job 7). #233 open (from #219, tier:mid) · #172/#144 open until v2.0.14 · #204 open · #227 at 5/8. Remember `Closes #N` does **not** auto-fire here — PRs land on `dev` |
 | Cross-repo (S95) | ops#184 answered in full and left open for HLF. ops#169 unchanged and still job 2. ops#173 unchanged. Nothing new owed |
 
 ## Blockers
@@ -110,9 +112,7 @@ next session may still start on Opus: state the running model in your first repl
 **Durable traps are NOT carried here** (DEC-0105/ops#173). **Read it when:** trusting any tool's
 zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) · any NAS or campaign
 task (§3) · judging a component live, dead, or shipped (§4). Indexed in `MANIFEST.md`. **New traps
-are appended THERE, not here** — that is what keeps this file under cap. S95 added two to §1: an
-undated log tail reads history as *now*, and a daily-rotating log makes any window past midnight
-span two files.
+are appended THERE, not here** — that is what keeps this file under cap. S95 added two to §1.
 
 _Last updated: 2026-08-20 (S95 close). Green gate: ruff clean, **339/339**, mypy clean (57 files),
 secret gate clean **and positive-controlled** (three planted payload shapes caught, exit 1).
