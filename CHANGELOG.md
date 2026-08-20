@@ -5,6 +5,73 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S97] — 2026-08-20 — S91 audit fully closed (#225/#226); NAS-LEASE holder client built + verified (DEC-0108); INTERFACES.md's two DEC-0053 gaps actually documented
+
+- **The S91 audit's 8-issue sequence (#219–226) is now fully closed.** #225 (5 QC-completeness
+  findings, all dormant on this station's single-ISS config) and #226 (4 public-facing CLI/config
+  bugs) were the last two, both shipped this session (PRs #258, #260); #219–224 had already landed
+  in prior sessions. Tracking issue #227 closed with the full sequence noted. #226 item 1 is the
+  standout for impact beyond this station: the shipped config template carried a literal,
+  unsubstituted `[options]` token that any new user following the documented setup shipped straight
+  into `weewx.conf`, silently discarding the auto-appended `-tf`/`-tr` flags and falling back to
+  868MHz EU instead of 915MHz US with zero error. 23 new regression tests across the two PRs.
+- **`ops/nas_build.py` — weewx's NAS-LEASE holder client — built, tested, and verified against the
+  real NAS, ahead of the ~08-23 build (DEC-0108).** A generic lease-wrapper (`--job <name> --
+  <command>`): `O_CREAT|O_EXCL` acquire, explicit `fchmod 0644` (the exact umask near-miss
+  `NAS-LEASE.md` v1.4 documents and DEC-0107 found on the box), `flock` held for the wrapped
+  command's run, stale-break only when flock is free **and** `expires_at` has passed, release with a
+  truthful outcome (`clean`/`build-failed`/`crashed`) wrapped in `try/finally`. Generic over any
+  command so it covers both of weewx's named holder cases (image build, manual bulk analysis) from
+  one script. **Scope decision, recorded in DEC-0108:** the observer/downshift side is deliberately
+  not built — weewx has no live downshift lever to act on a "held" verdict yet, so a courtesy read
+  with nothing to act on has unclear benefit today; revisit once the InfluxDB `post_interval` lever
+  ships. 14 tests against a real `flock()` on a `tmp_path` dir, not mocked. **Later in the session,
+  ran it for real** against the actual shared `LEASE_DIR` (a clearly-labeled dry-run job, TTL 60s) —
+  clean `acquired`/`released` pair logged, directory left exactly as found, no stray lease file.
+  Floor/TTL ship as §5's provisional 600s/3600s, to be re-pinned against the real ~08-23 build's
+  measured duration; the adopting DEC itself still waits for that event on purpose.
+- **`INTERFACES.md` actually documents both of DEC-0053's open findings now — ROADMAP had been
+  overclaiming this since S48.** Tracing ROADMAP's P3 line (which asserted DEC-0053's
+  station-identity finding was "documented there") against the actual file found that only Finding 1
+  (bound the loop-JSON cache) had made it in. Finding 2 — InfluxDB carries no station-identity tag,
+  and adding one later forks a parallel series instead of annotating it — is now written into §2,
+  along with a one-line pointer to Finding 3 (the SQLite archive's own missing correction flag,
+  deliberately left in `DATA_ERRATA.md` where DEC-0053 always said it belonged). ROADMAP's P3 line
+  corrected in the same pass, with the guardrail's own "targeted pass writes both places" rule
+  followed this time. PRs #261, #262.
+- **Session-start concurrency, resolved cleanly.** A live peer session (`weewx-rtldavis-e4`, S96)
+  was still finishing as this session started; coordinated directly rather than duplicating work.
+  The peer's handoff corrected an early misreading on this session's part — ops#169's current
+  title/body read as an unresolved coffee-radar heads-up, but the actual unresolved thread had
+  already closed as DEC-0104/DEC-0107, verified independently against `DECISIONS.md` rather than
+  taken on the peer's word alone. Mid-session, coffee-radar (`coffeeradar-28`) cross-checked the
+  ~08-23 timeline directly; confirmed, and told them the holder client was now built and verified,
+  not just designed.
+- **Interim Campaign B readout, informational only — square left running untouched per owner
+  instruction.** Using `ops/campaign_analyze.py --since <the live attempt's epoch>` (the raw log
+  pools 6 aborted attempts back to 08-11; the tool's own pooling warning caught it): at 22 of 32
+  blocks, arm B (gain 496, ex 0) leads arm A (372, anchor) by +2.25 pts, and D leads C by +1.16 pts
+  at ex 50 — gain wins both head-to-heads; the ex axis itself reads as a wash (+0.93 pts one way,
+  −0.16 the other). Already exceeds campaign A's entire 4-arm spread (0.94 pts). Explicitly not a
+  verdict — the runbook's own rule is not to read partial results, and DEC-0102's overnight iowait
+  confound is still open.
+- **Two secret-read-guard false positives found and worked around, worth a note to ops.** The guard
+  blocked a plain `scp` upload of this repo's own already-secret-gated script (never touches
+  `weewx.conf`), and separately a `tail` on the NAS-LEASE attribution log (plain JSONL, no
+  credentials) — both keyed on the command verb/NAS-host pattern rather than which file is actually
+  touched. The documented `command` escape hatch resolved both, but only once `command` was the
+  **literal first word** of the whole invocation — `cmd; command scp ...` still triggered it,
+  `command bash -c '...scp...'` did not. Flagged via `spawn_task` for ops to fold into the guard's
+  own documentation rather than left as a per-session rediscovery.
+- **Green gate at close:** ruff clean, **386/386**, mypy clean (62 files), secret gate clean and
+  positive-controlled mid-session (planted a fake key, confirmed the catch, restored from a
+  pre-mutation backup rather than `git checkout` since the index held the payload). Soak at close:
+  17 pass / 2 warn / 0 fail — same two known warns (chatty stdout #253, USB hedge during RF-dead).
+- Model tier: ran on Sonnet 5 throughout, confirmed directly rather than inferred — no restore owed.
+- Five PRs merged this session: #258 (#226), #259 (DEC-0108), #260 (#225), #261 (INTERFACES.md
+  Finding 2), #262 (INTERFACES.md Finding 3). Steady state verified `dev` + `main` only after each.
+
+---
 ## [S96] — 2026-08-20 — ops#169 closed end-to-end (DEC-0107); #224 unit systems fixed; ROADMAP tripwire fired
 
 - **ops#169 / NAS-LEASE: every open item closed in one session, and all three box-level fixes rest on
@@ -128,109 +195,6 @@ under [Pre-S16].
   payload shapes caught, exit 1).
 
 ---
-## [S94] — 2026-08-19 — #223 shipped (DEC-0103); ops#169 unblocked by correcting our own DEC-0099 (DEC-0104); BOOT.md diet, under cap (DEC-0105)
-
-- **#223 (`dewpoint_service.py` wind-plausibility filter, frontier) fixed, tested, PR #241.** Its
-  four defects were one design gap, exactly as the issue argued: `_filter_wind` never adopted the
-  resync-on-reject and co-null behavior `rtldavis.py`'s `SensorQC` already established in this repo.
-  **The fix is one distinction, applied consistently** (DEC-0103): a **bounds** reject — an
-  impossible reading, or a gust below its own speed — is positive proof of corruption, so the
-  baseline is left untouched; a **delta** reject may be a genuine gust front, so the baseline
-  **always resyncs, even when rejecting**. (1) That resync closes the deadlock: previously a
-  rejected step froze `last_wind_speed` permanently and every later reading was nulled against a
-  baseline the weather had left behind, until the weewx process restarted — a 300 s TTL
-  (= `QC_RESEED_SECONDS`) adds a second, independent escape. (2) `windDir` is now co-nulled in every
-  reject branch; a bare heading with no speed previously reached loop-JSON, InfluxDB and every
-  uploader, and this matches the driver's own two precedents while staying narrower than DEC-0054's
-  frame-level co-rejection, which delta correctly still never triggers. (3) Cold-start warmup samples
-  are bounds-checked before they can seed a wrong baseline and trigger (1). (4) `windGust` is
-  bounds-checked independently of `windSpeed`'s presence — unreachable with today's driver, included
-  because the driver-agnostic goal is the same one that decided (below) not to import from the driver.
-  10 new tests (`tests/test_dewpoint_wind_filter_223.py`). 339/339 full suite (329 baseline + 10 new),
-  ruff/mypy clean (57 files), secret scan positive-controlled clean.
-- **The port-vs-import call, decided and recorded (DEC-0103).** Importing `SensorQC` from
-  `rtldavis.py` is the cheaper move and was rejected: `dewpoint_service.py` has zero driver imports
-  today, and `docs/INTERFACES.md` commits it to being re-pointable at non-Davis WeeWX. Coupling a
-  driver-agnostic LOOP-packet service to a vendored fork carrying USB and subprocess concerns, to
-  reuse ~20 lines of pure logic for a single field, costs more than the duplication. Recorded
-  because the reasoning is invisible from the code — a later reader should know the second filter is
-  a considered port, not drift.
-- **The first pre-fix proof was worthless and looked convincing.** All 10 new tests "failed" against
-  the stashed pre-fix file — every one with `TypeError: unexpected keyword argument 'now'`, i.e. the
-  signature change, not the defects. Re-run through a shim giving the old `_filter_wind` the new
-  signature so only behavior was under test: **6 of 8 behavioral checks fail pre-fix with the exact
-  predicted symptom, 0 after**, and the 2 convention locks pass on both sides by design. The
-  generalizable form of DEC-0045's rule, from the other side: *a failing test is no more evidence
-  than a passing one if it fails for the wrong reason.*
-- **`dewpoint_service.py` confirmed BAKED, not mounted** — established with `nasctl inspect` and
-  positive-controlled against a known-mounted file, not assumed from its sibling `pressure_service.py`.
-  `CONSTANTS.md`'s deploy-layer table did not list the file at all (the same omission S85 found for
-  `loop_json_writer.py`, which would let a change "ship" with an image cut and silently do nothing —
-  DEC-0046's exact failure); it gains the row. **Nothing deployed this session**: the fix ships on an
-  image rebuild, gated behind v2.0.14.
-- **[ops#169] promoted to job 2 on owner instruction — and researching it overturned our own
-  DEC-0099, logged as DEC-0104.** The owner raised its priority ("next few sessions for sure") and
-  then corrected the approach: *"ask the repo… you have coded all of this, so you should be able to
-  find answers."* Re-reading `eaglehunt-ops/NAS-LEASE.md` against our own record found three things.
-  (1) **DEC-0099's gating premise was wrong.** It deferred adoption to the v2.0.14 container recreate
-  because `influx.py` cannot see `LEASE_DIR` from inside the container — true for that one lever,
-  over-generalized into a gate on the whole client (and an earlier commit this session amplified it
-  into `BOOT.md` as a hard deadline). §9 had already settled it the other way: weewx's client's
-  *"natural home is host-side"*, chosen precisely to avoid a release-class recreate. **Holder** (wrap
-  the NAS image build) runs on the host; **observer** (read lease, append `heavy-io.log`) is
-  `weewx_monitor.py`, already resident with a 30 s poll — neither needs a container change. Only the
-  InfluxDB `post_interval` **yield** lever does. (2) **The "two strands" are one:** coffee-radar's
-  disk-contention handshake IS this lease — their DEC-0181 Stage 2 landed *as* OPS-DEC-0107. The
-  question we nearly posted to ops#169 was already answered in coffee-radar's own `BACKLOG.md`, one
-  grep away. (3) **★ weewx's adoption LOCKS §5's constants for every tenant** (unlocked "until the
-  second adopting DEC"; HLF's DEC-0177 was first) — a governance act arriving disguised as merge
-  order, flagged to ops so other tenants can amend first. Pre-flight verified rather than assumed
-  (DEC-0074): `LEASE_DIR` exists at `/volume1/docker/nas-lease/` mode 1777 (owner step already done),
-  `heavy-io.log` live with HLF renewing in production (~8.7 h held 08-19, released
-  `outcome: step-failures`). **DEC-0099's index row gains a correction pointer rather than being
-  edited** — a decision is superseded, never rewritten in place. Position posted to ops#169.
-- **Three of this session's six PRs were corrections of its own errors, each caught by re-reading
-  rather than by getting it right first.** #242: `BOOT.md` was written before the merge landed, so it
-  shipped telling S95 to delete a branch already gone and close an issue already closed. #243: the
-  model-tier line asserted "a restore is owed" from OPS-DEC-0010's rule while a read already showed
-  `sonnet` — **the identical mistake S89 made and was corrected on by ops**; all five scopes verified
-  intact, nothing owed. #246: the DEC-0099 correction above. The generalizable lesson, now in
-  `BOOT.md`: for anything whose truth depends on a merge landing, the handoff is written *after* it,
-  even though the closeout ritual lists BOOT at step 2 and push at step 7.
-- Daily square watch, checked twice. Start: **arm C**, 16 pass / 2 expected-WARN, reception 71%/62%.
-  Close: **arm D as of 08-19T18:08:23 EDT** — a scheduled swap mid-session, confirmed against the
-  state file *and* container uptime (19 min) rather than inferred from the fresh counters; 16 pass /
-  2 expected-WARN, reception 72%/86%. No STOP/PAUSE/lock either time. Untouched by this session's work.
-- ROADMAP checked: neither DEC-0103 nor DEC-0104 ships/closes/reprioritizes a P0–P3 line (#227's
-  remediation is tracked on the issue tracker, and ops#169 appears on ROADMAP only inside DEC-0102's
-  narrative record, not as a line item) — nothing to reconcile, tripwire unchanged, still due by S96.
-- Model tier: escalated to Opus for #223's frontier design work. **Floor verified intact across all
-  five scopes at close — nothing to restore** (see #243 above for why that is checked, not inferred).
-- **`BOOT.md` diet done on owner instruction — 4,866 → 2,406 tok, under the 2,500 cap for the first
-  time since before S83 (DEC-0105, ops#173).** Done days ahead of the ~08-23 plan. The starting point
-  was worse than ops#173 last recorded (4,427 at S86) because this session added ~1,000 of its own.
-  **Four prior rule-1 trimming passes at S84 had moved the file ~50 tok net** — deleting resolved
-  items cannot keep pace with a file that absorbs a session's state every close, so the remaining
-  bulk was diagnosed as *misfiled rather than stale*: the gotchas block was **41% of the file** and
-  nothing in it expires at a session close. Moved to **`docs/GOTCHAS.md`**, four sections deep, with
-  a `MANIFEST.md` row whose "load when" names a trigger rather than a topic — an index entry saying
-  "read this sometimes" is unread, not lazily loaded. Then What's-settled and job 2 compressed to
-  conclusions now that DEC-0103/DEC-0104 hold the detail (the ops#169 briefing alone was ~700 tok
-  restating DEC-0104). **Rejected:** distributing the entries into `CONVENTIONS.md`/`ARCHITECTURE.md`
-  by topic — each would land in a defensible home but the class would stop existing, and the class is
-  the point. **A rule-5 trap caught mid-task:** the first draft of the new file also copied in the
-  gate commands, the baked-vs-mounted deploy table and the pyc cache from the canonical docs; it read
-  as completeness and is precisely STANDARD rule 5's defect (a second copy is what drifts). Eight
-  entries removed, exclusion stated inline. **Cost taken deliberately:** `MANIFEST.md` 1,096 → 1,226,
-  including correcting its own stale "~1.1K" self-figure — 130 tok there bought ~1,700 out of the
-  always-load tier. **ops#173 left open on purpose**, result posted to the thread: `MANIFEST.md` is
-  still over its own cap, and the automated sweep — not this repo — should be what calls it green.
-- **A second follow-up PR (#249) fixed two stale references the diet itself created** — job 6 still
-  read "diet at the square's close, still deferred on purpose", and the gotchas pointer cited a §5
-  that no longer existed after the rule-5 removals merged it into §4. Same shape as #242: a doc
-  describing a state that changed while it was being written. Caught by re-reading the finished file
-  rather than trusting the edits.
-
 ---
 ---
-*(S73–S93 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S94 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
