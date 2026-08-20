@@ -157,6 +157,7 @@ from subprocess import check_output
 import signal
 import os
 import re
+import shlex
 import subprocess
 import math
 import threading
@@ -204,9 +205,15 @@ weewx.units.MetricWXUnits['group_frequency'] = 'hertz'
 weewx.units.default_unit_format_dict['hertz'] = '%.0f'
 weewx.units.default_unit_label_dict['hertz'] = ' Hz'
 
-if weewx.__version__ < "3":
-    raise weewx.UnsupportedFeature("weewx 3 is required, found %s" %
-                                   weewx.__version__)
+def check_weewx_version(version_string, minimum_major=3):
+    """A bare string compare (version_string < "3") is lexicographic, not
+    numeric -- "10.0.0" < "3" is True in Python, which would reject a
+    genuinely newer weewx 10.x (issue #226 item 3)."""
+    if int(version_string.split('.')[0]) < minimum_major:
+        raise weewx.UnsupportedFeature("weewx %d is required, found %s" %
+                                       (minimum_major, version_string))
+
+check_weewx_version(weewx.__version__)
 
 # Rtldavis Usage
 #
@@ -773,7 +780,7 @@ class ProcManager():
         if ld_library_path:
             env['LD_LIBRARY_PATH'] = ld_library_path
         try:
-            self._process = subprocess.Popen(cmd.split(' '),
+            self._process = subprocess.Popen(shlex.split(cmd),
                                              env=env,
                                              stderr=subprocess.PIPE,
                                              stdout=subprocess.PIPE)
@@ -1061,7 +1068,7 @@ class RtldavisConfigurationEditor(weewx.drivers.AbstractConfEditor):
 [Rtldavis]
     # This section is for the rtldavis sdr-rtl USB receiver.
 
-    cmd = /home/pi/work/bin/rtldavis [options]
+    cmd = /home/pi/work/bin/rtldavis
     # Options:
     # -ppm = frequency correction of rtl dongle in ppm; default = 0
     # -gain = tuner gain in tenths of Db; default = 0 means "auto gain"
@@ -1977,6 +1984,29 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         obs_group_dict['heatingVoltage']    = 'group_frequency'
 
 
+def show_packets(mgr):
+    """Drive the --action show-packets CLI: print each decoded stderr
+    payload and stdout line as they arrive.
+
+    get_stderr() yields possibly-EMPTY lists on every queue-read timeout --
+    an expected, frequent event per its own docstring ("a hangup will occur
+    regularly, sometimes of more than a minute"). get_stdout() returns a
+    flat list of already-decoded line strings, not a list of 1-line lists
+    like get_stderr() -- the two have different shapes on purpose (issue
+    #226 item 4)."""
+    while mgr.running():
+        for lines in mgr.get_stderr():
+            if not lines:
+                continue
+            payload = lines[0].strip()
+            if payload:
+                print(payload)
+        for line in mgr.get_stdout():
+            line = line.strip()
+            if line:
+                print(line)
+
+
 ############################## Conf Editor ##############################
 
 if __name__ == '__main__':
@@ -2026,14 +2056,4 @@ Actions:
         mgr = ProcManager()
         mgr.startup(options.cmd, path=options.path,
                     ld_library_path=options.ld_library_path)
-        while mgr.running():
-            for lines in mgr.get_stderr():
-                payload = lines[0].strip()
-                if payload:
-                    print(payload)
-                lines.pop(0)
-            for lines in mgr.get_stdout():
-                err = lines[0].strip()
-                if err:
-                    print(err)
-                lines.pop(0)
+        show_packets(mgr)
