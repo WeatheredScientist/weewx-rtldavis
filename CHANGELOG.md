@@ -5,6 +5,57 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S98] — 2026-08-20 — Phantom 37 mph gust diagnosed and corrected (ERR-0006); reception-quality wind guard ships (DEC-0110); P0.5's last follow-on retired (DEC-0109)
+
+- **Owner-reported phantom 37 mph gust at 11:12 EDT, diagnosed to source and corrected (ERR-0006).**
+  Same class as `ERR-0004` (2026-07-27), recurring independently: `rxCheckPercent` for that one
+  archive minute collapsed to 9.2% (vs. 60–90%+ every surrounding minute), a genuine RF-dead
+  episode (weewx.log silent 11:11:35→11:15:22, confirmed not a restart). One of the few packets
+  that passed CRC that minute carried a corrupted wind byte; every other field in the row read
+  normally, so nothing tripped DEC-0054's frame co-rejection. Investigated and ruled out `#225`
+  item 2 (rain-rate co-rejection gap, fixed same day in PR #260 but not yet deployed) as the
+  mechanism here — rainRate was clean. Archive row nulled + daily summary rebuilt (day-max now 19
+  mph, genuine); InfluxDB point deleted and rewritten minus the 7 wind-derived fields, with
+  `windGust_qc=1`/`windSpeed_qc=1` flags (24 fields verified, matching `ERR-0004`'s own precedent
+  exactly) — the dashboard's read-only proxy token can't write/delete (confirmed 403), so the
+  correction used `weewx.conf`'s own uploader token instead. Wunderground/CWOP/PWSWeather/OWM/etc.
+  already have the bad value; that's permanent, same as `ERR-0004`. Cross-verified independently by
+  an eaglehunt-weather-dashboard session (InfluxDB via its own query path) and an eaglehunt-ops
+  session (raised `#225` item 2 and a container-restart confound as candidate mechanisms; both
+  checked directly and ruled out for this incident) — good example of the coordination working.
+- **Reception-quality wind guard ships, closing the ERR-0004/ERR-0006 blind spot (DEC-0110).**
+  Neither the bounds check nor the 75 mph delta cap can distinguish this corruption from a genuine
+  squall gust of similar magnitude — `ERR-0004`'s own writeup already established that tightening
+  either risks false-rejecting real weather. Measured first, before designing anything (93 days,
+  129,607 records): genuine high wind and severe reception collapse have never co-occurred at this
+  station (lowest `rxCheckPercent` among 220 records with `windGust>=10mph`: 54.5%; 87 of 89
+  `rxCheckPercent<20%` records stayed calm at 0–4 mph) — so a guard combining both signals can't
+  false-null a real gust, with wide margins on both sides. `dewpoint_service.py`'s `DewpointCacher`
+  gains a `NEW_ARCHIVE_RECORD` binding (`rxCheckPercent<20%` AND `windGust>10mph` → null the wind
+  triple + derived fields), confirmed via `weewx.conf`'s own `[Engine][Services]` order to run
+  before `StdArchive`'s write and every RESTful uploader. Explicitly does not reach Wunderground's
+  RapidFire feed (publishes pre-archive-close — a live ticker, not an archive of record). 11 new
+  tests including both incidents replayed verbatim as positive controls. Ships with the ~08-23
+  v2.0.14 build (baked into the image), same gate as `#225`.
+- **ROADMAP.md's P0.5 fully closed (DEC-0109).** Its last follow-on ("Keep-a-Changelog headings +
+  DECISIONS entry-skeleton convergence," proposed S25, ~72 sessions unclaimed) is retired, not
+  picked up: the original rationale is unrecoverable (no surviving transcript), no sibling repo
+  adopted anything to converge toward (checked all three), and `DECISIONS-FULL.md` already grew
+  its own working skeleton independently of `CHANGELOG.md` — nothing left to reconcile. Judgment
+  call, not just absence of evidence: this repo's entries are dense, cross-referencing narratives
+  that an external single-facet schema would likely fragment rather than clarify.
+- **A `ROADMAP.md` overclaim caught while closing the loop on the above.** Its P1 arc credited
+  DEC-0054 with "closing ERR-0004" outright — true only for the co-occurring-bounds-failure
+  mechanism, not the whole class, which `ERR-0006` just proved recurs independently. Corrected in
+  place rather than left standing.
+- **Cross-repo, same session:** fixed a `secret-read-guard.sh` false-positive gotcha in
+  eaglehunt-ops (`command` escape-hatch anchoring + a co-occurrence false-positive class), found
+  and flagged via `spawn_task` while doing unrelated ops work; landed there as OPS-DEC-0115, tested
+  and deployed.
+- **Gates:** 397/397 full suite (was 386, +11 new, 0 regressions), ruff clean, mypy clean (63
+  files, `.mypy_cache` cleared first), secret gate clean. PR #265 merged to `dev`.
+
+---
 ## [S97] — 2026-08-20 — S91 audit fully closed (#225/#226); NAS-LEASE holder client built + verified (DEC-0108); INTERFACES.md's two DEC-0053 gaps actually documented
 
 - **The S91 audit's 8-issue sequence (#219–226) is now fully closed.** #225 (5 QC-completeness
@@ -140,61 +191,7 @@ under [Pre-S16].
   (verified against `git log -- docs/INTERFACES.md`, not inferred).
 
 ---
-## [S95] — 2026-08-20 — The reported crash-loop was scheduled swaps (DEC-0106); `soak_check.sh` gains a restart-loop detector
-
-- **#245 / ops#184 (tier:frontier) refuted on measurement, and closed.** The report — `RestartCount: 0`
-  while stdout showed RTL-SDR re-detection cycling inside a 30-line tail — was read as a crash loop.
-  It was not. **Aug 15–19: exactly 4 weewxd startups a day, every one at HH:05 ±30 s**, which is
-  precisely Campaign B's four scheduled arm swaps, 6 h apart, with **zero off-schedule restarts in
-  five days**. The contrast case is in our own history: 2026-08-06's `journal_mode` crash-loop ran
-  **7 starts in 7 minutes** (43–90 s apart). The healthy and pathological signatures differ by three
-  orders of magnitude — the evidence was never ambiguous, nothing had ever put the two side by side.
-- **Why it looked exactly like a loop — three things compounding, none of them careless.** Container
-  stdout carries no timestamps; **`docker restart` never increments `RestartCount`**, so the reported
-  zero was truthful *and* uninformative about the process; and the container object was 8 days old and
-  *restarted* rather than recreated, so its stdout accumulated every restart into one stream. ~32
-  routine restarts stack consecutively, and a 30-line tail catches ~4 of them that are in fact six
-  hours apart. Corroborated by count: all three restart markers read **exactly 27** in a `--tail 200`
-  window — itself truncation at ~7 lines/start, so the true figure is ~32 = 8 days × 4/day.
-- **The owner's "a lot more crashes lately, it used to be super stable" is correct, and the cause is
-  benign.** Measured across a month of rotated daily logs: **0/day between campaigns** (Jul 20–24,
-  Aug 3–14), **4/day during them** (Aug 15–19). Every elevated non-campaign day has a known cause —
-  Aug 6 = 7 (the WAL loop), Aug 11 = 10 (the v2.0.13 deploy), Aug 10 = 3 (v2.0.12). The zeros were
-  **positive-controlled** (DEC-0045), not assumed: Aug 3's log runs full of data through 23:59 with
-  zero `weewxd` events. So the rate genuinely rose; every one of the new restarts is deliberate.
-- **HLF's staleness is not ours — redirected, not absorbed.** Through their reported window
-  (19:45–20:07Z) weewx was adding archive records **and** publishing to InfluxDB every minute,
-  successfully, no errors. The day's four driver stalls sat at 02:55–05:29 EDT (DEC-0097's overnight
-  cluster), hours away. ops#184 deliberately **left open** — its HLF redirect is still an open action
-  item for another repo, and closing it would bury that.
-- **The monitoring gap this exposed, fixed (DEC-0106).** `soak_check.sh` counted startup banners with
-  `grep -c` then tested only non-zero — 1 and 50 read identically green, which is what the S94 soaks
-  ran through twice while #245 was live. **Raising it to a count would not have worked:**
-  `entrypoint.sh` `exec`s weewxd, so weewxd is pid 1, its death takes the container with it, and
-  every container lifetime holds **exactly one** banner. A loop is structurally invisible inside a
-  per-container window. The detector therefore reads a **fixed 6 h window** and fails when consecutive
-  starts are **<1800 s apart** — swaps are 21,600 s, loops are 43–90 s, so the threshold sits in a gap
-  two orders of magnitude wide. **Positive-controlled over 7 cases** against the real Aug-6
-  timestamps, including both sides of the boundary (1799 s fires, 1800 s does not) and a loop hidden
-  beside a legitimate swap.
-- **A rotation trap, caught in verification and proven in production.** The first draft grepped only
-  the current `weewx.log` — which **rotates daily**, so a 6 h window run after midnight spans two
-  files. The first live run (00:0x EDT) found the window's only start in the **rotated** file, so the
-  unfixed version would have returned **0 — a false green**, at exactly the hour DEC-0097's stalls
-  cluster. Now reads yesterday's rotated file first. Same trap the `mon_resets` check already
-  documented for `weewx_monitor.log`; `docs/GOTCHAS.md` §1 gains both.
-- **Found, filed, deliberately not fixed here** (DEC-0014, keep the change small): the soak's
-  *pre-existing* window computation has the same rotation blindness — after midnight it collapses to
-  the new day's log, which is why four window-scoped checks currently WARN as artifacts rather than
-  findings. And the long-standing `stdout is chatty — 162 lines` WARN is now **explained**: accumulated
-  restart output on a long-lived container, permanent until the next recreate, not "freeze fuel" —
-  it has been read as expected noise for weeks.
-- **Nothing deployed.** `ops/soak_check.sh` is a laptop-side diagnostic; prod remains **v2.0.13** /
-  driver ws.5, untouched. Campaign B checked during the session, healthy. Gates: ruff clean,
-  **339/339**, mypy clean (57 files), secret gate clean **and positive-controlled** (all three planted
-  payload shapes caught, exit 1).
-
 ---
 ---
 ---
-*(S73–S94 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S95 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*

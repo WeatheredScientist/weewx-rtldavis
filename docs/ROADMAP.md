@@ -58,6 +58,13 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
   at or past S106 and this line still says S106, that itself is the signal it's overdue — run the
   same pass as S56, S66, S76, S86 and S96 did (diff every open/pending item here against
   DECISIONS.md, CHANGELOG.md and `BOOT.md`).
+- Prior: 2026-08-20 (S98 — two targeted line updates per DEC-0057, not a full pass; tripwire still
+  S106): P0.5's Keep-a-Changelog/DECISIONS-skeleton follow-on struck through as retired (DEC-0109
+  — unrecoverable rationale, no family-wide adoption to converge toward). P1's S52 bullet
+  corrected: it claimed DEC-0054 "closed" ERR-0004, which overclaimed — DEC-0054 only closed the
+  co-occurring-bounds-failure mechanism, and ERR-0006 proved the isolated-single-field-corruption
+  mechanism recurs independently (DEC-0110 closes that residual gap via reception quality, not
+  tighter bounds). Both found while doing the session's own work, not a scheduled audit.
 - Prior: 2026-08-20 (S97 — targeted line update per DEC-0057, not a full pass; tripwire still
   S106): P3's INTERFACES.md line corrected. It had claimed DEC-0053's station-identity finding
   (Finding 2) was already documented in `INTERFACES.md` — checked directly against the file rather
@@ -203,7 +210,12 @@ here.
 - **Reception-metric over-count fixed → v2.0.8** (S43): both layers of DEC-0024 closed (monitor
   counts unique record epochs; driver stops publishing dataless freqError packets).
 - **Frame-level co-rejection → v2.0.9** (S52): DEC-0054 — a bounds failure now nulls every field of
-  its frame instead of just the failing one, closing ERR-0004 (issues #74/#76).
+  its frame instead of just the failing one, closing the frame-co-rejection mechanism of ERR-0004
+  (issues #74/#76). **Correction (S98):** this closed the case where ANOTHER field in the same
+  frame also fails bounds — not the whole class. ERR-0006 (2026-08-20) proved an isolated
+  single-field wind corruption, with nothing else in the frame to co-reject on, recurs
+  independently; DEC-0110 closes that residual gap via an orthogonal signal (reception quality),
+  not a tighter bounds/delta check.
 - **Signed temp decode → v2.0.10** (S55): DEC-0055, fixes negative-temperature encoding and the
   `0xFF8` flag-nibble leak.
 - **Cap-16 tuning → v2.0.11** (S55c): DEC-0056, decided on an evidence pass (R1/R2); monitor
