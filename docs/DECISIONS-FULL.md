@@ -7009,6 +7009,61 @@ and removed properly via a targeted edit instead).
 `CHANGES-FROM-UPSTREAM.md`'s `influx.py` table gains row 6, explicitly marked as original
 functionality rather than an upstream-divergence fix (unlike rows 1–5).
 
+## DEC-0112 — Adopt closeout self-naming (`CLOSEOUT-TEMPLATE.md` step 7 / OPS-DEC-0114) as this repo's step 8
+
+**Status:** Accepted · **Date:** 2026-08-21 (S99) ·
+**Follows:** DEC-0052 (this repo's 7-step closeout skeleton) ·
+**Adopts:** eaglehunt-ops OPS-DEC-0114 / `CLOSEOUT-TEMPLATE.md` step 7 ·
+**Resolves:** weewx-rtldavis#264
+
+### Context
+
+eaglehunt-ops offered a closeout-template amendment (weewx-rtldavis#264): as the last action of a
+session's closeout, call `set_session_title` on `"self"` to record that the session actually ran
+its own closeout. Coffeeradar, eaglehunt-weather-dashboard, and hyperlocal-forecast had already
+adopted it (DEC-0190, DEC-0276, DEC-0193 respectively) by the time it reached this repo. Per
+OPS-DEC-0001, eaglehunt-ops owns the spec and never the adoption — this DEC is the owner's decision
+to adopt it here, made directly (not deferred to after Campaign B, as `BACKLOG.md` had provisionally
+marked it).
+
+### Why step 8, not step 7
+
+The generic `CLOSEOUT-TEMPLATE.md` numbers this its step 7. This repo's own closeout skeleton
+(DEC-0052, `CLAUDE.md`'s Session ritual section) already has seven steps ending in commit + push —
+adopted from `OPS-DEC-0016` and adapted before the generic template's step 7 existed. The spec's
+actual requirement is positional ("as the **last** action of the closeout"), not numeric, so it
+lands here as step 8, after commit + push.
+
+### What the mark means, and what it deliberately does not
+
+Three separate facts about a session, each with its own carrier (eaglehunt-ops#185's finding, that
+collapsing them into one marker was itself the bug):
+
+| Fact | Question it answers | Carrier |
+|---|---|---|
+| The work landed | did the PR merge? | `ccAutoArchiveOnPrClose` (app preference, already on) |
+| The session finished | did it run its own closeout? | **the `✓`, step 8** — the only one this DEC defines |
+| The window is open | still resumable? | `isRunning` from `list_sessions` |
+
+The `✓` claims exactly one thing. Its failure mode is silence, not false confidence: a session that
+crashes or is abandoned never writes it, rather than something else inferring a wrong answer on its
+behalf (the fate of the `session-title-sweep` script OPS-DEC-0114 retired — ~620 lines of
+branch-name inference, wrong in all four repos' session counters on its first version).
+
+### Grammar
+
+`weewx S<nums>[ ✓] · <slug>` — e.g. `weewx S99 ✓ · v2.0.14 build-prep + closeout-step8 adoption`.
+Matches the existing cross-repo session-reference convention (`CONSTANTS.md`'s Git section: "weewx
+S21" vs "dash S40"). No shared regex, no ops-owned matcher — this repo's own label and slug, per the
+spec's explicit design (OPS-DEC-0114: "no cross-repo coupling: you write your own label, in your own
+grammar").
+
+### Implementation
+
+`CLAUDE.md`'s closeout skeleton gains step 8 (this file, Session ritual section). `BACKLOG.md`'s
+provisional "decide after Campaign B closes" line for #264 is removed — the decision is made now,
+not deferred; nothing left to backlog. weewx-rtldavis#264 closed with a pointer to this DEC.
+
 ### Deploy gate
 
 Two NAS-side, non-repo steps remain, deliberately not done here: the `docker run` invocation for
