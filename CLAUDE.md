@@ -97,6 +97,14 @@ gone stale on two values: the reception baseline and the driver-vs-config layer 
      used and there is nothing to restore.
   7. **Commit + push**, per the branch model — subject to the pause-for-approval rule above
      (Non-negotiable rules).
+  8. **Name the session** (DEC-0112, adopted from `CLOSEOUT-TEMPLATE.md`'s step 7 / OPS-DEC-0114 —
+     renumbered to 8 here since this skeleton already had a step 7). As the **last** action of the
+     closeout, call `set_session_title` on `"self"`, in this repo's own grammar: `weewx
+     S<nums>[ ✓] · <slug>`. Write the `✓` **iff steps 1–7 actually completed this session** — it
+     attests only that this session ran its own closeout, nothing about whether a PR merged
+     (`ccAutoArchiveOnPrClose`'s job) or whether the window is still resumable (`isRunning`). Last on
+     purpose: written any earlier it could outlive its own truth. A session that crashes or is
+     abandoned simply never writes it — the absence is the honest report, not a missing one.
 - Sessions use **this repo's own independent counter** — a session number means something only within
   this repo (cross-repo refs are prefixed, e.g. `weewx S23` vs `dash S40`). **`BOOT.md` is the
   single source of truth for the current session number** — take it from there (+1 for a new session),
