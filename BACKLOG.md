@@ -247,6 +247,12 @@ failed resets currently produce no further action.
   scheduler task still runs as root (symptom: `sudo: a terminal is required` spam, no pidfile).
 - **Docker Hub README auto-sync:** add repo secrets `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` to
   activate `.github/workflows/dockerhub-description.yml` (green no-op until then). Owner action.
+- **weewx-rtldavis#264 — CLOSEOUT-TEMPLATE step 7 offer (session self-naming at closeout,
+  OPS-DEC-0114) — decide after Campaign B closes, per the issue's own filing terms.** Not a
+  decline; genuinely not due yet. Found undecided-and-untracked at S99 (the gap that led to the
+  session-start tracker-check fix in `CLAUDE.md`, #268) — that fix means a future session will see
+  #264 again on its own now, but this line still marks the deliberate "wait for the natural close"
+  timing so it doesn't just surface as unexplained backlog noise.
 - **Snow / freezing / no heating tape** — parked, owner's future thread. 2026 = learning year.
 - **Security follow-ups are tracked in the gitignored local-infra doc, not here.** This repo is
   public; operational security state does not belong in it.
