@@ -6918,3 +6918,108 @@ does not (cannot) retroactively touch anything published before that.
 Does not attempt a third occurrence's root cause (the underlying RF corruption mechanism itself
 remains uncharacterized, same as `ERR-0004`/`DEC-0081`'s broader RF-dead-episode work). This is a
 detection/suppression guard at the archive choke point, not a decode-layer fix.
+
+---
+
+## DEC-0111 — `influx.py` NAS-LEASE courtesy yield: the observer/downshift half DEC-0108 deliberately left unbuilt
+
+**Status:** Accepted (design + build) · **Date:** 2026-08-21 (S99) ·
+**Follows:** DEC-0099, DEC-0104 (the original plan) · DEC-0108 (built the holder half only) ·
+**Implements:** the `post_interval` yield lever named in both
+
+### Context
+
+DEC-0099 designed a three-part plan for weewx's NAS-LEASE adoption: mount `LEASE_DIR` read-only,
+have `influx.py` poll it, and raise `post_interval` while a foreign lease is held. DEC-0104
+corrected DEC-0099's gating premise (adoption isn't blocked on a v2.0.14 container recreate) but
+left the plan's content standing. DEC-0108 then built the **holder** side (`ops/nas_build.py`,
+wrapping weewx's own NAS image build) and explicitly scoped the **observer** side out: "weewx has
+no live downshift lever yet... a courtesy check with nothing to act on has unclear benefit." This
+session builds that lever, at the owner's direction, bundled into the same v2.0.14 build-prep work
+that also moved Docker Hub's `:latest` tag to the now-proven `:v2.0.13` and confirmed the next DEC
+number is unclaimed.
+
+### Mechanism, verified against real weewx source, not recalled
+
+Rather than trust recollection of how `weewx.restx.RESTThread` handles `post_interval`, the actual
+weewx 5.5.0 sdist was downloaded to a scratch directory and inspected directly. Confirmed:
+`self.post_interval` is a plain instance attribute (`RESTThread.__init__`, `self.post_interval =
+to_int(post_interval)`), read fresh on every queued record inside `skip_this_post(self, time_ts)`
+(`restx.py` lines 556–576) — no caching, no local-variable capture, no thread restart needed for a
+runtime mutation to take effect on the next record.
+
+### Design
+
+`InfluxThread` gains an opt-in `lease_dir` constructor param, default `None` — off entirely unless
+`weewx.conf`'s `[[Influx]]` stanza sets it, matching this repo's existing optional-arg convention
+(`site_dict.setdefault('lease_dir', None)`, same pattern as `verify_ssl`/`augment_record`/etc.).
+On construction (after `super().__init__()` has already set `self.post_interval`), the configured
+value is saved as `self._base_post_interval` and the lease file path is precomputed.
+
+A thin `skip_this_post` override re-derives `self.post_interval` on every call, before delegating
+to the base class for the actual stale/interval logic:
+
+```python
+def skip_this_post(self, time_ts):
+    self.post_interval = (LEASE_YIELD_POST_INTERVAL_S
+                           if self._foreign_lease_active()
+                           else self._base_post_interval)
+    return super(InfluxThread, self).skip_this_post(time_ts)
+```
+
+No separate restore path exists or is needed — every call re-evaluates fresh, so the value tracks
+lease state automatically as it changes.
+
+**`_foreign_lease_active()`** reads `heavy-io.lease` (same file, same JSON shape `ops/nas_build.py`
+already writes) and returns `True` only for a lease that is (a) present and parseable, (b) not our
+own (`tenant != TENANT`, matching `nas_build.py`'s own constant — duplicated rather than imported,
+since ops/ scripts and this in-container service run in different execution contexts), and (c) not
+expired. **Any other outcome — unmounted `lease_dir`, missing file, corrupt JSON, a missing
+`expires_at` key, a permission error — returns `False`.** This is the one load-bearing design
+choice: the fail-safe direction is "post normally," never "yield defensively." An uncertain read
+must never be allowed to silently slow this repo's own data path — the same asymmetry
+`ops/nas_build.py`'s own `_read_lease` already applies on the holder side (`None` on any read
+problem, never treated as free).
+
+**Why not yield to weewx's own held lease:** the yield exists as a courtesy to *other* tenants
+(`NAS-LEASE.md` §3's own framing, quoted in DEC-0104). If weewx's own `nas_build.py` job is
+running, that's already a deliberate, self-scheduled resource use — nothing to defer to.
+
+**1800s (30 min):** re-uses DEC-0092's own data-integrity analysis rather than re-deriving it —
+live prod runs `stale=None` and `max_backlog=1,000,000`, so a 30-minute deferral queues roughly 30
+records against a million-record cap and loses none.
+
+### Implementation
+
+`influx.py` (`VERSION` bumped `0.20+ws.1` → `0.20+ws.2`, per this file's existing per-patch
+convention): the two module constants (`TENANT`, `LEASE_YIELD_POST_INTERVAL_S`), the
+`lease_dir` param, `_foreign_lease_active()`, and the `skip_this_post` override. `tests/
+test_influx_lease_yield.py` (new — this file had no prior dedicated tests): 10 cases, built on a
+`RESTThread` stub that actually implements the real `post_interval`/`lastpost`/`skip_this_post`
+shape (verified against the real source above) rather than a no-op stand-in, since the interaction
+is exactly what's under test — off-by-default, missing/corrupt/incomplete lease file, own-tenant
+lease, foreign unexpired lease, foreign expired lease, the raise-then-restore cycle across two
+calls, and an end-to-end check that the base interval is still honored when no lease is held.
+407/407 full suite (was 397; +10 new, 0 regressions), ruff clean, mypy clean (64 files,
+`.mypy_cache` cleared first), secret gate clean and positive-controlled this session (a planted
+fake token was caught, then correctly identified as still-present after a `git checkout` restore
+attempt that only reverts to the index — the same gotcha this repo's own memory already carries —
+and removed properly via a targeted edit instead).
+
+`CHANGES-FROM-UPSTREAM.md`'s `influx.py` table gains row 6, explicitly marked as original
+functionality rather than an upstream-divergence fix (unlike rows 1–5).
+
+### Deploy gate
+
+Two NAS-side, non-repo steps remain, deliberately not done here: the `docker run` invocation for
+the v2.0.14 container needs `LEASE_DIR` bind-mounted read-only, and `weewx.conf`'s `[[Influx]]`
+stanza needs `lease_dir` set to that in-container path. Both belong to the same ~08-23 build-night
+event as `#224`, `DEC-0110`, and the NAS-LEASE holder adoption itself — `weewx.conf` is mounted,
+never committed (DEC-0012), so there is no repo-side artifact for this half of the change.
+
+### What this does not do
+
+Does not touch the `LEASE_DIR` mount itself, `weewx.conf`, or any NAS state — code only, gated
+behind an opt-in default-`None` parameter that is inert until the build-night deploy steps above
+happen. Does not change behavior for any deployment that doesn't set `lease_dir` (every current
+install, including this station until the ~08-23 build).

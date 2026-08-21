@@ -9,7 +9,7 @@
 #   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of the
 #   weewx-influx uploader. Chain: matthewwall/weewx-influx -> david-lutz/
 #   weewx-influx2 (InfluxDB 2.x port; the base we install) -> patched here.
-#   It reports VERSION '0.20+ws.1' so the difference is visible in the logs.
+#   It reports VERSION '0.20+ws.2' so the difference is visible in the logs.
 #
 #   2026-07-04  handle_exception() called `e.read.decode()` -- a missing pair of
 #               parens, so it raised AttributeError on the method object instead
@@ -25,6 +25,12 @@
 #               to logdbg -- they fired on every record and flooded weewx.log.
 #   2026-07-04  distutils StrictVersion replaced with a tuple compare (distutils is
 #               gone in Python 3.12+; this image runs 3.14).
+#   2026-08-21  NAS-LEASE courtesy yield (opt-in, off unless `lease_dir` is set in
+#               weewx.conf): while another tenant's shared-NAS lease is held and
+#               unexpired, post_interval rises from its configured value to 1800s;
+#               any lease-file read/parse failure -- unmounted, corrupt, permission
+#               error -- is treated as "not held", so an unreadable lease can never
+#               slow our own uploads. Never yields to weewx's own held lease.
 #
 #   Full narrative and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #
@@ -157,6 +163,9 @@ except ImportError:
     # Python 2
     import Queue as queue  # type: ignore[no-redef]
 import base64
+import json
+import os
+from datetime import datetime, timezone
 # from distutils.version import StrictVersion
 # distutils removed in Python 3.12+; use tuple version comparison instead
 def _ver_tuple(v): return tuple(int(x) for x in v.split('.')[:3])
@@ -187,7 +196,7 @@ from weeutil.weeutil import to_bool, accumulateLeaves
 
 # '+ws.N' = PEP 440 local version: upstream base 0.20, WeatheredScientist rev 1.
 # Not stock upstream -- see the modification notice at the top of this file.
-VERSION = "0.20+ws.1"
+VERSION = "0.20+ws.2"
 
 REQUIRED_WEEWX = "3.5.0"
 if _ver_tuple(weewx.__version__) < _ver_tuple(REQUIRED_WEEWX):
@@ -249,6 +258,15 @@ UNIT_REDUCTIONS = {
 OBS_TO_SKIP = ['dateTime', 'interval', 'usUnits']
 
 MAX_SIZE = 1000000
+
+# NAS-LEASE.md v1.4 courtesy yield (DEC-0099/DEC-0104/DEC-0111). TENANT must match
+# ops/nas_build.py's own constant -- not imported from there since ops/ scripts and
+# this in-container service run in different execution contexts.
+TENANT = "weewx-rtldavis"
+# Safe per DEC-0092's own data-integrity analysis: live prod runs stale=None and
+# max_backlog=1,000,000, so a 30-minute deferral queues ~30 records against a
+# million-record cap, posting late and losing none.
+LEASE_YIELD_POST_INTERVAL_S = 1800
 
 # return the units label for an observation
 def _get_units_label(obs, unit_system, unit_type=None):
@@ -347,6 +365,7 @@ class Influx(weewx.restx.StdRESTbase):
         site_dict.setdefault('measurement', 'record')
         site_dict.setdefault('add_binding_tag', True)
         site_dict.setdefault('verify_ssl', True)
+        site_dict.setdefault('lease_dir', None)
 
         site_dict['append_units_label'] = to_bool(
             site_dict.get('append_units_label'))
@@ -427,7 +446,8 @@ class InfluxThread(weewx.restx.RESTThread):
                  manager_dict=None,
                  post_interval=None, max_backlog=MAX_SIZE, stale=None,
                  log_success=True, log_failure=True,
-                 timeout=60, max_tries=3, retry_wait=5):
+                 timeout=60, max_tries=3, retry_wait=5,
+                 lease_dir=None):
         super(InfluxThread, self).__init__(queue,
                                            protocol_name='Influx',
                                            manager_dict=manager_dict,
@@ -456,6 +476,47 @@ class InfluxThread(weewx.restx.RESTThread):
         self.line_format = line_format
         self.add_binding_tag = to_bool(add_binding_tag)
         self.verify_ssl = to_bool(verify_ssl)
+        # NAS-LEASE courtesy yield -- off unless lease_dir is set (DEC-0111).
+        # self.post_interval was just set by RESTThread.__init__ above; save it
+        # as the value to restore to once no foreign lease is held.
+        self._base_post_interval = self.post_interval
+        self._lease_path = (os.path.join(lease_dir, 'heavy-io.lease')
+                             if lease_dir else None)
+
+    def _foreign_lease_active(self):
+        """Read-only check against NAS-LEASE.md Section 3's protocol: is
+        another tenant's lease currently held and unexpired? Any read/parse
+        failure -- lease_dir not mounted, corrupt file, permission error --
+        returns False, same as ops/nas_build.py's own _read_lease: a lease we
+        can't make sense of is never treated as grounds to slow our own
+        uploads. Never yields to weewx's own held lease (e.g. our own NAS
+        build running via nas_build.py) -- the yield exists as a courtesy to
+        OTHER tenants, per Section 3's own framing."""
+        if self._lease_path is None:
+            return False
+        try:
+            with open(self._lease_path, 'rb') as f:
+                lease = json.loads(f.read().decode())
+            if lease.get('tenant') == TENANT:
+                return False
+            expires_at = datetime.strptime(
+                lease['expires_at'], '%Y-%m-%dT%H:%M:%SZ'
+            ).replace(tzinfo=timezone.utc)
+            return expires_at > datetime.now(timezone.utc)
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+
+    def skip_this_post(self, time_ts):
+        """Thin wrapper around RESTThread.skip_this_post: re-evaluate
+        post_interval fresh on every queued record (matches upstream's own
+        per-record read of self.post_interval, verified against weewx 5.5.0's
+        actual restx.py -- not cached, no thread restart needed), then defer
+        to the base class for the real stale/interval logic. Self-correcting:
+        no separate restore path, every call re-derives the right value."""
+        self.post_interval = (LEASE_YIELD_POST_INTERVAL_S
+                               if self._foreign_lease_active()
+                               else self._base_post_interval)
+        return super(InfluxThread, self).skip_this_post(time_ts)
 
     def get_record(self, record, dbm):
         # We allow the superclass to add stuff to the record only if the user
