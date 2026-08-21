@@ -64,7 +64,12 @@ gone stale on two values: the reception baseline and the driver-vs-config layer 
 
 - **Start:** read `BOOT.md` + `CONSTANTS.md` + `MANIFEST.md` (**from `dev`'s tip if the checkout
   lags**); `git fetch && git status`. A clean-pickup check: `git status` clean and `pytest` green
-  before new work. Then pick up cross-repo assignments (ops-DEC-0005; Claude sessions only — one
+  before new work. Then check **this repo's own tracker** — a separate read from the ops-inbox
+  below, found missing at S99 (#268): an issue filed directly here (like #264) was structurally
+  invisible to every session start until this line existed, independent of what BOOT/BACKLOG/
+  ROADMAP say, because nothing ever ran this query:
+  `gh issue list -R WeatheredScientist/weewx-rtldavis --state open`
+  Then pick up cross-repo assignments (ops-DEC-0005; Claude sessions only — one
   command, the rest of eaglehunt-ops stays not-a-session-start-read):
   `gh issue list -R WeatheredScientist/eaglehunt-ops --label repo:weewx --state open`
 - **End (closeout skeleton — DEC-0052, adapted from eaglehunt-ops OPS-DEC-0016):**
