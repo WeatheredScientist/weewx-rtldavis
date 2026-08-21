@@ -150,8 +150,10 @@ duplicate. Do not trust a null from an instrument you have not proven can see a 
 ## `influx.py`
 
 Base: `david-lutz/weewx-influx2` (itself a fork of `matthewwall/weewx-influx` for InfluxDB 2.x).
-Delta: **+33 / −14 lines.** The Dockerfile installs the upstream extension and then copies our
-patched file over it.
+Delta through item 5: **+33 / −14 lines**; item 6 (2026-08-21) adds roughly 64 more, not
+re-measured against true upstream here — the number above predates it and is left as historical
+rather than guessed at. The Dockerfile installs the upstream extension and then copies our patched
+file over it.
 
 | # | Change | Date | Why |
 |---|--------|------|-----|
@@ -160,8 +162,9 @@ patched file over it.
 | 3 | **CLI `KeyError` when env vars unset** | 2026-07-04 | `os.environ['INFLUX_HOST']` (and `_ORG`, `_TOKEN`) are read at option-parse time, so `--help` crashes with `KeyError` unless all three are exported. Now `os.environ.get()`. Also fixed the `InluxDfB` help-text typos. |
 | 4 | **Per-record logging at INFO** | 2026-07-05 | `loginf("Add Bindding Tag = ...")` and `loginf("tags = ...")` fire on every record. Demoted to `logdbg`. |
 | 5 | **`distutils.StrictVersion` removed** | 2026-07-04 | `distutils` is gone in Python 3.12+; this image runs 3.14. Replaced with a tuple compare. |
+| 6 | **NAS-LEASE courtesy yield (opt-in)** | 2026-08-21 | `InfluxThread` gains a `lease_dir` param (default `None`, off unless `weewx.conf` sets it) and a thin `skip_this_post` override: while another tenant's `NAS-LEASE.md` lease is held and unexpired, `post_interval` rises from its configured value to 1800s (safe per DEC-0092's own data-integrity analysis: prod runs `stale=None`/`max_backlog=1,000,000`, so a 30-minute deferral queues ~30 records against a million-record cap and loses none). Any lease-file read/parse failure, or weewx's own held lease, is treated as "not held" — fails toward normal operation, never toward silently slowing our own uploads. Design: DEC-0099/DEC-0104; build: DEC-0111. |
 
-Items 1, 2, 3 and 5 are unambiguous upstream bugs. Item 2 is a security fix.
+Items 1, 2, 3 and 5 are unambiguous upstream bugs. Item 2 is a security fix. Item 6 is original functionality, not an upstream-divergence fix.
 
 ---
 
