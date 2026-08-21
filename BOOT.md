@@ -47,12 +47,23 @@ re-narrated here.
    wash. **Not a verdict** — square isn't done, DEC-0102's overnight-iowait confound is still open.
    Rotation-artifact WARNs after midnight are #252; `stdout is chatty` is #253, permanent until the
    next container recreate.
-3. **★ The ~08-23 v2.0.14 build is still a THREE-purpose event, now FOUR.** Run
-   `ops/nas_build.py --job nas-image-build -- docker build ...`, measure its real duration, re-pin
-   `RENEWAL_FLOOR_S`/`TTL_S`, write the adopting DEC same day. Carries **#224** and **DEC-0110**
-   (the reception-quality wind guard) into prod alongside it — both already on `dev`, both baked
-   into the image, both wait for this same event. Optional call unchanged: mounting `LEASE_DIR`
-   read-only only buys the InfluxDB `post_interval` yield lever; skipping costs adoption nothing.
+3. **★ The ~08-23 v2.0.14 build is now a FIVE-purpose event.** Carries **#224**, **DEC-0110**, and
+   **DEC-0111** (NAS-LEASE `influx.py` yield, built S99) into prod — all three on `dev`, baked in.
+   **`LEASE_DIR` mount is no longer optional — owner confirmed at S99: include it this event**
+   (supersedes S97–S98's "skip costs adoption nothing"). Mount path decided: `-v
+   /volume1/docker/nas-lease:/nas-lease:ro` + `weewx.conf`'s `[[Influx]]` gains `lease_dir =
+   /nas-lease` (S99's own naming, not spec-mandated — rename freely). **Precondition: verify
+   Campaign B has actually self-terminated** (`ops/rx_experiment.sh status` = `BASELINE`) before
+   touching the container — don't start off a clock guess. Build command + `BUILD-EXIT`
+   verification: `ops/nas_build.py`'s own docstring. Floor/TTL re-pin formula + the three
+   live-config deviations any recreate silently reverts (SQLite `timeout`, `pragmas` subsection,
+   radiation calibration): `CONSTANTS.md`. Full mechanism + why the fail-safe direction matters:
+   `DEC-0111`. **New verification this event:** driver banner must stay **unchanged** at
+   `0.20+ws.5` (a *changed* banner means the wrong image shipped) and `weewx.log` should show
+   `influx.py 0.20+ws.2`. Adopting DEC: recompute the next free number that day, don't reuse
+   DEC-0111 — locks `NAS-LEASE.md` §5's constants for every tenant (DEC-0104), a governance act,
+   not just paperwork. **`main` promotion is separate and later**, once v2.0.14 proves out — not
+   part of this event. Full phase-by-phase walkthrough: S99 session transcript (2026-08-21).
 4. **Watch for HLF's ~08-23 floor re-measure.** Their blend-refresh ran 88 min → 155m31s → 275m33s
    (ratios 1.767, 1.772 — compounding, not settling). **Their 8h TTL goes out of spec the moment
    they declare an honest floor** (3×275min = 13.8h) — unresolved, their thread to close.
