@@ -70,7 +70,7 @@ these.** Re-apply and re-verify after any recreate.
 | Thing | Value |
 |-------|-------|
 | Prod image | **`:v2.0.13`**, deployed 2026-08-11 (S73, mid-H-hold), NAS-built from `1530971` (ws.5: child reaping + stall self-classification, DEC-0081) |
-| Docker Hub | `:v2.0.13` pushed at deploy. **`:latest` stays on `:v2.0.12`** until the station proves v2.0.13 (same rule as every release); move it at the next prod touch once the square has run clean on it |
+| Docker Hub | `:v2.0.13` pushed at deploy. **`:latest` moved to `:v2.0.13`** 2026-08-21 (S99) — 9 clean prod days, pure retag (no rebuild), verified via Docker Hub's public API matching digest `sha256:4cfc7fb9…` on both tags. Same rule applies to v2.0.14: hold at `:v2.0.13` until it proves out |
 | Rollback | `:v2.0.12` (config digest `9db5c1…`), on the NAS and Docker Hub |
 | Prod baseline tag | **`prod-baseline-20260811`** (`main` = `1cc9605`, the v2.0.13 promotion via PR #161) — landed after S73 close, verified S88 |
 | Driver banner | **prod runs `0.20+ws.5`** (shipped in `:v2.0.13`) |
