@@ -7,6 +7,62 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S95] — 2026-08-20 — The reported crash-loop was scheduled swaps (DEC-0106); `soak_check.sh` gains a restart-loop detector
+
+- **#245 / ops#184 (tier:frontier) refuted on measurement, and closed.** The report — `RestartCount: 0`
+  while stdout showed RTL-SDR re-detection cycling inside a 30-line tail — was read as a crash loop.
+  It was not. **Aug 15–19: exactly 4 weewxd startups a day, every one at HH:05 ±30 s**, which is
+  precisely Campaign B's four scheduled arm swaps, 6 h apart, with **zero off-schedule restarts in
+  five days**. The contrast case is in our own history: 2026-08-06's `journal_mode` crash-loop ran
+  **7 starts in 7 minutes** (43–90 s apart). The healthy and pathological signatures differ by three
+  orders of magnitude — the evidence was never ambiguous, nothing had ever put the two side by side.
+- **Why it looked exactly like a loop — three things compounding, none of them careless.** Container
+  stdout carries no timestamps; **`docker restart` never increments `RestartCount`**, so the reported
+  zero was truthful *and* uninformative about the process; and the container object was 8 days old and
+  *restarted* rather than recreated, so its stdout accumulated every restart into one stream. ~32
+  routine restarts stack consecutively, and a 30-line tail catches ~4 of them that are in fact six
+  hours apart. Corroborated by count: all three restart markers read **exactly 27** in a `--tail 200`
+  window — itself truncation at ~7 lines/start, so the true figure is ~32 = 8 days × 4/day.
+- **The owner's "a lot more crashes lately, it used to be super stable" is correct, and the cause is
+  benign.** Measured across a month of rotated daily logs: **0/day between campaigns** (Jul 20–24,
+  Aug 3–14), **4/day during them** (Aug 15–19). Every elevated non-campaign day has a known cause —
+  Aug 6 = 7 (the WAL loop), Aug 11 = 10 (the v2.0.13 deploy), Aug 10 = 3 (v2.0.12). The zeros were
+  **positive-controlled** (DEC-0045), not assumed: Aug 3's log runs full of data through 23:59 with
+  zero `weewxd` events. So the rate genuinely rose; every one of the new restarts is deliberate.
+- **HLF's staleness is not ours — redirected, not absorbed.** Through their reported window
+  (19:45–20:07Z) weewx was adding archive records **and** publishing to InfluxDB every minute,
+  successfully, no errors. The day's four driver stalls sat at 02:55–05:29 EDT (DEC-0097's overnight
+  cluster), hours away. ops#184 deliberately **left open** — its HLF redirect is still an open action
+  item for another repo, and closing it would bury that.
+- **The monitoring gap this exposed, fixed (DEC-0106).** `soak_check.sh` counted startup banners with
+  `grep -c` then tested only non-zero — 1 and 50 read identically green, which is what the S94 soaks
+  ran through twice while #245 was live. **Raising it to a count would not have worked:**
+  `entrypoint.sh` `exec`s weewxd, so weewxd is pid 1, its death takes the container with it, and
+  every container lifetime holds **exactly one** banner. A loop is structurally invisible inside a
+  per-container window. The detector therefore reads a **fixed 6 h window** and fails when consecutive
+  starts are **<1800 s apart** — swaps are 21,600 s, loops are 43–90 s, so the threshold sits in a gap
+  two orders of magnitude wide. **Positive-controlled over 7 cases** against the real Aug-6
+  timestamps, including both sides of the boundary (1799 s fires, 1800 s does not) and a loop hidden
+  beside a legitimate swap.
+- **A rotation trap, caught in verification and proven in production.** The first draft grepped only
+  the current `weewx.log` — which **rotates daily**, so a 6 h window run after midnight spans two
+  files. The first live run (00:0x EDT) found the window's only start in the **rotated** file, so the
+  unfixed version would have returned **0 — a false green**, at exactly the hour DEC-0097's stalls
+  cluster. Now reads yesterday's rotated file first. Same trap the `mon_resets` check already
+  documented for `weewx_monitor.log`; `docs/GOTCHAS.md` §1 gains both.
+- **Found, filed, deliberately not fixed here** (DEC-0014, keep the change small): the soak's
+  *pre-existing* window computation has the same rotation blindness — after midnight it collapses to
+  the new day's log, which is why four window-scoped checks currently WARN as artifacts rather than
+  findings. And the long-standing `stdout is chatty — 162 lines` WARN is now **explained**: accumulated
+  restart output on a long-lived container, permanent until the next recreate, not "freeze fuel" —
+  it has been read as expected noise for weeks.
+- **Nothing deployed.** `ops/soak_check.sh` is a laptop-side diagnostic; prod remains **v2.0.13** /
+  driver ws.5, untouched. Campaign B checked during the session, healthy. Gates: ruff clean,
+  **339/339**, mypy clean (57 files), secret gate clean **and positive-controlled** (all three planted
+  payload shapes caught, exit 1).
+
+---
+
 ## [S94] — 2026-08-19 — #223 shipped (DEC-0103); ops#169 unblocked by correcting our own DEC-0099 (DEC-0104); BOOT.md diet, under cap (DEC-0105)
 
 - **#223 (`dewpoint_service.py` wind-plausibility filter, frontier) fixed, tested, PR #241.** Its
