@@ -5,6 +5,49 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S99] — 2026-08-22 — Ops-tracker close-out sweep: 5 issues closed, #233/#252 fixed and shipped, #144 resolved (DEC-0113)
+
+- **Opened on a stale handoff and closed it first.** `BOOT.md`'s resume header still read "S98 →
+  S99" and its footer "S98 close" despite two PRs (#269, #270) already merged under S99 branch
+  names — an earlier S99 instance had deliberately held off on its own closeout after
+  `eaglehunt-ops#195` flagged a possibly-concurrent session. Confirmed no other weewx session was
+  active (this session's own `ListAgents`) and both loose ends that issue named — a stray remote
+  branch, a stale detached-HEAD worktree — were already gone. Closed `eaglehunt-ops#195` with that
+  confirmation.
+- **`eaglehunt-ops#180` (the S91 audit heads-up) closed: all 8 remediation issues (#219–226) are
+  confirmed closed**, `#227`'s sequencing plan fully executed. Only the deploy gate (the ~08-23
+  v2.0.14 image) remains, already tracked here.
+- **`#233` fixed: `ProcManager.shutdown()` now kills its own Popen handle directly**, belt-and-braces
+  alongside the existing `pidof` name-match sweep, which had no fallback if it ever missed a
+  still-live child. Regression test reproduces the exact gap (pidof matches nothing, child genuinely
+  still alive) with a positive control. Baked file — ships to prod with the v2.0.14 image.
+- **`#252` fixed: `ops/soak_check.sh`'s window computation and restart-loop detector now share one
+  `$LY+$L` read** (yesterday's rotated log + today's), replacing the window cut's silent
+  `ln=1`-widens-to-the-whole-file fallback when a container start predates midnight — the exact
+  false-WARN shape the issue reported (driver-identity canary silently unverified, among others).
+  Two new tests extract and run the real deployed bash block against synthetic logs, since the
+  existing suite stubs `ssh` entirely and never exercised this layer. Not baked — a repo script, live
+  the moment it's on `dev`. Both landed together in PR #271 (merged, `071f684`).
+- **`#144` fully resolved (DEC-0113).** Item 2 (triple-field bug) was already fixed pre-session
+  (S82b). Item 3 (hourly `fetch_interval`): checked WeatherLink v2's actual documented ceiling
+  (1,000 calls/hour + 10/s) rather than the original guess ("what I thought the free tier allowed");
+  300s uses ~1.2% of it and cuts the archived barometer from a 60-min staircase to a 5-min one.
+  Queued as a live `weewx.conf` edit (confirmed via `nasctl conf` as the winning MOUNTED layer),
+  held to the same v2.0.14 restart as everything else behind Campaign B's comparability discipline —
+  new rows in `CONSTANTS.md`'s deviations table and this file's job list. Item 1 (the ~0.03 inHg
+  console-vs-METAR offset): put to the owner directly, who confirmed the console's elevation-based
+  correction is working as designed for the surveyed 550 ft (the DEC-0086 mechanism, not in
+  question); closed with no change, the residual already absorbed downstream by HLF's per-source
+  correction. Issue stays open pending the v2.0.14 deploy, same pattern as `#172`/`#204`/`#253`.
+- **The ~08-23 v2.0.14 build is now a seven-purpose event**: `#224`, DEC-0110, DEC-0111, `#233`
+  (all baked), plus DEC-0113's live `fetch_interval` edit — `#252` needs no deploy step at all.
+- **Also closed: `#239`**, a stale, fully-contained InfluxDB-gap courtesy notice with nothing
+  pending.
+- **Gates:** 410/410 full suite (was 397, +13, 0 regressions), ruff clean, mypy clean (64 files,
+  `.mypy_cache` cleared first), secret gate clean, positive-controlled throughout. PR #271 merged;
+  branch cleaned up (local + remote), steady state verified after.
+
+---
 ## [S98] — 2026-08-20 — Phantom 37 mph gust diagnosed and corrected (ERR-0006); reception-quality wind guard ships (DEC-0110); P0.5's last follow-on retired (DEC-0109)
 
 - **Owner-reported phantom 37 mph gust at 11:12 EDT, diagnosed to source and corrected (ERR-0006).**
@@ -123,75 +166,5 @@ under [Pre-S16].
   Finding 2), #262 (INTERFACES.md Finding 3). Steady state verified `dev` + `main` only after each.
 
 ---
-## [S96] — 2026-08-20 — ops#169 closed end-to-end (DEC-0107); #224 unit systems fixed; ROADMAP tripwire fired
-
-- **ops#169 / NAS-LEASE: every open item closed in one session, and all three box-level fixes rest on
-  direct observation rather than report.** The round was run session-to-session with coffee-radar
-  (their S205) at the owner's direction, with eaglehunt-ops informed throughout. Landed: `chmod 666`
-  on `heavy-io.log`, `chmod 0777` on `LEASE_DIR` (sticky dropped), `chattr +a` on the log,
-  `NAS-LEASE.md` **v1.4 / OPS-DEC-0110**, and HLF's create-mode patch (their PR #388, `066bbf9f`).
-- **The finding that moved it: both weewx lease roles run non-root, and neither is what the other
-  tenants assumed.** coffee-radar reasoned the uid gaps were moot for us because our client would run
-  as root "like your `rx_experiment` tasks" — those *are* DSM root tasks, but neither is the lease
-  client. The observer is `weewx-monitor` (uid 1031, DEC-0009 least-privilege) and the holder is a
-  separate non-root account, established from the ownership of every `build-v2.0.*` directory rather
-  than inferred. **weewx is the first tenant the gaps actually bite** — HLF and coffee-radar are both
-  uid 0, which is exactly why three nights of clean production never surfaced them. Widening the
-  monitor's sudo grant to dodge a file mode was considered and **rejected**: it trades a documented
-  security decision for a `chmod` someone else can make.
-- **`chattr +a` was deliberately not closed on its no-error exit.** That is its normal success
-  signature and coffee-radar's reading was reasonable — but **this box is the origin of our
-  accepts-and-silently-ignores precedent** (DEC-0036: Synology's `db` driver takes `max-size` and
-  discards it, 7 h of prod lost to a cap that was never real). One owner-run `lsattr` returned
-  `-----a------------` and converted inference to observation. A write-based probe was explicitly
-  refused — it would confirm the attribute by attacking the attribution record.
-- **We priced the cost of our own recommendation in writing.** Dropping sticky widens §11's already-
-  accepted wrong-lease-deletion race from same-owner to any-tenant: a buggy unlink of a *valid* lease
-  leaves the holder renewing into an unlinked inode while every observer reads the slot free. Still
-  the right trade against option (b)'s *guaranteed* silent stranding of the least-privileged tenant,
-  but recorded rather than discovered later. Break-by-takeover-in-place was considered and
-  **discarded with the reason**, checked against HLF's real acquire/release code, so it stays dead.
-- **Two findings came from the other tenants looking at our situation, and both changed what
-  shipped.** coffee-radar noticed sticky was *incidentally* the only thing protecting the log from
-  unlink — unpriced because it had only ever been weighed against §3's break clause — and flagged
-  that the holder's literal account name was heading into a persisted record. That name is the
-  owner's personal login, absent from all tracked files, and our adopting DEC lands in a **public,
-  permanent** repo: the hazard was ahead, not behind. HLF, patching the line we reported, found **a
-  second create we had not flagged** (the steal-then-acquire retry) — the branch that only runs after
-  a crash, i.e. when the lease matters most.
-- **DEC-0107 is deliberately NOT the adopting DEC.** Landing one locks §5's constants for every
-  tenant (HLF's DEC-0177 was the first), so it must lock a *corrected* spec. Adoption now waits on
-  nobody but us and lands with the client at the **~08-23 v2.0.14 build**, which §8 designates as the
-  protocol's first cross-tenant holder exercise. Declared floor 600 s / TTL 3600 s, flagged as dated
-  data to be re-pinned against that build's real duration.
-- **#224 shipped: `dewpoint_service.py` now branches on `usUnits`** (PR #255). The file had no
-  `usUnits` check anywhere — `dewpointF`/`heatindexF` unconditionally, plus two wind thresholds
-  documented in mph compared against packet values that are km/h or m/s under
-  `target_unit=METRIC`/`METRICWX`, both documented options in our own `weewx.conf.example`. Masked in
-  prod only by the shipped US default. **Fixed the way WeeWX's own `wxxtypes.py` does, NOT via the
-  issue's proposed `weewx.units.to_US()`** — `loop_json_writer.py` uses to_US legitimately because it
-  *emits* US-suffixed fields, but this service writes into the live packet, so a to_US fix without
-  the return trip would put degF into a metric packet: the same bug one layer along.
-- **The wind half failed in both directions, each silently** — as m/s the 200 mph ceiling is ~447 mph
-  and the guard was **inert**; as km/h it is ~124 mph and the guard **nulled real weather**. Readings
-  are now normalised to mph at each comparison, keeping one documented threshold set instead of three
-  to keep in sync. Pre-fix logs printed km/h values labelled `mph`; they now carry the reading's own
-  unit. Suite **339 → 349**.
-- **Two process findings from doing it.** The mutation check corrected our own documentation: 7 of 10
-  new tests fail against the pre-fix file, not the 8 the docstring claimed. And the new tests **passed
-  in isolation while asserting nothing in the full suite** — the weewx stubs live in `sys.modules` and
-  are shared, so `dewpoint_service.weewx` is whichever stub won the import race; fixed by patching
-  through the module under test and restoring after.
-- **ROADMAP scheduled reconciliation ran — tripwire fired on time, three stale items fixed** (PR
-  #256, bumped to S106). The most interesting: **the "Last updated" banner had itself gone stale.**
-  S89 and S92 recorded targeted passes in the guardrail section without promoting them into the top
-  block, so the banner read S86 while content was current through S92 — the freshness signal aged
-  while the file did not. Also: P2 asserted the Campaign A arm-winner seal held, which DEC-0069 broke
-  as a side effect **30 sessions ago**; and P3's INTERFACES citation list was three DECs out of date
-  (verified against `git log -- docs/INTERFACES.md`, not inferred).
-
 ---
----
----
----
-*(S73–S95 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S96 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
