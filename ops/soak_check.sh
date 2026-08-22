@@ -80,11 +80,30 @@ echo \"stdout_logerr=\$(printf '%s' \"\$so\" | grep -c -- '--- Logging error ---
 # --- log lines only within the window ---
 awkw() { awk -v t0=\"\$1\" '{ cmd=\"date -d \\\"\" substr(\$0,1,19) \"\\\" +%s 2>/dev/null\"; cmd | getline ts; close(cmd); if (ts+0 >= t0) print }' ; }
 
-# cheap window: the log is chronological, so cut from the first line at/after t0
+# weewx.log rotates daily, so any read windowed further back than \"today\"
+# needs yesterday's rotated file too, or it silently misses everything before
+# midnight. Computed once and shared below by the window cut and the
+# restart-loop detector -- both used to read this pair separately (#252;
+# mon_resets further down already reads its own \$ML/\$ML.1 pair the same way).
+LY=\$L.\$(date -d yesterday '+%Y-%m-%d' 2>/dev/null)
+both=\$(cat \$LY \$L 2>/dev/null)
+
+# cheap window: the log is chronological, so cut from the first line at/after
+# t0. Reads \$both, not \$L alone (#252): t0 (container start, or now-WINDOW)
+# predating midnight means the target hour-string exists only in yesterday's
+# rotated file -- a plain grep against \$L then found nothing, and the old
+# ln=1 fallback silently turned that MISS into \"the whole of today's log\",
+# not an error. grep -n's line numbers are relative to whatever it reads, so
+# the tail below must read the identical \$both, or the cut point lands on
+# the wrong file. Residual, unchanged from the two other rotation-aware
+# checks in this file: an uptime beyond ~1 day (only reachable between
+# campaigns, when restarts are 0/day) still falls back to ln=1 -- now
+# \"yesterday+today\" instead of \"today alone\", a superset rather than a
+# silent lie, but still not exact.
 d0=\$(date -d \"@\$t0\" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)
-ln=\$(grep -n \"^\$(date -d \"@\$t0\" '+%Y-%m-%d %H' 2>/dev/null)\" \"\$L\" | head -1 | cut -d: -f1)
+ln=\$(printf '%s' \"\$both\" | grep -n \"^\$(date -d \"@\$t0\" '+%Y-%m-%d %H' 2>/dev/null)\" | head -1 | cut -d: -f1)
 [ -z \"\$ln\" ] && ln=1
-win=\$(tail -n +\$ln \"\$L\")
+win=\$(printf '%s' \"\$both\" | tail -n +\$ln)
 
 echo \"banner=\$(printf '%s' \"\$win\" | grep -c 'weewxd .*Initializing weewxd version')\"
 # --- restart-loop detector (S95, #245) ---
@@ -95,14 +114,12 @@ echo \"banner=\$(printf '%s' \"\$win\" | grep -c 'weewxd .*Initializing weewxd v
 # container lifetimes, which is why this reads the log on its own 6 h window.
 # The signature, measured S95: scheduled campaign swaps sit 6 h apart, while
 # 2026-08-06's journal_mode crash-loop ran 7 starts in 7 min (60-90 s apart).
-# Reads yesterday's rotated file too: weewx.log rotates daily, so a 6 h window
-# run just after midnight spans TWO files and would silently under-count from
-# one -- the same trap the mon_resets check below already documents, and the
-# worst possible one here, since the overnight stall cluster (DEC-0097) sits
-# at 00:00-04:00. Yesterday first, so the timestamps stay chronological.
+# Reads \$both (yesterday + today, defined above): a 6 h window run just after
+# midnight spans TWO files and would silently under-count from one -- the
+# same trap the window cut above and the mon_resets check below guard
+# against. Yesterday first, so the timestamps stay chronological.
 loop_t0=\$((now - 21600))
-LY=\$L.\$(date -d yesterday '+%Y-%m-%d' 2>/dev/null)
-echo \"restart_times=\$(cat \$LY \$L 2>/dev/null | grep 'Initializing weewxd version' | cut -c1-19 | while read -r ts; do tt=\$(date -d \"\$ts\" +%s 2>/dev/null || echo 0); [ \"\$tt\" -ge \"\$loop_t0\" ] && printf '%s ' \"\$tt\"; done)\"
+echo \"restart_times=\$(printf '%s' \"\$both\" | grep 'Initializing weewxd version' | cut -c1-19 | while read -r ts; do tt=\$(date -d \"\$ts\" +%s 2>/dev/null || echo 0); [ \"\$tt\" -ge \"\$loop_t0\" ] && printf '%s ' \"\$tt\"; done)\"
 echo \"drv_ver=\$(printf '%s' \"\$win\" | grep -o 'driver version is [^ ]*' | tail -1 | sed 's/.* //')\"
 echo \"qc_ok=\$(printf '%s' \"\$win\" | grep -c 'sensor_qc True')\"
 echo \"hraw_on=\$(printf '%s' \"\$win\" | grep -c 'log_humidity_raw True')\"

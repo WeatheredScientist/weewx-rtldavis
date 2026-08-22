@@ -33,8 +33,12 @@ Run:  .venv/bin/python -m pytest tests/test_soak_check.py
 """
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
+
+import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 SCRIPT = REPO / "ops" / "soak_check.sh"
@@ -257,3 +261,101 @@ def test_tripwire_says_so_when_it_cannot_measure(tmp_path):
     out = run_soak(tmp_path, db_bytes="0", mem_total_kb="0")
     assert "retention tripwire unmeasured" in out
     assert "unmonitored" in out
+
+
+# --- #252: the remote-side window computation must survive a midnight rotation --
+#
+# Everything above stubs ssh and tests the CLIENT-side parsing of a canned k=v
+# blob -- it never executes the bash that actually runs on the NAS, inside the
+# ssh argument. That layer needs a different harness: the LY/both/ln/win block
+# is pulled verbatim out of the deployed script and unescaped back to plain
+# bash, then run directly against fake local log files. What's under test is
+# still the real file's logic, just executed locally instead of over ssh.
+
+
+def _extract_window_block():
+    src = SCRIPT.read_text()
+    start = src.index("\nLY=") + 1
+    end = src.index('\necho \\"drv_ver=', start)
+    return src[start:end].replace('\\$', '$').replace('\\"', '"')
+
+
+WINDOW_BLOCK = _extract_window_block()
+
+
+def _gnu_date_env():
+    """Env whose PATH resolves `date` to a GNU-compatible `date -d`.
+
+    The window block (like the rest of this script) assumes GNU date
+    semantics -- true on every real target (Linux CI, the Synology NAS).
+    macOS ships BSD date, which has no `-d` at all; shim it via Homebrew
+    coreutils' `gdate` so this test also runs locally.
+    """
+    env = dict(os.environ)
+    probe = subprocess.run(["date", "-d", "yesterday", "+%s"], capture_output=True)
+    if probe.returncode == 0:
+        return env  # system date is already GNU-compatible
+    gdate = shutil.which("gdate")
+    if not gdate:
+        pytest.skip("no GNU-compatible `date -d` on PATH (install coreutils for gdate)")
+    shim = Path(tempfile.mkdtemp()) / "bin"
+    shim.mkdir()
+    (shim / "date").symlink_to(gdate)
+    env["PATH"] = f"{shim}{os.pathsep}{env['PATH']}"
+    return env
+
+
+DATE_ENV = _gnu_date_env()
+
+
+def _date(*args):
+    return subprocess.run(
+        ["date", *args], capture_output=True, text=True, check=True, env=DATE_ENV
+    ).stdout.strip()
+
+
+def run_window_block(tmp_path, t0, today_lines, yesterday_lines):
+    """Write fake today/yesterday logs and run the real window-computation
+    block against them, returning the banner=/restart_times= lines it echoes."""
+    L = tmp_path / "weewx.log"
+    L.write_text("".join(ln + "\n" for ln in today_lines))
+    LY = tmp_path / f"weewx.log.{_date('-d', 'yesterday', '+%Y-%m-%d')}"
+    LY.write_text("".join(ln + "\n" for ln in yesterday_lines))
+    script = f'L="{L}"\nnow=$(date +%s)\nt0={t0}\n{WINDOW_BLOCK}\n'
+    return subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, timeout=30, env=DATE_ENV
+    ).stdout
+
+
+def test_window_spans_midnight_into_yesterdays_rotated_log(tmp_path):
+    """The #252 bug, reproduced: t0 (container start) at 23:50 predates
+    midnight, so the startup banner lives only in yesterday's rotated file.
+    Pre-fix, grep -n ran against today's file alone, found no match for
+    yesterday's date-hour, and fell back to ln=1 -- "the whole of today's
+    log" -- which does not contain the banner line at all.
+    """
+    t0 = int(_date("-d", "yesterday 23:50:00", "+%s"))
+    banner_line = (
+        _date("-d", f"@{t0}", "+%Y-%m-%d %H:%M:%S")
+        + " weewxd 0.20+ws.5: Initializing weewxd version 5.3.1"
+    )
+    out = run_window_block(
+        tmp_path, t0,
+        today_lines=["2099-01-01 00:20:00 INFO weewx.engine: unrelated startup line"],
+        yesterday_lines=[banner_line],
+    )
+    assert "banner=1" in out
+
+
+def test_window_still_reports_no_banner_when_truly_absent(tmp_path):
+    """POSITIVE CONTROL for the test above: with no banner line in either
+    file, the fix must not have started reporting one unconditionally."""
+    t0 = int(_date("-d", "yesterday 23:50:00", "+%s"))
+    out = run_window_block(
+        tmp_path, t0,
+        today_lines=["2099-01-01 00:20:00 INFO weewx.engine: unrelated line"],
+        yesterday_lines=[
+            _date("-d", f"@{t0}", "+%Y-%m-%d %H:%M:%S") + " INFO weewx.engine: also unrelated"
+        ],
+    )
+    assert "banner=0" in out
