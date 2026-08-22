@@ -5,6 +5,31 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S100] — 2026-08-22 — Verification-only session: clean pickup confirmed, Campaign B on track, new GOTCHAS entry for `rx_experiment.sh`'s local-run trap
+
+- **No code shipped this session** — a status-check pickup, not a coding session. Clean-pickup gate
+  ran clean: `dev` up to date with origin, working tree clean, 410/410 (unchanged from S99, no
+  regressions).
+- **Daily square watch (BOOT job 2, deferred at S99) run for real.** `ops/soak_check.sh`: 17 pass /
+  2 warn / 0 fail, same two known warns (chatty stdout #253, USB hedge during RF-dead) — matches
+  S98's last-known figure exactly, no drift.
+- **Caught `ops/rx_experiment.sh status` giving a false-empty read when run from a local checkout**
+  (`arm: NONE` since epoch, `installed: no`, `samples: 0` — looks exactly like "campaign
+  self-terminated," which would have wrongly cleared job 1's precondition). The script has no `ssh`
+  calls of its own and only resolves real state when it's actually running on the NAS. Verified the
+  real state directly with `nasctl cat` on `rx_experiment.state`: Campaign B is genuinely still
+  live, **arm D**, last swap **2026-08-22 00:07:25** — on schedule for its **08-23T00:05**
+  self-termination. Documented the trap in `docs/GOTCHAS.md` §3 so the next session (or anyone else
+  running this script) doesn't have to rediscover it.
+- **Owner asked whether `eaglehunt-ops#180` needed an update.** Verified live via `gh issue view`:
+  already closed at S99 with an accurate closing comment (remediation code-complete, only the
+  v2.0.14 deploy gate remains, already tracked here) — nothing had changed since, so no new comment
+  was needed.
+- **Gates:** ruff clean, **410/410** (unchanged — no code touched), mypy clean (64 files,
+  `.mypy_cache` cleared first), secret gate clean.
+- Model tier: ran on Sonnet 5 throughout, confirmed directly rather than inferred — no restore owed.
+
+---
 ## [S99] — 2026-08-22 — Ops-tracker close-out sweep: 5 issues closed, #233/#252 fixed and shipped, #144 resolved (DEC-0113)
 
 - **Opened on a stale handoff and closed it first.** `BOOT.md`'s resume header still read "S98 →
@@ -99,72 +124,5 @@ under [Pre-S16].
   files, `.mypy_cache` cleared first), secret gate clean. PR #265 merged to `dev`.
 
 ---
-## [S97] — 2026-08-20 — S91 audit fully closed (#225/#226); NAS-LEASE holder client built + verified (DEC-0108); INTERFACES.md's two DEC-0053 gaps actually documented
-
-- **The S91 audit's 8-issue sequence (#219–226) is now fully closed.** #225 (5 QC-completeness
-  findings, all dormant on this station's single-ISS config) and #226 (4 public-facing CLI/config
-  bugs) were the last two, both shipped this session (PRs #258, #260); #219–224 had already landed
-  in prior sessions. Tracking issue #227 closed with the full sequence noted. #226 item 1 is the
-  standout for impact beyond this station: the shipped config template carried a literal,
-  unsubstituted `[options]` token that any new user following the documented setup shipped straight
-  into `weewx.conf`, silently discarding the auto-appended `-tf`/`-tr` flags and falling back to
-  868MHz EU instead of 915MHz US with zero error. 23 new regression tests across the two PRs.
-- **`ops/nas_build.py` — weewx's NAS-LEASE holder client — built, tested, and verified against the
-  real NAS, ahead of the ~08-23 build (DEC-0108).** A generic lease-wrapper (`--job <name> --
-  <command>`): `O_CREAT|O_EXCL` acquire, explicit `fchmod 0644` (the exact umask near-miss
-  `NAS-LEASE.md` v1.4 documents and DEC-0107 found on the box), `flock` held for the wrapped
-  command's run, stale-break only when flock is free **and** `expires_at` has passed, release with a
-  truthful outcome (`clean`/`build-failed`/`crashed`) wrapped in `try/finally`. Generic over any
-  command so it covers both of weewx's named holder cases (image build, manual bulk analysis) from
-  one script. **Scope decision, recorded in DEC-0108:** the observer/downshift side is deliberately
-  not built — weewx has no live downshift lever to act on a "held" verdict yet, so a courtesy read
-  with nothing to act on has unclear benefit today; revisit once the InfluxDB `post_interval` lever
-  ships. 14 tests against a real `flock()` on a `tmp_path` dir, not mocked. **Later in the session,
-  ran it for real** against the actual shared `LEASE_DIR` (a clearly-labeled dry-run job, TTL 60s) —
-  clean `acquired`/`released` pair logged, directory left exactly as found, no stray lease file.
-  Floor/TTL ship as §5's provisional 600s/3600s, to be re-pinned against the real ~08-23 build's
-  measured duration; the adopting DEC itself still waits for that event on purpose.
-- **`INTERFACES.md` actually documents both of DEC-0053's open findings now — ROADMAP had been
-  overclaiming this since S48.** Tracing ROADMAP's P3 line (which asserted DEC-0053's
-  station-identity finding was "documented there") against the actual file found that only Finding 1
-  (bound the loop-JSON cache) had made it in. Finding 2 — InfluxDB carries no station-identity tag,
-  and adding one later forks a parallel series instead of annotating it — is now written into §2,
-  along with a one-line pointer to Finding 3 (the SQLite archive's own missing correction flag,
-  deliberately left in `DATA_ERRATA.md` where DEC-0053 always said it belonged). ROADMAP's P3 line
-  corrected in the same pass, with the guardrail's own "targeted pass writes both places" rule
-  followed this time. PRs #261, #262.
-- **Session-start concurrency, resolved cleanly.** A live peer session (`weewx-rtldavis-e4`, S96)
-  was still finishing as this session started; coordinated directly rather than duplicating work.
-  The peer's handoff corrected an early misreading on this session's part — ops#169's current
-  title/body read as an unresolved coffee-radar heads-up, but the actual unresolved thread had
-  already closed as DEC-0104/DEC-0107, verified independently against `DECISIONS.md` rather than
-  taken on the peer's word alone. Mid-session, coffee-radar (`coffeeradar-28`) cross-checked the
-  ~08-23 timeline directly; confirmed, and told them the holder client was now built and verified,
-  not just designed.
-- **Interim Campaign B readout, informational only — square left running untouched per owner
-  instruction.** Using `ops/campaign_analyze.py --since <the live attempt's epoch>` (the raw log
-  pools 6 aborted attempts back to 08-11; the tool's own pooling warning caught it): at 22 of 32
-  blocks, arm B (gain 496, ex 0) leads arm A (372, anchor) by +2.25 pts, and D leads C by +1.16 pts
-  at ex 50 — gain wins both head-to-heads; the ex axis itself reads as a wash (+0.93 pts one way,
-  −0.16 the other). Already exceeds campaign A's entire 4-arm spread (0.94 pts). Explicitly not a
-  verdict — the runbook's own rule is not to read partial results, and DEC-0102's overnight iowait
-  confound is still open.
-- **Two secret-read-guard false positives found and worked around, worth a note to ops.** The guard
-  blocked a plain `scp` upload of this repo's own already-secret-gated script (never touches
-  `weewx.conf`), and separately a `tail` on the NAS-LEASE attribution log (plain JSONL, no
-  credentials) — both keyed on the command verb/NAS-host pattern rather than which file is actually
-  touched. The documented `command` escape hatch resolved both, but only once `command` was the
-  **literal first word** of the whole invocation — `cmd; command scp ...` still triggered it,
-  `command bash -c '...scp...'` did not. Flagged via `spawn_task` for ops to fold into the guard's
-  own documentation rather than left as a per-session rediscovery.
-- **Green gate at close:** ruff clean, **386/386**, mypy clean (62 files), secret gate clean and
-  positive-controlled mid-session (planted a fake key, confirmed the catch, restored from a
-  pre-mutation backup rather than `git checkout` since the index held the payload). Soak at close:
-  17 pass / 2 warn / 0 fail — same two known warns (chatty stdout #253, USB hedge during RF-dead).
-- Model tier: ran on Sonnet 5 throughout, confirmed directly rather than inferred — no restore owed.
-- Five PRs merged this session: #258 (#226), #259 (DEC-0108), #260 (#225), #261 (INTERFACES.md
-  Finding 2), #262 (INTERFACES.md Finding 3). Steady state verified `dev` + `main` only after each.
-
 ---
----
-*(S73–S96 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S97 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*

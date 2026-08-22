@@ -104,6 +104,12 @@ alone did not catch.
 - **Campaign clocks are LOCAL (EDT); most tool output is UTC — convert before comparing.** Check the
   actual process/log evidence, don't compute (S83, S91/DEC-0068, S92/DEC-0098, re-confirmed S94 on an
   arm-D swap).
+- **`rx_experiment.sh` has no `ssh` calls of its own — it reads hardcoded NAS-only paths**
+  (`/volume1/docker/weewx-rtldavis/...`) and is meant to run scp'd onto the NAS itself. Run its
+  `status` (or any) subcommand from a local checkout and it silently reports empty defaults instead
+  of erroring — `arm: NONE` since the Unix epoch, `installed: no`, `samples: 0` — because those paths
+  just don't exist locally. Reads exactly like "campaign never installed" when it's actually live.
+  Verify real state with `nasctl cat <project root>/rx_experiment.state` instead (S100).
 - **`rx_experiment.sh` the SCRIPT lives flat at the NAS project root, its LOG output does not**:
   `.state`/`.STOP`/`.PAUSE`/`.lock` flat at the root; `.log`/`_data.log` under `logs/`. **So does
   `weewx.log`** — `logs/weewx.log`, not `weewx-data/weewx.log`.
