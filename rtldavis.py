@@ -818,6 +818,22 @@ class ProcManager():
         for pid in pid_list:
             os.kill(int(pid), signal.SIGKILL)
             loginf("rtldavis with pid %s killed" % pid)
+        # Belt-and-braces direct kill via the Popen handle (#233): the sweep
+        # above only ends the child if `pidof rtldavis` matches its name.
+        # That has held across every DEC-0081 incident, but has no fallback
+        # if it ever doesn't -- a name mismatch or pidof quirk would leave
+        # shutdown() with nothing signaling the child, and the wait() below
+        # would just time out over a still-running orphan holding the
+        # RTL-SDR device. Signaling our own handle is independent of
+        # whatever pidof does or doesn't find. Not a replacement for the
+        # sweep above: that also catches strays from outside this instance
+        # (e.g. startup()'s own kill of a prior leaked process), which a
+        # handle-based kill alone would miss.
+        if self._process is not None:
+            try:
+                self._process.kill()
+            except Exception:
+                pass
         # Reap our own child so the kill above does not strand a zombie
         # (S73, ws.5). wait() cannot hang >5s on a SIGKILLed process.
         if self._process is not None:
