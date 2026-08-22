@@ -7078,3 +7078,69 @@ Does not touch the `LEASE_DIR` mount itself, `weewx.conf`, or any NAS state — 
 behind an opt-in default-`None` parameter that is inert until the build-night deploy steps above
 happen. Does not change behavior for any deployment that doesn't set `lease_dir` (every current
 install, including this station until the ~08-23 build).
+
+## DEC-0113 — WeatherLink pressure poll tightens from hourly to 5 min, backed by the measured API ceiling (#144 item 3); item 1 reviewed and closed with no change
+
+**Status:** Accepted (research + queued config change) · **Date:** 2026-08-21 (S99) ·
+**Resolves:** #144 ·
+**Applies:** DEC-0086's documented passthrough mechanism ·
+**Queued behind:** DEC-0059/DEC-0064/DEC-0092's campaign-comparability discipline
+
+### Context
+
+#144 (hlf#302's barometer-offset attribution) carried three station-side items, filed
+file-don't-fix, every action owner-decision. Item 2 (the triple-field `pressure`/`barometer`/
+`altimeter` bug) was already fixed at S82b (DEC-0086/DEC-0091) before this session started. This
+DEC closes the other two.
+
+### Item 3 — the poll interval was never actually checked against the API
+
+`pressure_service.py`'s `DavisPressureFetcher` has polled WeatherLink's v2 current-conditions
+endpoint at `fetch_interval=3600` (hourly) since early deployment. The owner's own account: it was
+set to "what I thought was as fast as the free tier of weatherlink would allow" — a guess, never
+verified against the published limit. Checked this session against WeatherLink's own v2 API docs
+(`weatherlink.github.io/v2-api/rate-limits`): the documented ceiling is **1,000 calls/hour and 10
+calls/second**, uniform across endpoints and account tiers (higher limits exist only as a
+large-scale-customer exception). A 300 s interval uses 12 calls/hour — **~1.2% of quota** — leaving
+enormous headroom even accounting for research error. Chosen over going tighter still (e.g. 60 s to
+match the archive's own write cadence) because `new_loop_packet` only writes `barometer` into
+whatever loop packet is open when a fetch completes, and the SQLite archive is built from loop
+packets at the fixed 60 s archive interval regardless of poll rate — polling faster than the
+consumer's own resolution buys nothing. 300 s cuts the archived barometer from a 60-min
+sample-and-hold staircase to a 5-min one, matching the range #144 itself already suggested
+("5–15 min").
+
+### Item 1 — the console-vs-METAR offset, reviewed and closed with no change
+
+hlf#302's attribution measured the station's sea-level pressure reading ~+0.03 inHg high against
+two independent METAR references (KMQS, KLOM) across two calm/clear windows, equivalent to the
+console believing it sits ~30 ft higher than its surveyed 550 ft. Put to the owner directly this
+session: **the console does apply an elevation-based sea-level correction, for the surveyed 550 ft,
+as designed** — the mechanism DEC-0086 already documented (WeatherLink's cloud side sea-level-
+corrects `bar_sea_level` before this repo ever sees it). That mechanism working correctly is not in
+question; the finding is a small residual on top of it, quantified and stable across both reference
+stations. The owner's call: leave it as-is. This matches #144's own framing ("leaving it as-is is
+also fine") — HLF's per-source additive correction absorbs a constant offset by design, and the
+station remains ground truth by product definition regardless of the console's exact configured
+value. No code, config, or console change follows from item 1.
+
+### Deploy gate
+
+`fetch_interval` lives in the **mounted** `weewx.conf`'s `[DavisPressure]` section (confirmed live
+via `nasctl conf` — the file already carries an explicit `fetch_interval = 3600`, so the Python
+default is not what's running). Per `CONSTANTS.md`'s deploy-layers rule the mount wins, so this is
+a live-NAS edit, not a code change requiring an image rebuild. It still can't happen today: the new
+value only takes effect at the next `weewxd` restart, and every restart is deliberately deferred
+until Campaign B's square closes (~08-23) to protect Latin-square comparability (DEC-0059/0064/
+0092) — the same discipline gating every other change queued behind the v2.0.14 build-night event.
+Recorded as a new row in `CONSTANTS.md`'s live-config-deviations table (DEC-0070's class: NAS-only,
+no repo artifact, silently reverted by a stock recreate) so it survives future recreates once
+applied, and added to `BOOT.md`'s v2.0.14 job list so it isn't dropped on the night.
+
+### What this does not do
+
+Does not edit the live `weewx.conf` now — the value is queued, not applied, per the deploy gate
+above. Does not change `pressure_service.py`'s code-level default (3600 stays as the fallback for
+any deployment that doesn't set `fetch_interval` explicitly; this station's install already does).
+Does not touch the console or WeatherLink cloud account settings — item 1 concludes with no action
+by design, not by deferral.

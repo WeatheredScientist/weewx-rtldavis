@@ -47,8 +47,14 @@ re-narrated here.
    wash. **Not a verdict** — square isn't done, DEC-0102's overnight-iowait confound is still open.
    Rotation-artifact WARNs after midnight are #252; `stdout is chatty` is #253, permanent until the
    next container recreate.
-3. **★ The ~08-23 v2.0.14 build is now a FIVE-purpose event.** Carries **#224**, **DEC-0110**, and
-   **DEC-0111** (NAS-LEASE `influx.py` yield, built S99) into prod — all three on `dev`, baked in.
+3. **★ The ~08-23 v2.0.14 build is now a SEVEN-purpose event.** Carries **#224**, **DEC-0110**,
+   **DEC-0111** (NAS-LEASE `influx.py` yield, built S99), and **#233** (ProcManager belt-and-braces
+   kill, PR #271, S99) into prod — all four on `dev`, baked in. **Also apply the queued live-config
+   edit from DEC-0113 (S99): `weewx.conf`'s `[DavisPressure]` → `fetch_interval` 3600 → 300** — a
+   MOUNTED-layer change, not baked, but held to this same restart per campaign-comparability
+   discipline; verify after with `nasctl conf ... DavisPressure`. (**#252**, the `soak_check.sh`
+   midnight-rotation fix also in PR #271, needs no deploy step at all — it's a repo script, live the
+   moment it's on `dev`.)
    **`LEASE_DIR` mount is no longer optional — owner confirmed at S99: include it this event**
    (supersedes S97–S98's "skip costs adoption nothing"). Mount path decided: `-v
    /volume1/docker/nas-lease:/nas-lease:ro` + `weewx.conf`'s `[[Influx]]` gains `lease_dir =
