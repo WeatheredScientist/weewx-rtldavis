@@ -186,6 +186,24 @@ def test_shutdown_reaps_even_when_get_pid_raises(monkeypatch):
     assert rtldavis._SPAWNED_CHILDREN == []
 
 
+def test_shutdown_kills_the_child_when_pidof_misses_it(monkeypatch):
+    """The gap issue #233 describes: pidof matching nothing does not always
+    mean the child already exited (that's _raising_manager's case above) --
+    it can also mean pidof failed to MATCH a child that is still alive.
+    Pre-fix, the pidof sweep was the only thing that ever signaled the
+    child, so an empty match left shutdown() with nothing to kill: the
+    wait(timeout=5) below just timed out over a still-running orphan.
+    shutdown() must end the child via its own Popen handle regardless of
+    what pidof found."""
+    _drain_registry()
+    mgr = _quiet_manager(monkeypatch)
+    mgr.startup("/bin/sleep 30")
+    p = mgr._process
+    mgr.shutdown()          # pidof sweep is inert; nothing else may kill p
+    assert p.returncode is not None
+    assert rtldavis._SPAWNED_CHILDREN == []
+
+
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-v"]))
