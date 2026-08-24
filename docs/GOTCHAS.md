@@ -133,3 +133,10 @@ alone did not catch.
   field from a driver-shaped object needs a full-suite run before trusting one new test file's green.
 - **zsh reserves `$status` as an alias for `$?`** — a loop variable named `status` fails to assign.
   Minor, but it costs a retry if you reach for that name in a polling loop.
+- **A clean image rebuild proves nothing for a MOUNTED file** (S101/DEC-0114) — `CONSTANTS.md`'s
+  deploy-layers table names this, and it still bit a build event that read the table: `influx.py`'s
+  new code was baked into a freshly-built, freshly-tagged, freshly-run image, and the running
+  container still executed the OLD version, because the mount overrides whatever the image
+  contains. `Successfully tagged` + a healthy new container ID prove the IMAGE changed, not that a
+  mounted file's behavior did. Verify the actual runtime version banner in the log after every
+  recreate that touches a mounted file's source, not just after a baked-file change.

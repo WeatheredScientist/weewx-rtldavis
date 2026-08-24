@@ -12,88 +12,63 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S100 → S101)
+## ▶ Resume here (S101 → S102)
 
 ### What's settled (do not re-derive)
 
-**Phantom 37 mph gust (ERR-0006, DEC-0110) and the NAS-LEASE `influx.py` yield (DEC-0111) are
-coded, tested, and queued — unchanged since S98/S99, not re-touched.** Both ship baked into the
-~08-23 v2.0.14 image; see job 1 for the full deploy-night list. Don't re-derive either
-measurement — DEC-0110/DEC-0111 have the full reasoning if the thresholds or mechanism ever need
-revisiting.
+**v2.0.14 shipped (S101) — DEC-0110, DEC-0111, #233, #224, weewx 5.5.0, NAS-LEASE `LEASE_DIR`
+mount, all live and verified.** Driver banner unchanged `0.20+ws.5`, `influx.py` confirmed
+`0.20+ws.2` post-fix, no new errors since restart. Three real bugs found and fixed live during the
+deploy (not glossed over) — full account in `docs/DECISIONS.md` DEC-0114: `docker` off the
+non-interactive SSH PATH, a genuine 70+min build hang (killed, not waited out), and `influx.py`'s
+mounted-not-baked deploy-layer miss (caught via live version banner, fixed with a separate `scp`).
+**NAS-LEASE adoption is locked** — `RENEWAL_FLOOR_S`/`TTL_S` re-pinned in `ops/nas_build.py`
+against the real measured build duration (DEC-0114). Don't re-derive any of this.
 
-**The S91 code audit is now FULLY closed — all 8 remediation issues (#219–226) done, nothing
-left.** `eaglehunt-ops#180`'s heads-up closed to match, and reconfirmed still closed/accurate at
-S100 (owner asked directly). If a similar full-repo audit is ever proposed again, it does not need
-to re-scope `rtldavis.py`/`dewpoint_service.py`.
+**Campaign B is CLOSED — gain 496 adopted as the new RF baseline (DEC-0115).** Clean 32/32-block
+final square: gain 496 beats 372 by +2.00 points, exactly at DEC-0059's adoption bar (not
+comfortably above it — read the margin honestly if this ever needs re-litigating). Deployed to
+both live `weewx.conf` and `weewx.conf.rx-baseline`. `ops/rx_experiment.sh`'s `SCHEDULE=` block is
+now EMPTY (stand-down state, DEC-0096) — regenerate it fresh if a new campaign is ever proposed,
+don't assume the old dates are reusable. A narrower gain sweep near 496 was considered and
+declined — see DEC-0115 if that ever comes back up.
 
-**#144 (barometer offset) is fully resolved (DEC-0113) — nothing left to decide.** Item 2 was
-already fixed pre-S99. Item 3: `fetch_interval` 3600→300, queued as a live `weewx.conf` edit (see
-job 1). Item 1: owner confirmed the console's elevation correction is working as designed for the
-surveyed 550 ft — closed with no change, don't re-open without new measurement.
+**#144, #233, #252 remain fully resolved** (unchanged since S99/S100 — #144 via DEC-0113, now
+live; #233/#252 via PR #271). **The S91 code audit remains fully closed** (#219–226).
 
-**#233 and #252 are fixed, merged (PR #271, `071f684`), and closed.** #233 (`ProcManager` direct
-kill) is baked, ships with v2.0.14. #252 (`soak_check.sh` midnight-rotation fix) needed no deploy
-step — already live for anyone running the script from an updated checkout.
+**New standing SOP (S101): for live inter-repo coordination, message the other repo's live Claude
+session directly first (`ListAgents`/`SendMessage`), always loop `eaglehunt-ops` too.** Exercised
+for real this session against HLF over the shared `heavy-io.lease` — see the parallel session's own
+memory for the full account; not repeated here since it's process, not repo state.
 
-**`ops/rx_experiment.sh status` gives a false-empty read from a local checkout — always verify
-against the NAS.** Ran it locally at S100 pickup and got `arm: NONE`/`installed: no`, which reads
-exactly like "campaign self-terminated." It isn't real — the script has no `ssh` calls and needs
-to run ON the NAS. Full trap + the `nasctl cat` workaround: `docs/GOTCHAS.md` §3.
+### ▶▶ S102 JOB LIST
 
-### ▶▶ S101 JOB LIST
-
-1. **★ The ~08-23 v2.0.14 build is now a SEVEN-purpose event.** Carries **#224**, **DEC-0110**,
-   **DEC-0111** (NAS-LEASE `influx.py` yield), and **#233** (ProcManager belt-and-braces kill) into
-   prod — all four on `dev`, baked in. **Also apply the queued live-config edit from DEC-0113:
-   `weewx.conf`'s `[DavisPressure]` → `fetch_interval` 3600 → 300** — a MOUNTED-layer change, not
-   baked, but held to this same restart per campaign-comparability discipline; verify after with
-   `nasctl conf ... DavisPressure`. (**#252** needs no deploy step at all — already live.)
-   **`LEASE_DIR` mount is no longer optional — owner confirmed at S99: include it this event.**
-   Mount path decided: `-v /volume1/docker/nas-lease:/nas-lease:ro` + `weewx.conf`'s `[[Influx]]`
-   gains `lease_dir = /nas-lease`. **Precondition: verify Campaign B has actually self-terminated**
-   — read `rx_experiment.state` via `nasctl cat <project root>/rx_experiment.state` (or ssh onto
-   the NAS itself); **do not** trust a local `ops/rx_experiment.sh status` run, see `docs/GOTCHAS.md`
-   §3 — before touching the container. As of S100 close it was still **arm D, live**, last swap
-   **2026-08-22 00:07:25**, on track for its **08-23T00:05** self-termination — don't start off a
-   clock guess, re-verify fresh. Build command + `BUILD-EXIT` verification: `ops/nas_build.py`'s own
-   docstring. Floor/TTL re-pin formula + the live-config deviations any recreate silently reverts
-   (SQLite `timeout`, `pragmas` subsection, radiation calibration, now also `fetch_interval`):
-   `CONSTANTS.md`. Full NAS-LEASE mechanism: `DEC-0111`. **Verification this event:** driver banner
-   must stay **unchanged** at `0.20+ws.5` (a *changed* banner means the wrong image shipped),
-   `weewx.log` should show `influx.py 0.20+ws.2`. Adopting DEC: recompute the next free number that
-   day, don't reuse DEC-0111 or DEC-0113 — locks `NAS-LEASE.md` §5's constants for every tenant
-   (DEC-0104), a governance act, not just paperwork. **`main` promotion is separate and later**,
-   once v2.0.14 proves out — not part of this event.
-2. **Daily square watch** (~5 min): `ops/soak_check.sh` + a direct `rx_experiment.state` read via
-   `nasctl cat` — **run at S100, all green, resume only if Campaign B is somehow still live when
-   S101 starts.** If it has already self-terminated by then (likely — owner expects to resume
-   ~Sunday morning, after the 08-23T00:05 end), skip straight to job 1's precondition check instead
-   of re-running this. Interim readout still the one from S97 (22/32 blocks): gain 496 leads 372
-   past DEC-0059's 2.0-pt adoption bar at both ex levels; ex axis is a wash. **Not a verdict** —
-   square isn't done as of S100, DEC-0102's overnight-iowait confound is still open. `stdout is
-   chatty` is #253, permanent until the next container recreate (i.e. job 1).
-3. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
-   [ops#179]. Revisit once the square closes **and** the gated queue clears.
-4. **[ops#173]** — left open on purpose for the automated sweep to close. Nothing to do unless it
+1. **Gain/receive-window hot-swap: filed, deliberately NOT started** — `BACKLOG.md` §Open ideas +
+   [ops#179]. The gated queue that was blocking it (Campaign B + the v2.0.14 event) has now
+   cleared — revisit whether this is next.
+2. **[ops#173]** — left open on purpose for the automated sweep to close. Nothing to do unless it
    re-flags.
+3. **`main` promotion for v2.0.14** — deliberately not part of S101's event (DEC-0114). Once
+   v2.0.14 has proven out in prod for a reasonable stretch, promote per the usual release mechanics
+   (`CONSTANTS.md`).
+4. **Docker Hub push for v2.0.14** — also deferred until prod proof, per DEC-0078's standing rule.
 
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
 [ops#173]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/173
 
-### Current state (S100 close)
+### Current state (S101 close)
 
 | Thing | State |
 |---|---|
-| Prod | **v2.0.13**, driver **ws.5**; unchanged this session |
-| Campaign B | **Live, arm D** (verified via `nasctl cat` on the real state file — a local `rx_experiment.sh status` run falsely showed `NONE`/not-installed, see `docs/GOTCHAS.md` §3). Last swap **2026-08-22 00:07:25**. Square through **08-23T00:05**. Interim readout still S97's (22/32 blocks) — job 2 doesn't call for a refresh |
-| Soak | **17 pass / 2 warn / 0 fail, confirmed directly at S100** — same two known warns (chatty stdout #253, USB hedge), matches S98 exactly, no regressions |
-| Restart rate | DEC-0106 baseline unchanged: 4/day during a campaign, 0/day between |
-| `dev` beyond prod | Unchanged from S99 — everything for v2.0.14 **plus DEC-0110, DEC-0111, #233** (baked) **and DEC-0113's queued `fetch_interval` edit** (mounted). S100 shipped only this closeout + a new `docs/GOTCHAS.md` entry, no code |
-| Data integrity | ERR-0006 correction unchanged from S98 (archive + InfluxDB); external copies still permanently carry the bad value |
-| NAS-LEASE | Unchanged from S97/S98 — holder client built + verified (DEC-0108); adopting DEC still waits for ~08-23. ops#169: HLF delivered its floor re-measure this round (nightly grew to 7h34m, shipped a heartbeat-renewal model instead of a fixed floor) — no weewx action pending |
-| Trackers | #172/#144 open until v2.0.14 (item 3 now queued, DEC-0113) · #204 open until v2.0.14 · #253 permanent until next recreate · ops#179 open on purpose · ops#169 active, nothing owed from us |
-| Cross-repo (S100) | Owner asked if `ops#180` needed an update — verified live, still closed and accurate since S99, nothing new to post. No other cross-repo action this session |
+| Prod | **v2.0.14**, driver **ws.5** unchanged, `influx.py` **ws.2**, weewx **5.5.0**, gain **496** |
+| Campaign B | **CLOSED.** Gain 496 adopted (DEC-0115). Nothing further scheduled |
+| Soak | Not re-run post-deploy this session — next session should confirm green on the new image/gain before trusting anything downstream |
+| Restart rate | DEC-0106 baseline (4/day during a campaign, 0/day between) — now stale since there's no active campaign; watch for the new steady-state rate |
+| `dev` vs prod | **In sync as of S101** — `main` promotion is the only thing still pending (job 3) |
+| Data integrity | ERR-0006 correction unchanged; external copies still permanently carry the bad value |
+| NAS-LEASE | **Adopted and locked (DEC-0114)** — `RENEWAL_FLOOR_S=420`, `TTL_S=3600`. ops#169 round fully closed |
+| Trackers | #172 open (item still pending, unrelated to this session) · #204 open until v2.0.14 proves in prod · #253 permanent until next recreate (i.e. already true again post-S101) · ops#179 ready to revisit (job 1) |
+| Cross-repo (S101) | HLF cross-repo notes on weewx#274 + ops#202, both replied to. `OPS-DEC-0136`/`0138` (HLF deprioritization) noted, not acted on — no weewx action implied |
 
 ## Blockers
 
@@ -108,18 +83,17 @@ to run ON the NAS. Full trap + the `nasctl cat` workaround: `docs/GOTCHAS.md` §
 
 ## Model tier
 
-Ran on Sonnet 5 throughout S100, confirmed directly (not inferred) — nothing to restore.
+Ran on Sonnet 5 throughout S101, confirmed directly (not inferred) — nothing to restore.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Durable traps are NOT carried here** (DEC-0105/ops#173). **Read it when:** trusting any tool's
 zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) · any NAS or campaign
 task (§3) · judging a component live, dead, or shipped (§4). Indexed in `MANIFEST.md`. **New traps
-are appended THERE, not here** — that is what keeps this file under cap.
+are appended THERE, not here** — that is what keeps this file under cap. **New this session:** §4
+gained the mounted-file-survives-a-rebuild trap that bit `influx.py` tonight.
 
-_Last updated: 2026-08-22 (S100 close). Green gate: ruff clean, **410/410** (unchanged, no code
-touched), mypy clean (64 files, `.mypy_cache` cleared first), secret gate clean. Shipped: no
-code — a verification-only pickup. Confirmed no regressions (soak 17/2/0, matches S98) and
-Campaign B genuinely still on track (arm D, live) after a local `rx_experiment.sh status` run gave
-a false-empty read; documented that trap in `docs/GOTCHAS.md` §3. Reconfirmed `ops#180` still
-closed/accurate on direct ask. Full narrative in `CHANGELOG.md`._
+_Last updated: 2026-08-23 (S101 close). Green gate: ruff clean, **402 passed / 8 skipped**
+(2 tests gained a stand-down skip guard for the now-empty `SCHEDULE=` block, matching the existing
+convention — not a regression), mypy clean (64 files), secret gate clean. Shipped: v2.0.14 to prod
+(DEC-0114) + Campaign B's gain-496 adoption (DEC-0115) — full narrative in `CHANGELOG.md`._

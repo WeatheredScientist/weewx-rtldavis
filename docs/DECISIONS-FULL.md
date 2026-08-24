@@ -7144,3 +7144,132 @@ above. Does not change `pressure_service.py`'s code-level default (3600 stays as
 any deployment that doesn't set `fetch_interval` explicitly; this station's install already does).
 Does not touch the console or WeatherLink cloud account settings — item 1 concludes with no action
 by design, not by deferral.
+
+## DEC-0114 — The ~08-23 v2.0.14 build event ships; NAS-LEASE adoption locks (the §5 event DEC-0107 deferred)
+
+**Status:** Accepted (design + build event) · **Date:** 2026-08-23 (S101) · **Locks:** `NAS-LEASE.md`
+§5's constants for weewx, the event DEC-0104/DEC-0107 deliberately deferred · **Ships:** DEC-0110,
+DEC-0111, #233, #224, DEC-0113's queued config edit, weewx 5.4.0 → 5.5.0 (pinned since S88, `ca3c024`,
+first release to actually carry it) · **Re-pins:** `ops/nas_build.py`'s `RENEWAL_FLOOR_S`/`TTL_S`
+
+### What shipped
+
+Campaign B self-terminated on schedule (`BASELINE` row, 2026-08-23T00:05 local), clearing the
+precondition every queued change was gated behind. Built natively on the NAS from `origin/dev`@
+`efeeebd` (`git archive` → scp → extract, per DEC-0078) under `ops/nas_build.py`'s NAS-LEASE holder
+wrapper, tagged `weatheredscientist/weewx-rtldavis:v2.0.14`. Container recreated with the new
+`-v /volume1/docker/nas-lease:/nas-lease:ro` bind alongside the existing per-file mounts; live
+`weewx.conf` gained `[[Influx]] lease_dir = /nas-lease` (DEC-0111) and `[DavisPressure]
+fetch_interval` 3600 → 300 (DEC-0113). Verified post-deploy: driver banner unchanged at `0.20+ws.5`
+(confirms the correct image), no new CRITICAL/ERROR lines since restart, `weewxd` on 5.5.0.
+
+### Two real problems found and fixed live, not glossed over
+
+1. **`docker` wasn't on the non-interactive SSH PATH.** The first build attempt crashed immediately
+   (`FileNotFoundError: docker`) — `CONSTANTS.md` already documents the binary at
+   `/usr/local/bin/docker`, off the default PATH; the wrapper invocation needed the full path passed
+   explicitly in `cmd`, not a change to `ops/nas_build.py` itself.
+2. **A build genuinely hung for over an hour**, not just ran slow: `docker build` crashed mid-Step
+   7/30 on a `weectl` syslog-handler traceback (`FileNotFoundError` connecting a unix socket — no
+   syslog inside a container build) and the wrapper process sat at 0:00 accumulated CPU across all
+   three PIDs (shell, `nas_build.py`, `docker build`) for 70+ minutes — verified via `ps aux`, not
+   inferred from log silence alone. Killed on owner instruction, stale lease file removed (SIGKILL
+   skips the `finally`-block release, same shape as HLF's own stuck job earlier this session), log
+   rotated aside, retried clean — that run completed in ~360s, Step 30/30, `BUILD-EXIT:0`.
+3. **`influx.py`'s DEC-0111 code never reached the running container** despite being baked into the
+   fresh image: `influx.py` is a **mounted** file (`CONSTANTS.md`'s deploy-layers table), so the image
+   rebuild was irrelevant to it — the NAS-side mount source (`/volume1/docker/weewx-rtldavis/influx.py`)
+   still held the pre-DEC-0111 `ws.1` code. Confirmed by the running banner (`service version is
+   0.20+ws.1` against source's `0.20+ws.2`) immediately after the "successful" recreate. Fixed by
+   `scp`-ing the correct file to its mount source (checksum-verified) and restarting; banner now
+   reads `0.20+ws.2`. This is the exact hazard the deploy-layers table exists to prevent, and it still
+   required a live verification step to catch — a rebuilt-and-running image is not proof every baked
+   change actually took effect.
+
+### The NAS-LEASE adoption lock
+
+Per DEC-0104/DEC-0107, weewx's holder client (`ops/nas_build.py`, DEC-0108) shipped pre-flight-clean
+but deliberately did not lock `NAS-LEASE.md` §5's constants until it had run against a real event.
+Tonight's build (the retried, successful run) is that event: **`RENEWAL_FLOOR_S` re-pinned 600 → 420
+(measured ~360s clean-run duration + ~15% margin), `TTL_S` held at 3600** — deliberately generous, not
+tightened to match the measured duration, because this same session also produced a genuine hour-plus
+hang on a non-capacity failure (see above); a short TTL would let another tenant break a legitimately
+slow-but-alive build, not just a dead one. weewx's adoption of the shared `heavy-io.lease` protocol is
+now locked with these numbers — see `ops/nas_build.py`'s module docstring and constant comments for
+the reasoning, not just the numbers.
+
+### Live contention exercised the courtesy-first design for real
+
+Before this event could run, `hyperlocal-forecast`'s `daily-maintenance` job held the shared lease
+(acquired 04:10 EDT, renewing continuously) and the wrapper deferred cleanly, exactly as designed —
+no break attempted. Resolved through direct session-to-session coordination (a new standing SOP this
+session, see the parallel session memory) rather than passive waiting: HLF found and killed a
+concurrent, lease-unaware manual job of their own that was the actual contention source, then killed
+the stuck `daily-maintenance` run itself and cleared its own stale lease after an owner priority call
+(`OPS-DEC-0136`). Independently verified on this side at each step (`nasctl cat` on the lease file),
+not taken on report.
+
+### What this does not do
+
+`main` promotion is separate and later, once v2.0.14 proves out in prod — not part of this event.
+Does not touch the gain-496 adoption — that is DEC-0115, a distinct decision from the same session.
+
+## DEC-0115 — Campaign B adopts gain 496 (arm B) as the new RF baseline, at exactly DEC-0059's adoption bar
+
+**Status:** Accepted (data + config change) · **Date:** 2026-08-23 (S101) · **Resolves:** the RX gain
+experiment DEC-0048/DEC-0059 designed · **Supersedes:** the `73.3%, sd 4.67` baseline figure recorded
+in `CONSTANTS.md` (DEC-0059)
+
+### The clean readout
+
+The apparatus log pools 6 campaign attempts (repeated aborted/restarted starts, 2026-08-11 through
+2026-08-15) under one `--campaign B` invocation of `ops/campaign_analyze.py` by default — the tool
+warns about this itself. Re-run scoped to the real, completed run only (`--since` the epoch of
+2026-08-15T00:05 EDT, the first row of the square that actually finished): 32/32 blocks,
+2026-08-15T00:05 → 2026-08-23T00:05.
+
+| arm | settings | mean | n | vs incumbent (A) |
+|---|---|---|---|---|
+| A | gain 372, ex 0 (incumbent) | 72.83% | 2658 | — |
+| B | gain 496, ex 0 | 74.83% | 2722 | **+2.00** |
+| C | gain 372, ex 50 | 73.28% | 2678 | +0.45 |
+| D | gain 496, ex 50 | 74.77% | 2746 | +1.94 |
+
+Gain axis: 496 beats 372 clearly at both extraction levels. Extraction axis: a wash (helps slightly
+at gain 372, marginally hurts at gain 496) — matches the S97 interim readout's direction on both
+axes, now confirmed on the complete square.
+
+### The margin is real, not comfortable
+
+Arm B clears DEC-0059's ≥2.0-point adoption bar at **exactly** 2.00 points — not comfortably above
+it. Arm D (496/ex50) falls just short at 1.94. Put to the owner directly rather than rounded up in
+the telling; the owner's call was to adopt B anyway rather than hold for more data, given the
+consistent direction across both the interim and final readouts and across both extraction levels.
+DEC-0102's overnight-iowait confound (a different investigation track — freeze/RF-dead episodes, not
+this gain comparison) was still open as of `BOOT.md`'s last note; recorded here as an interpretive
+caveat, not treated as invalidating this result.
+
+### Not pursuing a narrower sweep now
+
+A follow-up sweep at gain values just above/below 496 was considered and explicitly declined for now:
+each additional value needs its own multi-day campaign square for comparable statistical power, and
+the existing pilot data (P449: n=15, mean 72.65%, *below* the incumbent; P496: n=33, mean 75.56%,
+consistent with the full square) suggests the curve is fairly flat near 496 rather than hiding a
+sharper nearby peak. Revisit only if a specific reason to suspect a local peak surfaces (e.g. a known
+hardware ceiling); otherwise this is closed, not deferred.
+
+### Deploy
+
+Two files edited on the NAS: live `weewx.conf`'s `[Rtldavis] cmd` (`-gain 372` → `-gain 496`) and
+`weewx.conf.rx-baseline` (the snapshot `restore_baseline` copies over live config at every campaign
+abort/end, per the DEC-0080 lesson — a live-conf-only edit would be silently wiped by the next
+campaign's own stand-down path). Verified live post-restart: `startup process '/usr/local/bin/rtldavis
+-gain 496 -v -fc 0 -ppm 0 -tf US -tr 16'`. `CONSTANTS.md`'s Hardware/site section updated to record
+the new adopted setting and supersede the old baseline figure.
+
+### What this does not do
+
+Does not change `ex` (extraction) from its current value — the extraction axis was a wash, no
+adoption case either direction. Does not close `BACKLOG.md`'s gain/receive-window hot-swap item
+(ops#179) — that is a mechanism question (swap without a restart), orthogonal to which gain value is
+adopted.
