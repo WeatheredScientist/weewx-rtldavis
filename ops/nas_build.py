@@ -13,9 +13,13 @@ Usage:
     python3 ops/nas_build.py --job nas-image-build -- \\
         docker build -t weatheredscientist/weewx-rtldavis:v2.0.14 .
 
-RENEWAL_FLOOR_S/TTL_S below are PROVISIONAL (DEC-0078's ~10 min v2.0.12
-build) -- re-pin both against the real ~08-23 v2.0.14 build's measured
-duration once it has actually run under this wrapper (DEC-0108).
+RENEWAL_FLOOR_S/TTL_S are RE-PINNED (DEC-0114) against the real ~08-23
+v2.0.14 build's measured duration: a clean run under this wrapper took
+~360s (11:48:18-11:54 EDT). RENEWAL_FLOOR_S carries ~15% margin over that;
+TTL_S stays generous on purpose -- this same session also hit a build that
+hung for over an hour on a stuck weectl/network step before being killed
+manually, so a short TTL would break perfectly legitimate slow runs, not
+just dead ones.
 
 Deliberately NOT built here (DEC-0108): the observer/downshift side
 (Section 3's read protocol, checking OTHER tenants' leases) -- weewx has
@@ -50,9 +54,10 @@ from datetime import datetime, timedelta, timezone
 LEASE_DIR = "/volume1/docker/nas-lease/"
 TENANT = "weewx-rtldavis"
 
-# Provisional -- DEC-0078's ~10 min v2.0.12 NAS build. Re-pin both against
-# the real ~08-23 v2.0.14 build's measured duration (DEC-0108).
-RENEWAL_FLOOR_S = 600
+# Re-pinned (DEC-0114) against the real ~08-23 v2.0.14 build's measured
+# ~360s clean-run duration -- see the module docstring for the margin
+# reasoning on each constant.
+RENEWAL_FLOOR_S = 420
 TTL_S = 3600
 
 

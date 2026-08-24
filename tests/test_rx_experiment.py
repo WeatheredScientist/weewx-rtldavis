@@ -781,6 +781,7 @@ def test_tick_defers_swap_while_paused(tmp_path):
     converted DEC-0087's soft pause straight back into the hard sticky abort.
     Schedule-agnostic: pins now to the last real arm row, whatever the
     regenerated dates say."""
+    _require_campaign()
     conf, baseline, logs = _rx_base(tmp_path)
     when, arm = _schedule_rows()[-2]          # last non-BASELINE row
     assert arm != "BASELINE"
@@ -806,6 +807,7 @@ def test_tick_baseline_supersedes_pause(tmp_path):
     never wait on RF (safety property #5), and it runs no health check an
     episode could fail. A pause present at campaign end is cleared, baseline
     restored, completion recorded."""
+    _require_campaign()
     conf, baseline, logs = _rx_base(tmp_path)
     (tmp_path / "rx_experiment.PAUSE").write_text(
         f"{int(time.time()) - 300}|2026-01-01 00:00:00\n")

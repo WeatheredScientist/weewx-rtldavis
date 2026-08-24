@@ -5,6 +5,55 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S101] — 2026-08-23 — v2.0.14 ships (weewx 5.5, NAS-LEASE adoption); Campaign B closes, gain 496 adopted
+
+- **Merged S100's closeout PR (#273), then ran the ~08-23 v2.0.14 build event.** Campaign B
+  self-terminated on schedule (`BASELINE`, 2026-08-23T00:05); built natively on the NAS from
+  `origin/dev`@`efeeebd` under `ops/nas_build.py`'s NAS-LEASE holder wrapper. Ships DEC-0110
+  (reception-quality wind guard), DEC-0111 (`influx.py` NAS-LEASE courtesy yield), #233, #224, and
+  weewx 5.4.0 → 5.5.0 (pinned since S88, `ca3c024` — this is the first release to actually carry
+  it, since `dev` has been running ahead of prod).
+- **Three real problems found and fixed live during the deploy, not glossed over:**
+  1. `docker` wasn't on the non-interactive SSH PATH — first build attempt crashed instantly
+     (`FileNotFoundError: docker`); fixed by passing the full `/usr/local/bin/docker` path.
+  2. A retried build genuinely hung 70+ minutes at 0:00 accumulated CPU on a `weectl`
+     syslog-handler crash mid-Step 7/30 (verified via `ps aux`, not inferred from log silence) —
+     killed on owner instruction, stale lease cleared, log rotated, retried clean in ~360s.
+  3. `influx.py`'s DEC-0111 code never reached the running container despite a fresh image —
+     it's a MOUNTED file, so the image rebuild didn't touch the NAS-side mount source, which still
+     held the old `ws.1` code. Caught by checking the live version banner post-deploy (not assumed
+     from a clean-looking recreate); fixed via a separate `scp` + restart, checksum-verified.
+- **DEC-0114: NAS-LEASE adoption locks** (the §5 event DEC-0104/DEC-0107 deferred).
+  `RENEWAL_FLOOR_S` re-pinned 600 → 420 against tonight's real measured build duration; `TTL_S`
+  held deliberately generous at 3600 given the hour-plus hang above was a real, non-capacity
+  failure mode. Also added `LEASE_DIR` mount (`-v /volume1/docker/nas-lease:/nas-lease:ro`) and
+  `weewx.conf`'s `[[Influx]] lease_dir = /nas-lease`.
+- **Live NAS-LEASE contention with `hyperlocal-forecast` resolved via direct session-to-session
+  coordination** — a new standing SOP this session (message the other repo's live Claude session
+  directly for time-sensitive shared-resource questions, always loop `eaglehunt-ops` too, not just
+  on decisions needing sign-off). HLF found and killed a concurrent lease-unaware manual job of
+  their own, then their own stuck `daily-maintenance` run, after an owner priority call
+  (`OPS-DEC-0136`). Verified independently at each step, not taken on report.
+- **DEC-0113 applied live**: `[DavisPressure] fetch_interval` 3600 → 300, verified.
+- **DEC-0115: Campaign B closes, gain 496 (arm B) adopted as the new RF baseline.** Clean 32/32-block
+  final square (2026-08-15 → 08-23, after excluding 6 pooled aborted/restarted attempts the
+  analysis tool's own default run would otherwise have mixed in): **A (372/ex0, incumbent) 72.83% ·
+  B (496/ex0) 74.83% (+2.00) · C (372/ex50) 73.28% (+0.45) · D (496/ex50) 74.77% (+1.94)**. Gain
+  axis clearly favors 496; extraction axis a wash. The margin is exactly at DEC-0059's 2.0-point
+  adoption bar, not comfortably above it — adopted anyway given the consistent direction across
+  both the interim and final readouts. A narrower follow-up sweep near 496 considered and declined
+  for now (pilot data suggests a flat curve there). Deployed to both live `weewx.conf` and
+  `weewx.conf.rx-baseline` (a live-only edit would be silently wiped by the next campaign's own
+  restore path). `ops/rx_experiment.sh`'s `SCHEDULE=` block emptied per its own stand-down
+  convention (DEC-0096) now that the campaign is complete.
+- Post-deploy verification: driver banner unchanged at `0.20+ws.5`, `influx.py` now `0.20+ws.2`,
+  no new CRITICAL/ERROR since restart, `weewxd` on 5.5.0.
+- **`CONSTANTS.md`, `docs/DECISIONS.md`/`DECISIONS-FULL.md`, `docs/ROADMAP.md` updated same
+  session** — release/rollback table, live-config-deviations table (3 new/updated rows), hardware
+  timeline, reception baseline figure (73.3%/gain-372 → 74.83%/gain-496), Campaign B roadmap item
+  closed.
+
+---
 ## [S100] — 2026-08-22 — Verification-only session: clean pickup confirmed, Campaign B on track, new GOTCHAS entry for `rx_experiment.sh`'s local-run trap
 
 - **No code shipped this session** — a status-check pickup, not a coding session. Clean-pickup gate

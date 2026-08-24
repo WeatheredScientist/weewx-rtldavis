@@ -3,7 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-20 (S97 — targeted line update, not a full pass: P3's INTERFACES.md line
+**Last updated:** 2026-08-23 (S101 — targeted line update per DEC-0057, not a full pass; tripwire
+still S106: the Campaign B item closed — DEC-0115 adopted gain 496, deployed at the same v2.0.14
+event as DEC-0114's NAS-LEASE lock. Nothing else touched.)
+Prior: 2026-08-20 (S97 — targeted line update, not a full pass: P3's INTERFACES.md line
 corrected again — it claimed DEC-0053's station-identity finding (Finding 2) was already documented
 in INTERFACES.md; it wasn't, until this session actually wrote it in, along with a Finding 3
 pointer. See the guardrail section for detail.)
@@ -268,7 +271,12 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       compression tightening rides the CI-build follow-up (DEC-0078). ✅ **`:latest` moved to
       v2.0.12 at GATE 2 (S73)** — config digest `9db5c1…` verified identical across both tags
       (manifest digests differ by push-path compression only). Nothing remains on this item.
-- [ ] **Campaign B — LNA physically removed — LAUNCHED AND ARMED (S70, 2026-08-10).** DEC-0066's
+- [x] **Campaign B — LNA physically removed — CLOSED (S101, 2026-08-23): gain 496 adopted (DEC-0115).**
+      Self-terminated on schedule (`BASELINE`, 2026-08-23T00:05). Clean 32/32-block final square
+      (2026-08-15 → 08-23): gain 496 beats 372 by +2.00 points, exactly clearing DEC-0059's bar;
+      extraction axis a wash. Deployed to prod at the same ~08-23 v2.0.14 event (DEC-0114). A
+      narrower follow-up sweep near 496 considered and declined for now — see DEC-0115. Nothing
+      remains on this item. DEC-0066's
       hold released on its own terms: the gates were closed on measurement (DEC-0069/0070), A's
       figures confirmed clean (DEC-0077), and the "instrument trusted" condition met. The first
       launch night (08-09) was scrubbed at 00:58 on a dead VPN — the runbook's postpone-24h
