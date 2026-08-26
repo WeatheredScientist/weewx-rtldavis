@@ -5,6 +5,34 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S102] — 2026-08-25 — Ops-tracker verification sweep: #144/#172/#204 checked live (not memory), two didn't hold up; `loop_json_writer.py`'s stale mount found and fixed (DEC-0116)
+
+- **An `eaglehunt-ops` session asked to confirm four post-v2.0.14 items were live and close whichever
+  were done: ops#179, #144, #172, #204.** Checked each against the running container directly instead
+  of trusting the ship announcement. ops#179 matched ops's own description (still unstarted,
+  untouched). #144 held up and closed clean: `fetch_interval=300` confirmed live via `readconf --nas`,
+  the triple-field null fix baked into the running image, owner's item-1 decision already final.
+- **#172 and #204 did NOT hold up — DEC-0116.** Both features live in `loop_json_writer.py`, a
+  **mounted** file per `CONSTANTS.md`'s deploy-layers table. The deployed copy was still the
+  2026-07-27 version: hash mismatched `dev`, missing both `current_interval` and
+  `barometer_fetch_epoch` entirely, confirmed by a live `current.json` read with the field absent and
+  `current.json`/`loop-data.txt` sharing an identical mtime (per-packet writes, not throttled). Same
+  deploy-layer trap DEC-0114 caught for `influx.py` three days earlier, just outside that event's own
+  verification scope — `dev` and prod were **not** actually in sync as `BOOT.md`'s S101 close claimed,
+  for this one file.
+- **Fixed live, with the owner's explicit go-ahead:** deployed current `dev`'s `loop_json_writer.py`
+  to its NAS mount source, hash-verified the match, `docker kill` + `docker start` (DEC-0008). Confirmed
+  post-restart: `barometer_fetch_epoch` appeared on the first WeatherLink poll, and `current.json`'s
+  60s throttle is now measurably active (mtimes diverge from `loop-data.txt`'s per-packet writes).
+  #172/#204 closed with the live evidence in the closing comments. Ops looped throughout via direct
+  session-to-session messages, including the correction on the two claims that didn't hold up.
+- **Lesson for next time (DEC-0116):** an image bump proves the baked layer moved; it says nothing
+  about any mounted file not specifically re-verified that session. The deploy-layers table's other
+  mounted files (`ogoxeUploader.py`, `sortedcontainers`, `weewx.conf`) remain independently unverified.
+- **Gates:** 402/402 (8 skipped, unchanged — no code touched this session), ruff clean, mypy clean
+  (64 files, `.mypy_cache` cleared first), secret gate clean.
+
+---
 ## [S101] — 2026-08-23 — v2.0.14 ships (weewx 5.5, NAS-LEASE adoption); Campaign B closes, gain 496 adopted
 
 - **Merged S100's closeout PR (#273), then ran the ~08-23 v2.0.14 build event.** Campaign B
@@ -122,56 +150,5 @@ under [Pre-S16].
   branch cleaned up (local + remote), steady state verified after.
 
 ---
-## [S98] — 2026-08-20 — Phantom 37 mph gust diagnosed and corrected (ERR-0006); reception-quality wind guard ships (DEC-0110); P0.5's last follow-on retired (DEC-0109)
-
-- **Owner-reported phantom 37 mph gust at 11:12 EDT, diagnosed to source and corrected (ERR-0006).**
-  Same class as `ERR-0004` (2026-07-27), recurring independently: `rxCheckPercent` for that one
-  archive minute collapsed to 9.2% (vs. 60–90%+ every surrounding minute), a genuine RF-dead
-  episode (weewx.log silent 11:11:35→11:15:22, confirmed not a restart). One of the few packets
-  that passed CRC that minute carried a corrupted wind byte; every other field in the row read
-  normally, so nothing tripped DEC-0054's frame co-rejection. Investigated and ruled out `#225`
-  item 2 (rain-rate co-rejection gap, fixed same day in PR #260 but not yet deployed) as the
-  mechanism here — rainRate was clean. Archive row nulled + daily summary rebuilt (day-max now 19
-  mph, genuine); InfluxDB point deleted and rewritten minus the 7 wind-derived fields, with
-  `windGust_qc=1`/`windSpeed_qc=1` flags (24 fields verified, matching `ERR-0004`'s own precedent
-  exactly) — the dashboard's read-only proxy token can't write/delete (confirmed 403), so the
-  correction used `weewx.conf`'s own uploader token instead. Wunderground/CWOP/PWSWeather/OWM/etc.
-  already have the bad value; that's permanent, same as `ERR-0004`. Cross-verified independently by
-  an eaglehunt-weather-dashboard session (InfluxDB via its own query path) and an eaglehunt-ops
-  session (raised `#225` item 2 and a container-restart confound as candidate mechanisms; both
-  checked directly and ruled out for this incident) — good example of the coordination working.
-- **Reception-quality wind guard ships, closing the ERR-0004/ERR-0006 blind spot (DEC-0110).**
-  Neither the bounds check nor the 75 mph delta cap can distinguish this corruption from a genuine
-  squall gust of similar magnitude — `ERR-0004`'s own writeup already established that tightening
-  either risks false-rejecting real weather. Measured first, before designing anything (93 days,
-  129,607 records): genuine high wind and severe reception collapse have never co-occurred at this
-  station (lowest `rxCheckPercent` among 220 records with `windGust>=10mph`: 54.5%; 87 of 89
-  `rxCheckPercent<20%` records stayed calm at 0–4 mph) — so a guard combining both signals can't
-  false-null a real gust, with wide margins on both sides. `dewpoint_service.py`'s `DewpointCacher`
-  gains a `NEW_ARCHIVE_RECORD` binding (`rxCheckPercent<20%` AND `windGust>10mph` → null the wind
-  triple + derived fields), confirmed via `weewx.conf`'s own `[Engine][Services]` order to run
-  before `StdArchive`'s write and every RESTful uploader. Explicitly does not reach Wunderground's
-  RapidFire feed (publishes pre-archive-close — a live ticker, not an archive of record). 11 new
-  tests including both incidents replayed verbatim as positive controls. Ships with the ~08-23
-  v2.0.14 build (baked into the image), same gate as `#225`.
-- **ROADMAP.md's P0.5 fully closed (DEC-0109).** Its last follow-on ("Keep-a-Changelog headings +
-  DECISIONS entry-skeleton convergence," proposed S25, ~72 sessions unclaimed) is retired, not
-  picked up: the original rationale is unrecoverable (no surviving transcript), no sibling repo
-  adopted anything to converge toward (checked all three), and `DECISIONS-FULL.md` already grew
-  its own working skeleton independently of `CHANGELOG.md` — nothing left to reconcile. Judgment
-  call, not just absence of evidence: this repo's entries are dense, cross-referencing narratives
-  that an external single-facet schema would likely fragment rather than clarify.
-- **A `ROADMAP.md` overclaim caught while closing the loop on the above.** Its P1 arc credited
-  DEC-0054 with "closing ERR-0004" outright — true only for the co-occurring-bounds-failure
-  mechanism, not the whole class, which `ERR-0006` just proved recurs independently. Corrected in
-  place rather than left standing.
-- **Cross-repo, same session:** fixed a `secret-read-guard.sh` false-positive gotcha in
-  eaglehunt-ops (`command` escape-hatch anchoring + a co-occurrence false-positive class), found
-  and flagged via `spawn_task` while doing unrelated ops work; landed there as OPS-DEC-0115, tested
-  and deployed.
-- **Gates:** 397/397 full suite (was 386, +11 new, 0 regressions), ruff clean, mypy clean (63
-  files, `.mypy_cache` cleared first), secret gate clean. PR #265 merged to `dev`.
-
 ---
----
-*(S73–S97 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S98 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*

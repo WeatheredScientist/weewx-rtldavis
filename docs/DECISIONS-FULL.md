@@ -7214,6 +7214,56 @@ not taken on report.
 `main` promotion is separate and later, once v2.0.14 proves out in prod — not part of this event.
 Does not touch the gain-496 adoption — that is DEC-0115, a distinct decision from the same session.
 
+## DEC-0116 — `loop_json_writer.py`'s mount was stale for four weeks despite v2.0.14 shipping; caught closing #172/#204, fixed live
+
+**Status:** Accepted (verification + deploy fix) · **Date:** 2026-08-25 (S102) · **Corrects:** BOOT.md's
+S101 claim that `dev`/prod were "in sync" · **Recurrence of:** DEC-0114's `influx.py` mounted-file miss
+
+### What ops asked, and what turned out to be true
+
+An `eaglehunt-ops` session asked this repo to confirm four items were live post-v2.0.14 and close
+whichever were done: ops#179 (not started — matched ops's own description, no action), #144, #172,
+#204. Rather than taking the ship announcement at face value, each was checked against the running
+container directly. #144 held up: `fetch_interval=300` confirmed live via `readconf --nas`, the
+triple-field null fix is baked into the running image, and the owner's item-1 decision was already
+final. **#172 and #204 did not hold up.** Both features — `barometer_fetch_epoch` passthrough
+(DEC-0091) and the `current_interval` 60s throttle (DEC-0093) — live in `loop_json_writer.py`, which
+`CONSTANTS.md`'s deploy-layers table already documents as a **mounted**, not baked, file. The
+deployed copy on the NAS was checked directly: `mtime` 2026-07-27, hash mismatched `dev`, and grepping
+it for `current_interval` and `barometer_fetch_epoch` found neither. A live `current.json` read
+confirmed the absence end-to-end (no `barometer_fetch_epoch` field), and `current.json`/`loop-data.txt`
+shared an identical mtime — consistent with per-packet writes, not a 60s throttle.
+
+### Why this slipped past DEC-0114's own catch
+
+DEC-0114 caught the identical trap for `influx.py` during the v2.0.14 event three days earlier —
+image rebuild doesn't touch a mounted file, only a separate `scp` does — and fixed it live, verified
+by banner. That session's verification pass covered the files it touched (`influx.py`, gain config)
+but not every mounted file in the deploy-layers table. `loop_json_writer.py` hadn't been re-deployed
+since its last real edit (2026-07-27, predating both DEC-0091 and DEC-0093's features by weeks), and
+nothing in the v2.0.14 event's own checklist re-verified it, because nothing in that event's scope
+touched it. The image bump created no signal, positive or negative, about this file's state.
+
+### The fix
+
+Deployed the current `dev` copy of `loop_json_writer.py` to its NAS mount source
+(`/volume1/docker/weewx-rtldavis/loop_json_writer.py`), hash-verified the match, then `docker kill` +
+`docker start` (DEC-0008 — never `docker stop`) to force `weewxd` to re-import it. Confirmed live
+post-restart: `current.json` picked up `barometer_fetch_epoch` on the first WeatherLink poll, and
+`current.json`/`loop-data.txt` mtimes now diverge (throttle active). #172 and #204 closed with the
+live evidence in the closing comments; #144 closed separately, its own verification unaffected by
+this file.
+
+### The generalizable lesson
+
+**A "dev and prod are in sync" claim is only as true as the last verification pass's scope.** An image
+bump proves the baked layer moved; it says nothing about any mounted file not specifically checked
+that build. `CONSTANTS.md`'s deploy-layers table lists five mounted files (`rtldavis.py`'s baked
+neighbors aside: `influx.py`, `loop_json_writer.py`, `ogoxeUploader.py`, `sortedcontainers`,
+`weewx.conf`) — DEC-0114 checked one, this session checked another because two open issues happened
+to depend on it. The other mounted files' live-vs-`dev` state is **not** independently verified by
+either session and should not be assumed current without its own check.
+
 ## DEC-0115 — Campaign B adopts gain 496 (arm B) as the new RF baseline, at exactly DEC-0059's adoption bar
 
 **Status:** Accepted (data + config change) · **Date:** 2026-08-23 (S101) · **Resolves:** the RX gain
