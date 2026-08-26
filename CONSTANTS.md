@@ -43,7 +43,8 @@ DEC-0046).**
 | `weewx.conf` and other mounted config | the **mount** | an image rebuild does nothing — needs a live edit on the NAS |
 | `influx.py` | mounted → `scp` **is** correct | — |
 | **`loop_json_writer.py`** (verified S85) | the **mount** — `<project root>/loop_json_writer.py`, bind-mounted `ro` over the venv copy | **an image rebuild does nothing** — the Dockerfile never `COPY`s this file. Deploy = `scp` to the **project root** + restart. **The copy in `weewx-data/bin/user/` is a DECOY**: it is not the mount source and editing it changes nothing |
-| `ogoxeUploader.py`, `sortedcontainers` | the **mount** (same pattern, per-file `ro` binds) | as above |
+| **`ogoxeUploader.py`** (verified S104) | the **mount** — but its source is **`weewx-data/bin/user/ogoxeUploader.py`**, the very directory that is a decoy for `loop_json_writer.py`. Two adjacent rows, opposite truths: check the source path per file, never carry one file's answer to another | an image rebuild does nothing — the Dockerfile never `COPY`s this file either. Deploy = `scp` to **`weewx-data/bin/user/`** + recreate |
+| `sortedcontainers` (verified S104) | the **mount** — a whole-**directory** `ro` bind, not a per-file one | **no repo copy exists**: this is a vendored third-party package pinned by the mount, so there is no `dev` version to diff it against. "In sync with `dev`" is undefined here — don't report it as either |
 
 **Verify, don't recall** — `nasctl inspect weewx-rtldavis-v2` lists the per-file bind mounts
 explicitly. That is the authoritative answer for any file, and it takes one command. S85 found

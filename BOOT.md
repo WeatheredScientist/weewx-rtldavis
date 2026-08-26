@@ -62,9 +62,18 @@ relevant context for anything infra-adjacent proposed before then.
    window is open now. Needs the driver in prod first (job 3) or it has nothing to talk to.
 3. **The hot swap is not in prod until an image rebuild** — `rtldavis.py` is BAKED. No urgency on its
    own (feature is off by default), so fold it into the next image cut rather than cutting one for it.
-4. **Spot-check the other mounted files' live-vs-`dev` state** (`ogoxeUploader.py`,
-   `sortedcontainers`, `weewx.conf`) — DEC-0116 established that an image bump says nothing about a
-   mounted file unless specifically checked, and none of these three have been since before S101.
+   **Carry `ogoxeUploader.py` along on that same cut** (job 4 below): it is mounted, so the cut alone
+   does nothing for it — it needs an `scp` to `weewx-data/bin/user/`, and the recreate the cut
+   performs anyway is what makes it take effect, with no separate prod restart and no venv pyc dance.
+4. ~~Spot-check the other mounted files' live-vs-`dev` state.~~ **DONE S104.** `influx.py` and
+   `loop_json_writer.py` match `dev` byte-for-byte; live `weewx.conf` still carries **all six**
+   DEC-0070 deviations. `sortedcontainers` has **no repo copy** — the comparison is undefined, not
+   passing (`CONSTANTS.md` corrected). **`ogoxeUploader.py` was 7.5 weeks stale** — byte-identical to
+   `7e79d15`, its own S16 prod import, so two `dev` commits never landed. Content is harmless (SPDX +
+   the GPLv3 §5(a) fork notice from DEC-0034, plus one `log.debug()` that printed `None` for a key
+   never set); **no data-path change, and the Dockerfile never `COPY`s it, so the published image
+   carries no compliance gap either.** Deploy folded into job 3. Same detection gap as DEC-0116 — no
+   new DEC, that row already names the class.
 
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
 
@@ -76,7 +85,7 @@ relevant context for anything infra-adjacent proposed before then.
 | Campaign B | **CLOSED.** Gain 496 adopted (DEC-0115). Nothing further scheduled |
 | Soak | Not re-run since S101 — next session should confirm green before trusting anything downstream |
 | Restart rate | DEC-0106 baseline (4/day during a campaign, 0/day between) — stale since there's no active campaign; watch for the new steady-state rate |
-| `dev` vs prod | `dev` is now **ahead** of prod by DEC-0117 (baked layer — needs an image rebuild, job 3). `loop_json_writer.py` in sync since S102. Other mounted files unverified (job 4) |
+| `dev` vs prod | `dev` is **ahead** of prod by DEC-0117 (baked layer — needs an image rebuild, job 3) **and by `ogoxeUploader.py`** (mounted, 7.5 wks stale, harmless, riding job 3's cut). **Every other mounted file audited clean S104** — `influx.py` + `loop_json_writer.py` byte-identical to `dev`, `weewx.conf`'s six DEC-0070 deviations all present, `sortedcontainers` not comparable (no repo copy) |
 | Hot swap (DEC-0117) | **Built, tested, merged to `dev`. Not in prod, and off by default.** Driver half only — `ops/rx_experiment.sh` still restart-based (job 2) |
 | Data integrity | ERR-0006 correction unchanged; external copies still permanently carry the bad value |
 | NAS-LEASE | Adopted and locked (DEC-0114) — `RENEWAL_FLOOR_S=420`, `TTL_S=3600` |
