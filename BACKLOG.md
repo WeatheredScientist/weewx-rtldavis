@@ -257,7 +257,17 @@ failed resets currently produce no further action.
   re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
-- **Hot-swap gain / receive-window without restarting the container (owner question, S89).**
+- ~~**Hot-swap gain / receive-window without restarting the container (owner question, S89).**~~
+  **BUILT S103, [DEC-0117](docs/DECISIONS.md).** Watched control file carrying bounds-checked
+  `gain`/`ex` integers only (never a command string — `cmd` reaches `shlex.split()` → `Popen`);
+  swap resets the stall-watchdog counters and widens the threshold to 240 s until the first packet,
+  which is the hazard the analysis below missed: a respawned child restarts the US 133 s init
+  period against a 150 s watchdog the respawn does *not* reset. Plus rollback, an ack file
+  recording the measured respawn gap (answers constraint 4 below), and init-time honoring so a
+  restart cannot silently revert a swap. **Default off; `rtldavis.py` is BAKED, so this is not in
+  prod until an image rebuild.** Still open: converting `ops/rx_experiment.sh` to use it — a
+  separate change, and the one that must not land mid-campaign. Original analysis kept below.
+- **[CLOSED — see above] Hot-swap gain / receive-window without restarting the container (S89).**
   Asked while looking at how much restarting campaign B does. **Answer: nothing prevents it but
   the feature itself, and most of the machinery is already built.** Gain is only a CLI flag on the
   Go binary, carried inside the `cmd = /usr/local/bin/rtldavis -gain NNN ... -ex N` string in the

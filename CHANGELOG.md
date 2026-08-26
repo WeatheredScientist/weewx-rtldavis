@@ -5,6 +5,44 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S103] — 2026-08-26 — Gain / receive-window hot swap built (DEC-0117): a validated control file, plus the post-swap watchdog grace that keeps it from tearing the driver down
+
+- **Picked up the last open `BACKLOG.md` idea / [ops#179], filed at S89 and deliberately unstarted
+  until Campaign B closed.** S89's analysis held up on re-inspection: nothing prevented a hot swap
+  but the trigger. `gain` and `-ex` are startup-only CLI flags on the Go binary, `rtldavis.py` never
+  inspects them, `ProcManager.startup(cmd, …)` already takes the command as a parameter, and the
+  150 s watchdog exercises that kill→respawn cycle routinely.
+- **Built as a watched control file carrying bounds-checked integers only — never a command string.**
+  `hotswap_control_file` (unset = feature off, stock behavior). The driver polls it about every 10 s
+  at the top of `genLoopPackets` — no thread, no signal handler, since `get_stderr()` already budgets
+  10 s per pass — and on an mtime change validates, splices into the running command, and respawns.
+  Only `gain` (0–496) and `ex` (0–1000) are accepted: `cmd` reaches `shlex.split()` → `Popen`, so a
+  raw-command channel would be arbitrary code execution inside the container for anything able to
+  write that NAS path. Tests pin that rejection explicitly.
+- **The hazard S89's note missed, and the reason this needed design work:** `time_last_received` is a
+  **local** in `genLoopPackets` and is *not* reset by a child respawn, while a fresh child is
+  legitimately silent for the US 133 s radio init period. A naive `shutdown()`→`startup()` inherits a
+  stale timer, trips the 150 s stall watchdog mid-init and tears the driver down — reintroducing the
+  abort-on-unhealthy-swap failure class the feature exists to retire, on *every* swap. Every swap now
+  resets the four watchdog counters and widens the threshold to `HOTSWAP_GRACE_S = 240` until the
+  first packet (a flat 150 s left only 17 s of margin over that init period), reverting as soon as
+  anything is received.
+- **Also: rollback** to the last known-good command if the new one fails to start (a bad gain must
+  not cost us the receiver), **an atomic ack file** recording status and the measured respawn gap —
+  which self-measures ops#179's constraint 4, the never-measured RTL-SDR re-open time — and the
+  control file **honored at init before the first spawn**, so a container restart cannot silently
+  revert a swapped gain while the ack still advertises it (DEC-0116's exact shape).
+- **Green gate: 428 passed / 8 skipped** (26 new), ruff clean, mypy clean (65 files), secret gate
+  clean. The three loop-level tests are **mutation-verified** — removing the grace, the reset, or the
+  rollback each turns the suite red — with a positive control proving the same silence *without* a
+  swap still stalls at 150 s. One secret-scanner false positive fixed at source by renaming a local
+  (`key = …`) rather than widening the allow-list.
+- **Not in prod.** `rtldavis.py` is a **BAKED** file, so this ships only with an image rebuild, and
+  the feature is off until the config key is set. `ops/rx_experiment.sh` still swaps arms by
+  rewriting the mounted config and restarting — converting it is a separate change, and the one that
+  must not land mid-campaign.
+
+---
 ## [S102] — 2026-08-25 — Ops-tracker verification sweep: #144/#172/#204 checked live (not memory), two didn't hold up; `loop_json_writer.py`'s stale mount found and fixed (DEC-0116)
 
 - **An `eaglehunt-ops` session asked to confirm four post-v2.0.14 items were live and close whichever
