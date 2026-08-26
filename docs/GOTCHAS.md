@@ -140,3 +140,11 @@ alone did not catch.
   contains. `Successfully tagged` + a healthy new container ID prove the IMAGE changed, not that a
   mounted file's behavior did. Verify the actual runtime version banner in the log after every
   recreate that touches a mounted file's source, not just after a baked-file change.
+- **The same trap recurs silently ACROSS sessions, not just within one deploy event** (S102/DEC-0116)
+  — `loop_json_writer.py` had been genuinely stale for four weeks (last real edit 2026-07-27) while
+  BOOT.md kept asserting "`dev`/prod in sync" through S99, S100, and S101's own v2.0.14 ship, because
+  no session's verification pass happened to touch that specific mounted file. A "ship event went
+  clean" claim only covers the files that event's own checklist actually checked — it is not evidence
+  about every other mounted file in the deploy-layers table. Before trusting any "in sync" claim for a
+  mounted file you're about to depend on, check that specific file directly (mtime/hash/grep for the
+  feature, or a live output field), not the general fact that a recent image shipped clean.
