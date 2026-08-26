@@ -146,6 +146,16 @@ Run rtld on a thread and push the output onto a queue.
     # This has only effect with 2 transmitters or more
     save_pct_good_per_transmitter = False
 
+    # Hot-swap of -gain / -ex without restarting weewx or the container.
+    # Unset (the default) disables the feature entirely. When set, the driver
+    # polls this file about every 10s; on an mtime change it validates the
+    # contents, respawns the rtldavis child with the new flags, and writes the
+    # outcome to <hotswap_control_file>.ack (override with hotswap_ack_file).
+    # The file accepts ONLY these integer keys -- never a command string:
+    #     gain = 0..496     tuner gain in tenths of a dB (0 = auto)
+    #     ex   = 0..1000    extra loopTime in ms
+    # hotswap_control_file = /path/to/rtldavis-hotswap.conf
+
     # The driver to use:
     driver = user.rtldavis
 
@@ -750,6 +760,102 @@ def reap_spawned_children():
     return reaped
 
 
+# --- Hot-swap of gain / receive-window (S103, DEC-0117) --------------------
+# Gain and -ex are CLI flags on the Go binary, carried inside the `cmd` string
+# and read by it only at startup -- there is no runtime control channel in the
+# binary. So a "hot swap" is a child respawn: shutdown() -> rewrite cmd ->
+# startup(). That path already existed (ProcManager.startup takes the command
+# as a parameter, and the 150s watchdog exercises kill->respawn routinely);
+# the only thing missing was a trigger.
+#
+# The trigger is a watched control file of VALIDATED INTEGER FIELDS -- never a
+# command string. `cmd` flows to shlex.split() -> Popen, so a control file
+# carrying raw command text would hand arbitrary code execution inside the
+# container to anything able to write that path. Two bounded ints spliced into
+# the existing command is a config knob; a command string is a shell. This
+# repo is public and the file lives on a NAS share -- keep the boundary.
+STALL_TIMEOUT_S = 150
+
+# A freshly spawned child is legitimately silent for the radio's init period
+# (US/AU/NZ: 133s, EU: 16s), so the normal 150s stall watchdog leaves only 17s
+# of margin on a post-swap respawn. Nowhere near enough to run a campaign on:
+# a slow init would raise WeeWxIOError and tear the driver down, reintroducing
+# the abort-on-unhealthy-swap failure class this feature exists to retire.
+# The first packet after a swap gets this longer deadline instead; the normal
+# threshold returns as soon as anything is received.
+HOTSWAP_GRACE_S = 240
+
+# Accepted control-file keys and their inclusive bounds. gain is tuner gain in
+# tenths of a dB (0 = the binary's "auto"; 496 = the R820T's 49.6 dB maximum);
+# ex is extra loopTime in ms. Anything outside this table is rejected.
+HOTSWAP_LIMITS = {
+    'gain': (0, 496),
+    'ex': (0, 1000),
+}
+
+
+def parse_hotswap_control(text, limits=None):
+    """Parse a hot-swap control file into a validated {key: int} dict.
+
+    Pure (no I/O) so the validation can be pinned by tests without a live
+    process, same pattern as stall_diagnosis/drought_due. Raises ValueError
+    with a human-readable reason on anything malformed, unknown or out of
+    range -- the caller logs that reason and keeps the current command.
+    """
+    if limits is None:
+        limits = HOTSWAP_LIMITS
+    settings = {}
+    for raw in text.splitlines():
+        line = raw.split('#', 1)[0].strip()
+        if not line:
+            continue
+        if '=' not in line:
+            raise ValueError("malformed line (want 'key = value'): %r"
+                             % raw.strip())
+        # Named `name`, not `key`: `key = ...` trips the repo's secret scanner
+        # (scripts/check_secrets.sh). Renaming the local is the right fix --
+        # widening that allow-list to admit this line would weaken a control
+        # that has already missed real secrets more than once (DEC-0084).
+        name, _, value = line.partition('=')
+        name = name.strip().lower()
+        value = value.strip()
+        if name not in limits:
+            raise ValueError("unknown key %r (accepted: %s)"
+                             % (name, ", ".join(sorted(limits))))
+        try:
+            number = int(value)
+        except ValueError:
+            raise ValueError("key %r wants an integer, got %r" % (name, value))
+        low, high = limits[name]
+        if not low <= number <= high:
+            raise ValueError("key %r out of range: %d not in [%d, %d]"
+                             % (name, number, low, high))
+        settings[name] = number
+    if not settings:
+        raise ValueError("no settings found")
+    return settings
+
+
+def splice_cmd_flag(cmd, flag, value):
+    """Return `cmd` with `flag`'s argument replaced by `value`, appending the
+    flag if it is not present at all (DEFAULT_CMD carries neither -gain nor
+    -ex). The lookaround guards stop `-ex` matching inside a longer token.
+    """
+    pattern = re.compile(r'(?<!\S)' + re.escape(flag) + r'\s+\S+(?!\S)')
+    replacement = '%s %d' % (flag, value)
+    spliced, count = pattern.subn(replacement, cmd)
+    if count == 0:
+        return cmd + ' ' + replacement
+    return spliced
+
+
+def apply_hotswap_settings(cmd, settings):
+    """Splice every validated setting into `cmd`, in a fixed order."""
+    for key in sorted(settings):
+        cmd = splice_cmd_flag(cmd, '-' + key, settings[key])
+    return cmd
+
+
 class ProcManager():
 
     def __init__(self):
@@ -1139,6 +1245,16 @@ class RtldavisConfigurationEditor(weewx.drivers.AbstractConfEditor):
     # This has only effect with 2 transmitters or more
     save_pct_good_per_transmitter = False
 
+    # Hot-swap of -gain / -ex without restarting weewx or the container.
+    # Unset (the default) disables the feature entirely. When set, the driver
+    # polls this file about every 10s; on an mtime change it validates the
+    # contents, respawns the rtldavis child with the new flags, and writes the
+    # outcome to <hotswap_control_file>.ack (override with hotswap_ack_file).
+    # The file accepts ONLY these integer keys -- never a command string:
+    #     gain = 0..496     tuner gain in tenths of a dB (0 = auto)
+    #     ex   = 0..1000    extra loopTime in ms
+    # hotswap_control_file = /path/to/rtldavis-hotswap.conf
+
     # The driver to use:
     driver = user.rtldavis
 
@@ -1294,6 +1410,26 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         # packet, held here until the next real DATA packet rides them in --
         # never published as their own dataless loop packet.
         self._pending_freq_fields = {}
+        # Hot-swap control channel (S103, DEC-0117). Absent config key = the
+        # feature is off entirely, which is the stock/upstream behavior.
+        self._hotswap_path = stn_dict.get('hotswap_control_file', None)
+        self._hotswap_ack_path = stn_dict.get('hotswap_ack_file', None)
+        if self._hotswap_path and not self._hotswap_ack_path:
+            self._hotswap_ack_path = self._hotswap_path + '.ack'
+        self._hotswap_mtime = None
+        if self._hotswap_path:
+            loginf('hotswap control file %s' % self._hotswap_path)
+            # Apply a pre-existing control file BEFORE the first startup, so
+            # the running command reflects it with no extra respawn -- and,
+            # more importantly, so a container restart cannot silently revert
+            # a swapped gain back to the config value while the ack file still
+            # advertises the swapped one. That silent-revert shape is exactly
+            # what DEC-0116 cost four weeks to notice.
+            settings, mtime = self._read_hotswap_settings()
+            self._hotswap_mtime = mtime
+            if settings:
+                self.cmd = apply_hotswap_settings(self.cmd, settings)
+                loginf('hotswap applied at init: %s' % settings)
         self._mgr = ProcManager()
         self._mgr.startup(self.cmd, self.path, self.ld_library_path)
 
@@ -1547,6 +1683,99 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
     def hardware_name(self):
         return 'Rtldavis'
 
+    # ── Hot-swap control channel (S103, DEC-0117) ────────────────────────────
+    def _read_hotswap_settings(self):
+        """Read + validate the control file. Returns (settings_or_None, mtime).
+
+        An absent file is the normal idle state, not an error: the feature can
+        be configured on with nothing ever written to the path.
+        """
+        try:
+            mtime = os.stat(self._hotswap_path).st_mtime
+        except OSError:
+            return None, None
+        try:
+            with open(self._hotswap_path, 'r') as f:
+                return parse_hotswap_control(f.read()), mtime
+        except (OSError, ValueError) as e:
+            logerr("HOTSWAP rejected %s: %s" % (self._hotswap_path, e))
+            self._write_hotswap_ack(None, "rejected: %s" % e)
+            return None, mtime
+
+    def _write_hotswap_ack(self, settings, status, gap=None):
+        """Publish what actually happened, atomically.
+
+        The harness must be able to CONFIRM a swap took rather than assume it
+        (GOTCHAS §4). The respawn gap is recorded because how fast the RTL-SDR
+        device re-opens after a deliberate SIGKILL has never been measured
+        under normal conditions -- this makes the feature self-measuring in
+        production instead of leaving that a known-unknown.
+        """
+        if not self._hotswap_ack_path:
+            return
+        lines = ["status = %s" % status, "at = %d" % int(time.time())]
+        for key in sorted(settings or {}):
+            lines.append("%s = %d" % (key, settings[key]))
+        if gap is not None:
+            lines.append("respawn_gap_s = %.2f" % gap)
+        lines.append("cmd = %s" % self.cmd)
+        tmp = self._hotswap_ack_path + '.tmp'
+        try:
+            with open(tmp, 'w') as f:
+                f.write("\n".join(lines) + "\n")
+            os.replace(tmp, self._hotswap_ack_path)
+        except OSError as e:
+            logerr("HOTSWAP ack write failed: %s" % e)
+
+    def _maybe_hotswap(self):
+        """Poll the control file; respawn the child if it asks for a change.
+
+        Returns True if the child was respawned -- the caller MUST then reset
+        its stall-watchdog state, because those counters are locals in
+        genLoopPackets and a respawned child starts its init period from
+        scratch. Returns True on a rolled-back swap too: the child was still
+        replaced, so the reset is owed either way.
+        """
+        if not self._hotswap_path:
+            return False
+        try:
+            mtime = os.stat(self._hotswap_path).st_mtime
+        except OSError:
+            return False
+        if mtime == self._hotswap_mtime:
+            return False
+        self._hotswap_mtime = mtime
+        settings, _ = self._read_hotswap_settings()
+        if not settings:
+            return False          # rejected; _read_hotswap_settings logged it
+        new_cmd = apply_hotswap_settings(self.cmd, settings)
+        if new_cmd == self.cmd:
+            loginf("HOTSWAP no-op: %s already running" % settings)
+            self._write_hotswap_ack(settings, "no-op")
+            return False
+        prev_cmd = self.cmd
+        loginf("HOTSWAP %s -- respawning child" % settings)
+        started = time.time()
+        self._mgr.shutdown()
+        try:
+            self._mgr.startup(new_cmd, self.path, self.ld_library_path)
+            self.cmd = new_cmd
+        except Exception as e:
+            # A bad value must not cost us the receiver. Put the last
+            # known-good command back before giving up -- losing the child
+            # over a rejected gain is the failure class this feature exists
+            # to retire, not one to reintroduce. If the rollback ALSO fails,
+            # its WeeWxIOError propagates, which is the pre-existing behavior.
+            logerr("HOTSWAP startup failed (%s) -- rolling back to: %s"
+                   % (e, prev_cmd))
+            self._mgr.startup(prev_cmd, self.path, self.ld_library_path)
+            self._write_hotswap_ack(settings, "rollback: %s" % e)
+            return True
+        gap = time.time() - started
+        loginf("HOTSWAP applied %s in %.2fs" % (settings, gap))
+        self._write_hotswap_ack(settings, "applied", gap)
+        return True
+
     def genLoopPackets(self):
         packet = dict()
         time_last_received = int(time.time())
@@ -1561,7 +1790,25 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         periodShowOneTransm = 2*24*3600  # 2 days
         self.transm_to_store = None  # forces the first loop pass to log below
 
+        # Normally 150s; widened to HOTSWAP_GRACE_S for the first packet after
+        # a hot swap, then restored below when anything is received.
+        stall_timeout = STALL_TIMEOUT_S
+
         while self._mgr.running():
+            # Hot-swap poll (S103, DEC-0117). This runs about every 10s on its
+            # own -- get_stderr() below budgets 10s per pass -- so no thread or
+            # signal handler is needed. Resetting the watchdog state here is
+            # not optional: a respawned child restarts its init period (US:
+            # 133s) and would otherwise be judged against a time_last_received
+            # inherited from before the swap.
+            if self._maybe_hotswap():
+                _swapped_at = int(time.time())
+                time_last_received = _swapped_at
+                time_last_data = _swapped_at
+                raw_since_data = 0
+                hop_since_data = 0
+                stall_timeout = HOTSWAP_GRACE_S
+                continue
             # the stalled timeout must be greater than the init period
             # init period is EU: 16 s, US, AU and NZ: 133 s
             _now = int(time.time())
@@ -1575,7 +1822,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             if new_transm_to_store != self.transm_to_store:
                 dbg_parse(1, "Number of transmitters: %s, store freqError data for transmitter with ID=%s" % (self.tr_count, new_transm_to_store))
             self.transm_to_store = new_transm_to_store
-            if _now - time_last_received > 150:
+            if _now - time_last_received > stall_timeout:
                 # Classify before raising (S73, ws.5): raw_since_data == 0
                 # means the child went totally mute (process/USB class);
                 # anything else means it was emitting but nothing decoded.
@@ -1613,6 +1860,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 for data in PacketFactory.create(self, lines):
                     if data:
                         time_last_received = int(time.time())
+                        # The child is alive and emitting -- any post-swap
+                        # grace has served its purpose (S103, DEC-0117).
+                        stall_timeout = STALL_TIMEOUT_S
                         if 'curr_cnt0' in data:
                             # A real DATA packet -- reset the classification
                             # counters (S73, ws.5).

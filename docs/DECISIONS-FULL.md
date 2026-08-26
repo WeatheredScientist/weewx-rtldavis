@@ -7323,3 +7323,93 @@ Does not change `ex` (extraction) from its current value — the extraction axis
 adoption case either direction. Does not close `BACKLOG.md`'s gain/receive-window hot-swap item
 (ops#179) — that is a mechanism question (swap without a restart), orthogonal to which gain value is
 adopted.
+
+## DEC-0117 — Gain / receive-window hot swap: a validated control file, not a command string; and the post-swap watchdog grace that makes it safe
+
+**Status:** Accepted (design + implementation) · **Date:** 2026-08-26 (S103) · **Closes:** the
+`BACKLOG.md` §Open ideas hot-swap item, [ops#179] · **Touches:** `rtldavis.py` (vendored fork —
+`CHANGES-FROM-UPSTREAM.md`) · **Default:** off; no prod behavior changes until the config key is set
+
+### The problem
+
+Campaign B swapped arms every 6 h by rewriting the `[Rtldavis] cmd` line in the mounted config and
+restarting the container. That costs a 600 s settle window per block (~2.8% of campaign data), puts
+a restart transient inside every comparison, and carries an abort-on-unhealthy-swap failure class
+that has already cost real blocks (DEC-0082's +24 h shift; the S79 incident behind DEC-0087).
+
+S89's finding held up on re-inspection: nothing prevents a hot swap but the feature itself. Gain and
+`-ex` are CLI flags on the Go binary, carried in the `cmd` string; `rtldavis.py` never inspects them.
+`ProcManager.startup(cmd, …)` already takes the command as a parameter, `shutdown()` kills and reaps
+(ws.5 / #233), and the 150 s watchdog exercises that kill→respawn cycle routinely. The whole gap was
+the trigger.
+
+### Decision 1 — the control channel carries validated integers, never a command string
+
+A watched control file, path from a new `hotswap_control_file` setting. Absent = feature off, which
+is stock/upstream behavior and keeps this upstreamable.
+
+The file accepts **only** `gain` (0–496) and `ex` (0–1000), as integers, bounds-checked. It does not
+accept a command string, and must never be extended to.
+
+`self.cmd` flows to `shlex.split()` → `Popen`. A control file carrying raw command text would hand
+arbitrary code execution inside the container to anything able to write that path — and that path is
+a NAS share, on a public-repo project. Two bounded integers spliced into the existing command is a
+config knob; a command string is a shell. The unit tests pin the rejection of unknown names,
+non-integers, out-of-range values and a command-string payload specifically, so a later "just let it
+pass the whole cmd" convenience change fails loudly rather than quietly.
+
+### Decision 2 — a swap resets the stall watchdog and widens it to 240 s
+
+**This is the part a naive implementation gets wrong, and it would have been expensive.**
+
+`genLoopPackets`' stall watchdog raises `WeeWxIOError` when `_now - time_last_received > 150`.
+`time_last_received` is a **local** in that generator and is not reset by a child respawn. A freshly
+spawned child is legitimately silent for the radio init period — **US/AU/NZ: 133 s** (the driver's
+own comment says the stall timeout must exceed it). So a bare `shutdown()` → `startup()` inherits a
+possibly-already-stale timer, trips the watchdog mid-init, and tears the driver down: the feature
+built to retire the abort-on-unhealthy-swap failure class would have reintroduced it in a worse
+form, on every swap rather than only on an unhealthy one.
+
+Every swap therefore resets `time_last_received`, `time_last_data`, `raw_since_data` and
+`hop_since_data`. And a reset alone is not enough: 150 s against a 133 s init is **17 s of margin**,
+too thin to run a campaign on. The first packet after a swap gets `HOTSWAP_GRACE_S = 240` instead
+(~107 s of margin), reverting to the normal 150 s the moment anything is received — the widened
+window is for the init period, not a permanent loosening of the freeze detector. 240 s was chosen
+over a tunable setting deliberately: one fewer knob to get wrong, and no campaign has a reason to
+tune it.
+
+The three loop-level tests are mutation-verified — removing the grace, removing the reset, or
+removing the rollback each turns a green suite red, and a positive-control test proves the same
+silence *without* a swap still stalls at 150 s.
+
+### Decision 3 — rollback, an ack file, and honoring the control file at init
+
+**Rollback:** if `startup()` raises on the new command, the last known-good command is started back
+up before the error propagates. A rejected gain value must not cost us the receiver. The swap still
+reports as having happened, because the child *was* replaced and the watchdog reset is owed either
+way.
+
+**Ack file** (`<control file>.ack`, atomic via tmp+rename): records status, the applied values, and
+the measured respawn gap. The harness must be able to *confirm* a swap took rather than assume it —
+GOTCHAS §4, and DEC-0116 four weeks earlier. It also makes the feature self-measuring against
+ops#179's constraint 4: how fast the RTL-SDR device re-opens after a deliberate SIGKILL under normal
+conditions has never been measured, and now it is recorded on every swap instead of staying a
+known-unknown.
+
+**Honored at init, before the first startup:** a pre-existing control file is applied to `self.cmd`
+*before* the initial spawn — no extra respawn, and more importantly a container restart cannot
+silently revert a swapped gain to the configured value while the ack file still advertises the
+swapped one. That silent-revert shape is exactly what DEC-0116 cost four weeks to notice; it is not
+being rebuilt here.
+
+### What this does not do
+
+Does not touch `ops/rx_experiment.sh` — the campaign harness still swaps arms by rewriting the
+mounted config and restarting. Converting it is a separate change and is the piece that must not
+land mid-campaign (ops#179 constraint 1). Does not change any prod behavior: the setting is unset,
+so the poll is a single `if not self._hotswap_path: return False`. Does not add a runtime control
+channel to the Go binary — this remains a child respawn, not a live `rtlsdr_set_tuner_gain()` call.
+Does not deploy: `rtldavis.py` is a **BAKED** file (`CONSTANTS.md` deploy-layers table), so this
+reaches prod only via an image rebuild, never an scp.
+
+[ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
