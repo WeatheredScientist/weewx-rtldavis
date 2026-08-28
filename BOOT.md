@@ -82,9 +82,9 @@ relevant context for anything infra-adjacent proposed before then.
 | Thing | State |
 |---|---|
 | Prod | **v2.0.14**, driver **ws.5** unchanged, `influx.py` **ws.2**, weewx **5.5.0**, gain **496** |
-| Campaign B | **CLOSED.** Gain 496 adopted (DEC-0115). Nothing further scheduled |
+| Campaign B | **CLOSED.** Gain 496 adopted (DEC-0115). No arm swaps — but its **two DSM scheduled tasks are still firing** (found S104, `BACKLOG.md`): state is `BASELINE` so nothing is at risk, yet "nothing further scheduled" was only ever true of the campaign, never of the scheduler. Owner action, DSM UI only |
 | Soak | Not re-run since S101 — next session should confirm green before trusting anything downstream |
-| Restart rate | DEC-0106 baseline (4/day during a campaign, 0/day between) — stale since there's no active campaign; watch for the new steady-state rate |
+| Restart rate | DEC-0106 baseline (4/day during a campaign, 0/day between). **One unexplained restart 2026-08-25 21:40 EDT** — cause absent from every artifact this repo keeps; the elimination is written up in `BACKLOG.md` so it is not re-walked. Prod healthy since (70–78% reception, no alerts) |
 | `dev` vs prod | `dev` is **ahead** of prod by DEC-0117 (baked layer — needs an image rebuild, job 3) **and by `ogoxeUploader.py`** (mounted, 7.5 wks stale, harmless, riding job 3's cut). **Every other mounted file audited clean S104** — `influx.py` + `loop_json_writer.py` byte-identical to `dev`, `weewx.conf`'s six DEC-0070 deviations all present, `sortedcontainers` not comparable (no repo copy) |
 | Hot swap (DEC-0117) | **Built, tested, merged to `dev`. Not in prod, and off by default.** Driver half only — `ops/rx_experiment.sh` still restart-based (job 2) |
 | Data integrity | ERR-0006 correction unchanged; external copies still permanently carry the bad value |
