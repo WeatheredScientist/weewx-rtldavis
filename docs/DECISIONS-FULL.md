@@ -7413,3 +7413,122 @@ Does not deploy: `rtldavis.py` is a **BAKED** file (`CONSTANTS.md` deploy-layers
 reaches prod only via an image rebuild, never an scp.
 
 [ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
+
+## DEC-0118 — Production migrates from the NAS to marvin; a live incident was the USB controller, not RF
+
+**Status:** Accepted · **Date:** 2026-08-28/29 (S105) · **Relates to** DEC-0067/0068 (corroborates,
+does not close) · DEC-0064/0115 (gain history — neither confirmed nor revisited by this incident) ·
+DEC-0111/0114 (NAS-LEASE) · does not change DEC-0011's prod-is-sacred discipline or the deploy-layers
+model in `CONSTANTS.md` (baked vs mounted still holds — only the host changed)
+
+### What this settles
+
+weewx-rtldavis's production instance moved off the Synology NAS ("Foundation") onto **marvin**, a
+new self-hosted Debian hypervisor (`marvin` repo, `MARVIN-DEC-0062`), the same night the owner called
+it — moved up from a planned Saturday to Friday night, 2026-08-28, on the same dark/calm/zero-solar
+reasoning. The cutover was coordinated live across four repos (weewx, marvin, eaglehunt-ops,
+eaglehunt-weather-dashboard; hyperlocal-forecast looped in) via direct cross-session messaging per the
+standing inter-repo SOP, and succeeded. A ~90-minute live incident during the cutover was root-caused
+to **the host's USB controller topology**, not any RF or software hypothesis tested first — a
+mechanism this repo's own troubleshooting history had never encountered, because until tonight there
+was never a second host to compare against.
+
+### Cutover mechanics
+
+- **Transparent to consumers by design.** marvin exports its `weewx-data` tree over NFS; the NAS
+  overlay-mounts that export **directly over the path consumers already use**
+  (`/volume1/docker/weewx-rtldavis/weewx-data`), so eh-proxy's and HLF's `-v` source strings stayed
+  byte-identical — no compose edits, no redeploys, just a container restart once the overlay landed.
+- **Ordering hazard caught before it bit:** the archive (`weewx.sdb`, 39.5 MB) had to be copied off
+  the NAS to marvin's tenant tree *before* the overlay mount landed, because the overlay hides the
+  original directory underneath it — copy-then-overlay, not overlay-then-copy.
+  Revised order: stop Foundation → copy `weewx.sdb` → move the RTL-SDR dongle → start marvin's weewx,
+  confirm writing → owner overlay-mounts on the NAS → consumers restart.
+  Rollback stayed clean at every step: unmount the overlay, the original NAS tree is untouched
+  underneath.
+- **No registry push existed for the deployed image.** `v2.0.14`'s Docker Hub push logs stop at
+  `v2.0.7` (Hub proof follows prod, DEC-0078 — never actually done past that tag). Image crossed via
+  `docker save`/`docker load` (608 MB, exact bits, no rebuild) rather than a registry pull.
+- **`[[Influx]] server_url`** needed one edit (a docker-network-internal name that doesn't resolve
+  from marvin, corrected to the NAS's real IP — InfluxDB itself stays NAS-hosted for now).
+- **`[[Influx]] lease_dir`/NAS-LEASE courtesy yield is now a deliberate no-op on marvin.** `influx.py`
+  never holds or writes the lease — it is a passive reader that backs its own post_interval off only
+  when it can read another tenant's active `heavy-io.lease` file (§ confirmed by source read this
+  session: `InfluxThread._foreign_lease_active()`, `rtldavis` `influx.py` lines ~486-507). Marvin
+  pointed the mount at a guaranteed-empty directory rather than wiring live cross-host access to the
+  NAS's real lease directory (`MARVIN-DEC-0063`) — reasoned as acceptable because every current
+  heavy-I/O tenant is itself paused or already migrated. The failure mode is silent by construction
+  (any read error → "not held" → normal cadence, no log line), so this is a standing gap, not a bug:
+  tracked in `BACKLOG.md` for whenever cross-host lease sharing is actually built.
+
+### The incident: what was tried, and what it ruled out
+
+Once the dongle moved, `loop-data.txt` wrote two packets (22:40:08, 22:40:58) then went silent. Live
+troubleshooting, in order:
+
+1. **Gain 496 → 372 (Foundation's own prior production value).** No change. Reasoned from this repo's
+   own gain-adoption history — DEC-0059/0115 found removing the LNA (~20 dB of front-end gain) pushed
+   the *optimal* receiver gain up (372→496); marvin's position is measurably closer with fewer walls,
+   the same physics in reverse, so overload at 496 was a plausible, historically-grounded hypothesis.
+   It did not hold up in testing.
+2. **`-fc`/`-ppm` frequency correction.** No historical data exists to draw a value from — DEC-0064
+   held both at `0` through **every** real campaign specifically to keep other comparisons clean; `0`
+   was never varied, never measured as optimal. No sweep files exist in this repo despite a
+   contemporaneous belief that they did. Correctly not acted on for lack of evidence, not because the
+   hypothesis was refuted.
+3. **Process freeze (DEC-0067's own discriminator, applied live).** The original ~20-minute silence
+   produced *zero* `"rtldavis process stalled"` raises despite being well past the 150 s watchdog
+   threshold — DEC-0067's own table reads that as "main thread not executing," i.e. a freeze, not RF
+   silence. This diagnosis was corrected in the same incident once restarts began: a later ~203 s gap
+   landed almost exactly on the known 150 s-raise + ~60 s-respawn cycle (DEC-0067/0081's own
+   arithmetic), meaning the watchdog was now actively firing and respawning — behavior a genuinely
+   frozen process cannot produce. **This is itself a useful, independent corroboration of DEC-0067/0081**
+   on hardware neither decision was ever measured on: across roughly an hour of subsequent *healthy*
+   operation (good controller, see below) the 150 s watchdog never fired once — the stall/respawn
+   cycle appeared *only* under the bad-controller condition. That supports reading DEC-0067/0081's
+   original freeze episodes as environmental/hardware-triggered rather than a defect in weewx's own
+   code, though it does not by itself identify what triggers them on the NAS.
+4. **The actual mechanism: USB controller topology.** Every USB port routed through the B850
+   chipset's own xHCI controller broke hop-tracking under sustained streaming, confirmed with
+   `rtl_test` directly (not weewx) — a demodulator-agnostic RF-capture tool showing lost samples on
+   chipset ports and zero lost samples on the CPU-attached controller. A research pass explained the
+   *why*: AMD's AM5 chipset-to-CPU link is a shared, QoS-less PCIe uplink with ASPM power-state
+   transitions the CPU-attached path doesn't have — plausible cause for the observed pattern (a
+   `rtl_sdr` USB isochronous stream is real-time-sensitive; one dropped hop forces a full blind
+   rescan, producing exactly the "one packet, then a `~45-200 s` gap, repeat" metronomic signature
+   this incident showed). Moving the dongle to the CPU-attached controller (`11:00.0`) resolved it;
+   weewx has run cleanly since.
+
+### Consequences
+
+- **Gain stays at 372, not readopted as a decision.** The controller was the actual defect; 372 just
+  happened to be set when the real fix landed, so it never got a clean test against 496 at marvin's
+  RF position. A proper re-sweep (Campaign-style measurement, not a snap call) is a `BACKLOG.md` item,
+  not resolved by this incident.
+- **`debug_rtld` raised to `3`** (per-packet) for the initial soak period; reverts to the driver's
+  own default (`2`) once marvin's weewx is proven stable for a few days.
+- **Foundation's container stays stopped-but-intact**, not decommissioned, through a real soak — this
+  stack has a documented history of multi-day-cycle intermittent issues (DEC-0067 freezes ~1/day,
+  DEC-0081 RF-dead episodes) that one clean night does not rule out. Same conservatism this repo
+  already applies to image rollbacks.
+- **`t-weewx`'s `marvinctl` access key is not yet minted** — self-service deploys to marvin from this
+  repo aren't live yet; `eaglehunt-ops`'s own follow-up (§9 step 4, same process CoffeeRadar got).
+  Marvin-side sessions drove tonight's deploy directly.
+- **A live SQLite-safe backup gap was caught and closed same night**, not left for the next
+  scheduled restic run: marvin's `/srv` backup fires at 03:30 and `weewx.sdb` is now a
+  continuously-written live database there. A `weewx-db-dump.service`/`.timer` (SQLite Online Backup
+  API, `.backup`, not a raw copy — safe against a concurrent writer regardless of journal mode) was
+  deployed and armed for 03:15, mirroring CoffeeRadar's own existing dump-before-restic pattern on the
+  same host.
+
+### What this does not do
+
+Does not change the data contract — `docs/INTERFACES.md`'s loop-JSON and InfluxDB surfaces are
+unaffected; consumers repoint via the transparent NAS overlay mount, not a contract change. Does not
+change the deploy-layers model in `CONSTANTS.md` — baked-vs-mounted still holds, only the physical
+host underneath the mounted layer changed. Does not resolve DEC-0067/0068's freeze mechanism in
+general (the `S`-vs-`D` thread-state question they left open is untouched) — it explains *this*
+incident and adds one data point toward "environmental," not a general proof. Does not re-validate or
+change the adopted gain (DEC-0115's 496 stands as the last *measured* value; 372 is what's running,
+provisionally, pending a real re-sweep). Does not touch InfluxDB's own location — it stays NAS-hosted
+for now; only the config pointing at it moved.

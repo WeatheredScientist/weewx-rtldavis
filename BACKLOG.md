@@ -268,7 +268,7 @@ failed resets currently produce no further action.
   external kill+start by something that writes to none of our logs** — DSM Task Scheduler is the only
   unexamined surface, and it needs the DSM UI. If it recurs, capture `docker events` if anything is
   watching, and check the DSM task list *first* rather than re-walking the elimination above.
-- **⚠️ Off-site backup is a MIRROR, not versioned — deferred to post-marvin by owner call (S104).**
+- **⚠️ Off-site backup is a MIRROR, not versioned — now UNBLOCKED, not yet designed (S105).**
   ops#209 established that the DS918+ runs Cloud Sync rather than Hyper Backup, so deletions and
   corruption **propagate off-site**. Two irreplaceable artifacts have no versioned copy anywhere:
   the live station config (only the `.example` template is tracked — deliberately, DEC-0012, since
@@ -276,11 +276,15 @@ failed resets currently produce no further action.
   `.bak-*` archive copies do **not** cover this: they sit in the same directory on the same volume,
   and they were made to protect against a bad `UPDATE` — which they do — not against volume loss or
   a propagated delete. Not hypothetical for this repo: four retrospective archive corrections have
-  been run, so writes to that DB are routine. **Deliberately NOT addressed now:** the owner's call is
-  that this belongs *after* the migration off the DS918+ ("foundation") onto `marvin`, since the
-  backup design should target the destination host, not the one being left. Revisit as part of the
-  post-migration checklist, not before. Forum-wide context and the open Hyper Backup decision stay
-  on ops#209; ops also flagged that the same question is unasked for the other NAS tenants.
+  been run, so writes to that DB are routine. **The migration this was deferred behind happened
+  S105 (DEC-0118)** — weewx now runs on `marvin`, and the design should target that destination
+  host. Note marvin already runs **restic** for its own tenants (`MARVIN-DEC-0020`), and a
+  `weewx-db-dump.service`/`.timer` (SQLite `.backup` API, 03:15 daily) shipped S105 as the
+  incident-driven fix for the *torn-copy* risk in that backup — but that timer's job is
+  consistency, not versioning/off-site-ness, and hasn't been evaluated against this line's actual
+  ask. Worth checking whether marvin's existing restic repo already closes this gap for free (it
+  backs up `/srv`, which now includes weewx's tenant tree) before designing anything new — possibly
+  a one-session close now that the blocker is gone, not a fresh design exercise.
 - **Docker Hub README auto-sync:** add repo secrets `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` to
   activate `.github/workflows/dockerhub-description.yml` (green no-op until then). Owner action.
 - **Snow / freezing / no heating tape** — parked, owner's future thread. 2026 = learning year.
@@ -293,6 +297,19 @@ failed resets currently produce no further action.
   re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
+- **Gain re-sweep at marvin's RF position (S105).** DEC-0115 adopted 496 on Foundation's own
+  Campaign B square; the host move (DEC-0118) put the receiver at a measurably closer, fewer-walls
+  position, and the incident that night tried 372 without a controlled comparison (the actual defect
+  was a USB controller, not gain). 372 is what's running now, provisionally — not a re-measured
+  result. Do this properly (Campaign-style, averaged sweep, PRINCIPLES §3), not as a repeat of the
+  incident-night guess. Not urgent: 372 works today. The DEC-0117 hot-swap control file (below) makes
+  this cheaper than either prior campaign was, once it's actually in prod (`BOOT.md` job 3).
+- **NAS-LEASE cross-host wiring for marvin (S105).** `influx.py`'s courtesy-yield mount (`/nas-lease`)
+  points at a deliberately empty local directory on marvin (`MARVIN-DEC-0063`) rather than a live
+  share of the NAS's real lease file — a permanent, silent no-op by design until someone builds the
+  cross-host path. Low priority: the mechanism fails open (never blocks/delays anything if absent),
+  and marvin currently has no other heavy-I/O tenant competing with weewx for shared storage anyway.
+  Worth closing once that changes.
 - ~~**Hot-swap gain / receive-window without restarting the container (owner question, S89).**~~
   **BUILT S103, [DEC-0117](docs/DECISIONS.md).** Watched control file carrying bounds-checked
   `gain`/`ex` integers only (never a command string — `cmd` reaches `shlex.split()` → `Popen`);
