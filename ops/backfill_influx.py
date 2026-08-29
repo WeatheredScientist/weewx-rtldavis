@@ -17,13 +17,13 @@ import urllib.request
 import urllib.error
 import argparse
 import datetime
+import os
 import time
 import sys
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
 INFLUX_URL   = "http://localhost:8086"
-INFLUX_ORG   = "YOUR_INFLUX_ORG"
 INFLUX_BUCKET = "weewx"
 DB_PATH      = "/volume1/docker/weewx-rtldavis/weewx-data/archive/weewx.sdb"
 MEASUREMENT  = "record"
@@ -75,10 +75,10 @@ def to_line_protocol(row, col_names, timestamp_ns):
     return f"{MEASUREMENT},binding=archive {field_str} {timestamp_ns}"
 
 
-def post_batch(lines, token, dry_run=False):
+def post_batch(lines, token, org, server_url, dry_run=False):
     """POST a batch of line protocol lines to InfluxDB."""
     body = "\n".join(lines).encode("utf-8")
-    url = f"{INFLUX_URL}/api/v2/write?org={INFLUX_ORG}&bucket={INFLUX_BUCKET}&precision=ns"
+    url = f"{server_url}/api/v2/write?org={org}&bucket={INFLUX_BUCKET}&precision=ns"
     if dry_run:
         print(f"  [dry-run] Would POST {len(lines)} lines ({len(body)} bytes)")
         return True
@@ -107,7 +107,20 @@ def post_batch(lines, token, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Backfill WeeWX archive to InfluxDB")
-    parser.add_argument("--token", required=True, help="InfluxDB auth token")
+    parser.add_argument("--token", default=os.environ.get("INFLUX_TOKEN"),
+                        help="InfluxDB auth token. Default is $INFLUX_TOKEN "
+                             "(prefer the env var over the flag — a --token "
+                             "literal is visible in shell history and ps)")
+    parser.add_argument("--org", default=os.environ.get("INFLUX_ORG"),
+                        help="InfluxDB org. Default is $INFLUX_ORG")
+    parser.add_argument("--server-url", default=INFLUX_URL,
+                        help=f"InfluxDB base URL. Default is {INFLUX_URL} "
+                             "(the NAS venue where InfluxDB is local; override "
+                             "for a different execution host, e.g. marvin)")
+    parser.add_argument("--db-path", default=DB_PATH,
+                        help=f"WeeWX sqlite archive path. Default is {DB_PATH} "
+                             "(NAS-side path to marvin's archive via the "
+                             "read-only NFS overlay, DEC-0118)")
     parser.add_argument("--start", default="2026-05-19T00:00:00",
                         help="Start datetime (local, default: 2026-05-19T00:00:00)")
     parser.add_argument("--end", default=None,
@@ -115,6 +128,11 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="Print stats without writing to InfluxDB")
     args = parser.parse_args()
+
+    if not args.token:
+        parser.error("--token is required (or set $INFLUX_TOKEN)")
+    if not args.org:
+        parser.error("--org is required (or set $INFLUX_ORG)")
 
     start_dt = datetime.datetime.fromisoformat(args.start)
     end_dt   = datetime.datetime.fromisoformat(args.end) if args.end \
@@ -124,11 +142,15 @@ def main():
     end_ts   = int(end_dt.timestamp())
 
     print(f"Backfill range: {start_dt} → {end_dt}")
-    print(f"Database: {DB_PATH}")
+    print(f"Database: {args.db_path}")
+    print(f"InfluxDB: {args.server_url}")
     print(f"Dry run: {args.dry_run}")
     print()
 
-    conn = sqlite3.connect(DB_PATH)
+    # Read-only: DB_PATH is marvin's live archive (over an NFS overlay when run
+    # from the NAS, DEC-0118) — a plain connect() opens read-write and fails
+    # (or worse, tries to create -wal/-shm) against a read-only export.
+    conn = sqlite3.connect(f"file:{args.db_path}?mode=ro", uri=True)
     c = conn.cursor()
 
     # Get column names
@@ -166,7 +188,7 @@ def main():
             batch_num += 1
             dt = datetime.datetime.fromtimestamp(ts_sec)
             print(f"  Batch {batch_num}: {len(batch)} records through {dt}...", end=" ")
-            ok = post_batch(batch, args.token, args.dry_run)
+            ok = post_batch(batch, args.token, args.org, args.server_url, args.dry_run)
             if ok:
                 posted += len(batch)
                 print("OK")
@@ -180,7 +202,7 @@ def main():
     if batch:
         batch_num += 1
         print(f"  Batch {batch_num}: {len(batch)} records (final)...", end=" ")
-        ok = post_batch(batch, args.token, args.dry_run)
+        ok = post_batch(batch, args.token, args.org, args.server_url, args.dry_run)
         if ok:
             posted += len(batch)
             print("OK")
