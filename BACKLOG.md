@@ -297,13 +297,34 @@ failed resets currently produce no further action.
   re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
-- **Gain re-sweep at marvin's RF position (S105).** DEC-0115 adopted 496 on Foundation's own
-  Campaign B square; the host move (DEC-0118) put the receiver at a measurably closer, fewer-walls
-  position, and the incident that night tried 372 without a controlled comparison (the actual defect
-  was a USB controller, not gain). 372 is what's running now, provisionally — not a re-measured
-  result. Do this properly (Campaign-style, averaged sweep, PRINCIPLES §3), not as a repeat of the
-  incident-night guess. Not urgent: 372 works today. The DEC-0117 hot-swap control file (below) makes
-  this cheaper than either prior campaign was, once it's actually in prod (`BOOT.md` job 3).
+- **Gain re-sweep at marvin's RF position — mini-campaign launched, STOPPED CLEAN at 01:08:16 ET for
+  an unrelated higher-priority marvin event; TREAT AS NO DATA, deferred to post-Phase-4-bind
+  (2026-08-29, S105 same night).** DEC-0115 adopted 496 on Foundation's own Campaign B square; the
+  host move (DEC-0118) put the receiver at a measurably closer, fewer-walls position, and the
+  incident that night tried 372 without a controlled comparison (the actual defect was a USB
+  controller, not gain).
+  **What ran:** launched 01:01:20 as a self-driving script (transient systemd unit on marvin,
+  `weewx-gain-campaign`), arms 207/372/496 × 2 non-adjacent reps, 45 min dwell, exit-trapped to
+  restore gain 372 + restart weewx regardless of outcome. **Stopped 6.5 minutes into block 1 (arm
+  207)** — the owner overrode Phase 4's soak gate and ordered the GPU passthrough bind the same
+  night ("this build is not Foundation, we are stress testing it"), and the campaign yielded the box
+  cleanly rather than compete with it. The exit trap worked exactly as designed: gain back to 372,
+  weewx restarted, full record in the results log. **~6.5 minutes of one arm is not partial data —
+  treat the whole night as zero data points**, not a truncated-but-usable set.
+  **Re-run deferred to POST-BIND, not just "next quiet night" — marvin's own recommendation, and it's
+  right.** Passing the GPU to the guest changes the box's RF/EMI environment (a GPU under load next
+  to the antenna's USB port cluster) — a campaign run now would measure an environment already
+  scheduled to change again, making the data stale before it's even analyzed. Expect a host reboot in
+  the following hour(s) as part of the bind; weewx will go down and reacquire after — **not a new
+  incident**, don't chase it as one.
+  **Design carries forward as-is** (arms, dwell, exit-trap, non-adjacent-rep reasoning — see the
+  git history of this line for the original full rationale, not re-typed here) — **the self-driving
+  script pattern is proven and reusable**, kept in a marvin session's records, redeployable on one
+  owner approval whenever the post-bind environment is stable. **Still explicitly NOT
+  adoption-quality when it does run** — one night, unreplicated, no multi-day averaging (PRINCIPLES
+  §3's own bar); a directional prior for a real follow-up campaign, not a replacement. The DEC-0117
+  hot-swap control file makes that real campaign cheaper than either prior one was, once it's
+  actually in prod (`BOOT.md` job 3).
 - **NAS-LEASE cross-host wiring for marvin (S105).** `influx.py`'s courtesy-yield mount (`/nas-lease`)
   points at a deliberately empty local directory on marvin (`MARVIN-DEC-0063`) rather than a live
   share of the NAS's real lease file — a permanent, silent no-op by design until someone builds the
