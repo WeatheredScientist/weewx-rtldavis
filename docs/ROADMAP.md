@@ -3,7 +3,11 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-23 (S101 — targeted line update per DEC-0057, not a full pass; tripwire
+**Last updated:** 2026-08-29 (S105 — targeted line update per DEC-0057, not a full pass; tripwire
+still S106: the P0 freeze item gained DEC-0118's incidental corroboration from the marvin migration
+incident. Nothing else touched — the migration itself isn't a P0-P3 line, it's `BOOT.md`/
+`CONSTANTS.md` territory.)
+Prior: 2026-08-23 (S101 — targeted line update per DEC-0057, not a full pass; tripwire
 still S106: the Campaign B item closed — DEC-0115 adopted gain 496, deployed at the same v2.0.14
 event as DEC-0114's NAS-LEASE lock. Nothing else touched.)
 Prior: 2026-08-20 (S97 — targeted line update, not a full pass: P3's INTERFACES.md line
@@ -450,8 +454,15 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       a 0.3–0.7 baseline — a real contributor, not a full explanation.** The other S65 freeze, same
       night, had neither coffee-radar nor elevated load. n=1 correlated out of 3 captured freezes;
       not a settled base rate. `ops/freeze_watch.sh` (S65, now committed — no longer a scratchpad
-      rebuild every session) is the tool for any further capture. **Root cause is not fully
-      explained, but campaign B does not need it to be** — and as of **DEC-0069 (S66) the metric gate
+      rebuild every session) is the tool for any further capture. **S105 (2026-08-28/29, DEC-0118):
+      independent corroboration on entirely different hardware, found by accident during the marvin
+      migration, not a targeted probe.** A live incident during cutover reproduced DEC-0067's exact
+      discriminator (150s-raise + ~60s-respawn) and it fired *only* under a bad USB controller —
+      zero occurrences across the following hour of healthy operation on the same box. Supports
+      "environmental/hardware-triggered" over a weewx-code regression, but doesn't identify the
+      NAS's own trigger (marvin's mechanism — a chipset USB controller — has no NAS equivalent to
+      point at; the NAS has no comparable second controller to swap). Not a new probe result, an
+      incidental one. **Root cause is not fully explained, but campaign B does not need it to be** — and as of **DEC-0069 (S66) the metric gate
       is CLOSED**, leaving the line below as B's sole remaining gate. DEC-0069 also bounds how much
       these freezes were ever worth to the campaign: **±0.03 points** on a pooled arm mean against a
       2.0-point adoption bar, once the metric is read at the resolution it is actually stored at.

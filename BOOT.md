@@ -12,103 +12,102 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S103 → S104)
+## ▶ Resume here (S105 → S106)
+
+*Numbering note: BOOT.md's pointer still read "S103 → S104" at this session's start despite S104
+having already merged (PR #279) — that session's own closeout apparently skipped the BOOT.md
+rewrite step. Corrected here; tonight is S105.*
 
 ### What's settled (do not re-derive)
 
-**v2.0.14 remains prod, unchanged since S101** — DEC-0110/DEC-0111/#233/#224, weewx 5.5.0,
-NAS-LEASE adoption locked (DEC-0114). Campaign B is CLOSED, gain 496 adopted (DEC-0115). Full
-detail in `docs/DECISIONS.md` DEC-0114/DEC-0115 if this ever needs re-litigating — not repeated
-here.
+**Production migrated from the NAS to marvin overnight 2026-08-28/29 (DEC-0118).** Cutover
+succeeded; consumers (dashboard, HLF) repointed transparently via an NFS overlay mount at the same
+NAS path they always used — no compose edits on their side. A live ~90-min incident mid-cutover was
+the host's **USB controller** (every port on the B850 chipset's own xHCI breaks RTL-SDR hop-tracking
+under sustained streaming; the CPU-attached controller is clean) — not RF, not gain, not fc/ppm, not
+a process freeze. Full narrative, what was ruled out and why, in DEC-0118 — don't re-walk it.
 
-**S102 (DEC-0116): `dev`/prod were NOT fully in sync despite S101's claim** — `loop_json_writer.py`,
-a MOUNTED file, was four weeks stale. Fixed live, #144/#172/#204 closed. **`ogoxeUploader.py`,
-`sortedcontainers`, and `weewx.conf` — the deploy-layers table's other mounted files — remain
-independently unverified**; don't assume current without checking (job 3).
+**v2.0.14 is unchanged as the running image** — the exact same build (`335a6cf4a6c6`) crossed via
+`docker save`/`load`, no rebuild. Driver banner still `0.20+ws.5`, weewx still 5.5.0.
 
-**S103: the gain/receive-window hot swap is BUILT — DEC-0117.** The last open `BACKLOG.md` idea /
-[ops#179], filed S89 and held until Campaign B closed. Watched control file (`hotswap_control_file`,
-unset = off) carrying bounds-checked `gain`/`ex` integers only — never a command string, since `cmd`
-reaches `shlex.split()` → `Popen`. Polled at the top of `genLoopPackets`, ~10 s, no thread.
-**The non-obvious part, don't re-derive it:** `time_last_received` is a local in `genLoopPackets`
-and a respawn does not reset it, while a fresh child is legitimately silent for the US 133 s init
-period — so a swap must reset the four watchdog counters *and* widen the threshold to 240 s until
-the first packet, or it trips the 150 s stall raise mid-init and tears the driver down. Plus
-rollback, an atomic ack file recording the measured respawn gap, and init-time honoring so a restart
-can't silently revert a swap. Mutation-verified. **Not in prod: `rtldavis.py` is BAKED — needs an
-image rebuild — and the feature is off until the config key is set.**
+**Gain is 372 right now, not 496 — provisional, not a re-adoption.** DEC-0115's 496 never got a
+clean test against marvin's RF position (the controller was the actual incident cause). A proper
+re-sweep is job 4 below, not urgent — 372 works.
 
-**#233, #252 remain fully resolved** (via PR #271). **The S91 code audit remains fully closed**
-(#219–226).
+**`debug_rtld=3`** (per-packet) is left on for marvin's initial soak — revert to the driver's own
+default `2` once proven stable for a few days (job 5).
 
-**Standing SOP (S101): for live inter-repo coordination, message the other repo's live Claude
-session directly first (`ListAgents`/`SendMessage`), always loop `eaglehunt-ops` too.** Used again
-this session (ops verification exchange) — process, not repo state, not repeated here.
+**Foundation (the NAS container) is stopped, not decommissioned.** Rollback net stays through a
+week-plus soak, matching this repo's own image-rollback conservatism (job 6).
 
-**Marvin (new Debian hypervisor build) is targeting a Saturday 2026-08-29 host migration for
-weewx + eaglehunt-weather-dashboard + hyperlocal-forecast, conditional on Marvin's network-link
-soak surviving concurrent Win11-VM bring-up and coffeeradar's own move through the weekend.** Not
-this repo's decision to track in detail — `~/Projects/marvin/STATE.md` is the source of truth — but
-relevant context for anything infra-adjacent proposed before then.
+**`t-weewx`'s marvinctl key is not minted yet** — self-service deploys to marvin from this repo
+aren't live. `eaglehunt-ops`'s own follow-up (§9 step 4, same process CoffeeRadar got); tonight's
+deploy was driven directly from marvin's own session, so this didn't block anything.
 
-### ▶▶ S104 JOB LIST
+**S103's gain/receive-window hot swap (DEC-0117) is unchanged by tonight** — built, merged to `dev`,
+off by default, still not in prod (`rtldavis.py` is BAKED; needs an image rebuild). S104's job list
+carries forward unstarted, see below.
 
-1. **`main` promotion for v2.0.14** — deliberately deferred (DEC-0114). Once v2.0.14 has proven out
-   in prod for a reasonable stretch, promote per the usual release mechanics (`CONSTANTS.md`).
-   **Docker Hub push follows the same gate** (DEC-0078) — Hub is still on `:v2.0.13`.
-2. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — the other half of the hot swap,
-   deliberately left out of S103. Retires the 600 s settle window and the restart transient from
-   campaign blocks. **Must not land mid-campaign** (ops#179 constraint 1); none is scheduled, so the
-   window is open now. Needs the driver in prod first (job 3) or it has nothing to talk to.
-3. **The hot swap is not in prod until an image rebuild** — `rtldavis.py` is BAKED. No urgency on its
-   own (feature is off by default), so fold it into the next image cut rather than cutting one for it.
-   **Carry `ogoxeUploader.py` along on that same cut** (job 4 below): it is mounted, so the cut alone
-   does nothing for it — it needs an `scp` to `weewx-data/bin/user/`, and the recreate the cut
-   performs anyway is what makes it take effect, with no separate prod restart and no venv pyc dance.
-4. ~~Spot-check the other mounted files' live-vs-`dev` state.~~ **DONE S104.** `influx.py` and
-   `loop_json_writer.py` match `dev` byte-for-byte; live `weewx.conf` still carries **all six**
-   DEC-0070 deviations. `sortedcontainers` has **no repo copy** — the comparison is undefined, not
-   passing (`CONSTANTS.md` corrected). **`ogoxeUploader.py` was 7.5 weeks stale** — byte-identical to
-   `7e79d15`, its own S16 prod import, so two `dev` commits never landed. Content is harmless (SPDX +
-   the GPLv3 §5(a) fork notice from DEC-0034, plus one `log.debug()` that printed `None` for a key
-   never set); **no data-path change, and the Dockerfile never `COPY`s it, so the published image
-   carries no compliance gap either.** Deploy folded into job 3. Same detection gap as DEC-0116 — no
-   new DEC, that row already names the class.
+**Standing SOP (S101) carried the entire cutover: message the other repo's live session directly
+first, always loop `eaglehunt-ops` too.** Real-time coordination across weewx/marvin/ops/dashboard
+tonight — passive polling would not have worked at incident speed.
 
-[ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
+### ▶▶ S106 JOB LIST
 
-### Current state (S103 close)
+**Carried forward from S104, untouched by tonight:**
+1. **`main` promotion for v2.0.14** — still deliberately deferred (DEC-0114). Unchanged by the host
+   move; promote per the usual release mechanics once proven out on marvin too.
+2. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — still gated on the hot swap
+   reaching prod first (job 3).
+3. **DEC-0117 hot swap still needs an image rebuild to reach prod** — no urgency (off by default).
+   **Note: the next image cut needs to reach marvin, not the NAS.** `docker save`/`load` is the
+   proven path from tonight, but check whether marvin can build natively first — it's a Ryzen 9700X
+   (amd64), unlike the arm64 Mac that forced NAS-native builds per DEC-0078. Untested; worth checking
+   before repeating the save/load dance out of habit.
+
+**New from tonight:**
+4. **Gain re-sweep at marvin's RF position** — 372 vs 496 vs possibly something new, done properly
+   (Campaign-style measurement), not decided under an incident clock.
+5. **Revert `debug_rtld` 3→2** once marvin's weewx has a few clean days behind it.
+6. **Foundation decommission timing** — after a week-plus of clean marvin operation. Owner's call
+   when the soak looks done, not a unilateral session decision.
+7. **NAS-LEASE cross-host wiring** — marvin's `/nas-lease` mount is a deliberate empty no-op
+   (`MARVIN-DEC-0063`). Low priority (courtesy-yield only, fails safe), worth closing once marvin
+   hosts another heavy-I/O tenant that would actually benefit.
+8. **`CONSTANTS.md`'s infra section needs a careful second pass.** This session updated the headline
+   facts (container host, project root, release mechanics) but the file was written assuming a
+   single NAS-only deploy target for years — re-verify every row against `nasctl`/marvin's own
+   inspect output rather than trust this session's first pass alone.
+
+### Current state (S105 close)
 
 | Thing | State |
 |---|---|
-| Prod | **v2.0.14**, driver **ws.5** unchanged, `influx.py` **ws.2**, weewx **5.5.0**, gain **496** |
-| Campaign B | **CLOSED.** Gain 496 adopted (DEC-0115). No arm swaps — but its **two DSM scheduled tasks are still firing** (found S104, `BACKLOG.md`): state is `BASELINE` so nothing is at risk, yet "nothing further scheduled" was only ever true of the campaign, never of the scheduler. Owner action, DSM UI only |
-| Soak | Not re-run since S101 — next session should confirm green before trusting anything downstream |
-| Restart rate | DEC-0106 baseline (4/day during a campaign, 0/day between). **One unexplained restart 2026-08-25 21:40 EDT** — cause absent from every artifact this repo keeps; the elimination is written up in `BACKLOG.md` so it is not re-walked. Prod healthy since (70–78% reception, no alerts) |
-| `dev` vs prod | `dev` is **ahead** of prod by DEC-0117 (baked layer — needs an image rebuild, job 3) **and by `ogoxeUploader.py`** (mounted, 7.5 wks stale, harmless, riding job 3's cut). **Every other mounted file audited clean S104** — `influx.py` + `loop_json_writer.py` byte-identical to `dev`, `weewx.conf`'s six DEC-0070 deviations all present, `sortedcontainers` not comparable (no repo copy) |
-| Hot swap (DEC-0117) | **Built, tested, merged to `dev`. Not in prod, and off by default.** Driver half only — `ops/rx_experiment.sh` still restart-based (job 2) |
-| Data integrity | ERR-0006 correction unchanged; external copies still permanently carry the bad value |
-| NAS-LEASE | Adopted and locked (DEC-0114) — `RENEWAL_FLOOR_S=420`, `TTL_S=3600` |
-| Trackers | ops#179 closed this session (DEC-0117). #253 permanent until next recreate. #274 informational, no action |
-| Marvin migration | Target **Saturday 2026-08-29** for this repo's host move, conditional on the soak — see above |
+| Prod host | **marvin** (was the NAS/"Foundation" through S104) — DEC-0118, 2026-08-28/29 |
+| Prod | **v2.0.14** unchanged, driver **ws.5**, weewx **5.5.0**, gain **372** (provisional, see above) |
+| Foundation (NAS container) | Stopped, intact, rollback net through a soak period |
+| Consumers | Dashboard + HLF repointed transparently (NFS overlay at the old NAS path), both restarted and verified live |
+| InfluxDB | Still NAS-hosted; only the config URL pointing at it moved |
+| `debug_rtld` | **3** (soak) — revert to default **2** later (job 5) |
+| Hot swap (DEC-0117) | Unchanged — built, merged to `dev`, off by default, not in prod |
+| `dev` vs prod | Unchanged from S104's audit — see that session's findings, not re-walked here |
+| Trackers | [ops#216](https://github.com/WeatheredScientist/eaglehunt-ops/issues/216) is the cutover's full coordination record and incident narrative |
 
 ## Blockers
 
-1. **weewx process freezes — 1.31/day, median 240 s (DEC-0088-corrected).** Root cause unproven
-   (thread blocking on the bind-mounted log volume leads, DEC-0067/0068); evening 18:00–21:00 carries
-   the signal (DEC-0094). Untouched this session.
-2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open). DEC-0097 adds 00:00–04:00
-   clustering; DEC-0102 the 11.80x iowait confound, which does **not** close it. Next real step is
-   multi-night minute-level correlation, not a re-run. Untouched this session.
-3. **ERR-0005** — largely explained by DEC-0081; its 21-stall episode remains the largest on record.
-4. `ppm`/`fc` unmeasured, deliberately unchanged for B.
+1. **weewx process freezes — 1.31/day, median 240 s (DEC-0088-corrected).** Root cause unproven on
+   the NAS specifically. **Tonight adds a data point, not a close**: DEC-0067/0081's predicted
+   watchdog cycle got independent confirmation on different hardware, firing only under a bad USB
+   controller — supports "environmental," doesn't identify the NAS's own trigger.
+2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open). Untouched this session —
+   marvin's hardware, not the NAS's RF environment.
+3. **ERR-0005** — unchanged.
+4. `ppm`/`fc` — still unmeasured, now for a second confirmed reason: deliberately unchanged for
+   Campaign B, and tonight confirmed no sweep data exists to fall back on either.
 
 ## Model tier
 
-**S103 escalated to Opus 5 for the DEC-0117 design work — via `/model claude-opus-5`, the
-PERSISTING form (OPS-DEC-0010), not a session-only switch.** The Sonnet floor must be restored:
-`"model": "sonnet"` in `~/.claude/settings.json`, or re-run `global/install.sh`. **If the next
-session opens on Opus, this is why — restore it before doing anything else.**
+No `/model` switch this session. Nothing to restore.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -117,6 +116,7 @@ zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) ·
 task (§3) · judging a component live, dead, or shipped (§4). Indexed in `MANIFEST.md`. **New traps
 are appended THERE, not here** — that is what keeps this file under cap.
 
-_Last updated: 2026-08-26 (S103 close). Green gate: ruff clean, **428 passed / 8 skipped** (26 new),
-mypy clean (65 files), secret gate clean. Shipped: the gain/receive-window hot swap (DEC-0117),
-ops#179 closed — full narrative in `CHANGELOG.md`._
+_Last updated: 2026-08-29 (S105 close). Green gate: ruff clean, 428 passed / 8 skipped (unchanged —
+no code touched), mypy clean (65 files), secret gate clean. Shipped: production
+migrated to marvin (DEC-0118), a live USB-controller incident root-caused and fixed mid-cutover, a
+live SQLite backup gap closed the same night — full narrative in `CHANGELOG.md`._
