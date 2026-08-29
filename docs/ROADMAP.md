@@ -3,7 +3,12 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-29 (S105 — targeted line update per DEC-0057, not a full pass; tripwire
+**Last updated:** 2026-08-29 (S106 — **scheduled full reconciliation, tripwire fired on time**: every
+open item diffed against DECISIONS.md/CHANGELOG.md/BOOT.md; nothing stale found. DEC-0119 — today's
+ops#183 Influx outage, the `backfill_influx.py` fix, and the `weewx_monitor.py` alerter finding —
+touches no P0–P3 line, the same call S105 made about DEC-0118's migration: it's incident response and
+`BOOT.md`/`CONSTANTS.md` territory, not the sequenced plan. Next check: S116.)
+Prior: 2026-08-29 (S105 — targeted line update per DEC-0057, not a full pass; tripwire
 still S106: the P0 freeze item gained DEC-0118's incidental corroboration from the marvin migration
 incident. Nothing else touched — the migration itself isn't a P0-P3 line, it's `BOOT.md`/
 `CONSTANTS.md` territory.)
@@ -61,10 +66,18 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S106** (~10 sessions out). If the session counter is
-  at or past S106 and this line still says S106, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86 and S96 did (diff every open/pending item here against
+- **Next scheduled reconciliation check: by S116** (~10 sessions out). If the session counter is
+  at or past S116 and this line still says S116, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96 and S106 did (diff every open/pending item here against
   DECISIONS.md, CHANGELOG.md and `BOOT.md`).
+- Last full reconciliation: **S106, 2026-08-29** — tripwire fired on time. **Nothing stale found** —
+  the four open P0-P3 items (freeze root cause, DB-lock bound, `receiveWindow` confirmation,
+  INTERFACES.md hardening) all diffed clean against `DECISIONS.md`/`CHANGELOG.md`/`BOOT.md`; none
+  gained a new DEC since S105's last targeted pass. This session's own DEC-0119 (ops#183's Influx
+  outage, the `backfill_influx.py` fix, the `weewx_monitor.py` alerter finding) touches none of
+  them — same category as DEC-0118's migration, incident response rather than a P0-P3 line. First
+  reconciliation pass to find zero staleness; every prior one (S66, S76, S86, S96) found at least
+  one stale item, so a clean pass isn't yet enough of a pattern to loosen the ~10-session cadence.
 - Prior: 2026-08-20 (S98 — two targeted line updates per DEC-0057, not a full pass; tripwire still
   S106): P0.5's Keep-a-Changelog/DECISIONS-skeleton follow-on struck through as retired (DEC-0109
   — unrecoverable rationale, no family-wide adoption to converge toward). P1's S52 bullet
