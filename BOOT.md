@@ -12,98 +12,84 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S105 → S106)
-
-*Numbering note: BOOT.md's pointer still read "S103 → S104" at this session's start despite S104
-having already merged (PR #279) — that session's own closeout apparently skipped the BOOT.md
-rewrite step. Corrected here; tonight is S105.*
+## ▶ Resume here (S106 → S107)
 
 ### What's settled (do not re-derive)
 
-**Production migrated from the NAS to marvin overnight 2026-08-28/29 (DEC-0118).** Cutover
-succeeded; consumers (dashboard, HLF) repointed transparently via an NFS overlay mount at the same
-NAS path they always used — no compose edits on their side. A live ~90-min incident mid-cutover was
-the host's **USB controller** (every port on the B850 chipset's own xHCI breaks RTL-SDR hop-tracking
-under sustained streaming; the CPU-attached controller is clean) — not RF, not gain, not fc/ppm, not
-a process freeze. Full narrative, what was ruled out and why, in DEC-0118 — don't re-walk it.
+**ops#183's InfluxDB write outage (00:14→12:08:27 ET, ~11h54m) is fully remediated, backfilled, and
+closed (DEC-0119).** Root cause was external to this repo — `eaglehunt-ops` deleted a token it didn't
+know `influx.py` also wrote with (`OPS-DEC-0162`); weewx's own config was never at fault, confirmed
+unchanged since 08-23. Fixed with a new dedicated write token, installed by a marvin-side session
+(this repo's own `marvinctl` access has no arbitrary file write). Entire outage window backfilled
+clean — 712 records, 0 errors — via `ops/backfill_influx.py`, which had two real bugs found running it
+live for the first time (committed `INFLUX_ORG` placeholder, read-write `sqlite3.connect()` against a
+read-only export) — both fixed on PR #282, still open, green gate passed, live-tested in production
+before merge. Full narrative: DEC-0119, don't re-walk it.
 
-**v2.0.14 is unchanged as the running image** — the exact same build (`335a6cf4a6c6`) crossed via
-`docker save`/`load`, no rebuild. Driver banner still `0.20+ws.5`, weewx still 5.5.0.
+**`weewx_monitor.py` (this repo's own artifact) sent ~14h of false "STILL DOWN" alerts during the
+outage — found and disabled, not yet replaced.** It watches a hardcoded Foundation log path the
+marvin NFS overlay doesn't cover (`weewx-data/` is live-mirrored, `logs/` is not); the file froze at
+cutover and every alert since was reporting a dead file's age, not station health. Disabled on
+Foundation (owner action); no marvin-side equivalent exists yet — job 10 below. A second stale
+watcher, `usb_watchdog.sh`, found in the same sweep, filed on `eaglehunt-ops`#233 — same "points at
+where weewx used to be" shape.
 
-**Gain is 372 right now, not 496 — provisional, not a re-adoption.** DEC-0115's 496 never got a
-clean test against marvin's RF position (the controller was the actual incident cause). A proper
-re-sweep is job 4 below, not urgent — 372 works.
+**All twelve publish legs confirmed independently healthy** (WU-RF/PWS, PWSWeather, CWOP, AWEKAS,
+WOW/WOW-BE, WeatherCloud, OWM, Windy, Influx, Ogoxe) via the newly-live `marvin-weewx` `marvinctl`
+alias — this repo's own session's first real use of it. Tier-1 reads worked cleanly, no guard
+friction. Tier 2 (start/stop/restart own units) is available but untested this session; no arbitrary
+file write either tier, by design — the config fix still had to run from a marvin-side session.
 
-**`debug_rtld=3`** (per-packet) is left on for marvin's initial soak — revert to the driver's own
-default `2` once proven stable for a few days (job 5).
+**S105's migration items are otherwise untouched this session** — see job list below, all carried
+forward.
 
-**Foundation (the NAS container) is stopped, not decommissioned.** Rollback net stays through a
-week-plus soak, matching this repo's own image-rollback conservatism (job 6).
+### ▶▶ S107 JOB LIST
 
-**`t-weewx`'s marvinctl key is not minted yet** — self-service deploys to marvin from this repo
-aren't live. `eaglehunt-ops`'s own follow-up (§9 step 4, same process CoffeeRadar got); tonight's
-deploy was driven directly from marvin's own session, so this didn't block anything.
-
-**S103's gain/receive-window hot swap (DEC-0117) is unchanged by tonight** — built, merged to `dev`,
-off by default, still not in prod (`rtldavis.py` is BAKED; needs an image rebuild). S104's job list
-carries forward unstarted, see below.
-
-**Standing SOP (S101) carried the entire cutover: message the other repo's live session directly
-first, always loop `eaglehunt-ops` too.** Real-time coordination across weewx/marvin/ops/dashboard
-tonight — passive polling would not have worked at incident speed.
-
-### ▶▶ S106 JOB LIST
-
-**Carried forward from S104, untouched by tonight:**
-1. **`main` promotion for v2.0.14** — still deliberately deferred (DEC-0114). Unchanged by the host
-   move; promote per the usual release mechanics once proven out on marvin too.
-2. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — still gated on the hot swap
-   reaching prod first (job 3).
-3. **DEC-0117 hot swap still needs an image rebuild to reach prod** — no urgency (off by default).
-   **Note: the next image cut needs to reach marvin, not the NAS.** `docker save`/`load` is the
-   proven path from tonight, but check whether marvin can build natively first — it's a Ryzen 9700X
-   (amd64), unlike the arm64 Mac that forced NAS-native builds per DEC-0078. Untested; worth checking
-   before repeating the save/load dance out of habit.
-
-**New from tonight:**
-4. **Gain re-sweep at marvin's RF position** — 372 vs 496 vs possibly something new, done properly
-   (Campaign-style measurement), not decided under an incident clock.
+**Carried forward from S105, untouched this session:**
+1. **`main` promotion for v2.0.14** — still deliberately deferred (DEC-0114).
+2. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — gated on job 3.
+3. **DEC-0117 hot swap still needs an image rebuild to reach prod** (off by default, no urgency).
+   Still unverified whether marvin (Ryzen 9700X, amd64) can build natively, vs. repeating the
+   `docker save`/`load` dance.
+4. **Gain re-sweep at marvin's RF position** — 372 vs 496, done properly, not under an incident clock.
 5. **Revert `debug_rtld` 3→2** once marvin's weewx has a few clean days behind it.
-6. **Foundation decommission timing** — after a week-plus of clean marvin operation. Owner's call
-   when the soak looks done, not a unilateral session decision.
-7. **NAS-LEASE cross-host wiring** — marvin's `/nas-lease` mount is a deliberate empty no-op
-   (`MARVIN-DEC-0063`). Low priority (courtesy-yield only, fails safe), worth closing once marvin
-   hosts another heavy-I/O tenant that would actually benefit.
-8. **`CONSTANTS.md`'s infra section needs a careful second pass.** This session updated the headline
-   facts (container host, project root, release mechanics) but the file was written assuming a
-   single NAS-only deploy target for years — re-verify every row against `nasctl`/marvin's own
-   inspect output rather than trust this session's first pass alone.
+6. **Foundation decommission timing** — owner's call, after a week-plus soak.
+7. **NAS-LEASE cross-host wiring** — low priority, marvin's `/nas-lease` mount is a deliberate no-op.
+8. **`CONSTANTS.md`'s infra section second pass** — still not independently re-verified row by row.
 
-### Current state (S105 close)
+**New from today:**
+9. **Merge PR #282** (`s106-backfill-influx-org-secret-fixes`) — green gate passed; unusually, the fix
+   was already proven live in production before the branch merged, because the incident couldn't wait
+   for the normal order.
+10. **Decide a marvin-side alerter (or an explicit retirement) for `weewx_monitor.py` /
+    `usb_watchdog.sh`.** Both are now simply OFF — marvin currently has zero automated health
+    alerting from this repo's side. Not urgent (consumer-side/ops monitoring exists independently),
+    but a real, named gap rather than a silent one.
+11. **Sanity-check `eaglehunt-ops`'s `CONSTANTS.md` §5 register row for weewx's new token**
+    (fingerprint `ef8e9af8`) — this repo doesn't own that file, but it names `influx.py`/`weewx.conf`
+    as a consumer and is worth a quick correctness check next time either file changes.
+
+### Current state (S106 close)
 
 | Thing | State |
 |---|---|
-| Prod host | **marvin** (was the NAS/"Foundation" through S104) — DEC-0118, 2026-08-28/29 |
-| Prod | **v2.0.14** unchanged, driver **ws.5**, weewx **5.5.0**, gain **372** (provisional, see above) |
-| Foundation (NAS container) | Stopped, intact, rollback net through a soak period |
-| Consumers | Dashboard + HLF repointed transparently (NFS overlay at the old NAS path), both restarted and verified live |
-| InfluxDB | Still NAS-hosted; only the config URL pointing at it moved |
-| `debug_rtld` | **3** (soak) — revert to default **2** later (job 5) |
-| Hot swap (DEC-0117) | Unchanged — built, merged to `dev`, off by default, not in prod |
-| `dev` vs prod | Unchanged from S104's audit — see that session's findings, not re-walked here |
-| Trackers | [ops#216](https://github.com/WeatheredScientist/eaglehunt-ops/issues/216) is the cutover's full coordination record and incident narrative |
+| Prod host | marvin (unchanged from S105) |
+| Prod | v2.0.14 unchanged, driver ws.5, weewx 5.5.0, gain 372 (still provisional) |
+| InfluxDB write token | New dedicated token, fingerprint `sha256-ef8e9af8` (was `56d69d93`, shared/deleted — DEC-0119) |
+| Backfill | Complete — 712 records + small follow-up slices, 0 errors, verified from the consumer side |
+| Alerting (Foundation) | `weewx_monitor.py` + `usb_watchdog.sh` both OFF; no marvin equivalent yet (job 10) |
+| `marvin-weewx` alias | Live; tier-1 read proven working this session |
+| PR | [#282](https://github.com/WeatheredScientist/weewx-rtldavis/pull/282) open, green gate passed, awaiting merge (job 9) |
+| Trackers | `eaglehunt-ops`#183 closed · #216 open (non-weewx items only: dashboard gate re-derivation, ops closeout report) · #229/#233/#227 filed as follow-ups, not weewx's to close |
 
 ## Blockers
 
 1. **weewx process freezes — 1.31/day, median 240 s (DEC-0088-corrected).** Root cause unproven on
-   the NAS specifically. **Tonight adds a data point, not a close**: DEC-0067/0081's predicted
-   watchdog cycle got independent confirmation on different hardware, firing only under a bad USB
-   controller — supports "environmental," doesn't identify the NAS's own trigger.
-2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open). Untouched this session —
-   marvin's hardware, not the NAS's RF environment.
+   the NAS specifically. S105 added a data point (independent confirmation on different hardware,
+   firing only under a bad USB controller); untouched this session.
+2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open). Untouched this session.
 3. **ERR-0005** — unchanged.
-4. `ppm`/`fc` — still unmeasured, now for a second confirmed reason: deliberately unchanged for
-   Campaign B, and tonight confirmed no sweep data exists to fall back on either.
+4. `ppm`/`fc` — still unmeasured; deliberately unchanged for Campaign B, no sweep data to fall back on.
 
 ## Model tier
 
@@ -116,7 +102,7 @@ zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) ·
 task (§3) · judging a component live, dead, or shipped (§4). Indexed in `MANIFEST.md`. **New traps
 are appended THERE, not here** — that is what keeps this file under cap.
 
-_Last updated: 2026-08-29 (S105 close). Green gate: ruff clean, 428 passed / 8 skipped (unchanged —
-no code touched), mypy clean (65 files), secret gate clean. Shipped: production
-migrated to marvin (DEC-0118), a live USB-controller incident root-caused and fixed mid-cutover, a
-live SQLite backup gap closed the same night — full narrative in `CHANGELOG.md`._
+_Last updated: 2026-08-29 (S106 close). Green gate: ruff clean, 428 passed / 8 skipped, mypy clean
+(65 files), secret gate clean. Shipped: ops#183's Influx outage fully remediated and backfilled
+(DEC-0119), `ops/backfill_influx.py` hardened (PR #282), `weewx_monitor.py`'s stale-watch-path blind
+spot found and disabled — full narrative in `CHANGELOG.md`._

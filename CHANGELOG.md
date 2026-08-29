@@ -5,6 +5,31 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+## [S106] — 2026-08-29 — ops#183's Influx outage remediated and fully backfilled (DEC-0119); weewx_monitor.py's alerter found blind since the marvin cutover
+
+- **weewx's InfluxDB uploads were down 00:14→12:08:27 ET (~11h54m).** Root cause was `eaglehunt-ops`
+  deleting an InfluxDB token it didn't know `influx.py` also wrote with — weewx's own `weewx.conf`
+  was never at fault, confirmed unchanged since 08-23. Fixed with a new dedicated, never-shared write
+  token, installed and verified by a marvin-side session (this repo has no path to edit that file
+  directly). Full narrative: DEC-0119, `eaglehunt-ops`#183/`OPS-DEC-0162`.
+- **The entire outage window is backfilled** — 712 archive records posted, 0 errors, via
+  `ops/backfill_influx.py`, run against the live production archive from inside the marvin container.
+- **`ops/backfill_influx.py` had two real bugs, found running it live for the first time** (PR #282):
+  a committed `INFLUX_ORG` placeholder that would have failed every POST, and a read-write
+  `sqlite3.connect()` that fails against a read-only export. Fixed, plus hardening:
+  `--server-url`/`--db-path` overrides and `$INFLUX_TOKEN`/`$INFLUX_ORG` env-var sourcing so a
+  credential never has to be a CLI literal.
+- **`weewx_monitor.py` sent ~14h of false "STILL DOWN" alerts** — it watches a hardcoded Foundation
+  log path the marvin NFS overlay doesn't cover (`weewx-data/` is live-mirrored, `logs/` is not), so
+  it froze at cutover and alerted on the age of a dead file, not station health. The false alerts'
+  outage-shaped noise is part of why the real Influx outage went unnoticed until mid-morning.
+  Disabled on Foundation; no marvin-side replacement exists yet. A second stale watcher
+  (`usb_watchdog.sh`) found in the same sweep, filed on `eaglehunt-ops`#233.
+- **All twelve publish legs verified independently healthy** (WU, PWSWeather, CWOP, AWEKAS, WOW,
+  WeatherCloud, OWM, Windy, Influx, Ogoxe) via the newly-live `marvin-weewx` `marvinctl` alias — this
+  repo's own session's first real use of that access.
+
+---
 ## [S105] — 2026-08-28/29 — Production migrates from the NAS to marvin (DEC-0118); a live USB-controller incident root-caused and fixed mid-cutover
 
 - **The weewx-rtldavis container now runs on `marvin`, a new self-hosted Debian hypervisor, not the
@@ -89,42 +114,5 @@ under [Pre-S16].
   assumption anywhere.
 
 ---
-## [S103] — 2026-08-26 — Gain / receive-window hot swap built (DEC-0117): a validated control file, plus the post-swap watchdog grace that keeps it from tearing the driver down
-
-- **Picked up the last open `BACKLOG.md` idea / [ops#179], filed at S89 and deliberately unstarted
-  until Campaign B closed.** S89's analysis held up on re-inspection: nothing prevented a hot swap
-  but the trigger. `gain` and `-ex` are startup-only CLI flags on the Go binary, `rtldavis.py` never
-  inspects them, `ProcManager.startup(cmd, …)` already takes the command as a parameter, and the
-  150 s watchdog exercises that kill→respawn cycle routinely.
-- **Built as a watched control file carrying bounds-checked integers only — never a command string.**
-  `hotswap_control_file` (unset = feature off, stock behavior). The driver polls it about every 10 s
-  at the top of `genLoopPackets` — no thread, no signal handler, since `get_stderr()` already budgets
-  10 s per pass — and on an mtime change validates, splices into the running command, and respawns.
-  Only `gain` (0–496) and `ex` (0–1000) are accepted: `cmd` reaches `shlex.split()` → `Popen`, so a
-  raw-command channel would be arbitrary code execution inside the container for anything able to
-  write that NAS path. Tests pin that rejection explicitly.
-- **The hazard S89's note missed, and the reason this needed design work:** `time_last_received` is a
-  **local** in `genLoopPackets` and is *not* reset by a child respawn, while a fresh child is
-  legitimately silent for the US 133 s radio init period. A naive `shutdown()`→`startup()` inherits a
-  stale timer, trips the 150 s stall watchdog mid-init and tears the driver down — reintroducing the
-  abort-on-unhealthy-swap failure class the feature exists to retire, on *every* swap. Every swap now
-  resets the four watchdog counters and widens the threshold to `HOTSWAP_GRACE_S = 240` until the
-  first packet (a flat 150 s left only 17 s of margin over that init period), reverting as soon as
-  anything is received.
-- **Also: rollback** to the last known-good command if the new one fails to start (a bad gain must
-  not cost us the receiver), **an atomic ack file** recording status and the measured respawn gap —
-  which self-measures ops#179's constraint 4, the never-measured RTL-SDR re-open time — and the
-  control file **honored at init before the first spawn**, so a container restart cannot silently
-  revert a swapped gain while the ack still advertises it (DEC-0116's exact shape).
-- **Green gate: 428 passed / 8 skipped** (26 new), ruff clean, mypy clean (65 files), secret gate
-  clean. The three loop-level tests are **mutation-verified** — removing the grace, the reset, or the
-  rollback each turns the suite red — with a positive control proving the same silence *without* a
-  swap still stalls at 150 s. One secret-scanner false positive fixed at source by renaming a local
-  (`key = …`) rather than widening the allow-list.
-- **Not in prod.** `rtldavis.py` is a **BAKED** file, so this ships only with an image rebuild, and
-  the feature is off until the config key is set. `ops/rx_experiment.sh` still swaps arms by
-  rewriting the mounted config and restarting — converting it is a separate change, and the one that
-  must not land mid-campaign.
-
 ---
-*(S73–S102 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+*(S73–S103 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*

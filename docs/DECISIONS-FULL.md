@@ -7532,3 +7532,93 @@ incident and adds one data point toward "environmental," not a general proof. Do
 change the adopted gain (DEC-0115's 496 stands as the last *measured* value; 372 is what's running,
 provisionally, pending a real re-sweep). Does not touch InfluxDB's own location — it stays NAS-hosted
 for now; only the config pointing at it moved.
+
+## DEC-0119 — ops#183's Influx outage: root cause was external, the backfill tool had two real bugs, and this repo's own alerter was blind the whole time
+
+**Status:** Accepted · **Date:** 2026-08-29 (S106) · **Relates to** DEC-0118 (the migration this
+outage followed within hours) · DEC-0074 (file-vs-process liveness — the alerter's failure is that
+pattern one level up: a *path* proves nothing about the *service* behind it) · does not change
+`CONSTANTS.md`'s deploy-layers model or `docs/INTERFACES.md`'s data contract
+
+### What this settles
+
+weewx's InfluxDB uploads were down 00:14 → 12:08:27 ET 2026-08-29 (~11h54m). The cause was entirely
+external to this repo: `eaglehunt-ops`'s own session deleted an InfluxDB auth token (ops#183) believing
+it was an unused "old" credential, not knowing it was the same value `influx.py` presents to write —
+a sharing relationship that had never been recorded anywhere (weewx's write token had no row in the
+secrets register at all before this incident; full record and hardening in `eaglehunt-ops`'s
+`OPS-DEC-0162`). **weewx's own config was never at fault** — its token was confirmed unchanged since
+at least 2026-08-23 against the genuine pre-cutover baseline, fingerprint-verified without ever
+printing the raw value. Fix: a new token, scoped write-only and never shared, minted and installed in
+marvin's live `weewx.conf` by a marvin-side session under direct owner authorization (this repo's own
+session had no path to make that edit — `marvinctl`'s tier 2 has no arbitrary file write, by design);
+`weewx.service` restarted 12:08:27 ET; first new point landed at 12:10:44.
+
+### The backfill tool had two real bugs, now fixed
+
+`ops/backfill_influx.py` — this repo's own sanctioned tool for exactly this situation
+(`docs/INTERFACES.md` §2 names it as the repair path) — had never been run against a live outage
+before and had two defects that would have made the first real run fail:
+
+1. `INFLUX_ORG` was a committed placeholder (`"YOUR_INFLUX_ORG"`), which would have failed every POST
+   with the wrong org.
+2. `sqlite3.connect()` opened read-write, which fails (or attempts to create `-wal`/`-shm`) against a
+   read-only export — the exact shape of access this incident needed, reading marvin's live archive
+   without disturbing the process still writing it.
+
+Both fixed, plus hardening prompted directly by this incident: `--server-url`/`--db-path` CLI
+overrides (the execution venue — NAS vs marvin — was undecided when the fix was written, and the
+sibling script `backfill_container.py` already carried the exact wrong-venue trap this was written to
+avoid), and `$INFLUX_TOKEN`/`$INFLUX_ORG` env-var sourcing so a credential never has to be a literal
+CLI argument. Landed on PR #282, tested live in production before the branch merged — the incident
+could not wait for the normal order. The entire outage window backfilled clean: 712 records posted, 0
+errors, plus small follow-up slices for a boundary and a later maintenance reboot. The one apparent
+gap that survived a first pass (`04:00–05:00Z` short by what looked like one record) turned out to be
+two correct counts disputing an unstated boundary convention (SQL's inclusive vs. Flux's
+`aggregateWindow` exclusive) — not a missing record. The real, unrecoverable shortfalls in two hours
+(14 and 6 records against a 60/hr cadence) are genuine source-side loss: this driver's archive
+generation runs in `hardware` mode, meaning an archive row only exists if a loop packet was actually
+received — the tail of the cutover night's RF reception fight, and the two gain-campaign restarts plus
+the 01:12 host reboot, respectively. No import can recover data that was never generated.
+
+### `weewx_monitor.py`'s alerter was blind for the entire outage, and made it worse
+
+`weewx_monitor.py` (repo root — this is this repo's own artifact, not `eaglehunt-ops`'s) watches
+`{BASE_DIR}/logs/weewx.log`, hardcoded to Foundation's (the NAS's) path. marvin's NFS export overlay
+covers `weewx-data/` — verified live and current throughout this incident — but **not** `logs/`. That
+NAS-side log path froze at 22:33:46 ET on 08-28, the moment Foundation's own weewx stopped, and has
+not moved since. Every alert the monitor sent afterward — reception percentage, "STILL DOWN" — was
+computing from the age and content of a dead file, not the health of anything real. For roughly 14
+hours the alerter fired false alarms with exactly the *shape* of a real outage, which is what let the
+actual (unrelated) Influx outage run undiscovered until a human noticed the pattern didn't add up. This
+is `DEC-0074`'s lesson one level up: a *file path* surviving a host migration proves nothing about the
+*process* it used to watch. **Disabled on Foundation** (owner action, DSM Task Scheduler) rather than
+repointed — there is no path from Foundation to marvin's live log; the export is one-directional and
+does not include it. A second, independently stale watcher (`usb_watchdog.sh`, root-scripts class per
+`MANIFEST.md`) was found in the same sweep: it tails the same frozen log and would reset Foundation's
+own USB bus on a stall match — inert since it stopped seeing activity, silent since 2026-05-22,
+filed on `eaglehunt-ops`#233 alongside this. Neither has a marvin-side equivalent yet — open question,
+`BOOT.md` job 10. `logrotate-weewx`, a third watcher pointed at the same frozen file, was caught and
+disabled before it fired at 00:05 the same night this DEC was written — it would have rotated the
+frozen log into an empty one, turning a detectable staleness signature into a silent one.
+
+### Verification
+
+All twelve publish legs (`Wunderground-RF`, `Wunderground-PWS`, `PWSWeather`, `CWOP`, `AWEKAS`,
+`WOW`, `WOW-BE`, `WeatherCloud`, `OWM`, `Windy`, `Influx`, `OgoxeUploader`) confirmed independently
+healthy by reading marvin's live log directly, through the newly-minted `marvin-weewx` `marvinctl`
+alias — the first real use of that access from this repo's own session (tier-1 reads only; no guard
+friction, no relay through a marvin session needed). `WeatherCloud`'s apparent sparseness in an
+initial spot-check was a real ~10-minute publish interval, not a gap — confirmed against its own
+timestamped log lines, not assumed.
+
+### What this does not do
+
+Does not change `docs/INTERFACES.md`'s data contract or `CONSTANTS.md`'s deploy-layers model — the
+credential fix and the backfill are operational repair, not a schema or architecture change. Does not
+decide a marvin-side alerter design — disabling the broken watchers on Foundation stops the false
+alarms; what (if anything) replaces them on marvin is still open (`BOOT.md` job 10). Does not close
+`eaglehunt-ops`#216 (the migration's own tracking issue) — its remaining items (the dashboard's
+go/no-go gate re-derivation, an isolation matrix, ops' own closeout report) belong to other repos.
+Does not re-litigate `OPS-DEC-0162` — the credential-sharing lesson and the secrets-register hardening
+are `eaglehunt-ops`'s decision, referenced here only for the parts that touch this repo's own files.
