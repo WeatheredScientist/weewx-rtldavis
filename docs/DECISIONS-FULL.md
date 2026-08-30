@@ -7622,3 +7622,112 @@ alarms; what (if anything) replaces them on marvin is still open (`BOOT.md` job 
 go/no-go gate re-derivation, an isolation matrix, ops' own closeout report) belong to other repos.
 Does not re-litigate `OPS-DEC-0162` — the credential-sharing lesson and the secrets-register hardening
 are `eaglehunt-ops`'s decision, referenced here only for the parts that touch this repo's own files.
+
+## DEC-0120 — Rebuild weewx's alerting for marvin: input-staleness as a first-class state, and a remedy that is selected rather than assumed
+
+**Status:** Accepted (design + implementation; deploy deferred) · **Date:** 2026-08-30 (S107) ·
+**Answers:** `eaglehunt-ops`#233 · **Follows from:** DEC-0118 (the host move), DEC-0119 (which found
+the alerter blind) · **Generalizes:** DEC-0074's log/action drift guard · **Acts on:** DEC-0081's
+closed finding that the USB remedy does not work
+
+### The defect is structural, not a wrong path
+
+On 2026-08-29 `weewx_monitor.py` sent ~14 hours of confident "STILL DOWN" mail about six uploaders
+that were all healthy — live `rxCheckPercent` ran 74–77% while it reported reception "below 60%".
+The obvious reading is "it pointed at the old host's log". That is true and it is not the lesson.
+
+**Every threshold in the file is of the form "nothing has been seen for N seconds", and a frozen
+input satisfies all of them simultaneously and indefinitely.** The monitor had no way to distinguish
+*the station is down* from *I am blind*, because both present identically to every check it runs.
+Repointing the path fixes the 08-29 instance and leaves the mechanism that produced it fully intact —
+the next mount change, export narrowing or host move reproduces it exactly.
+
+So blindness became its own state, evaluated *before* any threshold, on two signals that fail
+differently: the log's **mtime** (cheap; fooled by a touch, or by a writer that reopens without
+writing) and the **timestamp parsed from the newest line actually consumed** (catches content going
+stale behind a fresh mtime — the "right path, wrong host" shape, which is precisely what the cutover
+produced). Staleness is the worse of the two; five minutes is already far outside normal for a
+station publishing every ~3 s and archiving every 60 s.
+
+It is reported as a **distinct alert class**, deliberately not resembling `<svc> DOWN`, and it
+**suspends** uploader and reception judgement while it holds. Collapsing the two is the original
+defect in one line: fourteen hours of mail asserted six specific things that were all false, when
+the one true statement available was "I cannot see."
+
+### What ops#233's own framing got wrong, and it matters
+
+The issue reasons from "there is no path from Foundation to marvin's live log", which is correct, to
+a rebuild scoped as if the input were the hard part. Checked directly: **marvin's
+`/srv/docker/weewx/logs/weewx.log` is alive, local, and healthy** — growing continuously, rotating
+daily, bind-mounted `-v /srv/docker/weewx/logs:/var/log/weewx`. The input problem exists only when
+looking *from Foundation*. On marvin itself jobs 1 and 2 (service alerting, reception tracking) port
+on an environment variable and nothing else.
+
+Found in the same pass, unrelated to the rebuild but the same family as ops#214: **marvin's copy of
+`weewx_monitor.py` is stale against `dev`** (sha mismatch, 50026 vs 50538 bytes). Any deploy must
+come from the merged tip, never from what is already sitting on the box.
+
+### The remedy is now chosen, not assumed — and the Foundation body is not ported
+
+The USB unbind/rebind survives in this repo as "a hedge for a genuine (never yet observed) dongle
+wedge". The evidence behind that wording: across ~17 forensically-captured events (08-02 ×11,
+08-06 ×3, 08-10/11 ×3) it **never once demonstrably fixed a stall**, S73 demoted it 3 → 1 on exactly
+that record, and ERR-0005 suspects reset #10 *caused* a strictly worse failure mode.
+
+Porting it to marvin would be worse than useless. `usb_reset.sh` unbinds a driver at a hardcoded
+Synology bus path (`/sys/bus/usb/devices/1-3`); marvin's topology differs — `MARVIN-DEC-0051`
+reassigned two controller roles — so on a box now hosting two live tenants and a passed-through
+ASM3142 the same call either no-ops or resets **someone else's device**.
+
+`REMEDY_MODE` therefore selects the action while the escalation discipline around it (one attempt,
+the verify window, one email per outage) is untouched:
+
+| mode | action | for |
+|---|---|---|
+| `usb_reset` | `sudo usb_reset.sh` — driver unbind/rebind | Synology; **the default**, see below |
+| `restart_unit` | `systemctl restart weewx.service` | marvin |
+| `none` | detect and escalate only | any host where no remedy has been shown to work |
+
+**`usb_reset` stays the default deliberately.** This is a published extension; silently changing what
+an existing Synology install does because *our* host moved would be its own defect, and our evidence
+is from our hardware. The efficacy record is documented loudly at the constant instead, so an
+operator can opt out on the evidence rather than on our say-so.
+
+On marvin `restart_unit` is not the timid option — it is the *strong* one. `weewx.service` is
+`docker run --rm` with `ExecStartPre=/usr/bin/docker rm -f`, so a restart **is** a full container
+recreate: the remedy that actually resolved ERR-0005, and the one the Foundation monitor could only
+reconstruct via `docker inspect` and mail to a human to run by hand.
+
+### The campaign inhibit
+
+An RX campaign restarts weewx once per arm on purpose. Every one of those restarts looks exactly like
+the fault this watchdog remedies, and a remedy landing mid-arm corrupts the block being measured —
+the watchdog would fight the campaign it exists to observe. While `CAMPAIGN_INHIBIT` exists, **no
+automatic remedy fires; detection and alerting continue unchanged.** The skip is logged with the
+action it *would* have taken, because a bare "skipped" line reads, months later, exactly like a
+remedy that fired and worked — the same unfalsifiable-record failure DEC-0074 is about.
+
+### Deploy is deliberately deferred, and the unit ships at `REMEDY_MODE=none`
+
+Nothing is deployed this session. The gain campaign runs tonight and restarts weewx per arm; a
+monitor landing before it would either fight it or spam reception alerts on every switch. Deploy
+follows the campaign.
+
+`ops/weewx-monitor.service` ships with `REMEDY_MODE=none` — alert-only — until two things are true:
+the unit has been observed through a full day including a 00:00 log rotation and a deliberate
+restart, **and** `t-weewx` has actually been granted a way to restart `weewx.service` (a path-scoped
+sudoers entry, or a `marvinctl` tier-2 verb). Setting `restart_unit` without that grant yields a
+remedy that fails every time it is needed while looking correct — DEC-0061's "configured-looking,
+never exercised, therefore never disproved", which has already bitten this repo twice. For the same
+reason `NoNewPrivileges` stays `false` now rather than being flipped later in a separate change.
+
+### Not settled here
+
+The archive DB is mode `0500 t-weewx` and the container writes it as root. If it is in WAL mode, an
+unprivileged reader opening it `?mode=ro` may fail needing `-shm` write — the same bug class as
+DEC-0119's read-only-export failure. **Unverified; do not assume either way** before enabling the
+reception-summary path on marvin.
+
+Ownership stays the three-way split ops#183 needed: the tool is this repo's, the host and the unit
+install are marvin's, the coordination is `eaglehunt-ops`'s. `usb_watchdog.sh`'s fate
+(`eaglehunt-ops`#233's sibling finding) is not decided here — it remains simply OFF.

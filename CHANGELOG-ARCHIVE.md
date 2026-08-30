@@ -7,6 +7,56 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S104] — 2026-08-26 — Every mounted file audited against `dev` (one 7.5-week-stale, harmless); a prod restart bounded by elimination; two DSM tasks found still firing after Campaign B closed
+
+- **Job 4 done: audited the whole mount list, not just the files a deploy happened to touch.** Worked
+  from `nasctl inspect` rather than the deploy-layers table, since the table was the thing under test.
+  `influx.py` and `loop_json_writer.py` are byte-identical to `dev`; the live config still carries all
+  six DEC-0070 deviations; `hotswap_control_file` is absent, so DEC-0117 is *verifiably* off in prod
+  rather than assumed off.
+- **`ogoxeUploader.py` was 7.5 weeks stale — byte-identical to `7e79d15`, its own S16 prod import.**
+  Two `dev` commits had never reached the NAS. Identified without reading the live file, by hashing
+  every historical revision of the repo copy until one matched. Content is harmless: an SPDX line,
+  the GPLv3 section 5(a) fork notice from DEC-0034, and one `log.debug()` that reported a key which is
+  never set and so always printed `None`. No data-path change; the Dockerfile never `COPY`s the file,
+  so the published image carries no compliance gap either. Deploy folded into the next image cut,
+  where the recreate makes a mounted file take effect for free. Same detection gap as DEC-0116 — no
+  new DEC, that row already names the class.
+- **The deploy-layers table itself was wrong, which is the durable part.** It grouped
+  `ogoxeUploader.py` and `sortedcontainers` as "same pattern" as the row above; neither held.
+  `ogoxeUploader.py`'s mount source is `weewx-data/bin/user/` — the exact directory the preceding row
+  calls a DECOY for `loop_json_writer.py`, so two adjacent rows asserted opposite truths. And
+  `sortedcontainers` is a vendored third-party *directory* bind with no repo copy at all, so "in sync
+  with `dev`" was never a meaningful question about it — a comparison that is undefined, not passing.
+  Both rows corrected and split ([#278](https://github.com/WeatheredScientist/weewx-rtldavis/pull/278)).
+- **Filed the generalization cross-repo as ops#214**, at ops's flag: deploy verification checks the
+  file it deployed and never the whole mount list, and every repo in the forum mounts config into
+  containers. Routing, not prescribing.
+- **The unexplained 2026-08-25 21:40 EDT prod restart: cause absent from every artifact this repo
+  keeps, but bounded tightly.** Ruled out on evidence — host/daemon event (every other container's
+  uptime spans it), weewx crash (zero `CRITICAL`), graceful stop (no shutdown markers, so SIGKILL),
+  the restart policy (`RestartCount: 0`, `Created` predates it — stopped-and-started, never
+  recreated), the monitor (it observed and emailed; zero action lines), the campaign harness, and a
+  USB reset. What remains is a deliberate external kill+start. Written up in `BACKLOG.md` so the
+  elimination is not re-walked. Prod healthy since: 70–78% reception, no alerts.
+- **Found while investigating it: Campaign B's two DSM scheduled tasks are still firing**, three days
+  after it closed — `tick`/`guard` passes every few minutes, churning lock contention. State is
+  `BASELINE`, so nothing is at risk, but "nothing further scheduled" was only ever true of the
+  campaign, never of the scheduler. Owner action; they are visible only in the DSM UI. Also the
+  leading hypothesis for the restart above.
+- **Backlogged, not built: off-site backup is a mirror, not versioned** (ops#209 — the DS918+ runs
+  Cloud Sync, so deletes and corruption propagate). The live config and the archive database have no
+  versioned copy anywhere, and the eight `.bak-*` archive copies share a volume with the thing they
+  guard. Owner's call: address it *after* the migration onto `marvin`, since the design should target
+  the destination host rather than the one being left.
+- Housekeeping: ops#203 closed with a comment (verified by GET); ops#213's marvin ssh changes checked
+  against this repo and confirmed a no-op — no runbook, no cockpit reference, no password-auth
+  assumption anywhere.
+
+---
+---
+*(S73–S103 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+
 ## [S103] — 2026-08-26 — Gain / receive-window hot swap built (DEC-0117): a validated control file, plus the post-swap watchdog grace that keeps it from tearing the driver down
 
 - **Picked up the last open `BACKLOG.md` idea / [ops#179], filed at S89 and deliberately unstarted
