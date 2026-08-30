@@ -68,6 +68,54 @@ USB_FORENSICS_SCRIPT = os.environ.get(
     'USB_FORENSICS_SCRIPT', '/volume1/docker/weewx-rtldavis/usb_forensics.sh')
 CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 
+# --- Which automatic remedy the watchdog is allowed to try (S107, ops#233) ---
+# The host moved to marvin (DEC-0118), where the Foundation-era USB path does not
+# just fail -- it is DANGEROUS. `usb_reset.sh` unbinds a driver at a hardcoded
+# Synology bus path (`/sys/bus/usb/devices/1-3`); marvin's USB topology is
+# different (MARVIN-DEC-0051 reassigned two controller roles), so the same call
+# there either no-ops or resets SOMEONE ELSE'S device on a box now hosting two
+# live tenants and a passed-through ASM3142 controller.
+#
+# So the mechanism is now selected, not assumed:
+#
+#   usb_reset     the Foundation/Synology body: sudo usb_reset.sh (driver
+#                 unbind/rebind). DEFAULT, because this is a published extension
+#                 and changing an existing install's behavior silently would be
+#                 its own defect. But read RESET_MAX_TRIES' comment before
+#                 trusting it: across ~17 forensically-captured events on our
+#                 hardware it never once demonstrably fixed a stall, and
+#                 ERR-0005 suspects reset #10 caused a strictly worse mode.
+#   restart_unit  marvin: `systemctl restart <REMEDY_UNIT>`. weewx.service is
+#                 `docker run --rm` with `ExecStartPre=docker rm -f`, so a
+#                 restart IS the full container recreate -- the remedy that
+#                 actually resolved ERR-0005, which the Foundation monitor could
+#                 only reconstruct via `docker inspect` and mail to a human.
+#   none          detect and escalate only; never act. The honest setting for
+#                 any host where no remedy has been shown to work.
+#
+# Every mode keeps the SAME escalation discipline (RESET_MAX_TRIES, the verify
+# window, one email per outage). Only the action in the middle changes.
+REMEDY_MODE = os.environ.get('REMEDY_MODE', 'usb_reset')
+REMEDY_UNIT = os.environ.get('REMEDY_UNIT', 'weewx.service')
+# How to invoke systemctl. marvin's tenant runs unprivileged, so this is the
+# seam where a deployment supplies whatever it is actually allowed to use
+# (a path-scoped sudo grant, or marvinctl's tier-2 own-unit verb).
+REMEDY_SYSTEMCTL = os.environ.get('REMEDY_SYSTEMCTL', 'sudo systemctl')
+
+# --- Campaign inhibit (S107) ---
+# An RX campaign restarts weewx deliberately, once per arm. Every one of those
+# restarts looks exactly like the fault this watchdog exists to remedy: a gap in
+# decodes, then a respawn. Left unguarded the monitor would fight the campaign
+# it is supposed to be observing -- and worse, a remedy restart landing mid-arm
+# corrupts the block, which is the measurement the whole campaign is for.
+#
+# While this file exists: alerting and logging continue unchanged (we still want
+# the record), but NO automatic remedy fires. Detection is never inhibited --
+# only action. Same spirit as void_pending_verdict(): when the situation cannot
+# be judged honestly, say so loudly rather than act on it.
+CAMPAIGN_INHIBIT = os.environ.get(
+    'CAMPAIGN_INHIBIT', f'{BASE_DIR}/logs/campaign.inhibit')
+
 # --- Episode ledger (S73) ---
 # One pipe-delimited row per reception episode (RECEPTION ALERT -> RECOVERY),
 # written at recovery so post-campaign analysis and the LNA verdict read ONE
@@ -194,6 +242,152 @@ def send_email(subject, body):
         log(f"EMAIL error: {e}")
 
 WEEWX_LOG_PATH = os.environ.get('WEEWX_LOG', f'{BASE_DIR}/logs/weewx.log')
+
+# --- Input staleness: THIS MONITOR'S OWN FAILURE MODE (S107, ops#233) ---
+# On 2026-08-29 this monitor sent ~14 hours of "STILL DOWN" alerts about six
+# uploaders that were all healthy. Nothing in it was broken. weewx had moved to
+# marvin (DEC-0118) and the log file it reads froze at 22:33:46 the night
+# before; every alert after that reported the age of a DEAD FILE, not the state
+# of the station. Live rxCheckPercent ran 74-77% the whole time it was calling
+# reception "below 60%".
+#
+# The defect is structural, not a wrong path: EVERY threshold in this file is of
+# the form "nothing has been seen for N seconds", and a stalled input satisfies
+# all of them at once, forever, while looking exactly like a total outage. The
+# monitor could not tell "the station is down" from "I am blind".
+#
+# So blindness is now its own state, checked BEFORE any threshold is evaluated,
+# and reported as its own alert class. Two independent signals, because they
+# fail differently:
+#
+#   mtime      cheap, catches the file not growing. Fooled by a touch, and by a
+#              writer that reopens the path without writing.
+#   last line  the timestamp parsed from the newest line we actually consumed.
+#              Catches content going stale even when something keeps the file's
+#              mtime fresh -- the "right path, wrong host" shape, which is
+#              precisely what the marvin cutover produced.
+#
+# Staleness is the WORSE of the two. weewx publishes every ~3 s and archives
+# every 60 s, so five minutes of silence is already far outside normal.
+INPUT_STALE_S   = int(os.environ.get('INPUT_STALE_S', 300))
+# Timestamp prefix weewx writes on every line: '2026-08-30 07:20:50,192 ...'.
+LOG_TS_RE = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
+
+# Blind state, module-global like WD/EP. 'since' is when we first went blind;
+# 'alerted_at' drives the REPEAT cadence, reusing the same clock as everything
+# else here so a blind episode reads like any other outage in the mail.
+BLIND = {
+    'active': False,
+    'since': 0.0,
+    'alerted_at': 0.0,
+    'last_line_ts': 0.0,   # epoch of the newest weewx.log line we have parsed
+}
+
+
+def parse_log_ts(line):
+    """Epoch of LINE's leading weewx timestamp, or None if it has none.
+
+    Deliberately anchored (`^`) and second-resolution: the millisecond suffix
+    and everything after it is noise for a staleness question, and a regex that
+    could match a timestamp appearing LATER in a line would happily read a
+    quoted one out of an error message and call the input fresh."""
+    m = LOG_TS_RE.match(line)
+    if not m:
+        return None
+    try:
+        return time.mktime(time.strptime(m.group(1), '%Y-%m-%d %H:%M:%S'))
+    except ValueError:
+        return None
+
+
+def log_mtime():
+    """mtime of the weewx log, or 0.0 if it cannot be stated (missing/denied).
+
+    0.0 is deliberately the WORST possible answer rather than an exception: a
+    log we cannot stat is a log we cannot trust, and input_staleness() turns
+    that into maximum staleness, which is the honest reading."""
+    try:
+        return os.path.getmtime(WEEWX_LOG_PATH)
+    except OSError:
+        return 0.0
+
+
+def input_staleness(now):
+    """Seconds since the input last showed evidence of life -- the WORSE of the
+    file's mtime age and the newest parsed line's age.
+
+    Returns a float. A never-seen line (last_line_ts 0.0) does not by itself
+    mean stale: at startup we have not read anything yet, so that signal is
+    skipped until it has a value and mtime carries the check alone."""
+    ages = [now - log_mtime()]
+    if BLIND['last_line_ts']:
+        ages.append(now - BLIND['last_line_ts'])
+    return max(ages)
+
+
+def send_blind_alert(stale_s, now, recovered=False):
+    """Alert on the monitor's own blindness -- a DIFFERENT class from '<svc> DOWN'.
+
+    Kept deliberately distinct in subject and body. Collapsing the two is the
+    original defect: 14 hours of mail said six uploaders were down when the
+    truth was that the monitor could not see. A reader must be able to tell
+    'your station stopped' from 'your monitoring stopped' at a glance, because
+    the actions are completely different."""
+    mtime = log_mtime()
+    seen = (datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+            if mtime else 'never (cannot stat the file)')
+    if recovered:
+        log(f"INPUT RECOVERED: {WEEWX_LOG_PATH} is being written again")
+        send_email(
+            f"{STATION_NAME}: monitoring input RECOVERED",
+            f"{WEEWX_LOG_PATH} is growing again as of {datetime.now()}.\n"
+            f"Uploader and reception checks have resumed.\n\n"
+            f"Alerts sent while blind said nothing about station health.")
+        return
+    log(f"INPUT STALE: {WEEWX_LOG_PATH} unchanged for {int(stale_s)}s -- "
+        f"checks suspended, NOT reporting station health")
+    send_email(
+        f"{STATION_NAME}: MONITORING BLIND - input stale, station state UNKNOWN",
+        f"This is NOT a station alert. The monitor cannot see.\n\n"
+        f"Input:      {WEEWX_LOG_PATH}\n"
+        f"Last write: {seen}\n"
+        f"Stale for:  {int(stale_s // 60)} min (threshold {INPUT_STALE_S // 60} min)\n"
+        f"As of:      {datetime.now()}\n\n"
+        f"Uploader and reception checks are SUSPENDED while this holds, so no\n"
+        f"'DOWN' mail will follow. The station may be perfectly healthy; this\n"
+        f"says only that the file this monitor reads has stopped changing.\n\n"
+        f"Most likely causes, in the order they have actually happened here:\n"
+        f"  - weewx moved host and this monitor still points at the old path\n"
+        f"    (2026-08-29, ops#233: 14 h of false alerts about healthy uploaders)\n"
+        f"  - the container is down, or stopped writing its log\n"
+        f"  - the path is a stale mount, or an export that no longer covers it\n\n"
+        f"Check the log path first, not the station.")
+
+
+def check_input_freshness(now):
+    """Update the blind latch. Returns True when the input is TRUSTWORTHY.
+
+    Called once per poll, before any threshold is evaluated. When this returns
+    False the caller must skip uploader and reception judgement entirely --
+    every threshold in this file would otherwise fire on the same stale input
+    and mail a confident, wrong answer."""
+    stale = input_staleness(now)
+    if stale > INPUT_STALE_S:
+        if not BLIND['active']:
+            BLIND['active'] = True
+            BLIND['since'] = now
+            BLIND['alerted_at'] = now
+            send_blind_alert(stale, now)
+        elif now - BLIND['alerted_at'] >= REPEAT:
+            BLIND['alerted_at'] = now
+            log(f"INPUT STALE: still blind after {int((now - BLIND['since'])//60)}min")
+            send_blind_alert(stale, now)
+        return False
+    if BLIND['active']:
+        BLIND['active'] = False
+        send_blind_alert(0.0, now, recovered=True)
+    return True
+
 
 def get_log_size():
     """Current size of the weewx log in bytes (0 if missing). The caller compares
@@ -437,14 +631,94 @@ def send_unrecoverable_alert(reason, detail=''):
     send_email(f"{STATION_NAME}: RTL-SDR UNRECOVERABLE - manual intervention needed", body)
 
 
+def campaign_inhibited():
+    """True while an RX campaign has asked for no automatic action (S107).
+
+    Cheap existence check, re-read every time rather than cached: a campaign
+    starts and ends without restarting this monitor, so a value read once at
+    startup would be wrong for the entire run that mattered."""
+    return os.path.exists(CAMPAIGN_INHIBIT)
+
+
+def remedy_action():
+    """Human name of the action REMEDY_MODE will actually take.
+
+    Exists for the same reason USB_RESET_ACTION does (S67, DEC-0074): months of
+    logs named an operation that had stopped happening, and a reader reasoning
+    from them reasons about the wrong mechanism. Now that the action is
+    mode-selected, a single hardcoded string would be that defect by
+    construction."""
+    if REMEDY_MODE == 'restart_unit':
+        return f'{REMEDY_SYSTEMCTL} restart {REMEDY_UNIT}'
+    if REMEDY_MODE == 'usb_reset':
+        return f'{USB_RESET_ACTION} via {USB_RESET_SCRIPT}'
+    return 'no automatic remedy (REMEDY_MODE=none)'
+
+
+def do_restart_unit(notify=True):
+    """marvin's remedy: restart the systemd unit that owns the container.
+
+    This is not the timid option. `weewx.service` is `docker run --rm` with
+    `ExecStartPre=/usr/bin/docker rm -f`, so a restart is a FULL CONTAINER
+    RECREATE -- the exact remedy that resolved ERR-0005 and the one the
+    Foundation monitor could only rebuild via `docker inspect` and mail to a
+    human to run by hand. It costs ~2-3 minutes of data, which is why
+    RESET_MAX_TRIES bounds it to one attempt per outage, same as every other
+    remedy here."""
+    import subprocess
+    cmd = REMEDY_SYSTEMCTL.split() + ['restart', REMEDY_UNIT]
+    try:
+        log(f"REMEDY: running {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode == 0:
+            log(f"REMEDY: {REMEDY_UNIT} restart returned 0")
+            if notify:
+                send_email(f"{STATION_NAME}: weewx restarted",
+                           f"Restarted {REMEDY_UNIT} at {datetime.now()} after a "
+                           f"stall.\n\nThis is a full container recreate "
+                           f"(docker run --rm + ExecStartPre rm -f).\n"
+                           f"Expect a 2-3 minute gap in data around this time.")
+        else:
+            log(f"REMEDY error: rc={result.returncode} {result.stderr}")
+            send_email(f"{STATION_NAME}: weewx restart FAILED",
+                       f"{' '.join(cmd)} exited {result.returncode}:\n"
+                       f"{result.stderr}")
+    except Exception as e:
+        # Same lesson as do_reset()'s exception path (S82b, #180): a remedy that
+        # never ran is at least as alarming as one that ran and failed, and the
+        # 15 s sudo timeout that told nobody is why that branch emails.
+        log(f"REMEDY error: {e}")
+        send_email(f"{STATION_NAME}: weewx restart FAILED",
+                   f"{' '.join(cmd)} raised: {e}")
+
+
 def reset_dongle(last_reset, notify=True):
+    """Fire ONE automatic remedy, subject to cooldown and the campaign inhibit.
+
+    Name retained deliberately: `watchdog_stall()` and the S62 escalation tests
+    reach this by name, and renaming the single choke point through which every
+    automatic action passes is not worth the churn (DEC-0014). What it DOES is
+    now selected by REMEDY_MODE -- see that constant. Every log line here takes
+    its wording from remedy_action() so the record can never again describe an
+    operation that is not the one being performed (DEC-0074)."""
     now = time.time()
-    if now - last_reset < RESET_CD:
-        log(f"SKIP reset: cooldown ({int(now-last_reset)}s)")
+    if campaign_inhibited():
+        # Detection is never inhibited; only action. Loud on purpose -- a silent
+        # skip here would read, months later, exactly like a remedy that fired
+        # and worked.
+        log(f"SKIP remedy: campaign inhibit present ({CAMPAIGN_INHIBIT}); "
+            f"would have run {remedy_action()}")
         return last_reset
-    log(f"RESET: {USB_RESET_ACTION} via {USB_RESET_SCRIPT}")
+    if REMEDY_MODE == 'none':
+        log("SKIP remedy: REMEDY_MODE=none; detection and escalation only")
+        return last_reset
+    if now - last_reset < RESET_CD:
+        log(f"SKIP remedy: cooldown ({int(now-last_reset)}s)")
+        return last_reset
+    log(f"REMEDY: {remedy_action()}")
     import threading
-    t = threading.Thread(target=do_reset, kwargs={'notify': notify}, daemon=True)
+    target = do_restart_unit if REMEDY_MODE == 'restart_unit' else do_reset
+    t = threading.Thread(target=target, kwargs={'notify': notify}, daemon=True)
     t.start()
     return time.time()
 
@@ -920,6 +1194,12 @@ def main():
             if lines:
                 log(f"Poll: {len(lines)} new lines")
             for line in lines:
+                # Freshness signal first, and from EVERY line rather than the
+                # ones we happen to match below: the point is to know the input
+                # is alive, which is independent of whether it is interesting.
+                _ts = parse_log_ts(line)
+                if _ts:
+                    BLIND['last_line_ts'] = _ts
                 if 'rtldavis process stalled' in line:
                     log("STALL detected")
                     EP['stalls'] += 1
@@ -966,6 +1246,29 @@ def main():
                     wu_first_seen = True
             # last_offset already advanced by get_new_lines() above.
 
+        # --- Is the input worth judging at all? (S107, ops#233) ---
+        # Everything below this line is a "nothing seen for N seconds" test, and
+        # a frozen input satisfies every one of them simultaneously and forever.
+        # That is not a hypothetical: it is what shipped 14 hours of confident,
+        # false "STILL DOWN" mail about six healthy uploaders. Judge the input
+        # before judging the station.
+        _was_blind = BLIND['active']
+        if not check_input_freshness(now):
+            continue
+        if _was_blind:
+            # Recovered. The window/period clocks have been parked for however
+            # long the blindness lasted; carrying them forward would close a
+            # single "window" spanning hours and read it as catastrophic
+            # reception. Restart the accounting instead of reporting a number
+            # built out of the gap.
+            log("INPUT RECOVERED: restarting reception window accounting")
+            wu_window_start   = now
+            wu_window_epochs  = set()
+            wu_period_counts  = []
+            wu_period_start   = now
+            wu_bad_windows    = 0
+            wu_first_seen     = False
+            void_pending_verdict("input was stale across the verification window")
 
         # --- Reception: close window every 60s ---
         if wu_first_seen and (now - wu_window_start) >= WU_RF_WINDOW:

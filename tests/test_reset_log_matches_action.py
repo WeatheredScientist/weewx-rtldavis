@@ -59,14 +59,61 @@ def test_subprocess_uses_the_named_constant():
     assert not hardcoded, f"reset path hardcoded at the call site: {hardcoded}"
 
 
-def test_reset_log_lines_reference_the_constants():
-    """Every RESET log line that describes the mechanism derives it from the constants."""
+def test_remedy_log_lines_reference_the_constants():
+    """Every log line that describes the mechanism derives it, never spells it.
+
+    GENERALIZED AT S107 (ops#233). The guard originally watched one line:
+    `log(f"RESET: {USB_RESET_ACTION} via {USB_RESET_SCRIPT}")`. The marvin
+    rebuild made the action mode-selected (REMEDY_MODE: usb_reset on Synology,
+    restart_unit on marvin, none where nothing has been shown to work), so a
+    single hardcoded mechanism string would now be DEC-0074's defect by
+    construction -- it could not be right in more than one mode.
+
+    The rule is unchanged and the surface is wider: a mechanism-describing log
+    line must derive its wording from remedy_action() or from the constants,
+    so the record cannot name an operation that is not the one performed.
+    """
     mechanism_lines = [
         line for line in SOURCE.splitlines()
-        if "log(" in line and "RESET:" in line and "running" not in line and "done" not in line
+        if "log(" in line
+        and ("REMEDY:" in line or "RESET:" in line)
+        and "running" not in line and "done" not in line
     ]
-    assert mechanism_lines, "expected at least one RESET mechanism log line"
+    assert mechanism_lines, "expected at least one remedy mechanism log line"
     for line in mechanism_lines:
-        assert "USB_RESET_ACTION" in line or "USB_RESET_SCRIPT" in line, (
-            f"RESET log line describes the mechanism with a literal, so it can drift: {line.strip()}"
+        assert any(
+            token in line for token in (
+                "remedy_action()",     # the mode-aware description
+                "USB_RESET_ACTION",    # legacy Synology body
+                "USB_RESET_SCRIPT",
+                "REMEDY_UNIT",         # marvin body: the unit being acted on
+                "REMEDY_SYSTEMCTL",
+            )
+        ), (
+            f"remedy log line describes the mechanism with a literal, so it can "
+            f"drift: {line.strip()}"
         )
+
+
+def test_remedy_action_derives_every_mode_from_constants():
+    """remedy_action() is now the single source the log lines quote, so it is
+    the thing that must not carry a hand-written mechanism string.
+
+    Checked structurally rather than by calling it: the point is that no mode's
+    wording can be edited in one place and left stale in another."""
+    body = SOURCE.split("def remedy_action():", 1)[1].split("\ndef ", 1)[0]
+    assert "REMEDY_UNIT" in body and "REMEDY_SYSTEMCTL" in body, (
+        "restart_unit wording must derive from the unit/systemctl constants"
+    )
+    assert "USB_RESET_ACTION" in body and "USB_RESET_SCRIPT" in body, (
+        "usb_reset wording must derive from the legacy constants"
+    )
+
+
+def test_skip_lines_say_what_would_have_run():
+    """A suppressed remedy must record WHICH remedy it suppressed.
+
+    The campaign inhibit and REMEDY_MODE=none both decline to act. A bare
+    'skipped' line would read, months later, exactly like a remedy that fired
+    and worked -- the same unfalsifiable-record failure DEC-0074 is about."""
+    assert 'would have run {remedy_action()}' in SOURCE

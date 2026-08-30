@@ -5,6 +5,45 @@ Most recent first. Governance-era entries are session-tagged (`[S16]`, `[S17]`, 
 under [Pre-S16].
 
 ---
+
+## [S107] — 2026-08-30 — Alerting rebuilt for marvin (DEC-0120): input staleness becomes its own state, the USB remedy stops being assumed; today's gain campaign refused on power grounds
+
+- **`weewx_monitor.py`'s 14 h of false alerts were a structural defect, not a wrong path (DEC-0120,
+  answers [ops#233]).** Every threshold in the file is "nothing seen for N seconds", and a frozen
+  input satisfies all of them at once — so it could not distinguish *the station is down* from *I am
+  blind*. Repointing the path would have fixed the instance and left the mechanism. Blindness is now
+  checked **before** any threshold, on the worse of the log's mtime and the newest parsed line's
+  timestamp, raised as a **distinct alert class**, and it suspends uploader/reception judgement while
+  it holds.
+- **ops#233's premise corrected: marvin's `logs/weewx.log` is alive, local and healthy** — growing
+  continuously, rotating daily. The "no path to the log" problem exists only when looking from
+  Foundation; on marvin the service-alerting and reception halves port on an environment variable.
+- **The USB unbind/rebind is no longer assumed — `REMEDY_MODE` selects it.** `usb_reset` stays the
+  DEFAULT (this is a published extension; our zero-efficacy evidence across ~17 events is from our
+  hardware), `restart_unit` is marvin's (a `weewx.service` restart IS a full container recreate —
+  `docker run --rm` + `ExecStartPre=docker rm -f` — the remedy that resolved ERR-0005), `none` is
+  detect-and-escalate. The Foundation body is deliberately **not** ported: it unbinds a hardcoded
+  Synology bus path, and marvin's controller roles differ (`MARVIN-DEC-0051`), so on a two-tenant box
+  it would no-op or reset someone else's device.
+- **Campaign inhibit added** — a campaign restarts weewx once per arm, and a remedy landing mid-arm
+  corrupts the block being measured. Action is suppressed; detection and alerting are not, and the
+  skip logs the action it *would* have taken.
+- **New `ops/weewx-monitor.service`**, shipping at `REMEDY_MODE=none`. **Nothing deployed this
+  session** — tonight's campaign restarts weewx per arm, so a monitor landing first would fight it.
+- **Today's requested 4-hour gain campaign was refused on the repo's own power math.** DEC-0059
+  measured 24 h/arm resolving 1.1 points; a 4 h window splits to ~2 h/arm, giving a minimum
+  detectable effect of **~3.8 points against a 2.0-point effect of interest** — ~3.6× too short, and
+  it would have returned "no difference" nearly regardless of truth. Confirmed two independent ways.
+  A properly-powered 2-arm run needs ~15 h. Owner's call: overnight instead.
+- **Found, not fixed:** prod is running **gain 372 while DEC-0115 adopted 496** — the 08-29 migration
+  incident set it without a controlled comparison and the aborted campaign's exit trap codified it.
+  Owner's call: hold 372 until measured. Also, marvin's `weewx_monitor.py` is **stale against `dev`**
+  (the [ops#214] silent-drift family), and `BOOT.md`'s job 5 (`debug_rtld` 3→2) is stale — live
+  config is already at 1.
+
+[ops#233]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/233
+[ops#214]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/214
+
 ## [S106] — 2026-08-29 — ops#183's Influx outage remediated and fully backfilled (DEC-0119); weewx_monitor.py's alerter found blind since the marvin cutover
 
 - **weewx's InfluxDB uploads were down 00:14→12:08:27 ET (~11h54m).** Root cause was `eaglehunt-ops`
@@ -67,52 +106,3 @@ under [Pre-S16].
   need a marvin-side session for now. Tracked as `eaglehunt-ops`'s own follow-up.
 
 ---
-## [S104] — 2026-08-26 — Every mounted file audited against `dev` (one 7.5-week-stale, harmless); a prod restart bounded by elimination; two DSM tasks found still firing after Campaign B closed
-
-- **Job 4 done: audited the whole mount list, not just the files a deploy happened to touch.** Worked
-  from `nasctl inspect` rather than the deploy-layers table, since the table was the thing under test.
-  `influx.py` and `loop_json_writer.py` are byte-identical to `dev`; the live config still carries all
-  six DEC-0070 deviations; `hotswap_control_file` is absent, so DEC-0117 is *verifiably* off in prod
-  rather than assumed off.
-- **`ogoxeUploader.py` was 7.5 weeks stale — byte-identical to `7e79d15`, its own S16 prod import.**
-  Two `dev` commits had never reached the NAS. Identified without reading the live file, by hashing
-  every historical revision of the repo copy until one matched. Content is harmless: an SPDX line,
-  the GPLv3 section 5(a) fork notice from DEC-0034, and one `log.debug()` that reported a key which is
-  never set and so always printed `None`. No data-path change; the Dockerfile never `COPY`s the file,
-  so the published image carries no compliance gap either. Deploy folded into the next image cut,
-  where the recreate makes a mounted file take effect for free. Same detection gap as DEC-0116 — no
-  new DEC, that row already names the class.
-- **The deploy-layers table itself was wrong, which is the durable part.** It grouped
-  `ogoxeUploader.py` and `sortedcontainers` as "same pattern" as the row above; neither held.
-  `ogoxeUploader.py`'s mount source is `weewx-data/bin/user/` — the exact directory the preceding row
-  calls a DECOY for `loop_json_writer.py`, so two adjacent rows asserted opposite truths. And
-  `sortedcontainers` is a vendored third-party *directory* bind with no repo copy at all, so "in sync
-  with `dev`" was never a meaningful question about it — a comparison that is undefined, not passing.
-  Both rows corrected and split ([#278](https://github.com/WeatheredScientist/weewx-rtldavis/pull/278)).
-- **Filed the generalization cross-repo as ops#214**, at ops's flag: deploy verification checks the
-  file it deployed and never the whole mount list, and every repo in the forum mounts config into
-  containers. Routing, not prescribing.
-- **The unexplained 2026-08-25 21:40 EDT prod restart: cause absent from every artifact this repo
-  keeps, but bounded tightly.** Ruled out on evidence — host/daemon event (every other container's
-  uptime spans it), weewx crash (zero `CRITICAL`), graceful stop (no shutdown markers, so SIGKILL),
-  the restart policy (`RestartCount: 0`, `Created` predates it — stopped-and-started, never
-  recreated), the monitor (it observed and emailed; zero action lines), the campaign harness, and a
-  USB reset. What remains is a deliberate external kill+start. Written up in `BACKLOG.md` so the
-  elimination is not re-walked. Prod healthy since: 70–78% reception, no alerts.
-- **Found while investigating it: Campaign B's two DSM scheduled tasks are still firing**, three days
-  after it closed — `tick`/`guard` passes every few minutes, churning lock contention. State is
-  `BASELINE`, so nothing is at risk, but "nothing further scheduled" was only ever true of the
-  campaign, never of the scheduler. Owner action; they are visible only in the DSM UI. Also the
-  leading hypothesis for the restart above.
-- **Backlogged, not built: off-site backup is a mirror, not versioned** (ops#209 — the DS918+ runs
-  Cloud Sync, so deletes and corruption propagate). The live config and the archive database have no
-  versioned copy anywhere, and the eight `.bak-*` archive copies share a volume with the thing they
-  guard. Owner's call: address it *after* the migration onto `marvin`, since the design should target
-  the destination host rather than the one being left.
-- Housekeeping: ops#203 closed with a comment (verified by GET); ops#213's marvin ssh changes checked
-  against this repo and confirmed a no-op — no runbook, no cockpit reference, no password-auth
-  assumption anywhere.
-
----
----
-*(S73–S103 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*

@@ -411,7 +411,13 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       serially-silent children across multiple gain configs, recovery time-correlated, never
       action-correlated. Resets are theater for this class (~17 attempts, 0 fixes, 1 suspected
       harm — ERR-0005's recreate-fix now reads as episode-end coincidence, vindicating
-      DEC-0065). **Shipped same day (v2.0.13/ws.5 + monitor, before the square's first
+      DEC-0065). ⤷ **S107 (DEC-0120) acts on that conclusion rather than only recording it:** the
+      reset is no longer the assumed remedy. `REMEDY_MODE` selects one — `usb_reset` stays the
+      default for existing Synology installs (this is a published extension, and the zero-efficacy
+      record is *our* hardware), `restart_unit` is marvin's, `none` is detect-and-escalate. The
+      Foundation body is deliberately not ported to marvin, where a hardcoded Synology bus path
+      would no-op or reset another tenant's device. **Not deployed** — see `BOOT.md`.
+      **Shipped same day (v2.0.13/ws.5 + monitor, before the square's first
       block):** resets demoted to one hedge (`RESET_MAX_TRIES=1`), child reaping (the one real
       process bug — kill-without-wait stacked three zombies under one weewxd), `STALL
       DIAGNOSIS` + `DATA DROUGHT` self-classification at the source, and the `episodes.log`

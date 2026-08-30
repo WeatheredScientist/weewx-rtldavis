@@ -12,75 +12,84 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S106 → S107)
+## ▶ Resume here (S107 → S108)
 
 ### What's settled (do not re-derive)
 
-**ops#183's InfluxDB write outage (00:14→12:08:27 ET, ~11h54m) is fully remediated, backfilled, and
-closed (DEC-0119).** Root cause was external to this repo — `eaglehunt-ops` deleted a token it didn't
-know `influx.py` also wrote with (`OPS-DEC-0162`); weewx's own config was never at fault, confirmed
-unchanged since 08-23. Fixed with a new dedicated write token, installed by a marvin-side session
-(this repo's own `marvinctl` access has no arbitrary file write). Entire outage window backfilled
-clean — 712 records, 0 errors — via `ops/backfill_influx.py`, which had two real bugs found running it
-live for the first time (committed `INFLUX_ORG` placeholder, read-write `sqlite3.connect()` against a
-read-only export) — both fixed on PR #282, still open, green gate passed, live-tested in production
-before merge. Full narrative: DEC-0119, don't re-walk it.
+**The marvin alerting rebuild is BUILT and MERGED-READY, but deliberately NOT DEPLOYED (DEC-0120,
+answers ops#233).** Read the DEC before touching it; the short version is that the 08-29 false-alert
+episode was **not** a wrong path. Every threshold in `weewx_monitor.py` is "nothing seen for N
+seconds", and a frozen input satisfies all of them at once — so it structurally could not tell *the
+station is down* from *I am blind*. Repointing the path would have fixed the instance and left the
+mechanism. Now: staleness is checked **before** any threshold (worse of log mtime and newest parsed
+line timestamp), raised as its own alert class, and it suspends uploader/reception judgement while it
+holds. `REMEDY_MODE` replaces the assumed USB reset (`usb_reset` default for Synology,
+`restart_unit` for marvin, `none` = detect-only). Campaign inhibit added. New
+`ops/weewx-monitor.service` ships at `REMEDY_MODE=none`.
 
-**`weewx_monitor.py` (this repo's own artifact) sent ~14h of false "STILL DOWN" alerts during the
-outage — found and disabled, not yet replaced.** It watches a hardcoded Foundation log path the
-marvin NFS overlay doesn't cover (`weewx-data/` is live-mirrored, `logs/` is not); the file froze at
-cutover and every alert since was reporting a dead file's age, not station health. Disabled on
-Foundation (owner action); no marvin-side equivalent exists yet — job 10 below. A second stale
-watcher, `usb_watchdog.sh`, found in the same sweep, filed on `eaglehunt-ops`#233 — same "points at
-where weewx used to be" shape.
+**ops#233's premise was wrong in a way that made the job easier: marvin's
+`/srv/docker/weewx/logs/weewx.log` is alive, local and healthy** — growing continuously, rotating
+daily, bind-mounted. The "no path to the log" problem exists only when looking *from Foundation*.
 
-**All twelve publish legs confirmed independently healthy** (WU-RF/PWS, PWSWeather, CWOP, AWEKAS,
-WOW/WOW-BE, WeatherCloud, OWM, Windy, Influx, Ogoxe) via the newly-live `marvin-weewx` `marvinctl`
-alias — this repo's own session's first real use of it. Tier-1 reads worked cleanly, no guard
-friction. Tier 2 (start/stop/restart own units) is available but untested this session; no arbitrary
-file write either tier, by design — the config fix still had to run from a marvin-side session.
+**Today's 4-hour gain campaign was refused on this repo's own power math, and the owner agreed.**
+DEC-0059 measured 24 h/arm resolving 1.1 pts; 4 h splits to ~2 h/arm → MDE **~3.8 pts against a
+2.0-pt effect** (~3.6× too short; confirmed two independent ways). It would have returned "no
+difference" nearly regardless of truth. A properly-powered 2-arm run needs **~15 h**. Do not let this
+be re-proposed as a short run.
 
-**S105's migration items are otherwise untouched this session** — see job list below, all carried
-forward.
+**Prod is running gain 372 while DEC-0115 adopted 496.** The 08-29 migration incident set 372 without
+a controlled comparison and the aborted campaign's exit trap codified it as the restore value.
+**Owner's decision: hold 372 until measured** — this is deliberate, not drift-in-waiting.
 
-### ▶▶ S107 JOB LIST
+**marvin is clear for RF work.** Its GPU passthrough bind completed and is final since 08-29; no
+hardware work scheduled. Caveat that matters for any measurement: the 2070 now lives in the win11
+guest **full-time, driver-active even at idle**, and owner gaming is ad-hoc — an uncontrolled EMI
+variable unless hands-off is declared for the window.
 
-**Carried forward from S105, untouched this session:**
-1. **`main` promotion for v2.0.14** — still deliberately deferred (DEC-0114).
-2. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — gated on job 3.
-3. **DEC-0117 hot swap still needs an image rebuild to reach prod** (off by default, no urgency).
-   Still unverified whether marvin (Ryzen 9700X, amd64) can build natively, vs. repeating the
-   `docker save`/`load` dance.
-4. **Gain re-sweep at marvin's RF position** — 372 vs 496, done properly, not under an incident clock.
-5. **Revert `debug_rtld` 3→2** once marvin's weewx has a few clean days behind it.
-6. **Foundation decommission timing** — owner's call, after a week-plus soak.
-7. **NAS-LEASE cross-host wiring** — low priority, marvin's `/nas-lease` mount is a deliberate no-op.
-8. **`CONSTANTS.md`'s infra section second pass** — still not independently re-verified row by row.
+### ▶▶ S108 JOB LIST
 
-**New from today:**
-9. **Merge PR #282** (`s106-backfill-influx-org-secret-fixes`) — green gate passed; unusually, the fix
-   was already proven live in production before the branch merged, because the incident couldn't wait
-   for the normal order.
-10. **Decide a marvin-side alerter (or an explicit retirement) for `weewx_monitor.py` /
-    `usb_watchdog.sh`.** Both are now simply OFF — marvin currently has zero automated health
-    alerting from this repo's side. Not urgent (consumer-side/ops monitoring exists independently),
-    but a real, named gap rather than a silent one.
-11. **Sanity-check `eaglehunt-ops`'s `CONSTANTS.md` §5 register row for weewx's new token**
-    (fingerprint `ef8e9af8`) — this repo doesn't own that file, but it names `influx.py`/`weewx.conf`
-    as a consumer and is worth a quick correctness check next time either file changes.
+**Live, in order:**
+1. **Run the overnight 2-arm gain campaign (372 vs 496, ~15 h)** — owner-agreed, not yet run. Needs:
+   a marvin-side session to deploy the transient unit (we have no arbitrary file write), the
+   campaign to create `logs/campaign.inhibit`, and an owner hands-off-the-guest window. Design
+   carries forward from S105's pre-registration minus the 207 arm.
+2. **Deploy the S107 alerting** — *after* the campaign, never before (it would fight the per-arm
+   restarts). Deploy `weewx_monitor.py` from the **merged `dev` tip**: marvin's copy is already
+   **stale vs `dev`** (sha mismatch, 50026 vs 50538 bytes — the ops#214 family).
+3. **Verify the archive DB is readable unprivileged before enabling the reception-summary path.**
+   `weewx.sdb` is mode `0500 t-weewx`, written by root in-container. If it is WAL, a `?mode=ro` open
+   may fail needing `-shm` write — DEC-0119's bug class. **Unverified; do not assume either way.**
+4. **Then** flip `REMEDY_MODE=none` → `restart_unit`, but only once `t-weewx` actually holds a
+   restart grant (sudoers or a marvinctl tier-2 verb). Setting it without one yields a remedy that
+   fails every time while looking correct (DEC-0061).
+5. **`usb_watchdog.sh`'s fate** — still simply OFF, still undecided. ops#233's sibling finding.
 
-### Current state (S106 close)
+**Carried forward, untouched:**
+6. **`main` promotion for v2.0.14** — deliberately deferred (DEC-0114).
+7. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — gated on job 8.
+8. **DEC-0117 hot swap needs an image rebuild to reach prod** (off by default). Still unverified
+   whether marvin can build natively vs. repeating the `docker save`/`load` dance.
+9. **Foundation decommission timing** — owner's call, after a week-plus soak.
+10. **NAS-LEASE cross-host wiring** — low priority; marvin's `/nas-lease` is a deliberate no-op.
+11. **`CONSTANTS.md`'s infra section second pass** — still not re-verified row by row. S107 captured
+    the authoritative `docker run` line from `marvinctl unit weewx` if that helps the next pass.
+12. **Sanity-check ops' `CONSTANTS.md` §5 register row** for weewx's token (`ef8e9af8`).
+
+**Retired this session:** ~~merge PR #282~~ (was already merged before S107 began);
+~~revert `debug_rtld` 3→2~~ — **stale job, live config is already at 1**.
+
+### Current state (S107 close)
 
 | Thing | State |
 |---|---|
-| Prod host | marvin (unchanged from S105) |
-| Prod | v2.0.14 unchanged, driver ws.5, weewx 5.5.0, gain 372 (still provisional) |
-| InfluxDB write token | New dedicated token, fingerprint `sha256-ef8e9af8` (was `56d69d93`, shared/deleted — DEC-0119) |
-| Backfill | Complete — 712 records + small follow-up slices, 0 errors, verified from the consumer side |
-| Alerting (Foundation) | `weewx_monitor.py` + `usb_watchdog.sh` both OFF; no marvin equivalent yet (job 10) |
-| `marvin-weewx` alias | Live; tier-1 read proven working this session |
-| PR | [#282](https://github.com/WeatheredScientist/weewx-rtldavis/pull/282) open, green gate passed, awaiting merge (job 9) |
-| Trackers | `eaglehunt-ops`#183 closed · #216 open (non-weewx items only: dashboard gate re-derivation, ops closeout report) · #229/#233/#227 filed as follow-ups, not weewx's to close |
+| Prod host | marvin · `weewx.service` in `/weather.slice`, `docker run --rm` (a restart IS a full recreate) |
+| Prod | v2.0.14, driver ws.5, weewx 5.5.0, **gain 372** (owner-held pending measurement; adopted value is 496) |
+| Alerting | **Built, not deployed.** Foundation's `weewx_monitor.py` + `usb_watchdog.sh` still OFF — marvin has zero alerting from this repo until job 2 |
+| marvin GPU bind | Complete + final since 08-29; 2070 attached to win11 full-time, driver-active at idle |
+| `marvinctl` | Tier-1 reads proven (needs `--tenant weewx`). No SQL verb — an archive-DB readout needs a marvin-side session |
+| Campaign | Refused today on power grounds; ~15 h overnight run agreed, not yet scheduled |
+| Trackers | ops#233 answered by DEC-0120 (not closed — deploy outstanding) · #216/#214/#110 open · repo #274/#253 open |
+
 
 ## Blockers
 
