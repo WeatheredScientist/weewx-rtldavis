@@ -143,7 +143,11 @@ zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) ·
 task (§3) · judging a component live, dead, or shipped (§4). Indexed in `MANIFEST.md`. **New traps
 are appended THERE, not here** — that is what keeps this file under cap.
 
-_Last updated: 2026-08-29 (S106 close). Green gate: ruff clean, 428 passed / 8 skipped, mypy clean
-(65 files), secret gate clean. Shipped: ops#183's Influx outage fully remediated and backfilled
-(DEC-0119), `ops/backfill_influx.py` hardened (PR #282), `weewx_monitor.py`'s stale-watch-path blind
-spot found and disabled — full narrative in `CHANGELOG.md`._
+_Last updated: 2026-08-30 (S107 close). Green gate: ruff clean, 468 passed / 3 skipped, mypy clean
+(66 files), secret gate clean, shell syntax OK. Shipped: `weewx_monitor.py` rebuilt for marvin —
+input staleness checked before any threshold, raised as its own alert class, `REMEDY_MODE` replaces
+the assumed USB reset (DEC-0120); the overnight gain campaign C pre-registered and power-checked
+against marvin's own measured noise, then `ops/rx_experiment.sh` fixed to refuse launch without a
+fresh monitor log as its abort-tripwire input and the block order corrected against the actual
+notch clock (DEC-0121); ROADMAP's closed Campaign B line repointed at campaign C (DEC-0057) — full
+narrative in `CHANGELOG.md`._
