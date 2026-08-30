@@ -35,6 +35,21 @@ under [Pre-S16].
   detectable effect of **~3.8 points against a 2.0-point effect of interest** — ~3.6× too short, and
   it would have returned "no difference" nearly regardless of truth. Confirmed two independent ways.
   A properly-powered 2-arm run needs ~15 h. Owner's call: overnight instead.
+- **The replacement campaign is pre-registered before any data exists** (`BACKLOG.md`): 2 arms
+  (372 vs 496 — 207 dropped as known-worst and barely separable), 15 h, 90-min blocks, 5 per arm,
+  order `A B B A B A A B B A` balanced so the ~2-pt hour-07 notch lands on both arms, exit trap,
+  abort floor, and a pre-committed reading of both outcomes.
+- **Power re-checked against marvin's OWN measured noise rather than Foundation's inherited figure.**
+  ~15 h of post-bind gain-372 telemetry already in the archive gave 21 full 40-min blocks with
+  `NULL_COUNT` 0: **block sd 1.403 pts at 40 min → 0.936 at 90 min, 0.84× the sd implied by
+  DEC-0059** — marvin is quieter, so the 15 h design clears the 2.0-pt bar at **MDE ~1.66** rather
+  than scraping it.
+- **A prior recorded before the run, precisely so it cannot be back-fitted after:** marvin at gain
+  372 already measures **73.88%**, within ~0.95 pts of Foundation at 496 (74.83) and ~1.05 above
+  Foundation at 372 (72.83). Uncontrolled cross-environment comparison, so a prior and not a result
+  — but 496 repeating its 2.00-pt win at the new position is not the safe assumption.
+- **Incidental: zero gaps in ~15 h**, against the freeze blocker's NAS-era 1.31/day (~0.8 expected).
+  First post-migration data point on that blocker. Flagged, not concluded.
 - **Found, not fixed:** prod is running **gain 372 while DEC-0115 adopted 496** — the 08-29 migration
   incident set it without a controlled comparison and the aborted campaign's exit trap codified it.
   Owner's call: hold 372 until measured. Also, marvin's `weewx_monitor.py` is **stale against `dev`**
