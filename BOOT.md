@@ -49,10 +49,15 @@ variable unless hands-off is declared for the window.
 ### ▶▶ S108 JOB LIST
 
 **Live, in order:**
-1. **Run the overnight 2-arm gain campaign (372 vs 496, ~15 h)** — owner-agreed, not yet run. Needs:
-   a marvin-side session to deploy the transient unit (we have no arbitrary file write), the
-   campaign to create `logs/campaign.inhibit`, and an owner hands-off-the-guest window. Design
-   carries forward from S105's pre-registration minus the 207 arm.
+1. **Run the overnight 2-arm gain campaign (372 vs 496, ~15 h).** **Fully pre-registered in
+   `BACKLOG.md` (S107) — read it there, don't re-derive.** Arms/order/blocks/exit-trap/abort floor
+   are locked, and the power was re-checked against marvin's *own* measured noise (block sd 0.936
+   pts at 90 min, 0.84× Foundation's): **the 15 h design gives MDE ~1.66 pts against the 2.0 bar —
+   it clears, with margin.** Still needs: a marvin-side session to deploy the transient unit (we
+   have no arbitrary file write), and **an owner hands-off-the-guest declaration** for the window
+   (the 2070 is attached to win11 full-time; ad-hoc gaming is the one uncontrolled EMI variable).
+   ⚠ Prior worth knowing before reading results: **marvin @372 already measures 73.88%**, within
+   ~0.95 pts of Foundation @496 — so 496 repeating its 2.00-pt win here is not the safe assumption.
 2. **Deploy the S107 alerting** — *after* the campaign, never before (it would fight the per-arm
    restarts). Deploy `weewx_monitor.py` from the **merged `dev` tip**: marvin's copy is already
    **stale vs `dev`** (sha mismatch, 50026 vs 50538 bytes — the ops#214 family).
