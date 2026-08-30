@@ -325,6 +325,78 @@ failed resets currently produce no further action.
   §3's own bar); a directional prior for a real follow-up campaign, not a replacement. The DEC-0117
   hot-swap control file makes that real campaign cheaper than either prior one was, once it's
   actually in prod (`BOOT.md` job 3).
+
+  ### ▶ PRE-REGISTERED, S107 (2026-08-30) — written before any data exists
+
+  **Bind is done** (marvin, final since 08-29, confirmed by a marvin-side session), so the post-bind
+  gate is satisfied. **The owner asked for a 4-hour run this morning and it was declined on this
+  repo's own power math** — that refusal is part of the record, not a footnote:
+
+  | design | time/arm | detectable (80% power) |
+  |---|---|---|
+  | 4 h, 2 arms | 2.0 h | ~3.8 pts |
+  | 4 h, 3 arms (the S105 design) | 1.3 h | ~4.7 pts |
+  | **effect of interest** | — | **2.0 pts** |
+
+  DEC-0059 measured 24 h/arm resolving 1.1 pts; scaling gives ~7.3 h/arm to reach 2.0. Derived a
+  second, independent way (implied 6 h-block sd ≈ 0.56 pts → 1.67 pts at 40-min blocks) to the same
+  answer. A 4 h run returns "no difference" nearly regardless of truth. **Do not let a short run be
+  re-proposed as a cheap version of this one — it is not a weaker answer, it is a non-answer.**
+
+  - **Arms: 2 — gain 372 vs 496.** 207 is dropped, deliberately: at Foundation it was the known-worst
+    and barely separable (S66: 207 arms 73.87 / 74.17 vs 372's 74.81, spread 0.94 pts), it is not a
+    live candidate, and a third arm costs ~40% of the power on the question actually being asked.
+  - **15 h total, 90-minute blocks, 5 per arm.** Block size is a real trade, not a default: each
+    switch is a container restart (driver init up to 133 s), so 10 switches at 90 min loses ~3% of
+    the window while 20 at 45 min loses ~7% and doubles the disturbances; going longer than 90 min
+    buys little and shrinks the block count the variance estimate rests on.
+  - **Order `A B B A B A A B B A`** (A=372, B=496). Balanced against linear time drift: A's block
+    indices sum 28, B's 27, against an ideal 27.5. This is what makes the hour-07 notch
+    (DEC-0059 as amended, ~2 pts — the same magnitude as the effect) land on both arms rather than one.
+  - **Discard the first 5 minutes of every block** (driver init + archive alignment). At
+    `archive_interval = 60` a block yields ~85 usable per-minute records.
+  - **Metric: per-minute `rxCheckPercent` via `ops/campaign_analyze.py`** — the only sanctioned
+    readout (DEC-0069), including its gap-adjacency exclusion for freeze contamination (DEC-0067).
+    Not the WU-publish scrape, which measures publish liveness (S31).
+  - **Exit trap: restore gain 372 + restart weewx regardless of outcome**, and remove the inhibit
+    file. S105's trap worked exactly as designed under an abort; keep it identical.
+  - **Create `logs/campaign.inhibit` for the duration** (DEC-0120). The monitor is not deployed yet,
+    so this is belt-and-braces today and load-bearing the next time.
+  - **Abort floor: sustained reception below 50%** → abort and restore, matching Campaign B.
+  - **Declared confound, recorded not controlled: the GPU.** The 2070 now lives in the win11 guest
+    full-time and is driver-active even at idle; owner gaming is ad-hoc and unschedulable. **This run
+    needs an owner hands-off-the-guest declaration for the window.** If the guest is used anyway, the
+    affected blocks must be recorded and excluded — never silently averaged in.
+  - **Deployment needs a marvin-side session** — this repo has no arbitrary file write on marvin.
+
+  **Power re-checked against marvin's OWN measured noise, not Foundation's (S107, same day).** ~15 h
+  of post-bind gain-372 telemetry already existed in the archive; read out as 40-min block means
+  (23 blocks, 21 full; owner-run query, relayed by a marvin session). **`NULL_COUNT` was 0**, so no
+  freeze-signature exclusion applies to that window by `campaign_analyze.py`'s own criterion.
+
+  - Measured **block sd = 1.403 pts at 40 min** → **0.936 pts at 90 min**. That is **0.84× the sd
+    implied by Foundation's DEC-0059 figure** — marvin is slightly *quieter*, so the design above was
+    sized conservatively and holds with margin.
+  - **The planned 5 × 90 min/arm (15 h) gives an MDE of ~1.66 pts against the 2.0-pt bar.** It clears
+    it rather than scraping it; 15 h is sufficient, not marginal. Going to 18 h buys only 1.51.
+  - **Mean reception at marvin, gain 372: 73.88%** (range 70.03–75.94 across the 21 full blocks).
+    Set against Campaign B's Foundation figures — 372 → 72.83%, 496 → 74.83% — **marvin at 372 is
+    already within ~0.95 pts of Foundation at 496**, and ~1.05 pts above Foundation at 372.
+    Uncontrolled cross-environment comparison, so a prior and nothing more; but it is a prior that
+    cuts against assuming 496 will repeat its 2.00-pt win here. **Do not treat that as a result** —
+    it is the reason to run the campaign, not a substitute for it.
+  - **Incidental, worth its own look later: zero gaps in ~15 h.** Blocker 1 records freezes at
+    1.31/day (median 240 s) — a NAS-era measurement — which predicts ~0.8 in a window this size.
+    One clean window is far from evidence, but it is the first post-migration data point on that
+    blocker and it points the right way. Flagged, not concluded.
+
+  **Pre-committed reading of the result.** Even at ≥2.0 pts this is one night, unreplicated, and
+  therefore *directional* — it does not by itself re-open or re-confirm DEC-0115 as adoption
+  evidence. Prod currently runs 372 while 496 is the adopted value (the 08-29 incident set 372
+  without a controlled comparison; owner's call is to hold it until measured). So the two honest
+  outcomes are: **496 clears the bar** → restore the adopted value with a same-position measurement
+  behind it; **it does not** → the interesting finding is that marvin's position changed the answer,
+  which earns a real multi-day campaign rather than a config change.
 - **NAS-LEASE cross-host wiring for marvin (S105).** `influx.py`'s courtesy-yield mount (`/nas-lease`)
   points at a deliberately empty local directory on marvin (`MARVIN-DEC-0063`) rather than a live
   share of the NAS's real lease file — a permanent, silent no-op by design until someone builds the
