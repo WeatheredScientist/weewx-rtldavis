@@ -62,12 +62,11 @@ variable unless hands-off is declared for the window.
    to BASELINE. Design and rationale: `BACKLOG.md` — **read it there, don't re-derive.** Power was
    re-checked against marvin's *own* measured noise (block sd 0.936 pts at 90 min, 0.84× Foundation's):
    **MDE ~1.66 pts against the 2.0 bar — clears with margin.**
-   Steps 1–3 of the four-round-trip sequence are **done** (job 1, above). **Still outstanding before
-   launch: an owner hands-off-the-guest declaration** (the 2070 is attached to win11 full-time;
-   ad-hoc gaming is the one uncontrolled EMI variable — no session has visibility into this, it needs
-   the owner directly). Launch is the S105 pattern: `sudo systemd-run --unit=weewx-gain-campaign
-   --slice=weather.slice`, marvin-side, still a HOST-side command and therefore its own owner-token
-   round-trip — don't leave it to 19:55.
+   Steps 1–3 of the four-round-trip sequence are **done** (job 1, above). ✅ **Owner hands-off-the-guest
+   declaration obtained** — no gaming on the win11/2070 guest for the full campaign window (2026-08-31
+   20:00 → 09-01 11:00 ET), logged marvin-side as MARVIN-DEC-0082. **Only the launch itself remains.**
+   Launch is the S105 pattern: `sudo systemd-run --unit=weewx-gain-campaign --slice=weather.slice`,
+   marvin-side — still a HOST-side command and its own owner-token round-trip, at 20:00 tomorrow.
    ⚠ Prior to know *before* reading results: **marvin @372 already measures 73.88%**, within ~0.95 pts
    of Foundation @496 — 496 repeating its 2.00-pt win here is **not** the safe assumption.
 3. **Verify the archive DB is readable unprivileged before enabling the reception-summary path.**
