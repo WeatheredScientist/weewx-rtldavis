@@ -49,30 +49,25 @@ variable unless hands-off is declared for the window.
 ### ▶▶ S108 JOB LIST
 
 **Live, in order — and the order MATTERS (DEC-0121 reversed it):**
-1. **Deploy the monitor FIRST.** Not after the campaign, as S107 first said. `weewx_monitor.log` **is
-   the campaign's abort tripwire's only input** — `ABORT_PCT=50` and the RF-dead pause guard both
-   read it, so a campaign without it never aborts however bad reception gets, and looks healthy
-   throughout. `rx_experiment.sh preflight` now refuses on exactly this, with no `--force`. The
-   original "deploy after, it would fight the per-arm restarts" reasoning is already handled by
-   `CAMPAIGN_INHIBIT`. Deploy from the **merged `dev` tip** — marvin's copy is **stale vs `dev`**
-   (sha mismatch, 50026 vs 50538 bytes, the ops#214 family). Marvin-side action.
+1. ✅ **Monitor deployed and running (marvin S16, MARVIN-DEC-0079).** `weewx_monitor.py` on marvin is
+   sha `a6065f5f...`, 66183 bytes — byte-identical to `origin/dev`'s current tip, no drift (the
+   50026/50538-byte figures below were stale, from before this deploy landed). `weewx-monitor.service`
+   had never actually been installed on marvin at all — that, not staleness, was what `preflight`'s
+   monitor-freshness check was catching. Now installed and live: `weather.slice`, `REMEDY_MODE=none`,
+   log actively growing. The stale pre-migration `weewx.conf.rx-baseline` is moved aside (now
+   `weewx.conf.rx-baseline.pre-s16`), and `rx_experiment.sh preflight` has already run clean:
+   **PREFLIGHT OK.**
 2. **Then run campaign C (gain 372 vs 496, 15 h).** Schedule is **live in `SCHEDULE=`**:
    2026-08-31T20:00 → 09-01T11:00, 10 × 90-min blocks, order `A B B A B A A B A B`, self-terminating
    to BASELINE. Design and rationale: `BACKLOG.md` — **read it there, don't re-derive.** Power was
    re-checked against marvin's *own* measured noise (block sd 0.936 pts at 90 min, 0.84× Foundation's):
    **MDE ~1.66 pts against the 2.0 bar — clears with margin.**
-   Before launch: run **`rx_experiment.sh preflight`** on marvin (`RX_BASE=/srv/docker/weewx
-   RX_RESTART_MODE=systemd RX_DOCKER=/usr/bin/docker`), **move the stale pre-migration
-   `weewx.conf.rx-baseline` aside** (install refuses until you do, then re-snapshots from live), and
-   get an **owner hands-off-the-guest declaration** (the 2070 is attached to win11 full-time; ad-hoc
-   gaming is the one uncontrolled EMI variable). Launch is the S105 pattern: `sudo systemd-run
-   --unit=weewx-gain-campaign --slice=weather.slice`, marvin-side.
-   ⏱ **Budget for token latency: `preflight` and the `systemd-run` launch are HOST-side commands, so
-   on marvin each one is owner-token territory, PER COMMAND** (confirmed by a marvin session, S107).
-   The monitor deploy, the snapshot move-aside, preflight and the launch are therefore four separate
-   owner round-trips, not one — start well before 20:00 rather than discovering the latency at 19:55.
-   **`preflight` is EXPECTED to fail its monitor-freshness check until job 1 lands.** That failure is
-   the design working; do not "fix" it by relaxing the check.
+   Steps 1–3 of the four-round-trip sequence are **done** (job 1, above). **Still outstanding before
+   launch: an owner hands-off-the-guest declaration** (the 2070 is attached to win11 full-time;
+   ad-hoc gaming is the one uncontrolled EMI variable — no session has visibility into this, it needs
+   the owner directly). Launch is the S105 pattern: `sudo systemd-run --unit=weewx-gain-campaign
+   --slice=weather.slice`, marvin-side, still a HOST-side command and therefore its own owner-token
+   round-trip — don't leave it to 19:55.
    ⚠ Prior to know *before* reading results: **marvin @372 already measures 73.88%**, within ~0.95 pts
    of Foundation @496 — 496 repeating its 2.00-pt win here is **not** the safe assumption.
 3. **Verify the archive DB is readable unprivileged before enabling the reception-summary path.**
@@ -143,7 +138,11 @@ zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) ·
 task (§3) · judging a component live, dead, or shipped (§4). Indexed in `MANIFEST.md`. **New traps
 are appended THERE, not here** — that is what keeps this file under cap.
 
-_Last updated: 2026-08-29 (S106 close). Green gate: ruff clean, 428 passed / 8 skipped, mypy clean
-(65 files), secret gate clean. Shipped: ops#183's Influx outage fully remediated and backfilled
-(DEC-0119), `ops/backfill_influx.py` hardened (PR #282), `weewx_monitor.py`'s stale-watch-path blind
-spot found and disabled — full narrative in `CHANGELOG.md`._
+_Last updated: 2026-08-30 (S107 close). Green gate: ruff clean, 468 passed / 3 skipped, mypy clean
+(66 files), secret gate clean, shell syntax OK. Shipped: `weewx_monitor.py` rebuilt for marvin —
+input staleness checked before any threshold, raised as its own alert class, `REMEDY_MODE` replaces
+the assumed USB reset (DEC-0120); the overnight gain campaign C pre-registered and power-checked
+against marvin's own measured noise, then `ops/rx_experiment.sh` fixed to refuse launch without a
+fresh monitor log as its abort-tripwire input and the block order corrected against the actual
+notch clock (DEC-0121); ROADMAP's closed Campaign B line repointed at campaign C (DEC-0057) — full
+narrative in `CHANGELOG.md`._
