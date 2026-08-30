@@ -350,9 +350,25 @@ failed resets currently produce no further action.
     switch is a container restart (driver init up to 133 s), so 10 switches at 90 min loses ~3% of
     the window while 20 at 45 min loses ~7% and doubles the disturbances; going longer than 90 min
     buys little and shrinks the block count the variance estimate rests on.
-  - **Order `A B B A B A A B B A`** (A=372, B=496). Balanced against linear time drift: A's block
-    indices sum 28, B's 27, against an ideal 27.5. This is what makes the hour-07 notch
-    (DEC-0059 as amended, ~2 pts — the same magnitude as the effect) land on both arms rather than one.
+  - ~~**Order `A B B A B A A B B A`** — balanced against linear time drift (index sums 28/27 vs an
+    ideal 27.5), claimed to make the hour-07 notch land on both arms.~~ **WRONG, corrected the same
+    day, before any data (S107).** Laying the blocks against the actual clock disproved the claim:
+    the notch is not one hour but **hours 07–09, deepening to 2–3.5 pts during a campaign** (§Durable
+    RF findings, S58) — *larger than the 2.0-pt effect*. Under that order blocks 8 **and** 9 were both
+    B, putting **1.67 of 2.0 block-equivalents of notch exposure on gain 496**, the arm expected to
+    win, against 0.33 on 372. It would have manufactured a false negative and looked clean doing it.
+    Balancing linear drift is not the same as balancing a localized dip, and the first draft
+    confused the two.
+  - **Order `A B B A B A A B A B`** (A=372, B=496), start **2026-08-31T20:00**, terminator
+    **2026-09-01T11:00|BASELINE**. Splits notch exposure **exactly 1.00 / 1.00** block-equivalents
+    while keeping drift sums at 27/28 — both balances hold at once, neither traded for the other.
+    A 15 h overnight window cannot dodge both notches (19:00 and 07–09 are 12 h apart), so the order
+    absorbs the notch rather than avoiding it. Live in `ops/rx_experiment.sh`'s `SCHEDULE=` block.
+  - **The balance is machine-checked, with a positive control.** `tests/test_rx_experiment.py`
+    asserts notch exposure, drift sums, block spacing and run length for campaign C — and a control
+    test asserts that the *originally* pre-registered order still reads as lopsided. If that control
+    ever passes, the check has lost its teeth and the shipped order needs re-deriving rather than
+    trusting (this file's own `test_old_global_regex_is_destructive` tradition).
   - **Discard the first 5 minutes of every block** (driver init + archive alignment). At
     `archive_interval = 60` a block yields ~85 usable per-minute records.
   - **Metric: per-minute `rxCheckPercent` via `ops/campaign_analyze.py`** — the only sanctioned

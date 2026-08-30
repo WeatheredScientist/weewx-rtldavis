@@ -79,8 +79,36 @@ DATALOG="$BASE/logs/rx_experiment_data.log"
 MONLOG="$BASE/logs/weewx_monitor.log"
 WXLOG="$BASE/logs/weewx.log"
 ENVFILE="$BASE/monitor.env"
-DOCKER=/usr/local/bin/docker
-CONTAINER=weewx-rtldavis-v2
+CONTAINER="${RX_CONTAINER:-weewx-rtldavis-v2}"
+
+# ── Host profile (S107) ───────────────────────────────────────────────────────
+# Prod moved from the NAS to marvin (DEC-0118) and the two hosts restart weewx by
+# genuinely different mechanisms. This is NOT a path difference that a variable
+# tidies away -- getting it wrong takes production DOWN:
+#
+#   NAS      the container is long-lived. `docker kill` + `docker start` is
+#            correct, and `start` finds the same container still there.
+#   marvin   `weewx.service` runs `docker run --rm` with
+#            `ExecStartPre=/usr/bin/docker rm -f`. The `--rm` means a kill
+#            DESTROYS the container, so `docker start` has nothing to start and
+#            fails. The unit restart IS the supported operation, and because of
+#            that ExecStartPre it is also a full recreate.
+#
+# Default stays `docker` so an existing NAS install is unchanged by this edit.
+# preflight refuses to run if the selected mode cannot actually work here, rather
+# than discovering it at the first arm swap in the middle of the night.
+DOCKER="${RX_DOCKER:-/usr/local/bin/docker}"
+RESTART_MODE="${RX_RESTART_MODE:-docker}"     # docker | systemd
+RESTART_UNIT="${RX_RESTART_UNIT:-weewx.service}"
+SYSTEMCTL="${RX_SYSTEMCTL:-systemctl}"
+
+# How stale the monitor's log may be before its reception signal is untrustworthy.
+# The abort tripwire and the RF-dead pause guard BOTH read MONLOG; if nothing is
+# writing it, every reception read is silently empty and the campaign runs with
+# its safety net disconnected while looking healthy. That is the ops#233 failure
+# shape exactly, so preflight treats it as a refusal, not a warning. The monitor
+# writes a RECEPTION line every ~5 min, so 15 min is three missed writes.
+MONLOG_STALE_SECS="${RX_MONLOG_STALE_SECS:-900}"
 
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -188,7 +216,51 @@ arm_cmd() {
 # guard passes. Empty it when a campaign completes (a fully-elapsed table must
 # never sit here looking installable — DEC-0066's trap); regenerate it with
 # the recipe above to schedule the next one.
+# ── CAMPAIGN C (S107) — gain 372 vs 496 at marvin's RF position ───────────────
+# One night, two arms, 90-minute blocks. Pre-registered in BACKLOG.md before any
+# data existed; this table is the executable half of that registration.
+#
+# WHY TWO ARMS, NOT THE 2x2 SQUARE. The question is narrow: DEC-0115 adopted 496
+# on Foundation's evidence, the 08-29 migration incident set prod to 372 without
+# a controlled comparison, and the host has since moved to a closer, fewer-walls
+# position. `ex` is not in question (campaign B found it inert), and 207 is the
+# known-worst and barely separable at Foundation (spread 0.94 pts). A third arm
+# would cost ~40% of the power on the only question being asked.
+#
+# WHY 90-MINUTE BLOCKS. Each swap is a container restart (driver RF acquisition
+# can take ~130 s), so 10 swaps at 90 min lose ~3% of the window while 20 at
+# 45 min lose ~7% and double the disturbances. Longer than 90 buys little and
+# shrinks the block count the variance estimate rests on.
+#
+# WHY THIS ORDER, AND NOT THE ONE FIRST PRE-REGISTERED. The first draft was
+# `A B B A B A A B B A`, balanced against LINEAR drift (block-index sums 28/27).
+# Laying the blocks against the clock showed that is not sufficient here: the
+# site's morning notch is not one hour but **hours 07-09, deepening to 2-3.5 pts
+# down during a campaign** (BACKLOG §Durable RF findings, S58) -- larger than the
+# 2.0-pt effect being measured. Under the first order blocks 8 AND 9 were both B,
+# so the entire deep notch landed on gain 496, the arm expected to win. That
+# design would have manufactured a false negative and looked clean doing it.
+#
+# A 15 h overnight window cannot dodge both notches (19:00 and 07-09 are 12 h
+# apart), so the order absorbs it instead. `A B B A B A A B A B` splits notch
+# exposure exactly 1.00/1.00 block-equivalents while keeping index sums 27/28
+# and no run longer than two. Both balances hold at once; neither was traded.
+#
+# Blocks 8/9/10 carry notch weight 0.67/1.00/0.33 and are B/A/B respectively.
+# LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
+# Empty this block when the campaign completes (DEC-0096 stand-down).
 SCHEDULE="
+2026-08-31T20:00|A
+2026-08-31T21:30|B
+2026-08-31T23:00|B
+2026-09-01T00:30|A
+2026-09-01T02:00|B
+2026-09-01T03:30|A
+2026-09-01T05:00|A
+2026-09-01T06:30|B
+2026-09-01T08:00|A
+2026-09-01T09:30|B
+2026-09-01T11:00|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -349,10 +421,84 @@ restore_baseline() {
 }
 
 restart_container() {
+  if [ "$RESTART_MODE" = "systemd" ]; then
+    # marvin. One operation, and it is a full recreate (see the host-profile
+    # block): the unit's own ExecStartPre does `docker rm -f` and `--rm` clears
+    # the old container on exit. No kill/start pair to get wrong, and no
+    # dongle-release sleep needed because the unit does not return until the
+    # previous ExecStart has been torn down.
+    say_dry "$SYSTEMCTL restart $RESTART_UNIT" && return 0
+    $SYSTEMCTL restart "$RESTART_UNIT" >/dev/null 2>&1
+    return $?
+  fi
   say_dry "$DOCKER kill $CONTAINER; sleep 3; $DOCKER start $CONTAINER" && return 0
   "$DOCKER" kill "$CONTAINER" >/dev/null 2>&1     # kill, never stop (DEC-0008)
   sleep 3                                          # S47: let the USB dongle release
   "$DOCKER" start "$CONTAINER" >/dev/null 2>&1
+}
+
+# ── preflight (S107) ──────────────────────────────────────────────────────────
+# Everything that must be TRUE before an autonomous overnight prod-config writer
+# is allowed to start, checked while a human is still watching.
+#
+# This exists because the host move produced four ways to run this script into
+# production and have it fail hours later, at night, unattended -- and three of
+# them fail SILENTLY (an empty reception read looks exactly like a healthy one).
+# Refusing loudly up front is the whole point; there is deliberately no --force.
+preflight() {
+  local rc=0 age now
+  now="$(date '+%s')"
+
+  case "$RESTART_MODE" in
+    docker)
+      [ -x "$DOCKER" ] || { echo "PREFLIGHT FAIL: no docker binary at $DOCKER (set RX_DOCKER)" >&2; rc=1; }
+      ;;
+    systemd)
+      command -v "${SYSTEMCTL%% *}" >/dev/null 2>&1 \
+        || { echo "PREFLIGHT FAIL: systemctl not found ($SYSTEMCTL)" >&2; rc=1; }
+      $SYSTEMCTL cat "$RESTART_UNIT" >/dev/null 2>&1 \
+        || { echo "PREFLIGHT FAIL: unit $RESTART_UNIT not known to systemd" >&2; rc=1; }
+      ;;
+    *)
+      echo "PREFLIGHT FAIL: RX_RESTART_MODE must be 'docker' or 'systemd', got '$RESTART_MODE'" >&2
+      rc=1
+      ;;
+  esac
+
+  [ -f "$CONF" ] || { echo "PREFLIGHT FAIL: no live config at $CONF (wrong RX_BASE?)" >&2; rc=1; }
+  [ -f "$WXLOG" ] || { echo "PREFLIGHT FAIL: no weewx log at $WXLOG -- health_ok() would never pass" >&2; rc=1; }
+
+  # The safety net the campaign cannot run without.
+  if [ ! -f "$MONLOG" ]; then
+    echo "PREFLIGHT FAIL: no monitor log at $MONLOG." >&2
+    echo "  The abort tripwire (ABORT_PCT=$ABORT_PCT) and the RF-dead pause guard both" >&2
+    echo "  read it. Without it every reception read is empty, the campaign never" >&2
+    echo "  aborts however bad reception gets, and it looks healthy throughout." >&2
+    echo "  Start weewx_monitor.py on this host first (ops/weewx-monitor.service)." >&2
+    rc=1
+  else
+    age=$(( now - $(date -r "$MONLOG" '+%s' 2>/dev/null || echo 0) ))
+    if [ "$age" -gt "$MONLOG_STALE_SECS" ]; then
+      echo "PREFLIGHT FAIL: $MONLOG is ${age}s stale (limit ${MONLOG_STALE_SECS}s)." >&2
+      echo "  A monitor that is running but not writing is the ops#233 failure: the" >&2
+      echo "  file exists, every read succeeds, and every answer is about a dead file." >&2
+      rc=1
+    fi
+  fi
+
+  # Stale artifacts from a previous campaign on this host. install already
+  # refuses while a snapshot exists; say plainly what to clear, because the
+  # snapshot here predates the host move and restoring it would be a regression.
+  if [ -f "$BASELINE_SNAP" ]; then
+    echo "PREFLIGHT NOTE: baseline snapshot already present: $BASELINE_SNAP" >&2
+    echo "  install will refuse until it is moved aside. Verify it against the LIVE" >&2
+    echo "  config before trusting it as a revert target -- a snapshot taken on a" >&2
+    echo "  previous host restores that host's config, which is a regression, not a" >&2
+    echo "  rollback. Moving it aside is correct: install re-snapshots from live." >&2
+  fi
+
+  [ "$rc" = "0" ] && echo "PREFLIGHT OK (restart mode: $RESTART_MODE, base: $BASE)"
+  return "$rc"
 }
 
 # Up is not healthy (DEC-0036 froze for 7h18m while reporting Up). Require a NEW
@@ -519,6 +665,13 @@ install)
     echo "Regenerate the SCHEDULE= block with future dates first (DEC-0066)." >&2
     exit 1
   fi
+  # S107: last gate before this becomes an autonomous prod-config writer. Placed
+  # AFTER the schedule checks on purpose -- a stand-down or an already-started
+  # schedule is the more specific complaint and should be the one reported.
+  if ! preflight; then
+    echo "REFUSING to install: preflight failed (see above)." >&2
+    exit 1
+  fi
   say_dry "snapshot $CONF -> $BASELINE_SNAP and write state" && exit 0
   cp "$CONF" "$BASELINE_SNAP" || exit 1
   echo "NONE|0|1970-01-01 00:00:00" > "$STATE"
@@ -656,5 +809,13 @@ abort)
   trip_abort "manual abort requested"
   ;;
 
-*) echo "unknown mode: $mode (schedule|install|tick|guard|status|abort)"; exit 1 ;;
+preflight)
+  # Standalone, read-only, safe to run any time. Run it on a NEW host before
+  # anything else -- it is the cheapest way to find out that the restart
+  # mechanism or the reception safety net does not work here.
+  preflight
+  exit $?
+  ;;
+
+*) echo "unknown mode: $mode (schedule|install|preflight|tick|guard|status|abort)"; exit 1 ;;
 esac

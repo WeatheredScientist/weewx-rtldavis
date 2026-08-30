@@ -56,6 +56,30 @@ under [Pre-S16].
   (the [ops#214] silent-drift family), and `BOOT.md`'s job 5 (`debug_rtld` 3→2) is stale — live
   config is already at 1.
 
+- **The campaign apparatus learned marvin, and now refuses to run without its safety net (DEC-0121).**
+  `ops/rx_experiment.sh` rewrites the live config and restarts prod unattended overnight. Against the
+  new host four things were wrong and **three failed silently**: the docker path was hardcoded; the
+  restart mechanism would have taken **prod down** (`docker kill`+`start` against a `docker run --rm`
+  unit — the kill destroys the container and the start has nothing to start); the abort tripwire had
+  **no input** (it reads `weewx_monitor.log`, which nothing writes on marvin, so the campaign would
+  never abort however bad reception got); and a pre-migration baseline snapshot sits there latent.
+  New `preflight` mode gates `install`, demands a *fresh* monitor log, and has **no `--force`**.
+- **`RX_RESTART_MODE`** selects `docker` (NAS, unchanged default) or `systemd` (marvin, where a unit
+  restart is also a full container recreate). Existing NAS installs are untouched by the edit.
+- **The pre-registered block order was wrong, and laying it against a clock is what caught it.** The
+  morning notch is not one hour but **hours 07–09 at 2–3.5 pts down** — larger than the 2.0-pt effect
+  — and the first order put blocks 8 and 9 both on B, loading **1.67 of 2.0 notch block-equivalents
+  onto gain 496**, the arm expected to win. It would have manufactured a false negative. Balancing a
+  linear trend is not balancing a localized dip. The shipped order splits notch exposure **1.00/1.00**
+  with drift still 27/28 — both balances at once.
+- **Campaign C's schedule is live in `SCHEDULE=`** (2026-08-31T20:00 → 09-01T11:00, 10 × 90-min
+  blocks, self-terminating to BASELINE) and **machine-checked with a positive control** asserting the
+  old order still reads lopsided. Campaign B's structural tests are **guarded, not deleted** — the
+  block rotates between campaigns.
+- **Ordering corrected: the monitor deploys BEFORE the campaign**, not after. It *is* the abort
+  tripwire's input. The earlier "deploy after" reasoning (avoiding per-arm restart fights) is already
+  handled by the campaign inhibit.
+
 [ops#233]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/233
 [ops#214]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/214
 
