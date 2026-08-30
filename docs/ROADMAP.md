@@ -293,7 +293,14 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       (2026-08-15 → 08-23): gain 496 beats 372 by +2.00 points, exactly clearing DEC-0059's bar;
       extraction axis a wash. Deployed to prod at the same ~08-23 v2.0.14 event (DEC-0114). A
       narrower follow-up sweep near 496 considered and declined for now — see DEC-0115. Nothing
-      remains on this item. DEC-0066's
+      remains on this item **as a Foundation result** — ⤷ **but the answer is being re-measured at
+      marvin's RF position (S107, DEC-0121, campaign C, scheduled 2026-08-31T20:00).** Two reasons
+      this is not a re-litigation of a closed item: the host move put the receiver at a measurably
+      closer, fewer-walls position, and prod is currently running **372, not the adopted 496** — the
+      08-29 migration incident set it without a controlled comparison and the aborted campaign's exit
+      trap codified it (owner's call: hold 372 until measured). Early prior: marvin @372 already
+      measures 73.88%, within ~0.95 pts of Foundation @496, so 496 repeating its +2.00 here is not
+      assumed. DEC-0066's
       hold released on its own terms: the gates were closed on measurement (DEC-0069/0070), A's
       figures confirmed clean (DEC-0077), and the "instrument trusted" condition met. The first
       launch night (08-09) was scrubbed at 00:58 on a dead VPN — the runbook's postpone-24h
