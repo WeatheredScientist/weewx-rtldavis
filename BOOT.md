@@ -64,9 +64,22 @@ variable unless hands-off is declared for the window.
 3. **Verify the archive DB is readable unprivileged before enabling the reception-summary path.**
    `weewx.sdb` is mode `0500 t-weewx`, written by root in-container. If it is WAL, a `?mode=ro` open
    may fail needing `-shm` write — DEC-0119's bug class. **Unverified; do not assume either way.**
-4. **Then** flip `REMEDY_MODE=none` → `restart_unit`, but only once `t-weewx` actually holds a
-   restart grant (sudoers or a marvinctl tier-2 verb). Setting it without one yields a remedy that
-   fails every time while looking correct (DEC-0061).
+4. **Then** flip `REMEDY_MODE=none` → `restart_unit` — but **not yet, and not via `marvinctl`.**
+   Confirmed by a marvin-side session at S107: **no local grant exists today.** The only sudoers
+   lines on the box serve the **ssh forced-command** path, and `marvinctl` is the *remote* client —
+   a `t-weewx`-uid daemon already on the box has no ssh hop to make and cannot invoke it to escalate
+   itself. Manifest scoping (`units=weewx*`) governs what *this session* may ask for over that
+   channel; it says nothing about local systemd. **The only path is a narrow marvin-side grant** —
+   one sudoers line (`t-weewx` → `/usr/bin/systemctl restart weewx.service`) or a scoped polkit
+   rule — which is a marvin-repo change needing owner ratification and its own DEC row. File it when
+   the monitor is ready to prove the mechanism, not before. Setting `restart_unit` without the grant
+   yields a remedy that fails every time while looking correct (DEC-0061).
+   ⚠ *An earlier draft of this line offered "sudoers **or a marvinctl tier-2 verb**". The second was
+   wrong and is struck: eaglehunt-ops asserted it from manifest help text without exercising it. Left
+   standing it would have sent the next session chasing a route already ruled out — the same
+   never-exercised-therefore-never-disproven shape as the defect DEC-0120 fixes.*
+   **`REMEDY_MODE=none` permanently is a defensible end state**, not an unfinished job: the remedy's
+   entire evidence record is a USB reset aimed at hardware that has since changed boxes.
 5. **`usb_watchdog.sh`'s fate** — still simply OFF, still undecided. ops#233's sibling finding.
 
 **Carried forward, untouched:**
