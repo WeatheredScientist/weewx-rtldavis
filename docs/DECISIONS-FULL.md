@@ -7731,3 +7731,70 @@ reception-summary path on marvin.
 Ownership stays the three-way split ops#183 needed: the tool is this repo's, the host and the unit
 install are marvin's, the coordination is `eaglehunt-ops`'s. `usb_watchdog.sh`'s fate
 (`eaglehunt-ops`#233's sibling finding) is not decided here — it remains simply OFF.
+
+## DEC-0121 — Campaign C: the apparatus learns the new host, and refuses to run without its safety net
+
+**Status:** Accepted (apparatus + pre-registration) · **Date:** 2026-08-30 (S107) ·
+**Extends:** DEC-0059's apparatus to a second host · **Depends on:** DEC-0120 (the monitor IS the
+safety net this now demands) · **Follows:** DEC-0118 (the host move)
+
+### Four ways to run this into production and fail at 3am
+
+`ops/rx_experiment.sh` autonomously rewrites the live `weewx.conf` and restarts prod, unattended,
+overnight. Prod moved to marvin (DEC-0118). Checked against the new host, four things were wrong,
+and **three of them fail silently**:
+
+1. `DOCKER=/usr/local/bin/docker` — hardcoded, not overridable; marvin's is `/usr/bin/docker`.
+2. **The restart mechanism is not portable, and getting it wrong takes prod DOWN.** The script does
+   `docker kill` + `docker start`. On marvin `weewx.service` runs `docker run --rm` with
+   `ExecStartPre=docker rm -f`, so the kill **destroys** the container and the paired start has
+   nothing to start. `RX_RESTART_MODE` now selects `docker` (NAS, unchanged default) or `systemd`
+   (marvin, where the unit restart is also a full recreate).
+3. **The abort tripwire had no input.** `ABORT_PCT=50` and the RF-dead pause guard both read
+   `weewx_monitor.log`. No monitor runs on marvin, so every reception read would return empty — the
+   campaign would never abort however bad reception got, and would look healthy throughout. This is
+   DEC-0120's failure shape reappearing one layer up: not a broken check, a check with no input.
+4. A `weewx.conf.rx-baseline` from **before** the host move sits on marvin. `install` already
+   refuses while a snapshot exists, so this is latent rather than live — but a snapshot taken on a
+   previous host restores *that host's* config, which is a regression, not a rollback.
+
+### The fix is a refusal, not a repair
+
+New `preflight` mode, also gating `install`: it verifies the restart mechanism can actually work
+here, the live config and weewx log exist, and **the monitor log exists and is fresh** (15 min = three
+missed writes). There is deliberately **no `--force`**. An autonomous overnight prod-config writer
+running with its abort tripwire disconnected is not a degraded mode worth offering.
+
+### The order was wrong, and the clock is what caught it
+
+Campaign C's design (BACKLOG, pre-registered this morning) chose `A B B A B A A B B A` — balanced
+against linear drift, index sums 28/27 against an ideal 27.5. Laying those blocks against the actual
+clock disproved the claim attached to it. The site's morning notch is not one hour but **hours
+07–09, deepening to 2–3.5 pts during a campaign** (S58) — **larger than the 2.0-pt effect being
+measured**. Under that order blocks 8 and 9 were **both B**, loading **1.67 of 2.0 block-equivalents
+of notch exposure onto gain 496** — the arm expected to win — against 0.33 on 372. It would have
+produced a false negative and looked clean doing it.
+
+**Balancing a linear trend is not the same as balancing a localized dip**, and the first draft
+treated them as one thing. `A B B A B A A B A B` splits notch exposure exactly **1.00 / 1.00** while
+holding drift at 27/28: both balances at once, neither traded. A 15 h overnight window cannot dodge
+both notches (19:00 and 07–09 are 12 h apart), so the order absorbs it.
+
+This is why pre-registration is written down and then *checked*, rather than merely written down.
+The error survived being reasoned about carefully; it did not survive being laid against a clock.
+
+### What is now machine-checked
+
+Campaign C has its own structural tests — notch exposure, drift sums, uniform 90-min spacing, no
+single-arm run above two, terminator present — plus a **positive control** asserting the originally
+pre-registered order still reads as lopsided. If that control ever passes, the check has lost its
+teeth. Campaign B's structural tests are **guarded, not deleted**: the `SCHEDULE=` block rotates
+between campaigns, and deleting them would ship the next B-shaped campaign with no check at all.
+
+### Not settled here
+
+The stale `weewx.conf.rx-baseline` on marvin still needs moving aside (install refuses until it is;
+install then re-snapshots from live). The monitor must be deployed and writing before preflight will
+pass — which reverses this session's earlier ordering: **the monitor comes first, the campaign
+second.** Whether `t-weewx` can restart its own unit locally is DEC-0120's open question and does not
+block campaign C, which runs as root via `systemd-run` (the S105 pattern).

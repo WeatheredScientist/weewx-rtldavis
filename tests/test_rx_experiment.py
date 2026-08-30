@@ -145,6 +145,30 @@ def _require_campaign():
         pytest.skip("stand-down: no campaign scheduled (DEC-0096)")
 
 
+def _arms_in_schedule():
+    return {arm for _, arm in _schedule_rows()}
+
+
+def _require_campaign_b():
+    """Campaign B's shape: a P* pilot, an H hold, and a 4-arm 6h Latin square.
+
+    S107: the SCHEDULE block rotates between campaigns, so these assertions are
+    guarded on the loaded campaign rather than deleted when another one is in.
+    Deleting them would mean the next B-shaped campaign ships with no structural
+    check at all — and the balance they verify IS the control for diurnal drift,
+    which nothing at runtime would notice the loss of."""
+    _require_campaign()
+    if not (_arms_in_schedule() & {"H"} or any(a.startswith("P") for a in _arms_in_schedule())):
+        pytest.skip("loaded schedule is not campaign-B-shaped (no pilot/hold rows)")
+
+
+def _require_campaign_c():
+    """Campaign C's shape: two arms, 90-minute blocks, one night."""
+    _require_campaign()
+    if _arms_in_schedule() != {"A", "B", "BASELINE"}:
+        pytest.skip("loaded schedule is not campaign-C-shaped (arms != {A, B})")
+
+
 def test_schedule_is_a_balanced_latin_square():
     """Each square arm must visit each 6h slot exactly twice — that balance IS
     the control for time-of-day and diurnal drift. A typo here silently
@@ -152,7 +176,7 @@ def test_schedule_is_a_balanced_latin_square():
     runtime would notice. Pilot (P*) and hold (H) rows are campaign B's
     calibration prefix, not square blocks — they are excluded here and asserted
     by their own tests below."""
-    _require_campaign()
+    _require_campaign_b()
     rows = [r for r in _schedule_rows() if r[1] in {"A", "B", "C", "D"}]
     assert len(rows) == 32, f"expected 32 blocks, got {len(rows)}"
 
@@ -194,7 +218,7 @@ def test_pilot_runs_high_to_low_before_the_morning_notch():
     45-min cadence; and (c) finish before 06:00, clear of the site's hour-07
     reception notch (BACKLOG §Durable RF findings) — pilot numbers are bounding
     input and must not be depressed by a known site artifact."""
-    _require_campaign()
+    _require_campaign_b()
     rows = _schedule_rows()
     pilot = [r for r in rows if r[1].startswith("P")]
     assert len(pilot) == 5, f"expected 5 pilot rows, got {len(pilot)}"
@@ -224,7 +248,7 @@ def test_hold_follows_pilot_and_matches_control_settings():
     under its own tag and can never contaminate arm A's square samples, and
     (c) hand over to the square's first block at the NEXT day's 00:05 (the S57
     clean-day-boundary lesson)."""
-    _require_campaign()
+    _require_campaign_b()
     rows = _schedule_rows()
     holds = [(i, r) for i, r in enumerate(rows) if r[1] == "H"]
     assert len(holds) == 1, f"expected exactly one hold row, got {holds}"
@@ -875,3 +899,219 @@ def test_stale_lock_from_a_dead_holder_is_broken(tmp_path):
     assert (tmp_path / "rx_experiment.PAUSE").exists(), \
         "after breaking the stale lock the pass must actually run"
     assert not lock.exists(), "the pass must release the lock it took over"
+
+
+# ── preflight and the marvin host profile (S107) ──────────────────────────────
+# The host move (DEC-0118) gave this script two genuinely different ways to
+# restart weewx, and three ways to run into production and fail SILENTLY hours
+# later, unattended, at night. preflight is the gate that turns each of those
+# into a refusal while a human is still watching.
+
+
+def _preflight_base(tmp_path, monlog_age_s=0, with_monlog=True):
+    """A host that would pass preflight, so each test can break exactly one thing."""
+    conf = tmp_path / "weewx-data" / "weewx.conf"
+    conf.parent.mkdir(parents=True)
+    conf.write_text(FIXTURE)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "weewx.log").write_text("2026-08-30 07:20:50 Added record\n")
+    if with_monlog:
+        mon = logs / "weewx_monitor.log"
+        mon.write_text(_reception_lines(75))
+        if monlog_age_s:
+            old = time.time() - monlog_age_s
+            os.utime(mon, (old, old))
+    return conf, logs
+
+
+def _call_preflight(tmp_path, **env_extra):
+    env = dict(os.environ, RX_BASE=str(tmp_path), **env_extra)
+    return subprocess.run(["bash", str(SCRIPT), "preflight"],
+                          capture_output=True, text=True, env=env)
+
+
+def test_preflight_passes_on_a_sane_systemd_host(tmp_path):
+    _preflight_base(tmp_path)
+    r = _call_preflight(tmp_path, RX_RESTART_MODE="systemd", RX_RESTART_UNIT="cron.service")
+    # cron.service may or may not exist in CI; the assertion is that a systemd
+    # host with a live monitor gets past the mode/monitor checks specifically.
+    assert "PREFLIGHT FAIL: RX_RESTART_MODE" not in r.stderr
+    assert "no monitor log" not in r.stderr
+    assert "stale" not in r.stderr
+
+
+def test_preflight_refuses_a_missing_monitor_log(tmp_path):
+    """The abort tripwire and the pause guard BOTH read MONLOG. Without it every
+    reception read is empty, so the campaign never aborts however bad reception
+    gets -- and looks healthy the whole time. That is ops#233's shape."""
+    _preflight_base(tmp_path, with_monlog=False)
+    r = _call_preflight(tmp_path)
+    assert r.returncode != 0
+    assert "no monitor log" in r.stderr
+    assert "aborts however bad reception gets" in r.stderr
+
+
+def test_preflight_refuses_a_stale_monitor_log(tmp_path):
+    """A monitor that is running but not writing is the exact ops#233 failure:
+    the file exists, every read succeeds, every answer is about a dead file."""
+    _preflight_base(tmp_path, monlog_age_s=4000)
+    r = _call_preflight(tmp_path)
+    assert r.returncode != 0
+    assert "stale" in r.stderr
+
+
+def test_preflight_accepts_a_fresh_monitor_log(tmp_path):
+    _preflight_base(tmp_path, monlog_age_s=60)
+    r = _call_preflight(tmp_path)
+    assert "stale" not in r.stderr
+
+
+def test_preflight_rejects_an_unknown_restart_mode(tmp_path):
+    _preflight_base(tmp_path)
+    r = _call_preflight(tmp_path, RX_RESTART_MODE="reboot-the-nas")
+    assert r.returncode != 0
+    assert "RX_RESTART_MODE must be" in r.stderr
+
+
+def test_preflight_notes_a_pre_existing_baseline_snapshot(tmp_path):
+    """A snapshot taken on a PREVIOUS host restores that host's config. That is a
+    regression, not a rollback, and marvin is carrying exactly such a file."""
+    _preflight_base(tmp_path)
+    (tmp_path / "weewx.conf.rx-baseline").write_text(BASELINE_FIXTURE)
+    r = _call_preflight(tmp_path)
+    assert "baseline snapshot already present" in r.stderr
+    assert "regression" in r.stderr
+
+
+def test_systemd_mode_restarts_the_unit_not_the_container(tmp_path):
+    """The bug this prevents takes production DOWN. On marvin the unit runs
+    `docker run --rm`, so `docker kill` DESTROYS the container and the paired
+    `docker start` has nothing to start. Asserted via DRY_RUN so no restart of
+    any kind actually happens."""
+    _preflight_base(tmp_path)
+    env = dict(os.environ, RX_BASE=str(tmp_path), DRY_RUN="1",
+               RX_RESTART_MODE="systemd", RX_RESTART_UNIT="weewx.service")
+    r = subprocess.run(
+        ["bash", "-c",
+         f'source {SCRIPT} 2>/dev/null; restart_container'],
+        capture_output=True, text=True, env=env)
+    out = r.stdout + r.stderr
+    assert "systemctl restart weewx.service" in out
+    assert "docker kill" not in out, "must not use the NAS kill/start pair on marvin"
+
+
+def test_docker_mode_remains_the_default_for_existing_nas_installs(tmp_path):
+    """This edit must not change what an existing NAS install does."""
+    _preflight_base(tmp_path)
+    env = dict(os.environ, RX_BASE=str(tmp_path), DRY_RUN="1")
+    r = subprocess.run(
+        ["bash", "-c", f'source {SCRIPT} 2>/dev/null; restart_container'],
+        capture_output=True, text=True, env=env)
+    out = r.stdout + r.stderr
+    assert "docker kill" in out and "start" in out
+    assert "systemctl" not in out
+
+
+# ── campaign C structural checks (S107) ───────────────────────────────────────
+# Campaign C is gain 372 (A) vs 496 (B) at marvin's RF position: one night, two
+# arms, 90-minute blocks. Its balance is not a Latin square, so it needs its own
+# machine check — the same reason campaign B has one. The order must balance TWO
+# things at once, and the second is the one that nearly went wrong.
+
+NOTCH_HOURS = {7, 8, 9, 19}   # BACKLOG §Durable RF findings (S58); 07-09 deepens
+                              # to 2-3.5 pts down during a campaign — LARGER than
+                              # the 2.0-pt effect campaign C is trying to resolve.
+BLOCK_MIN = 90
+
+
+def _c_blocks():
+    rows = [r for r in _schedule_rows() if r[1] in {"A", "B"}]
+    return [(datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M"), arm) for t, arm in rows]
+
+
+def _notch_exposure(blocks):
+    """Block-equivalents of notch-hour exposure carried by each arm.
+
+    Sampled at 15-minute resolution because a block straddles hours; whole-hour
+    attribution would call block 8 either fully notched or not at all."""
+    out = {"A": 0.0, "B": 0.0}
+    step, n = 15, BLOCK_MIN // 15
+    for start, arm in blocks:
+        hit = sum(1 for i in range(n)
+                  if (start + datetime.timedelta(minutes=i * step)).hour in NOTCH_HOURS)
+        out[arm] += hit / n
+    return out
+
+
+def test_campaign_c_has_two_arms_and_a_terminator():
+    _require_campaign_c()
+    blocks = _c_blocks()
+    assert len(blocks) == 10, f"expected 10 blocks, got {len(blocks)}"
+    arms = [a for _, a in blocks]
+    assert arms.count("A") == 5 and arms.count("B") == 5
+    assert _schedule_rows()[-1][1] == "BASELINE", "must self-terminate to prod"
+
+
+def test_campaign_c_blocks_are_90_minutes_and_chronological():
+    _require_campaign_c()
+    times = [t for t, _ in _c_blocks()]
+    assert times == sorted(times), "schedule rows must be chronological"
+    gaps = {int((b - a).total_seconds() // 60) for a, b in zip(times, times[1:])}
+    assert gaps == {BLOCK_MIN}, f"expected uniform {BLOCK_MIN}-min blocks, got {gaps}"
+
+
+def test_campaign_c_balances_the_morning_notch_between_arms():
+    """THE ONE THAT MATTERS. The site's morning notch (hours 07-09, 2-3.5 pts
+    down) is larger than the effect being measured, so if it lands mostly on one
+    arm the campaign measures the notch and reports it as gain.
+
+    The first pre-registered order balanced linear drift and was still wrong this
+    way — see the positive control below."""
+    _require_campaign_c()
+    exp = _notch_exposure(_c_blocks())
+    assert abs(exp["A"] - exp["B"]) < 0.15, (
+        f"notch exposure is lopsided: A={exp['A']:.2f} B={exp['B']:.2f} "
+        f"block-equivalents. The arm carrying more of it is penalised by "
+        f"2-3.5 pts against a 2.0-pt effect."
+    )
+
+
+def test_campaign_c_balances_linear_drift():
+    """Block-index sums must be near-equal so a monotonic overnight trend
+    (cooling, dew, propagation) cannot masquerade as an arm difference."""
+    _require_campaign_c()
+    blocks = _c_blocks()
+    sums = {"A": 0, "B": 0}
+    for i, (_, arm) in enumerate(blocks, start=1):
+        sums[arm] += i
+    assert abs(sums["A"] - sums["B"]) <= 2, f"drift imbalance: {sums}"
+
+
+def test_campaign_c_has_no_long_single_arm_run():
+    """A run of three would hand one arm a contiguous third of the night."""
+    _require_campaign_c()
+    arms = "".join(a for _, a in _c_blocks())
+    longest = max(len(r) for r in re.findall(r"A+|B+", arms))
+    assert longest <= 2, f"longest single-arm run is {longest}: {arms}"
+
+
+def test_notch_balance_check_has_teeth():
+    """POSITIVE CONTROL, in this file's own tradition (see
+    test_old_global_regex_is_destructive).
+
+    The order FIRST pre-registered for campaign C — A B B A B A A B B A — is
+    balanced against linear drift and looks fine. Against the real clock it put
+    blocks 8 and 9 BOTH on B, dropping the entire deep notch on gain 496, the arm
+    expected to win. If this control ever passes, the notch test above has stopped
+    proving anything and the shipped order is no longer being checked."""
+    _require_campaign_c()
+    start = _c_blocks()[0][0]
+    bad = [(start + datetime.timedelta(minutes=BLOCK_MIN * i), arm)
+           for i, arm in enumerate("ABBABAABBA")]
+    exp = _notch_exposure(bad)
+    assert abs(exp["A"] - exp["B"]) >= 0.15, (
+        "the originally pre-registered order no longer looks lopsided — either the "
+        "start time moved or NOTCH_HOURS changed, and the shipped order needs "
+        "re-deriving rather than trusting"
+    )
