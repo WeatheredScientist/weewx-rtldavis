@@ -297,7 +297,18 @@ failed resets currently produce no further action.
   re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
-- **Gain re-sweep at marvin's RF position — mini-campaign launched, STOPPED CLEAN at 01:08:16 ET for
+- ✅ **Gain re-sweep at marvin's RF position — CLOSED (DEC-0125, S111): 496 does not clear the
+  2.0-pt adoption bar at marvin, 372 holds.** Campaign C ran the pre-registered design below exactly
+  as planned; ops#235's stdin-pipe fix landed same-day and unblocked the sanctioned per-minute
+  readout. Real result: A (372) 72.82% (n=368) vs B (496) 73.98% (n=350), **+1.16 pts** — smaller
+  than the coarse 5-min proxy's +1.87 lean, still under the bar. Per the pre-committed reading below,
+  this is the "does not clear" outcome: no config change, and the finding is that Foundation's
+  DEC-0115 answer doesn't transfer to marvin's site, not that DEC-0115 was wrong for Foundation.
+  Design, pre-registration and power-check detail kept below for the record; **a real multi-day
+  campaign remains an open idea if this question is worth resolving further** — not owed as a
+  follow-up from this result.
+
+- ~~**Gain re-sweep at marvin's RF position — mini-campaign launched, STOPPED CLEAN at 01:08:16 ET for
   an unrelated higher-priority marvin event; TREAT AS NO DATA, deferred to post-Phase-4-bind
   (2026-08-29, S105 same night).** DEC-0115 adopted 496 on Foundation's own Campaign B square; the
   host move (DEC-0118) put the receiver at a measurably closer, fewer-walls position, and the
@@ -412,7 +423,8 @@ failed resets currently produce no further action.
   without a controlled comparison; owner's call is to hold it until measured). So the two honest
   outcomes are: **496 clears the bar** → restore the adopted value with a same-position measurement
   behind it; **it does not** → the interesting finding is that marvin's position changed the answer,
-  which earns a real multi-day campaign rather than a config change.
+  which earns a real multi-day campaign rather than a config change.~~ **It did not clear
+  (DEC-0125, S111)** — see the ✅ entry above.
 - **NAS-LEASE cross-host wiring for marvin (S105).** `influx.py`'s courtesy-yield mount (`/nas-lease`)
   points at a deliberately empty local directory on marvin (`MARVIN-DEC-0063`) rather than a live
   share of the NAS's real lease file — a permanent, silent no-op by design until someone builds the
