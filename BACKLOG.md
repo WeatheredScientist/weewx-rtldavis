@@ -297,6 +297,48 @@ failed resets currently produce no further action.
   re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
+- **Campaign D — marvin gain pilot (S111), launching 2026-08-31T21:00 ET, arm-selection input
+  only, never adoption evidence.** Triggered directly by Campaign C (DEC-0125): 496 lost to 372 at
+  marvin after winning at Foundation, which means Foundation's pilot-derived shortlist {372, 496}
+  was never actually validated as the right *candidates* for marvin — it was carried over
+  unquestioned. This re-runs the shortlisting step, at marvin.
+
+  ### ▶ PRE-REGISTERED, S111 (2026-08-31) — written before any data exists
+
+  - **Six gain-only blocks, HIGH → LOW: 496, 449, 402, 372, 328, 207.** `-ex 0` fixed throughout
+    (found inert, Campaign B). The first five reuse Foundation's own original pilot points — real
+    R820T2 hardware steps, directly comparable to that curve. **207 is added**: Campaign C dropped
+    it from the square on a Foundation-only judgment ("known-worst there, barely separable") — the
+    same shape of assumption that just failed for 496, and 207 has zero data at marvin.
+  - **HIGH → LOW, not randomized or notch-balanced.** Matches Foundation precedent, and is a
+    deliberate safety choice for a pilot specifically: if a weak low-gain arm hits the abort floor
+    and kills the run, the higher/more-likely-useful arms are already harvested. A pilot is
+    arm-selection input only (PRINCIPLES §3) — it does not need campaign C's Latin-square-grade
+    drift/notch balancing; strict monotonic order is the right trade here, not a shortcut.
+  - **45-min blocks, 4h30m total (21:00 → 01:30 ET).** Matches Foundation's original pilot cadence
+    exactly — pilot-grade duration, not adoption-grade. Starts well clear of the site's known notch
+    hours (07-09 and 19 — 19 is Foundation's own finding, kept as a conservative inclusion since
+    marvin hasn't been separately characterized at that hour) and finishes well before them too,
+    even crossing midnight.
+  - **Metric: per-minute `rxCheckPercent` via `ops/campaign_analyze.py --campaign D`** — the
+    sanctioned DEC-0069 readout, now pullable immediately after the pilot closes: `marvinctl exec-ro`
+    works end-to-end (ops#235, fixed and verified same day as this pre-registration), no
+    owner-mediated wait this time.
+  - **Live in `ops/rx_experiment.sh`'s `SCHEDULE=` block**, machine-checked by
+    `tests/test_rx_experiment.py`'s campaign-D structural tests (arm order/gains, cadence, notch
+    clearance, self-termination, no stray hold/square arm).
+  - **Pre-reqs before launch:** a fresh hands-off-guest declaration (MARVIN-DEC-0088's window
+    lapsed with Campaign C's close), `logs/campaign.inhibit` for the duration so the monitor doesn't
+    fight per-arm restarts, monitor confirmed still healthy.
+  - **No USB-reset safety net, and none needed.** Foundation's `usb_reset.sh` was retired, not
+    ported, to marvin (MARVIN-DEC-0100) — the fault it existed for doesn't recur on marvin's
+    CPU-attached xHCI placement (DEC-0064, 0 lost samples/million measured). Each arm swap already
+    restarts the container, giving every gain a fresh driver acquisition regardless.
+
+  **Pre-committed reading of the result.** This is arm-selection input only — it does not itself
+  decide anything (same doctrine as Foundation's own pilots). Output feeds which two (or more)
+  values go into a real confirmatory campaign, if the question is judged worth pursuing further.
+
 - ✅ **Gain re-sweep at marvin's RF position — CLOSED (DEC-0125, S111): 496 does not clear the
   2.0-pt adoption bar at marvin, 372 holds.** Campaign C ran the pre-registered design below exactly
   as planned; ops#235's stdin-pipe fix landed same-day and unblocked the sanctioned per-minute
