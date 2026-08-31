@@ -96,6 +96,9 @@ LEGENDS: Dict[str, Dict[str, str]] = {
           "P496": "pilot gain 496", "P449": "pilot gain 449",
           "P402": "pilot gain 402", "P372": "pilot gain 372",
           "P328": "pilot gain 328"},
+    "D": {"P496": "pilot gain 496", "P449": "pilot gain 449",
+          "P402": "pilot gain 402", "P372": "pilot gain 372",
+          "P328": "pilot gain 328", "P207": "pilot gain 207"},
 }
 
 DEFAULT_LOG = "/volume1/docker/weewx-rtldavis/logs/rx_experiment.log"
@@ -415,7 +418,7 @@ def report(campaign: str, blocks: Sequence[Block], recs: Sequence[Rec],
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--campaign", default="A", help="A or B (selects the arm legend)")
+    ap.add_argument("--campaign", default="A", help="A, B, or D (selects the arm legend)")
     ap.add_argument("--log", default=DEFAULT_LOG, help="apparatus log on the NAS")
     ap.add_argument("--settle", type=int, default=600,
                     help="seconds to drop after each swap (default 600, matching "

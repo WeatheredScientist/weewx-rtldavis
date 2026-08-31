@@ -156,10 +156,16 @@ def _require_campaign_b():
     guarded on the loaded campaign rather than deleted when another one is in.
     Deleting them would mean the next B-shaped campaign ships with no structural
     check at all — and the balance they verify IS the control for diurnal drift,
-    which nothing at runtime would notice the loss of."""
+    which nothing at runtime would notice the loss of.
+
+    S111: gated on "H" alone, not "has any P* row" — campaign D is a pilot-only
+    schedule (P* rows, no hold, no square) and would otherwise misfire these
+    B-shape assertions (wrong pilot-row count, no hold to find, no square to
+    balance). A true campaign-B-shape always carries the hold; a pilot-only
+    campaign never does."""
     _require_campaign()
-    if not (_arms_in_schedule() & {"H"} or any(a.startswith("P") for a in _arms_in_schedule())):
-        pytest.skip("loaded schedule is not campaign-B-shaped (no pilot/hold rows)")
+    if "H" not in _arms_in_schedule():
+        pytest.skip("loaded schedule is not campaign-B-shaped (no hold row)")
 
 
 def _require_campaign_c():
@@ -1115,3 +1121,66 @@ def test_notch_balance_check_has_teeth():
         "start time moved or NOTCH_HOURS changed, and the shipped order needs "
         "re-deriving rather than trusting"
     )
+
+
+# ── campaign D structural checks (S111) ────────────────────────────────────────
+# Campaign D is a pilot-only re-sweep at marvin's RF position, triggered by
+# campaign C (DEC-0125) showing Foundation's arm-selection doesn't transfer:
+# 496 lost to 372 at marvin after winning at Foundation, so the {372, 496}
+# shortlist itself was never actually validated for this site. Six gain-only
+# blocks, HIGH -> LOW, no hold, no square — arm-selection input only
+# (PRINCIPLES §3), never adoption evidence.
+
+def _require_campaign_d():
+    """Campaign D's shape: pilot-only — P* rows, no hold, no square."""
+    _require_campaign()
+    arms = _arms_in_schedule()
+    if not (any(a.startswith("P") for a in arms)
+            and "H" not in arms and not (arms & {"A", "B", "C", "D"})):
+        pytest.skip("loaded schedule is not campaign-D-shaped (pilot-only)")
+
+
+def _d_pilot_blocks():
+    rows = [r for r in _schedule_rows() if r[1].startswith("P")]
+    return [(datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M"), arm) for t, arm in rows]
+
+
+def test_campaign_d_pilot_runs_high_to_low_across_six_arms():
+    """Six gain-only blocks, strictly HIGH -> LOW (496, 449, 402, 372, 328, 207)
+    so an abort on a weak low arm still leaves the higher/likely-useful arms
+    harvested — the same safety property Foundation's own pilot used, extended
+    with 207: campaign C dropped it as Foundation's known-worst, a judgment its
+    own result shows cannot be trusted to transfer, and it has zero data at
+    marvin. 45-min cadence matches Foundation's pilot precedent (pilot-grade
+    duration, not adoption-grade)."""
+    _require_campaign_d()
+    blocks = _d_pilot_blocks()
+    assert len(blocks) == 6, f"expected 6 pilot rows (incl. 207), got {len(blocks)}"
+    assert _schedule_rows()[:6] == [(t.strftime("%Y-%m-%dT%H:%M"), a) for t, a in blocks], \
+        "pilot rows must open the schedule"
+
+    gains = [_arm_gain(arm) for _, arm in blocks]
+    assert gains == [496, 449, 402, 372, 328, 207], f"unexpected gain set/order: {gains}"
+
+    gaps = {int((b[0] - a[0]).total_seconds() // 60) for a, b in zip(blocks, blocks[1:])}
+    assert gaps == {45}, f"pilot cadence must be 45 min: {gaps}"
+
+
+def test_campaign_d_clears_the_sites_notch_hours():
+    """Unlike campaign C's adoption-grade square, a pilot doesn't need
+    Latin-square-grade notch BALANCING — but it still must not sit IN a notch
+    hour, or a pilot arm's number is depressed by a known site artifact rather
+    than reflecting the gain itself."""
+    _require_campaign_d()
+    for when, arm in _d_pilot_blocks():
+        assert when.hour not in NOTCH_HOURS, \
+            f"{arm} block at {when} sits in a notch hour {sorted(NOTCH_HOURS)}"
+
+
+def test_campaign_d_self_terminates_and_has_no_hold_or_square():
+    _require_campaign_d()
+    rows = _schedule_rows()
+    assert rows[-1][1] == "BASELINE", "must self-terminate to prod"
+    arms = _arms_in_schedule()
+    assert "H" not in arms and not (arms & {"A", "B", "C", "D"}), \
+        f"campaign D is pilot-only: unexpected non-pilot arm present in {arms}"

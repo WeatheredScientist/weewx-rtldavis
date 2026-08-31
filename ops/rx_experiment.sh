@@ -165,6 +165,7 @@ arm_cmd() {
     P402) echo "    cmd = /usr/local/bin/rtldavis -gain 402 -v -fc 0 -ppm 0 -ex 0" ;;
     P372) echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0" ;;
     P328) echo "    cmd = /usr/local/bin/rtldavis -gain 328 -v -fc 0 -ppm 0 -ex 0" ;;
+    P207) echo "    cmd = /usr/local/bin/rtldavis -gain 207 -v -fc 0 -ppm 0 -ex 0" ;;
     H)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0" ;;
     A)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0"  ;;
     B)    echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 0"  ;;
@@ -249,7 +250,55 @@ arm_cmd() {
 # Blocks 8/9/10 carry notch weight 0.67/1.00/0.33 and are B/A/B respectively.
 # LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
 # Empty this block when the campaign completes (DEC-0096 stand-down).
+# ── CAMPAIGN D (S111) — marvin gain pilot, arm-selection input only ───────────
+# Triggered directly by Campaign C (DEC-0125): 496 lost to 372 at marvin after
+# winning at Foundation, which means Foundation's pilot-derived shortlist
+# {372, 496} was never actually validated as the right candidates FOR MARVIN —
+# it was just carried over. This re-runs the shortlisting step, at marvin,
+# before spending another multi-day campaign on a guess.
+#
+# Pre-registered in BACKLOG.md before any data exists; this table is the
+# executable half of that registration.
+#
+# SIX gain-only blocks, HIGH -> LOW: 496, 449, 402, 372, 328, 207. The first
+# five reuse Foundation's own original pilot points (real R820T2 steps,
+# directly comparable to that curve); 207 is added because it was dropped from
+# campaign C's square on a Foundation-only judgment ("known-worst there") that
+# Campaign C's own result shows cannot be trusted to transfer — it has zero
+# data at marvin. `-ex 0` fixed throughout (found inert, campaign B).
+#
+# WHY HIGH -> LOW, NOT RANDOMIZED. Matches Foundation precedent, and is a
+# deliberate safety choice for a PILOT specifically: if a weak low-gain arm
+# hits the abort floor and kills the run, the higher/more-likely-useful arms
+# are already harvested. A pilot is arm-selection input only (PRINCIPLES §3) —
+# it does not need Latin-square-grade drift/notch balancing the way campaign
+# C's adoption-grade square did; strictly monotonic order is the right trade
+# here, not a defect.
+#
+# WHY 45-MIN BLOCKS. Matches Foundation's original pilot exactly — pilot-grade
+# duration, not adoption-grade. Six blocks = 4h30m, comfortably inside one
+# evening/overnight window.
+#
+# WHY 21:00 START. Clears the site's known notch hours entirely (07-09 AND 19,
+# NOTCH_HOURS in tests/test_rx_experiment.py — 19 is Foundation's own finding,
+# kept as a conservative inclusion since marvin hasn't been separately
+# characterized at that hour). Six blocks from 21:00 finish at 01:30, crossing
+# midnight but never touching a notch hour on either side.
+#
+# NOT adoption evidence, no matter how the curve reads. Output feeds arm
+# selection for a follow-up confirmatory campaign, same doctrine as
+# Foundation's own pilots.
+#
+# LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
+# Empty this block when the campaign completes (DEC-0096 stand-down).
 SCHEDULE="
+2026-08-31T21:00|P496
+2026-08-31T21:45|P449
+2026-08-31T22:30|P402
+2026-08-31T23:15|P372
+2026-09-01T00:00|P328
+2026-09-01T00:45|P207
+2026-09-01T01:30|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

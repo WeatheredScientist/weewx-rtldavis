@@ -21,6 +21,19 @@ under [Pre-S16].
   Also verifies `BOOT.md` job 4 (archive DB opens `mode=ro` cleanly under `journal_mode=DELETE`).
 - **Reconciled:** `CONSTANTS.md`'s gain row/hardware-site prose/timeline, `docs/ROADMAP.md`'s
   Campaign B/C item (now closed as a marvin result too), `BACKLOG.md`'s gain re-sweep item (closed).
+- **Fixed two stale claims `BOOT.md` was carrying from ops#233.** The restart-grant question is
+  resolved (MARVIN-DEC-0099: the grant already exists, corrected upstream mid-Campaign-C — this
+  file was still quoting the earlier "no grant exists" finding), and `usb_watchdog.sh`'s fate is
+  decided (retiring, MARVIN-DEC-0100), not still open.
+- **Campaign D pre-registered and shipped (DEC-0126): a marvin-site gain pilot, launching
+  2026-08-31T21:00 ET.** Six gain-only blocks HIGH→LOW — 496, 449, 402, 372, 328, 207 — reusing
+  Foundation's original pilot points plus 207 (dropped from campaign C on a Foundation-only
+  judgment DEC-0125 just showed doesn't transfer). Arm-selection input only, never adoption
+  evidence. `arm_cmd()` gains `P207`; `SCHEDULE=` populated; `campaign_analyze.py`'s `LEGENDS`
+  gains `"D"`; `tests/test_rx_experiment.py` gains `_require_campaign_d()` + 3 structural tests,
+  and `_require_campaign_b()`'s over-broad gate ("any P* row") is corrected to require the H hold
+  specifically — the old gate would have misfired campaign B's assertions against campaign D's
+  pilot-only shape. Full suite green (465 passed / 9 skipped).
 
 ---
 
