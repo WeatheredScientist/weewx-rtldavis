@@ -7881,3 +7881,59 @@ timer itself should be disabled between campaigns or simply left inert permanent
 keeping explicit for any re-scope of `ops#233`/`ops#226`: this gap and the logrotate gap are the
 same failure shape — pieces that never got ported in DEC-0118's move, not pieces pointing at a
 wrong or stale host (relayed from `eaglehunt-ops`, S109).
+
+## DEC-0124 — Campaign C completed clean; the 372-vs-496 verdict at marvin's RF position is NOT decided, blocked on ops#235
+
+**Status:** Accepted (measurement session; adoption undecided) · **Date:** 2026-08-31 (S110) ·
+**Follows:** DEC-0121/DEC-0122/DEC-0123 (this campaign) · **Blocked by:**
+[ops#235](https://github.com/WeatheredScientist/eaglehunt-ops/issues/235)
+
+### The campaign itself ran clean
+
+All 10 scheduled rows ran against the clock exactly as pre-registered (`A B B A B A A B A B`,
+2026-08-30T20:00 → 2026-08-31T11:00 ET, confirmed against the deployed script on marvin, not
+assumed from the design doc). Only 8 restart events appear in the apparatus log because two pairs
+of consecutive rows share an arm (21:30/23:00 both B, 03:30/05:00 both A) and a `tick` that finds
+the arm unchanged does not restart the driver — that is restart-count not matching row-count, not a
+schedule deviation. Block 1 launched by hand at 21:24:19, 84 minutes after the 20:00 nominal start
+(already logged, DEC-0122). No aborts. Self-terminated to `BASELINE` at 11:00:00 ET, dead on
+schedule. `weewx.service` confirmed healthy on gain 372 since the restore.
+
+### The verdict is not decided — a coarse number is not a result
+
+A rough proxy read of the monitor's 5-min `RECEPTION:` aggregate across the full run: **A (372)
+70.76% (n=76) vs B (496) 72.63% (n=70), B +1.87 pts** — under DEC-0059's 2.0-pt adoption bar. This
+is explicitly **not** the sanctioned metric: DEC-0069 exists precisely because a single freeze can
+drag a whole 5-min bucket down (~0.6–0.8 pts of measured bias), and several blocks in this run
+showed 1–5 "bad windows" flagged within them. Nothing should be decided from this number, in
+either direction — it is a proxy for "which way is it leaning," not an adoption input.
+
+### Why the real readout couldn't be pulled this session
+
+`ops/campaign_analyze.py` (the DEC-0069 sanctioned tool) reads per-minute `rxCheckPercent` over ssh
+to `NAS_HOST` — hardcoded to the old host, never ported to marvin. `marvinctl` has no SQL verb
+(filed as ops#235, weewx S107, before this campaign even launched). This session tried
+`marvinctl exec-ro` as a workaround — owner's explicit go-ahead, since it is a `docker run` under
+the hood and got Class-C-blocked once from this session — and confirmed, with a positive control,
+that it has **no working path today**: the stdin-pipe idiom forwards nothing (a trivial `print()`
+piped via `python3 -` produced zero output at exit 0), and the `-c` argv path rejects any string
+containing quotes or parentheses even with **zero literal whitespace** in it (tested via a
+base64-encoded, `exec(__import__(...))`-driven payload) — real Python or SQL cannot be expressed
+without them, so no amount of further encoding closes this path; it was correctly left there rather
+than pushed further; that stops being "working within the guard" and starts being "defeating it."
+Findings added as a comment to ops#235 rather than filing a duplicate — that issue already named
+`exec-ro` as "unexamined for this" and its proposed fix (a dedicated tier-1 SQL read verb) is now
+the only path left standing.
+
+**ops#235 is a priority, not a routine backlog item** — it blocks a live RF-gain decision (372 vs
+496 at marvin's actual receive position), not just a convenience read. Until it lands, the readout
+needs either an owner-mediated pull run directly on marvin, or `campaign_analyze.py` ported to
+marvin as its own piece of work — both real options, neither exercised yet.
+
+### Housekeeping done this session
+
+`ops/rx_experiment.sh`'s `SCHEDULE=` block stood down to the empty stand-down form (DEC-0096) now
+that the terminator has passed — `test_current_schedule_is_not_fully_stale` was correctly red
+until this landed (that is the guard doing its job, not a regression); full suite green after
+(457 passed / 14 skipped — the 11-test delta is the structural schedule tests correctly skipping
+themselves against an empty schedule, DEC-0096's designed behavior).

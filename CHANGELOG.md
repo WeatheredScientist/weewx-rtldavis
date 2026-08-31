@@ -6,6 +6,27 @@ under [Pre-S16].
 
 ---
 
+## [S110] — 2026-08-31 — Campaign C completed clean; the 372-vs-496 verdict is blocked on ops#235 (DEC-0124), now flagged a priority
+
+- **Campaign C ran its full 10-row schedule clean, no aborts, self-terminated to `BASELINE` at
+  exactly 11:00:00 ET** — confirmed against the actual deployed script on marvin, not assumed from
+  the design doc. `weewx.service` healthy on gain 372 since the restore.
+- **The 372-vs-496 verdict is NOT decided (DEC-0124).** A coarse proxy (monitor's 5-min aggregate,
+  not the sanctioned metric) leans toward 496 (+1.87 pts, n=76/70) but sits under DEC-0059's
+  2.0-pt bar and is explicitly not the call — DEC-0069 exists because that coarse metric absorbs
+  freeze-contamination bias. The real per-minute readout needs marvin-side archive-DB access that
+  doesn't exist: `ops/campaign_analyze.py` is NAS-only, and `marvinctl` has no SQL verb
+  ([ops#235](https://github.com/WeatheredScientist/eaglehunt-ops/issues/235), filed weewx S107).
+- **`marvinctl exec-ro` tested as a workaround and confirmed non-functional**, with a positive
+  control: the stdin-pipe idiom forwards nothing, and the `-c` argv path rejects quotes/parens
+  even at zero literal whitespace, so no real code can be passed through it either way. Findings
+  added to ops#235 rather than filing a duplicate. **ops#235 is now flagged a priority** — it
+  blocks a live RF-gain decision, not a convenience read.
+- **`ops/rx_experiment.sh`'s `SCHEDULE=` stood down to the empty form (DEC-0096)** now that the
+  terminator has passed — the staleness guard test was correctly red until this landed. Full suite
+  green after: 457 passed / 14 skipped (structural schedule tests correctly self-skip against an
+  empty schedule).
+
 ## [S108] — 2026-08-30 — Campaign C launches tonight instead of tomorrow (DEC-0122); a missing marvin scheduler found and fixed mid-campaign (DEC-0123)
 
 - **Campaign C launched 2026-08-30T20:00, a day earlier than DEC-0121's pre-registered 08-31**
