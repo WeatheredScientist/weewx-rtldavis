@@ -43,6 +43,11 @@ closed), `docs/DECISIONS.md`/`DECISIONS-FULL.md` (DEC-0125 added, DEC-0124 marke
 on marvin. Needs the owner's own Google account access. Full trail: marvin's `DECISIONS.md`,
 MARVIN-DEC-0093/-0095/-0097.
 
+**`usb_watchdog.sh` is RETIRING, not porting (ops#233, MARVIN-DEC-0100)** — it targeted Foundation-only
+USB paths; `MARVIN-DEC-0064` already fixed the failure mode it existed for (the dongle's permanent
+home is marvin's CPU-attached xHCI, not the chipset one that lost hop-tracking). Matches
+`REMEDY_MODE=none`. Stays OFF permanently by design, not by neglect — nothing further owed here.
+
 **Unchanged from S110: `weewx-rx-experiment.timer`'s hands-off-guest window (MARVIN-DEC-0088) has
 lapsed with the campaign's close** — a fresh declaration is needed for any future RF-position-
 sensitive work. The logrotate gap and the unrotated-`weewx.log`/`t-hlf`-tenant risk checks are also
@@ -51,33 +56,36 @@ unrefreshed this session.
 ### ▶▶ S112 JOB LIST
 
 **Live, in order:**
-1. **Flip `REMEDY_MODE=none` → `restart_unit` — not yet, and not via `marvinctl`.** Confirmed by a
-   marvin-side session at S107: **no local grant exists today.** The only sudoers lines on the box
-   serve the **ssh forced-command** path, and `marvinctl` is the *remote* client — a `t-weewx`-uid
-   daemon already on the box has no ssh hop to make and cannot invoke it to escalate itself. **The
-   only path is a narrow marvin-side grant** — one sudoers line (`t-weewx` →
-   `/usr/bin/systemctl restart weewx.service`) or a scoped polkit rule — a marvin-repo change needing
-   owner ratification and its own DEC row. Setting `restart_unit` without the grant yields a remedy
-   that fails every time while looking correct (DEC-0061). **`REMEDY_MODE=none` permanently is a
-   defensible end state**, not an unfinished job: the remedy's entire evidence record is a USB reset
-   aimed at hardware that has since changed boxes.
-2. **`usb_watchdog.sh`'s fate** — still simply OFF, still undecided. ops#233's sibling finding.
-3. **File a durable logrotate fix for marvin** — the gap itself is still unaddressed; not numbered
+1. **Flip `REMEDY_MODE=none` → `restart_unit` — the grant question is RESOLVED (`ops#233`,
+   MARVIN-DEC-0099, corrected 2026-08-31, mid-Campaign-C), the switch itself is not yet exercised.**
+   An earlier S107 finding on this file ("no local grant exists, needs a new marvin-repo sudoers/
+   polkit change") was itself wrong and has been corrected upstream: `t-weewx` already holds
+   `NOPASSWD: /usr/local/lib/marvin/marvin-own weewx *` (installed at tenant onboarding, verified
+   live via `sudo -n -l -U t-weewx`), and the tenant manifest's `units = weewx*.service` glob already
+   covers `weewx.service`. **No new privilege plumbing needed** — whatever runs the remedy just needs
+   `User=t-weewx` in its own unit file and to call
+   `sudo -n /usr/local/lib/marvin/marvin-own weewx restart weewx.service`. **Not yet exercised as a
+   real restart** (verification-only so far; a live restart belongs at weewx's actual deploy time,
+   not a verification session) — that live test, then flipping `REMEDY_MODE`, is the actual remaining
+   work.
+2. **File a durable logrotate fix for marvin** — the gap itself is still unaddressed; not numbered
    as its own job yet, fold into the next ROADMAP/job-list pass.
 
 **Carried forward, untouched:**
-4. **`main` promotion for v2.0.14** — deliberately deferred (DEC-0114).
-5. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — gated on job 6.
-6. **DEC-0117 hot swap needs an image rebuild to reach prod** (off by default). Still unverified
+3. **`main` promotion for v2.0.14** — deliberately deferred (DEC-0114).
+4. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — gated on job 5.
+5. **DEC-0117 hot swap needs an image rebuild to reach prod** (off by default). Still unverified
    whether marvin can build natively vs. repeating the `docker save`/`load` dance.
-7. **Foundation decommission timing** — owner's call, after a week-plus soak.
-8. **NAS-LEASE cross-host wiring** — low priority; marvin's `/nas-lease` is a deliberate no-op.
-9. **`CONSTANTS.md`'s infra section second pass** — still not re-verified row by row.
-10. **Sanity-check ops' `CONSTANTS.md` §5 register row** for weewx's token (`ef8e9af8`).
+6. **Foundation decommission timing** — owner's call, after a week-plus soak.
+7. **NAS-LEASE cross-host wiring** — low priority; marvin's `/nas-lease` is a deliberate no-op.
+8. **`CONSTANTS.md`'s infra section second pass** — still not re-verified row by row.
+9. **Sanity-check ops' `CONSTANTS.md` §5 register row** for weewx's token (`ef8e9af8`).
 
 **Retired this session (S111):** ~~get ops#235 resolved~~ — fixed ops-side, confirmed working;
 ~~run the real DEC-0069 analysis and log the adoption verdict~~ — done, DEC-0125; ~~verify the
-archive DB is readable unprivileged~~ — confirmed via the same read.
+archive DB is readable unprivileged~~ — confirmed via the same read; ~~usb_watchdog.sh's fate~~ —
+decided, retiring (ops#233, MARVIN-DEC-0100), see "What's settled"; ~~REMEDY_MODE grant question~~
+— resolved, grant already exists (MARVIN-DEC-0099), only the live-exercise step remains (job 1).
 
 ### Current state (S111 open)
 
@@ -85,11 +93,11 @@ archive DB is readable unprivileged~~ — confirmed via the same read.
 |---|---|
 | Prod host | marvin · `weewx.service` in `/weather.slice`, `docker run --rm` (a restart IS a full recreate) — two-tenant box (`t-hlf` / `weather-hlf.slice`, ops#234, checked no-impact at S109, not re-checked this session) |
 | Prod | v2.0.14, driver ws.5, weewx 5.5.0, **gain 372 live — campaign C closed, verdict DECIDED (DEC-0125): 372 holds** |
-| Alerting | `weewx_monitor.py` (`REMEDY_MODE=none`) live. `weewx-rx-experiment.timer` fired cleanly all night (no gaps, no failed runs) — now a documented no-op against the stood-down empty `SCHEDULE=`. `usb_watchdog.sh` still OFF (job 2, undecided) |
-| `marvinctl` | Tier-1 reads proven (needs `--tenant weewx`). **`exec-ro` self-service DB read CONFIRMED WORKING (S111)** — stdin-pipe fix verified live against the real archive DB |
+| Alerting | `weewx_monitor.py` (`REMEDY_MODE=none`) live. `weewx-rx-experiment.timer` fired cleanly all night (no gaps, no failed runs) — now a documented no-op against the stood-down empty `SCHEDULE=`. `usb_watchdog.sh` retiring permanently, not porting (ops#233, MARVIN-DEC-0100) |
+| `marvinctl` | Tier-1 reads proven (needs `--tenant weewx`). **`exec-ro` self-service DB read CONFIRMED WORKING (S111)** — stdin-pipe fix verified live against the real archive DB. `restart_unit`'s grant CONFIRMED already present (MARVIN-DEC-0099), live restart itself not yet exercised (job 1) |
 | Campaign C | **CLOSED** — ran 2026-08-30T21:24 → 2026-08-31T11:00 ET clean, no aborts, self-terminated on schedule. **Adoption verdict DECIDED (DEC-0125): 496 does not clear the bar, 372 holds** |
 | Open risks | Gmail SMTP 535 breaking the 6-hourly summary (owner-side, unchanged) — unrotated-log and `t-hlf`-tenant risks checked clear at S109, not re-verified this session |
-| Trackers | ops#235 fixed, confirmed working (not closed — that's the ops repo's own call) · ops#233 answered by DEC-0120 (not closed — deploy landed, verify-and-close still owed) · #216/#214/#110 open · repo #274/#253 open |
+| Trackers | ops#235 fixed, confirmed working (not closed — that's the ops repo's own call) · ops#233 mostly resolved (grant confirmed, watchdog retiring — deploy + live-restart-exercise + verify-and-close still owed) · #216/#214/#110 open · repo #274/#253 open |
 
 
 ## Blockers
@@ -118,6 +126,9 @@ are appended THERE, not here** — that is what keeps this file under cap.
 _Last updated: 2026-08-31 (S111). Session summary: ops#235 fixed ops-side and confirmed working with
 the real blocked use case; ran the real DEC-0069 per-minute analysis on Campaign C's data — 496 does
 not clear the adoption bar at marvin, gain holds at 372 (DEC-0125); BOOT/DECISIONS/CHANGELOG/ROADMAP/
-BACKLOG/CONSTANTS all reconciled to that state. Green gate re-run clean (docs-only session, no code
-changed): ruff clean, 457 passed / 14 skipped, mypy clean (66 files), secret gate clean over the
-whole tracked tree._
+BACKLOG/CONSTANTS all reconciled to that state. Also caught this file carrying a stale ops#233
+finding (S107's "no restart grant exists" was itself corrected upstream mid-Campaign-C to "the grant
+already exists, MARVIN-DEC-0099") and the usb_watchdog.sh retirement decision (MARVIN-DEC-0100) that
+had never made it out of ops#233's thread — both corrected here. Green gate re-run clean (docs-only
+session, no code changed): ruff clean, 457 passed / 14 skipped, mypy clean (66 files), secret gate
+clean over the whole tracked tree._
