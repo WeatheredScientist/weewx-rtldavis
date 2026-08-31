@@ -7798,3 +7798,86 @@ install then re-snapshots from live). The monitor must be deployed and writing b
 pass — which reverses this session's earlier ordering: **the monitor comes first, the campaign
 second.** Whether `t-weewx` can restart its own unit locally is DEC-0120's open question and does not
 block campaign C, which runs as root via `systemd-run` (the S105 pattern).
+
+## DEC-0122 — Campaign C launches tonight, not tomorrow: the wait's own rationale evaporated
+
+**Status:** Accepted (schedule change) · **Date:** 2026-08-30 (S108) · **Follows:** DEC-0121 (the
+campaign design and preflight this schedule belongs to) · **Depends on:** the monitor's deploy
+(BOOT.md job 1) already being live
+
+### The reason to wait was moot, not satisfied
+
+DEC-0121 pre-registered campaign C to launch 2026-08-31T20:00 — one full day after the monitor's
+deploy — so the freshly-deployed monitor would prove itself across a log-rotation boundary before
+being trusted as the abort tripwire. Checking that assumption directly on marvin, mid-session,
+found **marvin has no logrotate configured for `weewx.log` at all**: the file simply grows
+continuously. There is no rotation boundary to prove the monitor against, so the wait's own
+precondition can never be satisfied by waiting longer — it was never going to resolve itself.
+
+### The change
+
+Owner's call: launch tonight (2026-08-30) instead, with a fresh hands-off-the-guest declaration
+scoped to tonight's specific window (logged marvin-side as MARVIN-DEC-0088, superseding the one
+implicitly scoped to 08-31). `SCHEDULE=` in `ops/rx_experiment.sh` shifted by a pure −1 calendar
+day: same 10 blocks, same clock times (20:00/21:30/23:00/00:30/02:00/03:30/05:00/06:30/08:00/
+09:30/11:00), same `A B B A B A A B A B` order. DEC-0121's notch-exposure balance (1.00/1.00 split,
+drift sums 27/28) is untouched — this is a calendar shift, not a redesign, and the structural tests
+that assert the order's balance needed no change.
+
+### Not settled here
+
+The logrotate gap itself is not fixed by this DEC — it is a durable marvin configuration gap, not
+addressed here and not urgent for tonight's run (DEC-0123's own investigation found negligible log
+growth against marvin's free disk, and no drift in the monitor's offset-tracked reads). It remains
+an open job: a permanent logrotate stanza for marvin is owed before the *next* long campaign, or in
+general operation, so this doesn't recur.
+
+## DEC-0123 — `weewx-rx-experiment.timer`: campaign C's tick/guard scheduler, missing since the host move, ported to marvin
+
+**Status:** Accepted (design + implementation, deployed same night) · **Date:** 2026-08-30 (S108) ·
+**Follows:** DEC-0121 (this timer is the safety net its preflight assumed would exist) ·
+**Extends:** DEC-0118's host move to a piece it missed
+
+### Discovered live, mid-campaign
+
+DEC-0118 moved prod from the NAS ("Foundation") to marvin without porting Foundation's DSM cron
+entry, which had driven `ops/rx_experiment.sh`'s `tick` and `guard` subcommands every 5 minutes for
+the life of every prior campaign. Campaign C's block 1 was launched by hand tonight (the S105
+pattern: owner-invoked `systemd-run`) and then sat un-advanced — nothing was calling `tick` again to
+reach block 2, and `guard`, the campaign's only abort-on-bad-reception check, never ran at all.
+DEC-0121's `preflight` checks that the monitor log is fresh; it does not check that anything will
+keep calling `tick`/`guard` *after* launch — a gap in the gap-catcher, found only by watching the
+live campaign fail to advance.
+
+### Design
+
+New `ops/weewx-rx-experiment.service` (oneshot, `ExecStart` runs `tick` then `guard`) + `.timer`
+(`OnBootSec=2min`, `OnUnitActiveSec=5min`), matching the script's own documented 5-min cadence.
+Environment overrides pin marvin's paths — `RX_BASE=/srv/docker/weewx`, `RX_DOCKER=/usr/bin/docker`,
+`RX_RESTART_MODE=systemd`, `RX_RESTART_UNIT=weewx.service` — because the script's bare defaults
+assume the old NAS host and either fail outright (`RX_BASE`: no such path) or, worse, take prod down
+(`RX_RESTART_MODE=docker` against a `--rm` unit — exactly DEC-0121's finding #2). Runs as **root**,
+not `t-weewx`: `tick`/`guard` restart `weewx.service` on every arm swap, and `t-weewx` has no
+sudoers grant for that yet (BOOT.md job 4 defers that as its own decision, deliberately not folded
+in here). Root mirrors exactly what the Foundation cron did for months and what tonight's manual
+launch did via the owner's `marvin-admin` key — porting the existing design and privilege shape, not
+adding new surface.
+
+### Verified live
+
+Installed on marvin and confirmed firing since 22:18:16 ET the same night — its first fire
+self-healed the overdue block 1→2 swap, and `guard` has run every 5-min cycle since, so abort
+coverage was live well before the campaign's midpoint. Log growth and slice-budget risk flagged
+alongside this (unrotated `weewx.log`, the new `t-hlf` tenant) were checked separately and found
+clear for tonight's run.
+
+### Not settled here
+
+Standing the timer down between campaigns (`systemctl disable --now weewx-rx-experiment.timer`) is
+documented in the unit's own header but not automated. DEC-0096's stand-down state (empty
+`SCHEDULE=`) makes a `tick`/`guard` pass against an empty schedule a documented no-op, so leaving the
+timer enabled between campaigns is harmless, not just untidy — but nobody has decided whether the
+timer itself should be disabled between campaigns or simply left inert permanently. Also worth
+keeping explicit for any re-scope of `ops#233`/`ops#226`: this gap and the logrotate gap are the
+same failure shape — pieces that never got ported in DEC-0118's move, not pieces pointing at a
+wrong or stale host (relayed from `eaglehunt-ops`, S109).

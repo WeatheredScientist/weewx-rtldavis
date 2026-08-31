@@ -294,7 +294,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       extraction axis a wash. Deployed to prod at the same ~08-23 v2.0.14 event (DEC-0114). A
       narrower follow-up sweep near 496 considered and declined for now — see DEC-0115. Nothing
       remains on this item **as a Foundation result** — ⤷ **but the answer is being re-measured at
-      marvin's RF position (S107, DEC-0121, campaign C, scheduled 2026-08-31T20:00).** Two reasons
+      marvin's RF position — campaign C, LIVE as of 2026-08-30T20:00 (S107 DEC-0121 design; S108
+      DEC-0122 shifted the launch from the pre-registered 08-31 to tonight; DEC-0123 fixed a
+      mid-campaign scheduler gap), self-terminating 2026-08-31T11:00.** Two reasons
       this is not a re-litigation of a closed item: the host move put the receiver at a measurably
       closer, fewer-walls position, and prod is currently running **372, not the adopted 496** — the
       08-29 migration incident set it without a controlled comparison and the aborted campaign's exit

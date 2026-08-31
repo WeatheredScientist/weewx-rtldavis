@@ -6,6 +6,29 @@ under [Pre-S16].
 
 ---
 
+## [S108] — 2026-08-30 — Campaign C launches tonight instead of tomorrow (DEC-0122); a missing marvin scheduler found and fixed mid-campaign (DEC-0123)
+
+- **Campaign C launched 2026-08-30T20:00, a day earlier than DEC-0121's pre-registered 08-31**
+  (DEC-0122). The reason to wait — letting the freshly-deployed monitor prove itself across a
+  log-rotation boundary before trusting it as the abort tripwire — turned out to be moot: marvin has
+  no logrotate configured for `weewx.log` at all. Owner's call, with a fresh hands-off-the-guest
+  declaration for tonight's window (PR #290, MARVIN-DEC-0088). `SCHEDULE=` shifted by a pure −1
+  calendar day; blocks, clock times, and the `A B B A B A A B A B` order are all unchanged, so
+  DEC-0121's notch balance is untouched.
+- **Discovered live, mid-campaign: nothing was advancing the schedule or checking the abort
+  condition.** DEC-0118's move to marvin never carried over Foundation's DSM cron that drove
+  `ops/rx_experiment.sh tick`/`guard` every 5 min. Block 1 sat un-advanced after its manual launch,
+  and `guard` — the campaign's only abort-on-bad-reception check — never ran. New
+  `ops/weewx-rx-experiment.service`+`.timer` (root, marvin-pinned env, PR #292 — DEC-0123) shipped
+  and was installed on marvin the same night; confirmed firing since 22:18:16 ET, having self-healed
+  the overdue block 1→2 swap on its first pass.
+- **This session's own closeout ritual did not run** — landed via 3 merged PRs (#290/#291/#292) with
+  no `BOOT.md` rewrite, no CHANGELOG entry, no DEC rows. **Completed retroactively by S109**, which
+  also confirmed (via live marvin/ops sessions) that two risks flagged after the fact — the unrotated
+  `weewx.log`'s growth rate and marvin's new second tenant (`t-hlf`, ops#234) — are both clear for
+  tonight's run; only the unrelated Gmail SMTP failure (reception-summary alerting, needs the owner's
+  Google account access) remains open. No code changed in S109 — docs and decision records only.
+
 ## [S107] — 2026-08-30 — Alerting rebuilt for marvin (DEC-0120): input staleness becomes its own state, the USB remedy stops being assumed; today's gain campaign refused on power grounds
 
 - **`weewx_monitor.py`'s 14 h of false alerts were a structural defect, not a wrong path (DEC-0120,
