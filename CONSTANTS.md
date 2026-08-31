@@ -82,7 +82,7 @@ mechanism is `ops/rx_experiment.sh` tooling that has not itself moved yet, `BOOT
 | `[DatabaseTypes][[SQLite]]` → `[[[pragmas]]] journal_mode = DELETE` | **subsection, not a scalar** | Re-pins `delete` on every connection so an accidental WAL flip can never again silently strand a reader on a stale snapshot (DEC-0071). **weedb iterates `pragmas` as a MAPPING** — the scalar spelling `pragmas = journal_mode = DELETE` parses as a string, and iterating it raises `TypeError: string indices must be integers`, which crash-loops weewxd. It cost ~6 min of prod on 2026-08-06 |
 | `[StdCalibrate][[Corrections]]` → `radiation` exact-code zero | DEC-0080 line, verbatim from `weewx.conf.example` | Zeros the VP2+ diode floor (`sr_raw=1` ≈ 1.758 W/m²) every dark minute. Applied 2026-08-11 (S73), **also written into `weewx.conf.rx-baseline`** — `restore_baseline` copies that snapshot over the live conf at every campaign abort/end, so a live-conf-only apply would be silently wiped (hazard found at apply; BOOT's original steps missed it). Verify after any recreate from stock **and** confirm dark hours read 0 (if 3.516 shows, extend per-code) |
 | `[DavisPressure]` → `fetch_interval` | **300** (applied S101/DEC-0113 at the v2.0.14 build event, verified live) | WeatherLink v2's documented ceiling is 1,000 calls/hour + 10/s; 300s uses ~1.2% of quota. Cuts the archived barometer from a 60-min sample-and-hold staircase to a 5-min one (#144 item 3) |
-| `[Rtldavis]` → `cmd` gain | **372** as of DEC-0118 (S105) — **provisional, not a re-adoption.** DEC-0115's measured-best value was **496** (S101, beat 372 by +2.00 reception points on Campaign B's square); tonight's cutover incident led to trying 372 (Foundation's own prior production value) and the incident resolved on an unrelated cause (a USB controller), so 496 was never cleanly re-tested at marvin's RF position. A proper re-sweep is `BOOT.md` job 4 |
+| `[Rtldavis]` → `cmd` gain | **372**, re-tested and holding as of DEC-0125 (S111). DEC-0118's cutover incident originally left it at 372 by accident (an unrelated USB controller, not gain); Campaign C then re-tested 372 vs DEC-0115's Foundation-adopted 496 at marvin's own RF position under a properly-powered design, and **496 did not clear the 2.0-pt adoption bar** (+1.16 pts, DEC-0059/DEC-0069). DEC-0115 stands for Foundation's own siting — this is a separate finding that the answer doesn't transfer to marvin, not a correction of it. 372 is no longer "provisional-by-accident"; it is measured-and-unbeaten at this site pending a longer multi-day campaign (`BACKLOG.md`) |
 | `[[Influx]]` → `lease_dir` | **`/nas-lease`** (in-container path, added S101/DEC-0111 — unchanged by the host move) | Points `influx.py`'s NAS-LEASE courtesy-yield at a mount. **On marvin this is a deliberately empty local directory (`MARVIN-DEC-0063`), not a live share of the NAS's real lease file** — the courtesy-yield is a permanent no-op until cross-host lease sharing is built (`BOOT.md` job 7). On the NAS through S104 it was `-v /volume1/docker/nas-lease:/nas-lease:ro`, a live bind. Either way, absent/broken silently disables the yield — the mechanism fails open by design, never errors |
 
 ## Release / rollback
@@ -106,15 +106,17 @@ limited on Foundation's own siting** (~150 ft through walls, above) — **this c
 when the receiver moved to marvin**, a measurably closer position with fewer walls (DEC-0118); the
 figures below are Foundation's own measured history and should not be assumed to transfer.
 
-**Gain running now: 372, provisional (DEC-0118, S105) — NOT the last measured-best value.** DEC-0115
-adopted **496** on Foundation's siting, superseding the prior 372: measured **74.83%, sd 8.47** at
-gain 496 on the clean 32/32-block Campaign B square (superseding the older "73.3%, sd 4.67" figure,
-which was gain 372's on the same siting — DEC-0059). That measurement is still the best data
-Foundation ever produced, but it was never re-validated at marvin's position — 372 is what's running
-post-migration because a same-night incident (the actual cause was unrelated — a USB controller, not
-gain) happened to leave it there. A proper re-sweep at the new site is `BACKLOG.md`'s open item, not
-done yet. Foundation's reproducible ~2-pt dip at **hours 07 and 19** was a property of that site; a
-new site removes any assumption it recurs.
+**Gain running now: 372, re-tested and holding at marvin's position (DEC-0125, S111).** DEC-0115
+adopted **496** on Foundation's siting: measured **74.83%, sd 8.47** at gain 496 on the clean
+32/32-block Campaign B square (superseding the older "73.3%, sd 4.67" figure, which was gain 372's
+on the same siting — DEC-0059). 372 ended up running post-migration by accident — a same-night
+incident (the actual cause was unrelated — a USB controller, not gain) — but Campaign C then ran the
+proper same-position re-sweep `BACKLOG.md` had queued, and **496 did not beat 372 by DEC-0059's
+2.0-pt bar** (+1.16 pts, per-minute freeze-aware metric). DEC-0115 is still the right call for
+Foundation's own data; it simply doesn't transfer to marvin's closer, fewer-walls position.
+Foundation's reproducible ~2-pt dip at **hours 07 and 19** was a property of that site — marvin's own
+morning notch instead runs **hours 07–09, 2–3.5 pts** (found pre-registering Campaign C), so treat
+either site's dip shape as local, not universal.
 
 ### Hardware timeline
 
@@ -127,7 +129,8 @@ new site removes any assumption it recurs.
 | 2026-06-16/17 | 6410 hall anemometer replaced |
 | 2026-08-02 | LNA removed (mid-ERR-0005; DEC-0081/DEC-0083) |
 | 2026-08-23 | RF gain 372 → 496 adopted, Campaign B's result (DEC-0115) |
-| 2026-08-28/29 | **Receiver relocated: NAS ("Foundation") → marvin (DEC-0118).** Closer, fewer walls — a new siting, not a tuning change. Gain reverted to 372 (provisional) mid-incident; re-sweep pending |
+| 2026-08-28/29 | **Receiver relocated: NAS ("Foundation") → marvin (DEC-0118).** Closer, fewer walls — a new siting, not a tuning change. Gain reverted to 372 mid-incident |
+| 2026-08-30/31 | Campaign C: same-position re-sweep of 372 vs 496 — 496 does not clear the adoption bar at marvin (DEC-0125). Gain holds at 372 |
 
 Station coordinates: gitignored local-infra doc. Attribution: **WeatheredScientist**.
 

@@ -7937,3 +7937,66 @@ that the terminator has passed — `test_current_schedule_is_not_fully_stale` wa
 until this landed (that is the guard doing its job, not a regression); full suite green after
 (457 passed / 14 skipped — the 11-test delta is the structural schedule tests correctly skipping
 themselves against an empty schedule, DEC-0096's designed behavior).
+
+## DEC-0125 — Campaign C's real per-minute verdict: 496 does NOT clear the adoption bar at marvin's RF position; 372 stays
+
+**Status:** Accepted (measurement + decision) · **Date:** 2026-08-31 (S111) · **Resolves:**
+DEC-0124's open verdict · **Depends on:** [ops#235](https://github.com/WeatheredScientist/eaglehunt-ops/issues/235)'s
+stdin-pipe fix, landed and verified live the same day · **Does not re-open:** DEC-0115 (Foundation's
+own adoption call stands on Foundation's own data; this is a different site)
+
+### ops#235 unblocked mid-session
+
+The stdin-pipe bug DEC-0124 found dead (`marvinctl exec-ro`'s container stdin was closed — the
+wrapper's own `docker run` was missing `-i`) was fixed and deployed by an ops-side session between
+DEC-0124's close and this one. Verified end-to-end with the actual blocked use case, not just the
+fix's own positive control: piping a read-only `sqlite3.connect('file:.../weewx.sdb?mode=ro',
+uri=True)` query through `marvinctl --tenant weewx exec-ro weatheredscientist/weewx-rtldavis:v2.0.14
+-- /opt/weewx-venv/bin/python3 -` against the live, mode-`0500` archive DB returned 1333 clean rows,
+exit 0, empty stderr. Confirmed on ops#235 with the full command and result. **Incidentally answers
+`BOOT.md` job 4** (archive-DB read permissions): the DB's `journal_mode=DELETE` pin (`CONSTANTS.md`'s
+live-config table) means there is no `-shm` sidecar to complicate a `mode=ro` open, and this read
+proves that in production, not in theory.
+
+### The real readout
+
+Fetched every `archive` row (`dateTime`, `interval`, `rxCheckPercent`) from 2026-08-30T21:00 ET
+through the campaign's close, then ran DEC-0069's own analysis code (`ops/campaign_analyze.py`'s
+`parse_blocks`/`partition`/`summarize` — unmodified, imported directly, not re-derived) against the
+apparatus log's swap events and the fetched rows:
+
+```
+   EXCLUSIONS (whole fetched window)
+     NULL rxCheckPercent (restart artifact)            9
+     gap-adjacent (freeze/restart truncation)         13
+     non-physical (rx > 100)                           0
+     post-swap settle window                          69
+     total excluded                                   91   of 1333 fetched, 797 in-block
+
+   ARM RESULTS
+     arm   settings                   n    mean     sd  raw n  raw mean   delta
+     A     gain 372 ex 0            368  72.82%  8.13    405    72.58%   +0.24
+     B     gain 496 ex 0            350  73.98%  8.35    384    74.03%   -0.05
+```
+
+**B (496) beats A (372) by +1.16 points — under DEC-0059's 2.0-pt adoption bar.** This is *smaller*
+than DEC-0124's coarse 5-min proxy (+1.87 pts), not larger: the freeze-aware per-minute metric this
+campaign existed to get does not just confirm the proxy's lean, it narrows it. Both readings land on
+the same side of the bar, but only one of them was ever the sanctioned answer.
+
+### What this means for prod
+
+`BACKLOG.md`'s pre-committed reading (written S107, before any data existed) named exactly two honest
+outcomes: *496 clears the bar → restore the adopted value with a same-position measurement behind
+it; it does not → the interesting finding is that marvin's position changed the answer, which earns
+a real multi-day campaign rather than a config change.* This is the second outcome. **No config
+change** — prod is already running 372 (has been since the DEC-0118 migration incident), so nothing
+to flip. `CONSTANTS.md`'s gain row should stop reading "372, provisional, not the last measured-best
+value" as if 496 simply hasn't been re-checked yet; it has, at this site, under a properly powered
+design (MDE ~1.66 pts against the 2.0-pt bar per S107's pre-run power check), and 496 did not win.
+DEC-0115 itself is not overturned — it was a valid call on Foundation's own data, at Foundation.
+What Campaign C shows is that Foundation's answer does not transfer to marvin's closer, fewer-walls
+position; that is a new, standalone finding, not a correction of the old one. Per the
+pre-commitment, one clean overnight run is still directional, not adoption-quality replication — the
+real next step, if this question is worth resolving further, is the multi-day campaign BACKLOG.md
+already names, not a third night with more taps of `campaign_analyze.py`.
