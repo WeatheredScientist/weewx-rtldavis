@@ -8000,3 +8000,52 @@ position; that is a new, standalone finding, not a correction of the old one. Pe
 pre-commitment, one clean overnight run is still directional, not adoption-quality replication — the
 real next step, if this question is worth resolving further, is the multi-day campaign BACKLOG.md
 already names, not a third night with more taps of `campaign_analyze.py`.
+
+## DEC-0126 — Campaign D pre-registered: a marvin-site gain pilot, six arms including 207, launching same day as DEC-0125
+
+**Status:** Accepted (design, pre-registered before any data exists) · **Date:** 2026-08-31 (S111) ·
+**Triggered by:** DEC-0125 · **Extends:** Foundation's original overnight-pilot design (DEC-0064)
+to a second host, same shape as DEC-0121 did for the confirmatory square
+
+DEC-0125 showed Foundation's own pilot-derived shortlist — gain 372 vs 496 — was never actually
+validated as the *right candidates* at marvin: it was carried over on the assumption that Foundation's
+arm-selection would transfer, and that assumption just failed. Rather than guess a third value to test
+1-vs-1 against 372, this re-runs the shortlisting step itself, at marvin, mirroring exactly what
+Foundation did before its own campaign square committed.
+
+**Design:** six gain-only blocks, HIGH → LOW — 496, 449, 402, 372, 328, 207 — `-ex 0` fixed (found
+inert, DEC-0064's campaign). The first five are Foundation's own original pilot points (real R820T2
+steps); **207 is new** — campaign C's own pre-registration (DEC-0121) dropped it as "Foundation's
+known-worst, barely separable," the identical shape of judgment that DEC-0125 just showed cannot be
+trusted to transfer, and it has zero data at marvin. 45-min blocks (Foundation's pilot cadence,
+pilot-grade not adoption-grade), starting 2026-08-31T21:00 ET, finishing 01:30 ET — comfortably clear
+of the site's known notch hours (07-09, 19) on both ends. HIGH → LOW order is deliberate, not just
+precedent: it is a pilot-specific safety property — an abort on a weak low arm still leaves the
+higher/likely-useful arms already harvested. No Latin-square notch/drift balancing is needed the way
+DEC-0121's confirmatory square required it — a pilot is arm-selection input only (PRINCIPLES §3),
+never adoption evidence, so strict monotonic order is the right trade, not a shortcut taken under
+time pressure.
+
+**No USB-reset safety net exists on marvin, and none is needed for this.** Foundation's
+`usb_reset.sh` was retired, not ported (MARVIN-DEC-0100/ops#233) — the fault it existed for (a USB
+controller losing hop-tracking) doesn't recur on marvin's CPU-attached xHCI placement (MARVIN-DEC-0064,
+0 lost samples/million measured there). Every arm swap already restarts the container, so each gain
+gets a fresh driver acquisition regardless of remedy configuration.
+
+**Shipped:** `arm_cmd()` gains a `P207` case; a new `SCHEDULE=` block (`ops/rx_experiment.sh`) with
+the six pilot rows plus the `BASELINE` self-terminator; `ops/campaign_analyze.py`'s `LEGENDS` gains a
+`"D"` entry so the eventual readout reports real gain values, not `?`. `tests/test_rx_experiment.py`
+gains `_require_campaign_d()` plus three structural tests (arm order/gain values, 45-min cadence,
+notch-hour clearance, self-termination, absence of a stray hold/square arm) — and `_require_campaign_b()`'s
+gate is corrected from "any P* row" to "the H hold row specifically," because a pilot-only schedule
+(campaign D's actual shape) was passing the old, looser check and would have misfired campaign B's
+pilot/hold/square assertions against a schedule that has neither a hold nor a square. Caught before
+it ever ran red, not after. Full suite green (465 passed / 9 skipped) with campaign B's and campaign
+C's structural tests confirmed correctly skipping against the live campaign D schedule, and campaign
+D's own tests confirmed passing. **Pre-reqs before launch, not yet done:** a fresh hands-off-guest
+declaration (MARVIN-DEC-0088's lapsed with campaign C's close) and `logs/campaign.inhibit` for the
+duration.
+
+**Pre-committed reading of the result.** Output feeds arm selection for a real confirmatory campaign
+if the question is judged worth pursuing further — it does not itself decide anything, same doctrine
+as every prior pilot in this repo's history.
