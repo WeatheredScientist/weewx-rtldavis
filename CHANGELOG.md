@@ -6,6 +6,24 @@ under [Pre-S16].
 
 ---
 
+## [S111] — 2026-08-31 — Campaign C's real verdict: 496 does not clear the adoption bar at marvin; 372 holds (DEC-0125)
+
+- **ops#235 fixed mid-session (ops-side): `marvinctl exec-ro`'s missing `-i` flag was closing
+  container stdin.** Verified end-to-end with the exact read DEC-0124 left blocked: a read-only
+  `sqlite3` query piped through `exec-ro` against the live, mode-`0500` archive DB returned 1333
+  clean rows, exit 0. Confirmed on ops#235.
+- **Ran DEC-0069's own `campaign_analyze.py` logic (unmodified) against the real per-minute data.**
+  Result: **A (372) 72.82% (n=368) vs B (496) 73.98% (n=350), B +1.16 pts — under DEC-0059's 2.0-pt
+  adoption bar**, smaller than DEC-0124's coarse 5-min proxy (+1.87 pts), not larger.
+- **Verdict logged as DEC-0125: 496 does not clear the bar at marvin's RF position — gain holds at
+  372, no config change.** Per `BACKLOG.md`'s S107 pre-commitment, this is a standalone finding
+  that Foundation's DEC-0115 answer doesn't transfer to marvin's site, not a reversal of DEC-0115.
+  Also verifies `BOOT.md` job 4 (archive DB opens `mode=ro` cleanly under `journal_mode=DELETE`).
+- **Reconciled:** `CONSTANTS.md`'s gain row/hardware-site prose/timeline, `docs/ROADMAP.md`'s
+  Campaign B/C item (now closed as a marvin result too), `BACKLOG.md`'s gain re-sweep item (closed).
+
+---
+
 ## [S110] — 2026-08-31 — Campaign C completed clean; the 372-vs-496 verdict is blocked on ops#235 (DEC-0124), now flagged a priority
 
 - **Campaign C ran its full 10-row schedule clean, no aborts, self-terminated to `BASELINE` at
