@@ -3,7 +3,11 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-29 (S106 — **scheduled full reconciliation, tripwire fired on time**: every
+**Last updated:** 2026-08-31 (S111 — targeted line update per DEC-0057, not a full pass; tripwire
+still S116: DEC-0125 decided Campaign C's verdict (496 does not clear the bar at marvin's position,
+372 holds) — closed the Campaign B item's marvin-remeasurement thread, which DEC-0124 had left open
+last session. Nothing else touched.)
+Prior: 2026-08-29 (S106 — **scheduled full reconciliation, tripwire fired on time**: every
 open item diffed against DECISIONS.md/CHANGELOG.md/BOOT.md; nothing stale found. DEC-0119 — today's
 ops#183 Influx outage, the `backfill_influx.py` fix, and the `weewx_monitor.py` alerter finding —
 touches no P0–P3 line, the same call S105 made about DEC-0118's migration: it's incident response and
@@ -296,19 +300,22 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       remains on this item **as a Foundation result** — ⤷ **the answer was re-measured at marvin's
       RF position — campaign C ran clean 2026-08-30T21:24 → 2026-08-31T11:00 ET (S107 DEC-0121
       design; S108 DEC-0122 shifted the launch from the pre-registered 08-31 to tonight; DEC-0123
-      fixed a mid-campaign scheduler gap) — but the verdict is NOT decided (DEC-0124, S110): the
-      sanctioned per-minute readout needs marvin-side archive-DB access that does not exist today
-      — [ops#235](https://github.com/WeatheredScientist/eaglehunt-ops/issues/235), now a
-      **priority** (`campaign_analyze.py` is NAS-only; `marvinctl exec-ro` examined and confirmed
-      to have no working path, S110). A coarse proxy (the monitor's 5-min aggregate, NOT the
-      freeze-aware metric) leans toward 496 (+1.87 pts across the full run) but sits under
-      DEC-0059's 2.0-pt bar and is explicitly not the call.** Two reasons this was not a
-      re-litigation of a closed item: the host move put the receiver at a measurably closer,
-      fewer-walls position, and prod is currently running **372, not the adopted 496** — the
-      08-29 migration incident set it without a controlled comparison and the aborted campaign's exit
-      trap codified it (owner's call: hold 372 until measured). Early prior: marvin @372 already
-      measures 73.88%, within ~0.95 pts of Foundation @496, so 496 repeating its +2.00 here was not
-      assumed. DEC-0066's
+      fixed a mid-campaign scheduler gap), and the verdict is now DECIDED (DEC-0125, S111): **496
+      does not clear DEC-0059's 2.0-pt adoption bar at marvin's position** — real per-minute,
+      freeze-aware readout (`campaign_analyze.py`'s own logic, pulled via ops#235's newly-fixed
+      `marvinctl exec-ro` stdin path) gives A (372) 72.82% vs B (496) 73.98%, **+1.16 pts**, smaller
+      than the coarse 5-min proxy's +1.87 lean and still under the bar either way. Gain holds at
+      372 — no config change — and this is a standalone finding that Foundation's DEC-0115 answer
+      doesn't transfer to marvin's closer, fewer-walls position, not a reversal of DEC-0115 itself.
+      This item is now CLOSED as a marvin result too; a longer multi-day campaign remains an open
+      idea in `BACKLOG.md` if the question is worth resolving further, not a follow-up owed here.**
+      Two reasons this was not a re-litigation of a closed item: the host move put the receiver at a
+      measurably closer, fewer-walls position, and prod was running **372, not the adopted 496** at
+      the time this re-measurement was queued — the 08-29 migration incident set it without a
+      controlled comparison and the aborted campaign's exit trap codified it (owner's call: hold 372
+      until measured — now measured, and holding on the evidence rather than the accident). Early
+      prior: marvin @372 already measured 73.88%, within ~0.95 pts of Foundation @496, so 496
+      repeating its +2.00 here was never assumed, and the campaign confirmed that caution. DEC-0066's
       hold released on its own terms: the gates were closed on measurement (DEC-0069/0070), A's
       figures confirmed clean (DEC-0077), and the "instrument trusted" condition met. The first
       launch night (08-09) was scrubbed at 00:58 on a dead VPN — the runbook's postpone-24h
