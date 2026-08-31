@@ -250,17 +250,6 @@ arm_cmd() {
 # LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
 # Empty this block when the campaign completes (DEC-0096 stand-down).
 SCHEDULE="
-2026-08-30T20:00|A
-2026-08-30T21:30|B
-2026-08-30T23:00|B
-2026-08-31T00:30|A
-2026-08-31T02:00|B
-2026-08-31T03:30|A
-2026-08-31T05:00|A
-2026-08-31T06:30|B
-2026-08-31T08:00|A
-2026-08-31T09:30|B
-2026-08-31T11:00|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
