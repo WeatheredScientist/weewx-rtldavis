@@ -1,0 +1,64 @@
+# weewx-rx-experiment.service -- periodic tick/guard driver for RX campaigns (S108)
+#
+# WHAT THIS REPLACES
+# -------------------
+# On Foundation, ops/rx_experiment.sh's `tick` and `guard` subcommands were driven
+# by a DSM cron entry firing every 5 min (see the script's own usage banner).
+# DEC-0118 moved prod to marvin without porting that trigger -- campaign C's
+# first block was launched by hand (owner-invoked `systemd-run`, S108) and then
+# sat un-advanced: nothing was calling `tick` again to reach block 2, and `guard`
+# -- the campaign's ONLY abort-on-bad-reception check -- never ran at all. An
+# unattended overnight campaign with no scheduler is not a degraded mode, it is
+# the campaign not actually running unattended.
+#
+# WHY ROOT, NOT t-weewx
+# ----------------------
+# `tick`/`guard` restart weewx.service on every arm swap (RX_RESTART_MODE=systemd
+# -> `systemctl restart weewx.service`). `t-weewx` (weewx-monitor.service's user)
+# has no sudoers grant for that yet -- BOOT.md defers that as its own decision,
+# not something to fold in here. Running this unit as root mirrors exactly what
+# the Foundation cron did for months (root crontab, no per-swap confirmation) and
+# what tonight's manual launch did via the owner's marvin-admin key -- a standing
+# root timer for the campaign's own duration, not new privilege surface.
+#
+# INSTALL (marvin session / owner -- NOT from the weewx repo session, matching
+# weewx-monitor.service's own convention)
+# ------------------------------------------------------------------
+#   install -m 0644 weewx-rx-experiment.service weewx-rx-experiment.timer /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now weewx-rx-experiment.timer
+#
+# Deploy ops/rx_experiment.sh from the MERGED dev tip, never a local edit -- same
+# rule as every other artifact here (ops#214 silent-drift pattern).
+#
+# STANDING DOWN: disable the timer between campaigns (DEC-0096) --
+#   systemctl disable --now weewx-rx-experiment.timer
+# A `tick`/`guard` pass against an empty SCHEDULE= is a documented no-op either
+# way, so leaving the timer enabled is harmless, not just tidy.
+
+[Unit]
+Description=weewx-rtldavis RX campaign tick+guard pass (ops/rx_experiment.sh)
+Documentation=https://github.com/WeatheredScientist/weewx-rtldavis
+After=weewx.service
+
+[Service]
+Type=oneshot
+Slice=weather.slice
+
+# Marvin-specific overrides -- the script's own defaults assume the old NAS host
+# (RX_BASE=/volume1/docker/weewx-rtldavis, RX_DOCKER=/usr/local/bin/docker,
+# RX_RESTART_MODE=docker) and running any of those bare on marvin either fails
+# outright (RX_BASE: no such path) or takes prod down (RX_RESTART_MODE=docker
+# against a --rm unit -- DEC-0121). No EnvironmentFile: these four are the whole
+# set the script reads (RX_CONTAINER's default already matches marvin).
+Environment=RX_BASE=/srv/docker/weewx
+Environment=RX_DOCKER=/usr/bin/docker
+Environment=RX_RESTART_MODE=systemd
+Environment=RX_RESTART_UNIT=weewx.service
+
+# tick first (advance the schedule if a block is due), then guard (abort/pause
+# on bad reception). Both share rx_experiment.sh's own lock, so back-to-back
+# calls in one pass are safe by design (script header: "tick/guard/abort
+# serialize behind one lock").
+ExecStart=/srv/docker/weewx/rx_experiment.sh tick
+ExecStart=/srv/docker/weewx/rx_experiment.sh guard
