@@ -297,6 +297,39 @@ failed resets currently produce no further action.
   re-checking evidence that looked internally weird (DEC-0047).
 
 ## Open ideas
+
+- **Public-maturity push (S112 audit) — three planned sessions, owner-requested.** Goal: as the fork
+  approaches true maturity, make it maximally accessible — clean code/comments, accurate docs,
+  proper git accoutrement, minimal and clear public surface. Four parallel S112 audit reviews
+  (doc drift, PII/secrets, comment quality, newcomer experience) produced the findings; the PII
+  finding shipped immediately as DEC-0127. The rest, staged (full detail in the S112 transcript;
+  jobs 3–5 in `BOOT.md`):
+  - **Session A — mechanical version/doc sync (Sonnet):** README + Docker Hub banner stuck at
+    v2.0.12/ws.4/weewx 5.4 vs live v2.0.14/ws.5/5.5.0; `influx.py` ws.1→ws.2 refs; no GitHub
+    release tag past v2.0.11 while README/SECURITY point at Releases as version truth; CHANGELOG
+    has no per-release notes a puller can find; `weewx.conf.example` version stamp + superseded
+    `fetch_interval=3600` (adopted: 300); ARCHITECTURE false "last updated" stamp, removed-LNA and
+    NAS-path content; broken `usb_forensics.sh` install command (missing `ops/`); README docker-run
+    vs docker-compose mount mismatch; CONTRIBUTING describes CI behavior ci.yml doesn't have and a
+    `for f in tests/...` loop that silently skips 8 files (pytest should lead); `BIAS_TEE=1`
+    default (DC to the antenna!) documented only in a changelog blockquote — needs Quick Start
+    prominence.
+  - **Session B — code-facing clarity (Opus):** strip internal IDs from RUNTIME-EMITTED strings
+    only (monitor alert emails cite ops#233/DEC-0021/DEC-0056 to strangers; driver/monitor log
+    lines similar) — comments KEEP their DEC/ERR trailing citations (public, resolvable, and the
+    audit judged the prose unusually good; add a notation glossary paragraph to CONTRIBUTING
+    instead). Driver docstrings still show upstream defaults (`/home/pi/...`, EU) that produce a
+    broken config if copied; three test docstrings cite stale line numbers (cite symbols);
+    `test_input_staleness.py:195` has an `... or True` unfailable assertion; `ops/` scripts need a
+    one-line internal-vs-user banner each; `Dockerfile:127` claims v2.0.4.
+  - **Session C — public-surface reorg (owner + Opus/Fable, needs DECs):** 8 of 14 root docs are
+    internal governance, alphabetically ahead of README on GitHub; docs/ has no user-vs-maintainer
+    index; `DECISIONS-FULL.md` (544KB) exceeds GitHub's render limit; PR titles are `S###:`-styled
+    and issue labels publicly describe model economics (`tier:frontier` = "Fable/Opus"); zero
+    topics/homepage/templates on the repo; open #274 is an internal cross-repo memo. Includes the
+    privacy-first question of whether the governance corpus (BOOT/BACKLOG/DECISIONS narrating prod
+    topology and known weaknesses) belongs in the private ops repo with pointers here.
+
 - **Campaign D — marvin gain pilot (S111), launching 2026-08-31T21:00 ET, arm-selection input
   only, never adoption evidence.** Triggered directly by Campaign C (DEC-0125): 496 lost to 372 at
   marvin after winning at Foundation, which means Foundation's pilot-derived shortlist {372, 496}
