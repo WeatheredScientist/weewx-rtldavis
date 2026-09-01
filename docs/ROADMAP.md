@@ -259,7 +259,7 @@ bound and done via reversible live hot-swap with an instant rollback path.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P2 — RF optimization, done honestly (PRINCIPLES §3) — **A COMPLETE, B LAUNCHED (S70)**
+## P2 — RF optimization, done honestly (PRINCIPLES §3) — **✅ CLOSED (S113, DEC-0128): the gain axis is exhausted**
 DEC-0048 (S41) deferred this into one designed experiment; the apparatus (`ops/rx_experiment.sh` +
 `tests/test_rx_experiment.py`, S56/DEC-0059) is now deployed and executing. The seven
 pre-governance sweep scripts are deleted; two of them were silently broken.
@@ -395,6 +395,24 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       above (PR #177). Two sessions running with one novel blind-spot bug each in just-shipped
       campaign automation (DEC-0088, DEC-0089) — a dedicated state-machine audit is scoped for
       the next session (`BOOT.md`), not just another reactive fix.
+- [x] **Campaign D — marvin gain pilot — CLOSED (S113, DEC-0128): the curve is flat; the gain
+      axis is exhausted at marvin.** Pre-registered S111 (DEC-0126) as the shortlisting step
+      DEC-0125 showed had never been run at this site. Ran exactly as designed — six 45-min
+      gain-only blocks HIGH→LOW, 2026-08-31 21:01 → 09-01 01:30 ET, no aborts, self-terminated and
+      restored prod at 01:30:39. **P496 74.65 · P449 73.79 · P402 74.98 · P372 74.97 · P328 73.29 ·
+      P207 68.17.** Gain 328–496 is one plateau — 1.70 pts of spread against a ~1.61-pt per-arm SE,
+      best delta **+0.01**, nothing near the 2.0-pt bar. **A shortlisting pilot that shortlists
+      nothing: no candidate remains worth a confirmatory square, so the multi-day follow-up
+      `BACKLOG.md` held open under campaign C is withdrawn, not deferred.** 207 is the one real
+      result (−6.80, t=−3.75) and agrees with the physics — campaign A's near-parity for 207 was
+      **LNA-in**, and DEC-0017's "207 optimal" is a with-preamp finding. Gain holds at 372, no
+      config change; `SCHEDULE=` stood down (DEC-0096). **What closes this section:** like-for-like
+      full-diurnal campaigns, LNA out both — 372: Foundation 72.83 vs marvin 72.82; 496: 74.83 vs
+      73.98. DEC-0118 moved the receiver measurably closer with fewer walls and reception did not
+      move. With `-ex` already a wash (+0.45/−0.06), that is **three axes — gain, receive window,
+      siting — all flat at ~73–75%**, so the missing ~25% is not SNR-limited and not reachable by
+      tuning. The open question is no longer *which setting* but *where the ceiling is*; candidates
+      are in `BACKLOG.md`, cheapest-first, and none is another CLI sweep.
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,

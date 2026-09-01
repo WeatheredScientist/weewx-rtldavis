@@ -330,11 +330,82 @@ failed resets currently produce no further action.
     privacy-first question of whether the governance corpus (BOOT/BACKLOG/DECISIONS narrating prod
     topology and known weaknesses) belongs in the private ops repo with pointers here.
 
-- **Campaign D — marvin gain pilot (S111), launching 2026-08-31T21:00 ET, arm-selection input
-  only, never adoption evidence.** Triggered directly by Campaign C (DEC-0125): 496 lost to 372 at
-  marvin after winning at Foundation, which means Foundation's pilot-derived shortlist {372, 496}
-  was never actually validated as the right *candidates* for marvin — it was carried over
-  unquestioned. This re-runs the shortlisting step, at marvin.
+- **▶ Where is the ~25% ceiling? Items 1 and 3 are now ANSWERED (DEC-0129); the loss is
+  deterministic and ours (opened S113, DEC-0128).** **Item 1 — denominator honest, hypothesis
+  rejected:** `loop_times` is exactly Davis's `(41+id)/16` s, so the missing 25% is undecoded
+  packets, not an artifact. Two incidentals: `max_count` varies 19–23 where `iss_channel=1` implies
+  a fixed 23 (the driver's `period` is not the archive interval — needs the un-emitted
+  `ARCHIVE_STATS` line), and **per-minute variance is entirely binomial** (predicted sd 9.2–9.9 at
+  ~20–25 packets/min, measured 8.80 — no excess variance at all). **Item 3 — `ppm`/`fc` dead,
+  blocker 4 closed:** offset is real and one-sided (+2206 Hz = +2.41 ppm, zero negatives) but
+  reception is flat across a 10x offset range (corr +0.075), so the AFC absorbs it; item 4
+  (`-noafc`) is contraindicated by the same result. **What replaced them:** the owner's Davis
+  console at comparable distance runs **single-digit** packet drop, so the ~20-pt gap is ours, not
+  the link's. Leading untested hypothesis: 26 MHz/51 channels vs an RTL-SDR's ~2.4 MHz means it must
+  **retune per hop**, and hops that don't settle are lost deterministically. **Next: read the
+  deployed Go hop-tracking path — `Dockerfile:46` fetches `src.tgz` publicly, no prod access
+  needed.** Original framing kept below.
+
+  *(as opened, S113)* Three independent axes are now measured flat at ~73–75%: tuner gain
+  (328–496, campaign D, spread 1.70 pts), receive window (`-ex` 0 vs 50, +0.45 and −0.06 pts,
+  campaigns A/B — and larger windows are *worse*, rw400 ≈ 63%), and **physical siting** (DEC-0118
+  moved the receiver measurably closer with fewer walls; 372 went 72.83 → 72.82 and 496 went
+  74.83 → 73.98). A link that ignores a 168-count gain range *and* a materially better path is not
+  SNR-limited. **Stop looking for a setting; find the ceiling.** Cheapest first:
+
+  1. **Is the denominator honest? (free, local, read-only — do this first.)**
+     `max_count = period // loop_times[x]` (`rtldavis.py:1622`) counts *every* ISS transmission with
+     no discount for the 51-channel frequency hop or for re-acquisition after one. If the receiver
+     structurally cannot be on-channel for some fraction of transmissions, part of the "missing 25%"
+     is **definitional, not lost data**, and every other item here is moot. The driver already emits
+     the per-transmitter breakdown — `ARCHIVE_STATS: station N: max_count=… count=… missed=…` at
+     debug level — so this needs one debug window and arithmetic, not a campaign. Also confirm
+     `loop_times[x]` is indexed by the right transmitter id for our single-ISS setup.
+  2. **Rule out the known decoder defects as the cause — they point the wrong way.** DEC-0035's
+     double-decode (~722/day) *inflates* `count`, so it makes `rxCheckPercent` read high, not low;
+     it cannot explain a deficit. Recorded here so it is not re-proposed as the mechanism.
+  3. **`ppm` / `fc` by MEASUREMENT, not by sweeping (free, read-only — closes blocker 4 without a
+     campaign).** The `FreqError` telemetry exists and is confirmed live (S57 Phase 0, DEC-0024),
+     and the archive carries the remapped freqError columns the S58 notch work already used. Pull
+     the distribution and look for a systematic non-zero centre: if it is centred, the axis is
+     **dead** and blocker 4 closes on evidence; if it is offset, set `ppm` once by arithmetic. The
+     prior is that it is centred — **AFC is on by default** (`-noafc` defaults false) and hour 06
+     has excellent reception (~75%) at the *highest* measured freqError, so the AFC is visibly
+     absorbing the offset. That prior is exactly why this must be measured rather than swept: a
+     sweep would cost a campaign to learn what one query can tell us.
+  4. **`-noafc` — the last untested binary flag, and a low prior.** If the AFC is absorbing offset
+     (item 3's evidence), disabling it should *hurt*. Worth an arm only if item 3 finds an offset
+     the AFC is failing to track. Not worth a campaign of its own.
+  5. **Narrower receive window (< 300 ms) — the one untested direction on a wash axis.** Needs
+     negative `-ex` (unvalidated; may produce a negative loop period) or a rebuild. Both tested
+     directions were flat-to-worse, so the prior is poor and the cost is real. Low.
+  6. **LNA back in — low prior, and the flat curve is the reason.** More front-end gain is what
+     campaign D just showed does nothing. An LNA improves *noise figure* rather than gain alone, so
+     it is not strictly the same axis, but a link that is demonstrably not noise-limited is the
+     wrong place to spend a hardware change with a bias-tee risk attached.
+
+  **What this item is not.** It is not a licence to re-sweep gain (closed, DEC-0128) or to re-run
+  the receive-window axis (a wash, twice). Items 1 and 3 are both free and read-only; neither
+  touches prod; between them they either explain the ceiling or retire the last CLI knob. Do those
+  before proposing anything that costs a night of production.
+
+- ✅ **Campaign D — marvin gain pilot — CLOSED (DEC-0128, S113): the curve is flat, the pilot
+  shortlists nothing, and the gain axis is exhausted at marvin.** Ran exactly as pre-registered
+  below — six 45-min blocks HIGH→LOW, 2026-08-31 21:01 → 09-01 01:30 ET, no aborts, self-terminated
+  and restored prod at 01:30:39. **P496 74.65 · P449 73.79 · P402 74.98 · P372 74.97 (incumbent) ·
+  P328 73.29 · P207 68.17.** Gain 328–496 is one plateau: 1.70 pts of spread against a ~1.61-pt
+  per-arm SE, best delta **+0.01**, nothing near DEC-0059's 2.0-pt bar. Per the pre-committed
+  reading below, a pilot that selects no arm selects no arm — **the multi-day confirmatory campaign
+  this list held open is withdrawn, not deferred.** 207 is the one separable result (−6.80,
+  t=−3.75) and is consistent with the LNA being out since 08-02 (campaign A's near-parity for 207
+  was LNA-in; DEC-0017's "207 optimal" is a with-preamp finding). Gain holds at 372, no config
+  change, `SCHEDULE=` stood down. Caveats on the record in DEC-0128: D's absolute level runs ~2 pts
+  high because it deliberately sat in the site's best hours, so **D's arms compare to each other,
+  not to campaign B/C absolutes**; n≈33/arm resolves ~4 pts, so a 2-pt effect is not excluded, only
+  a large one; one night. *Original framing, kept:* triggered directly by Campaign C (DEC-0125) —
+  496 lost to 372 at marvin after winning at Foundation, which means Foundation's pilot-derived
+  shortlist {372, 496} was never actually validated as the right *candidates* for marvin. This
+  re-ran the shortlisting step, at marvin, and found the shortlist empty.
 
   ### ▶ PRE-REGISTERED, S111 (2026-08-31) — written before any data exists
 
