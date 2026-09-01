@@ -291,14 +291,15 @@ arm_cmd() {
 #
 # LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
 # Empty this block when the campaign completes (DEC-0096 stand-down).
+#
+# RAN AND CLOSED (S113, DEC-0128). All six blocks completed, no aborts,
+# self-terminated to BASELINE 2026-09-01 01:30:39 ET. Result: 207 is real and
+# bad (-6.80 pts, t=-3.75); 328/372/402/449/496 are one flat plateau, 1.70 pts
+# of spread against a ~1.61-pt per-arm SE, so NOTHING clears DEC-0059's 2.0-pt
+# bar and the pilot shortlists no candidate. Gain holds at 372. Schedule stood
+# down below — the gain axis is closed at marvin, do not re-sweep it without a
+# new reason.
 SCHEDULE="
-2026-08-31T21:00|P496
-2026-08-31T21:45|P449
-2026-08-31T22:30|P402
-2026-08-31T23:15|P372
-2026-09-01T00:00|P328
-2026-09-01T00:45|P207
-2026-09-01T01:30|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
