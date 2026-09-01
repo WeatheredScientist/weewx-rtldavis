@@ -17,7 +17,15 @@ under [Pre-S16].
   DEC-0127.
 - Triggered by the S112 public-accessibility audit (four parallel reviews: doc/version drift,
   PII/secrets, code-comment quality, newcomer experience) — remaining findings are queued as
-  follow-up work, this session shipped the time-sensitive piece first.
+  follow-up work (`BACKLOG.md` §Public-maturity push, `BOOT.md` jobs 3–5), this session shipped the
+  time-sensitive piece first.
+- **Stale-schedule CI tripwire fixed to compare in the SCHEDULE's own timezone** —
+  `test_current_schedule_is_not_fully_stale` used the runner's naive clock, so UTC CI runners fired
+  it 4–5 h before the ET terminator passed; first bit PR #298 mid-Campaign-D. Verified with
+  `TZ=UTC` before/after. Merged with the transparency PR (#298).
+- Phase 0 before the rewrite: NAS SSH port rotated (owner, DSM), UniFi port-forwarding verified
+  empty — the exposed values were never WAN-reachable. Ops session briefed cross-session for their
+  own nas.env/alias/DEC follow-through.
 
 ## [S111] — 2026-08-31 — Campaign C's real verdict: 496 does not clear the adoption bar at marvin; 372 holds (DEC-0125)
 
