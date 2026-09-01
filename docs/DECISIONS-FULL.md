@@ -8049,3 +8049,58 @@ duration.
 **Pre-committed reading of the result.** Output feeds arm selection for a real confirmatory campaign
 if the question is judged worth pursuing further — it does not itself decide anything, same doctrine
 as every prior pilot in this repo's history.
+
+## DEC-0127 — Full-history rewrite: privacy outranks history immutability
+
+**Date:** 2026-09-01 (S112) · **Status:** Accepted (owner-directed, executed)
+
+**Trigger.** The S112 public-accessibility audit (four parallel review agents over the tracked tree,
+history, and public surfaces) confirmed that while HEAD is clean — the placeholder discipline holds
+across all tracked files, and no credential/key/token was ever committed on any branch — a small
+number of **historical** file versions carried real private-infrastructure identifiers, and 42
+early-era commits carried a personal email address in author/committer metadata, linking the
+project's pseudonym to a personal identity. The S41/S42 scrubs had cleaned HEAD the same week the
+values landed, but a public repo's history is permanently fetchable: cleaning HEAD cannot clean the
+exposure.
+
+**The call.** Owner's explicit priority ordering, stated in-session: *given a choice between best
+practices and privacy/security, privacy wins — breaking forks or past history is acceptable if
+what happened is explained.* Best-practice history immutability lost to that, deliberately.
+
+**Mitigating facts established before acting:** zero forks (no fork network retains old objects);
+the infrastructure values were LAN-scope only, and the router's port-forwarding table was checked
+empty (never internet-reachable), with the relevant service port rotated first as Phase 0; the
+values are non-credential, so scraper exposure is unlikely. This was a privacy scrub, not an
+incident response.
+
+**Execution.** Fresh `git clone --mirror` → `git filter-repo --replace-text` (values → the same
+`<PLACEHOLDER>` tokens HEAD already uses) `+ --mailmap` (both historical gmail identities → the
+GitHub noreply identity) → verification → force-push all `refs/heads/*` and `refs/tags/*` → branch
+protection deleted and restored with its exact original config (same checks, `enforce_admins`,
+no force pushes) → local clone re-pointed, stale local branches deleted. The auto-mode classifier
+blocked the agent from running the rewrite commands itself; the owner ran the five mutation
+commands by hand from agent-prepared one-liners (mirror clone, filter-repo, two pushes, protection
+cycle) — a correct outcome, not a workaround: the human held the pen on every irreversible step.
+
+**Verification (the part that makes this a decision and not a hope).** Every scan that found the
+exposure was re-run against the rewritten mirror and returned clean — and every zero was
+positive-controlled against the old history to prove the scan could still detect what it claimed
+to (the repo's standing false-zero doctrine). Axes: blob contents across all commits, commit
+messages, author/committer names and emails. Old SHAs no longer resolve in the rewritten repo;
+replacement placeholders confirmed present where values were.
+
+**Residual exposure, named honestly:** (1) GitHub retains pre-rewrite objects server-side
+(SHA-addressable, plus `refs/pull/*` pins) until a Support-side purge — requested, tracked in the
+local-infra doc; (2) anyone who cloned between 2026-07 and the rewrite retains the values — which
+is why Phase 0 rotation happened first and the values are treated as burned regardless.
+
+**Public communication.** `SECURITY.md` gained a dated re-clone notice, deliberately generic: it
+names the *action* (history rewrite, what class of thing was removed, SHAs changed, no credentials
+ever committed) and not the *specifics* (which files, which windows, what values) — per the S41
+doctrine that guard rails go public and exposures do not. Specifics live in the gitignored
+local-infra doc only.
+
+**Consequences accepted:** all commit SHAs changed (existing clones must re-clone, not pull);
+pre-rewrite PR diff views degrade after the server-side purge; release tags keep their names but
+point at rewritten commits. Docker Hub images, upstream PRs, and the running production host are
+untouched — nothing at runtime references git SHAs.
