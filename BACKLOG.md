@@ -723,10 +723,18 @@ failed resets currently produce no further action.
 - rw400-test (300ms → 400ms): ~63%, **worse** than baseline ~65%.
 - Larger receiveWindow is not supported by evidence so far. **Untested direction: narrower than 300**,
   which needs negative `-ex` (unvalidated — could produce a negative loop period) or a rebuild.
-- **Caveat on provenance (S56):** the equivalence was read from upstream *master*. The deployed binary
-  is built from weewx-contrib's bundled `src.tgz` and is demonstrably older — it lacks master's
-  startup settings line (`tr=… gain=… ex=… receiveWindow=…`), which is absent from both `weewx.log`
-  and the container stdout. The deployed source has not been read directly.
+- **Caveat on provenance (S56) — HALF FALSIFIED, S113.** The equivalence was read from upstream
+  *master*, and the deployed source had not been read directly. **Both of those are now fixed, and
+  the evidence offered for "demonstrably older" was wrong.** The startup settings line
+  (`tr=… gain=… ex=… receiveWindow=…`) is **not absent** — it is emitted by the deployed binary and
+  was simply invisible, because the driver routes unrecognized Go stderr to `logdbg` and DEC-0043's
+  `[Logging]` block pins the `user` logger to INFO. Raise that logger and it appears immediately:
+  `tr=16 fc=0 ppm=0 gain=372 maxmissed=51 ex=0 receiveWindow=300 actChan=[4] maxChan=1`.
+  **Lesson, and it is this repo's own recurring one: "absent from the log" is not "absent from the
+  program" — a suppressed emitter and a missing one look identical** (`docs/GOTCHAS.md` §1). The
+  deployed source has since been read directly (S113, publicly fetchable via `Dockerfile:46`) and
+  is version 0.15; whether it diverges from master on the `-ex`/`receiveWindow` sum should be
+  re-checked against that source rather than inferred from a log absence.
 
 **Gain, from the retired sweeps (kept because the scripts are gone, S56):**
 - `fc_sweep.sh` held gain at 207, its header recording it as "confirmed best from gain sweep" — a
