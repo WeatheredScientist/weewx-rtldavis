@@ -34,6 +34,13 @@ under [Pre-S16].
   and `_require_campaign_b()`'s over-broad gate ("any P* row") is corrected to require the H hold
   specifically — the old gate would have misfired campaign B's assertions against campaign D's
   pilot-only shape. Full suite green (465 passed / 9 skipped).
+- **Campaign D deployed and armed live on marvin, same session.** `rx_experiment.sh` shipped and
+  hash-verified, Campaign C's stale baseline snapshot archived to `.campaignC` (was blocking
+  `install`), `install` succeeded (fresh baseline snapshotted, schedule armed), `logs/campaign.inhibit`
+  set, monitor confirmed healthy. No further action needed for the 21:00 ET launch. Also caught and
+  reverted a wrong turn: attempted wiring `marvinctl pull`-based deploy for weewx before finding
+  marvin's own MARVIN-DEC-0079, which already tried and rejected that design for this tenant (the
+  on-disk layout doesn't match this repo's structure — deploy stays flat/scp, deliberately).
 
 ---
 

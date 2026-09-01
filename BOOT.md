@@ -48,41 +48,36 @@ USB paths; `MARVIN-DEC-0064` already fixed the failure mode it existed for (the 
 home is marvin's CPU-attached xHCI, not the chipset one that lost hop-tracking). Matches
 `REMEDY_MODE=none`. Stays OFF permanently by design, not by neglect — nothing further owed here.
 
-**⚠ Campaign D is pre-registered and SHIPPED, launching TONIGHT 2026-08-31T21:00 ET (DEC-0126) —
-still needs its pre-launch checklist run before then.** Triggered by DEC-0125: Foundation's
-pilot-derived shortlist {372, 496} was never actually validated for marvin, so this re-runs the
-shortlisting step there. Six gain-only blocks HIGH→LOW — 496, 449, 402, 372, 328, 207 — 45 min each,
-finishing 01:30 ET, clear of the site's notch hours on both ends. `SCHEDULE=` is populated (no longer
-the DEC-0096 stand-down state), `arm_cmd()` has `P207`, `campaign_analyze.py`'s `LEGENDS` has `"D"`,
-and `tests/test_rx_experiment.py` has full structural coverage (465 passed / 9 skipped — see below).
-Arm-selection input only, never adoption evidence (same doctrine as Foundation's own pilots). **Not
-yet done: the hands-off-guest declaration (see next paragraph), `logs/campaign.inhibit`, a monitor
-health check, and the actual `install` on marvin** — none of these are self-service from this repo
-(no arbitrary marvin file write), so launch needs a marvin-side session same as every prior campaign.
-Full design: `BACKLOG.md`'s pre-registration, `docs/DECISIONS-FULL.md`'s DEC-0126.
+**✅ Campaign D is pre-registered, shipped, deployed, and ARMED on marvin — launches automatically
+2026-08-31T21:00 ET (DEC-0126).** Triggered by DEC-0125: Foundation's pilot-derived shortlist
+{372, 496} was never actually validated for marvin, so this re-runs the shortlisting step there. Six
+gain-only blocks HIGH→LOW — 496, 449, 402, 372, 328, 207 — 45 min each, finishing 01:30 ET, clear of
+the site's notch hours on both ends. `SCHEDULE=` is populated (no longer the DEC-0096 stand-down
+state), `arm_cmd()` has `P207`, `campaign_analyze.py`'s `LEGENDS` has `"D"`, and
+`tests/test_rx_experiment.py` has full structural coverage (465 passed / 9 skipped). Arm-selection
+input only, never adoption evidence (same doctrine as Foundation's own pilots).
 
-**`weewx-rx-experiment.timer`'s hands-off-guest window (MARVIN-DEC-0088) has lapsed with Campaign C's
-close** — a fresh declaration is required before Campaign D can launch, not just "needed for any
-future work." This is the most time-critical open item in this file right now.
+**Pre-launch checklist done this session, live on marvin (owner-authorized, via marvin-admin token
+path):** `rx_experiment.sh` deployed to `/srv/docker/weewx/` (hash-verified) · Campaign C's stale
+baseline snapshot archived to `.campaignC` (was blocking `install`) · `install` succeeded — fresh
+baseline snapshotted 17:44 ET, `rx_experiment.state` reads `NONE\|0\|1970-01-01 00:00:00` (armed, no
+arm set — exactly the expected post-install state) · `logs/campaign.inhibit` set · monitor confirmed
+healthy (75% reception, actively polling) via `marvinctl` directly, no marvin-side session needed for
+that check. The already-running root timer (`weewx-rx-experiment.timer`, DEC-0123) picks up the first
+arm automatically once the clock crosses 21:00 — **no further command needed for launch itself.**
+
+**Still needed, not a command: the hands-off-guest declaration** (MARVIN-DEC-0088's own — the prior
+one lapsed with Campaign C's close) for tonight's window. Owner's call, not something run from here.
 
 ### ▶▶ S112 JOB LIST
 
 **Live, in order:**
-1. **⚠ Campaign D pre-launch checklist, before 21:00 ET tonight (2026-08-31) — see "What's settled"
-   above for the design.** (a) Fresh hands-off-guest declaration for tonight's window
-   (MARVIN-DEC-0088's own — the prior one lapsed with Campaign C). (b) `logs/campaign.inhibit` set on
-   marvin for the duration. (c) Confirm `weewx_monitor.py` still healthy (it's the abort tripwire's
-   input, DEC-0121). (d) `install` on marvin from the merged `dev` tip (needs a marvin-side session —
-   this repo has no arbitrary file write there). **If any of this can't happen before 21:00, do not
-   force it** — `install` self-heals a late start (`due_arm()`), but only within reason; a schedule
-   that's fully elapsed before it's ever installed just needs regenerating for the next attempt
-   (DEC-0096 stand-down), not a rushed launch.
-2. **Once Campaign D closes (~01:30 ET, or on abort): pull the readout and log the arm-selection
+1. **Once Campaign D closes (~01:30 ET, or on abort): pull the readout and log the arm-selection
    result.** `marvinctl exec-ro` + `campaign_analyze.py --campaign D` — no owner-mediated wait this
    time (ops#235 is fixed). Then empty `SCHEDULE=` back to the DEC-0096 stand-down state, or
    `tests/test_rx_experiment.py::test_current_schedule_is_not_fully_stale` starts failing CI once the
    terminator passes (same mechanism that caught Campaign C's own stale schedule).
-3. **Flip `REMEDY_MODE=none` → `restart_unit` — the grant question is RESOLVED (`ops#233`,
+2. **Flip `REMEDY_MODE=none` → `restart_unit` — the grant question is RESOLVED (`ops#233`,
    MARVIN-DEC-0099, corrected 2026-08-31, mid-Campaign-C), the switch itself is not yet exercised.**
    An earlier S107 finding on this file ("no local grant exists, needs a new marvin-repo sudoers/
    polkit change") was itself wrong and has been corrected upstream: `t-weewx` already holds
@@ -94,31 +89,32 @@ future work." This is the most time-critical open item in this file right now.
    real restart** (verification-only so far; a live restart belongs at weewx's actual deploy time,
    not a verification session) — that live test, then flipping `REMEDY_MODE`, is the actual remaining
    work.
-4. **File a durable logrotate fix for marvin** — the gap itself is still unaddressed; not numbered
+3. **File a durable logrotate fix for marvin** — the gap itself is still unaddressed; not numbered
    as its own job yet, fold into the next ROADMAP/job-list pass.
 
 **Carried forward, untouched:**
-5. **`main` promotion for v2.0.14** — deliberately deferred (DEC-0114).
-6. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — gated on job 7.
-7. **DEC-0117 hot swap needs an image rebuild to reach prod** (off by default). Still unverified
+4. **`main` promotion for v2.0.14** — deliberately deferred (DEC-0114).
+5. **Convert `ops/rx_experiment.sh` to the DEC-0117 control file** — gated on job 6.
+6. **DEC-0117 hot swap needs an image rebuild to reach prod** (off by default). Still unverified
    whether marvin can build natively vs. repeating the `docker save`/`load` dance.
-8. **Foundation decommission timing** — owner's call, after a week-plus soak.
-9. **NAS-LEASE cross-host wiring** — low priority; marvin's `/nas-lease` is a deliberate no-op.
-10. **`CONSTANTS.md`'s infra section second pass** — still not re-verified row by row.
-11. **Sanity-check ops' `CONSTANTS.md` §5 register row** for weewx's token (`ef8e9af8`).
+7. **Foundation decommission timing** — owner's call, after a week-plus soak.
+8. **NAS-LEASE cross-host wiring** — low priority; marvin's `/nas-lease` is a deliberate no-op.
+9. **`CONSTANTS.md`'s infra section second pass** — still not re-verified row by row.
+10. **Sanity-check ops' `CONSTANTS.md` §5 register row** for weewx's token (`ef8e9af8`).
 
 **Retired this session (S111):** ~~get ops#235 resolved~~ — fixed ops-side, confirmed working;
 ~~run the real DEC-0069 analysis and log the adoption verdict~~ — done, DEC-0125; ~~verify the
 archive DB is readable unprivileged~~ — confirmed via the same read; ~~usb_watchdog.sh's fate~~ —
 decided, retiring (ops#233, MARVIN-DEC-0100), see "What's settled"; ~~REMEDY_MODE grant question~~
-— resolved, grant already exists (MARVIN-DEC-0099), only the live-exercise step remains (job 1).
+— resolved, grant already exists (MARVIN-DEC-0099), only the live-exercise step remains (job 2);
+~~Campaign D pre-launch checklist~~ — done, armed on marvin, see "What's settled."
 
 ### Current state (S111 open)
 
 | Thing | State |
 |---|---|
 | Prod host | marvin · `weewx.service` in `/weather.slice`, `docker run --rm` (a restart IS a full recreate) — two-tenant box (`t-hlf` / `weather-hlf.slice`, ops#234, checked no-impact at S109, not re-checked this session) |
-| Prod | v2.0.14, driver ws.5, weewx 5.5.0, **gain 372 live — campaign C closed, verdict DECIDED (DEC-0125): 372 holds. Campaign D scheduled TONIGHT 21:00→01:30 ET (DEC-0126), not yet installed** |
+| Prod | v2.0.14, driver ws.5, weewx 5.5.0, **gain 372 live — campaign C closed, verdict DECIDED (DEC-0125): 372 holds. Campaign D ARMED on marvin, self-launches 21:00 ET tonight (DEC-0126)** |
 | Alerting | `weewx_monitor.py` (`REMEDY_MODE=none`) live. `weewx-rx-experiment.timer` fired cleanly all night (no gaps, no failed runs) — now a documented no-op against the stood-down empty `SCHEDULE=`. `usb_watchdog.sh` retiring permanently, not porting (ops#233, MARVIN-DEC-0100) |
 | `marvinctl` | Tier-1 reads proven (needs `--tenant weewx`). **`exec-ro` self-service DB read CONFIRMED WORKING (S111)** — stdin-pipe fix verified live against the real archive DB. `restart_unit`'s grant CONFIRMED already present (MARVIN-DEC-0099), live restart itself not yet exercised (job 1) |
 | Campaign C | **CLOSED** — ran 2026-08-30T21:24 → 2026-08-31T11:00 ET clean, no aborts, self-terminated on schedule. **Adoption verdict DECIDED (DEC-0125): 496 does not clear the bar, 372 holds** |
@@ -159,5 +155,13 @@ pilot did, adding 207, launching tonight 21:00 ET — `SCHEDULE=` populated, `ar
 all updated, `_require_campaign_b()`'s gate corrected in the process (was over-broad, would have
 misfired against campaign D's pilot-only shape). BOOT/DECISIONS/CHANGELOG/ROADMAP/BACKLOG/CONSTANTS
 all reconciled. Green gate clean: ruff clean, 465 passed / 9 skipped, mypy clean (66 files), secret
-gate clean over the whole tracked tree; `install --dry-run` confirms the new schedule parses (fails
-only on missing marvin-side paths, as expected when dry-run from the Mac)._
+gate clean over the whole tracked tree. **Then deployed and armed Campaign D live on marvin**
+(owner-authorized, via the marvin-admin token path each step): `rx_experiment.sh` shipped and
+hash-verified, Campaign C's stale baseline archived to `.campaignC`, `install` succeeded
+(`PREFLIGHT OK`, fresh baseline snapshotted, state armed), `logs/campaign.inhibit` set, monitor
+confirmed healthy — no further action needed for tonight's 21:00 ET launch beyond the owner's own
+hands-off-guest declaration. Also found and reverted a wrong turn: `marvinctl pull`-based deploy for
+weewx was attempted (git_branch=dev added to marvin's tenant manifest) before finding MARVIN-DEC-0079,
+which already tried and rejected that exact design for this tenant — weewx's marvin deploy is
+deliberately flat/scp, not git, because the on-disk layout doesn't match this repo's directory
+structure. Reverted before committing; no trace left in either repo._
