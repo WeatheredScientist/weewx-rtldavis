@@ -14,6 +14,15 @@ Please **do not** open a public issue for a security problem. Instead use GitHub
 version/tag. You'll get an acknowledgement as soon as practical; this is a personal project, so
 please allow a reasonable window before any public disclosure.
 
+## 2026-09-01 history rewrite
+
+On 2026-09-01 this repository's entire git history was rewritten (`git-filter-repo`) and
+force-pushed, to remove inadvertently committed private infrastructure identifiers and personal
+email addresses from a small number of historical file versions and early commit metadata. **No
+credentials, keys, or tokens were ever committed on any branch** — this was a privacy scrub, not a
+credential leak. Every commit SHA changed; if you cloned before this date, please **re-clone**
+rather than pull. Release tags keep their names and now point at the rewritten commits.
+
 ## Scope notes
 
 - This repository is **public**. It must never contain credentials, tokens, or personal

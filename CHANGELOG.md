@@ -6,6 +6,19 @@ under [Pre-S16].
 
 ---
 
+## [S112] — 2026-09-01 — Full-history rewrite: privacy scrub of infrastructure identifiers and personal emails (DEC-0127)
+
+- **The entire git history (661 commits, every branch and tag) was rewritten with `git-filter-repo`
+  and force-pushed** to remove private-infrastructure identifiers from historical file versions and
+  personal email addresses from early commit metadata. Owner-directed: privacy outranks history
+  immutability. All SHAs changed — existing clones must re-clone. Verified clean with
+  positive-controlled scans on every axis; zero forks existed; GitHub Support purge requested for
+  server-side cached objects. `SECURITY.md` carries the public re-clone notice. Full trail:
+  DEC-0127.
+- Triggered by the S112 public-accessibility audit (four parallel reviews: doc/version drift,
+  PII/secrets, code-comment quality, newcomer experience) — remaining findings are queued as
+  follow-up work, this session shipped the time-sensitive piece first.
+
 ## [S111] — 2026-08-31 — Campaign C's real verdict: 496 does not clear the adoption bar at marvin; 372 holds (DEC-0125)
 
 - **ops#235 fixed mid-session (ops-side): `marvinctl exec-ro`'s missing `-i` flag was closing
