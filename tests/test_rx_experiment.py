@@ -25,6 +25,7 @@ import re
 import subprocess
 import textwrap
 import time
+import zoneinfo
 from pathlib import Path
 
 import pytest
@@ -426,7 +427,13 @@ def test_current_schedule_is_not_fully_stale():
     so the stale branch stays positively controlled in the section below.
     """
     rows = _schedule_rows()
-    now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M")
+    # S112: the SCHEDULE contract is prod-host local time (ET), and the script
+    # compares against the prod host's own clock -- but this test used the
+    # RUNNER's naive clock, so on CI's UTC runners it fired 4-5 h before the
+    # terminator actually passed (first bit PR #298, mid-Campaign-D). Compare
+    # in the schedule's own timezone, not whoever happens to run the test.
+    tz = zoneinfo.ZoneInfo("America/New_York")
+    now = datetime.datetime.now(tz).strftime("%Y-%m-%dT%H:%M")
     state = _schedule_state(rows, now)
     assert state != "stale", (
         f"shipped SCHEDULE is fully elapsed (terminator {rows[-1][0]} < now {now}) "
