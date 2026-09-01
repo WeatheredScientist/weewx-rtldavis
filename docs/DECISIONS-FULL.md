@@ -8104,3 +8104,187 @@ local-infra doc only.
 pre-rewrite PR diff views degrade after the server-side purge; release tags keep their names but
 point at rewritten commits. Docker Hub images, upstream PRs, and the running production host are
 untouched — nothing at runtime references git SHAs.
+
+---
+
+## DEC-0128 — Campaign D closes the gain axis at marvin: the curve is flat, no candidate shortlists
+
+**Status:** Accepted (measurement + decision) · **Date:** 2026-09-01 (S113) ·
+**Executes** DEC-0126's pre-registration · **closes** the gain axis opened by DEC-0017 and re-opened
+for marvin by DEC-0125 · **does not re-open** DEC-0115 (Foundation's own siting)
+
+Campaign D ran exactly as pre-registered: six 45-minute gain-only blocks, HIGH → LOW, 2026-08-31
+21:01:38 → 09-01 01:30:08 ET, no aborts, no pauses, self-terminated to `BASELINE` and restored prod
+at 01:30:39. Readout is DEC-0069's sanctioned `ops/campaign_analyze.py` logic, unmodified — 763
+archive rows fetched, 255 in-block, 65 excluded by the tool's own structural criteria.
+
+| Arm | Gain | n | mean | sd | SE | Δ vs 372 | t | Reading |
+|---|---|---|---|---|---|---|---|---|
+| P496 | 496 | 33 | 74.65% | 9.10 | 1.58 | −0.33 | −0.16 | indistinguishable |
+| P449 | 449 | 35 | 73.79% | 9.14 | 1.55 | −1.18 | −0.59 | indistinguishable |
+| P402 | 402 | 30 | 74.98% | 9.97 | 1.82 | +0.01 | +0.00 | indistinguishable |
+| P372 | 372 | 35 | 74.97% | 7.69 | 1.30 | — | — | incumbent |
+| P328 | 328 | 35 | 73.29% | 10.54 | 1.78 | −1.69 | −0.77 | indistinguishable |
+| P207 | 207 | 30 | 68.17% | 6.92 | 1.26 | −6.80 | −3.75 | worse, real |
+
+**The finding is the flatness, not a winner.** Gain 328 → 496 is one plateau: 1.70 points of spread
+across five arms against a typical per-arm SE of 1.61. Nothing approaches DEC-0059's 2.0-point bar;
+the best delta is **+0.01**. A pilot exists to shortlist candidates for a confirmatory campaign, and
+this one shortlists **none** — there is no candidate left worth a multi-day square, because there is
+no gap for a square to resolve. Gain holds at 372, unchanged, and prod needed no edit.
+
+**207 is the one separable result, and it is not a surprise once the LNA is accounted for.** −6.80
+points, t = −3.75. Campaign A measured 207 only 0.94 points below 372 (73.87 vs 74.81) — but campaign
+A ran **LNA-in**, and DEC-0017's "207 optimal" is a with-preamp finding. With the LNA out since
+2026-08-02, 207 is simply too little front-end gain. The two figures agree with the physics rather
+than contradicting each other. DEC-0126 added 207 because campaign C had dropped it on a
+Foundation-only judgment; that was the right call — it now has marvin data, and the answer is no.
+
+**Internal consistency check (why these numbers can be trusted at n≈33).** Gain 372 was measured
+three independent times across the night, twice outside the campaign:
+
+| 372 window | n | mean |
+|---|---|---|
+| pre-campaign baseline, 20:00–21:01 | 61 | 74.85% |
+| in-block arm P372, 23:15–00:02 | 35 | 74.97% |
+| post-campaign baseline, 01:41–02:26 | 45 | 74.17% |
+
+0.80 points of spread across six hours. That also settles the one design risk DEC-0126 accepted
+knowingly: HIGH → LOW ordering confounds gain with time-of-night, and 207 ran last. The 45 minutes
+immediately after P207's block, back at 372, read 74.17% — so P207's deficit is the gain, not the
+clock. Time-of-day is not a first-order effect inside this window.
+
+**The cross-site result is the larger finding, and it was not what this campaign was designed to
+measure.** Comparing like-for-like — full-diurnal campaigns only, LNA out both times:
+
+| Gain | Foundation (Campaign B, DEC-0115) | marvin (Campaign C, DEC-0125) | Δ |
+|---|---|---|---|
+| 372 | 72.83% | 72.82% | −0.01 |
+| 496 | 74.83% | 73.98% | −0.85 |
+
+DEC-0118 moved the receiver to a **measurably closer position with fewer walls**, and reception did
+not move. Set beside campaign D's flat gain curve and campaign A/B's finding that the receive-window
+axis is a wash (`-ex` 0 vs 50: +0.45 and −0.06 points), that is **three independent axes — tuner
+gain, receive window, and physical siting — all flat at ~73–75%.** The conclusion this repo should
+carry forward is that the missing ~25% is **not SNR-limited and not reachable by tuning**. The
+driver's denominator is every ISS transmission (`max_count = period // loop_times[x]`,
+`rtldavis.py:1622`, no hop discount), so the ceiling lives somewhere in decode/hop-tracking or in the
+denominator's own realism — not in the RF link.
+
+**Caveats, named.** (1) Campaign D's absolute levels run ~2 points above campaigns B and C because it
+deliberately sat inside the site's best hours (21:00–01:30) and never touched the 07–09 notch —
+**D's arms are comparable to each other, not to B/C's absolute figures**, and the cross-site table
+above therefore uses B and C only. (2) n≈33 per arm resolves roughly a 4-point difference at
+95%; this pilot could not have detected a 2-point effect, and does not claim to have excluded one.
+What it excludes is a *large* one, which is what a shortlisting pilot is for. (3) One night.
+
+**Pre-committed reading, honored.** DEC-0126 and `BACKLOG.md` both stated before any data existed
+that this is arm-selection input only, never adoption evidence. It selected no arm. No config change.
+
+**Consequences.** `SCHEDULE=` emptied to the DEC-0096 stand-down state (which also lets the
+TZ-corrected staleness tripwire stop failing every PR); campaign D's design comment retained above it
+with the result recorded inline. **The gain axis is closed at marvin — do not re-sweep it without a
+new reason.** The open question moves off tuning entirely and onto the ceiling itself; candidates and
+their costs are recorded in `BACKLOG.md`, cheapest-first, and none of them is another CLI sweep.
+
+**Method note / known gap.** `ops/campaign_analyze.py`'s `fetch()` still ssh's to the NAS
+(pre-DEC-0118) and has never been ported to marvin. Only the transport was replaced here — rows via
+`marvinctl --tenant weewx exec-ro`, apparatus log via `marvinctl cat`, then the tool's own
+`parse_blocks`/`gap_adjacent`/`partition`/`summarize`/`report` run unmodified, exactly as S111 did for
+campaign C. That is now two campaigns read through a hand-assembled transport; the port is worth doing
+before a third.
+
+---
+
+## DEC-0129 — The ~25% loss is real, structural, and ours: the denominator is honest, the variance is pure counting noise, and the ppm/fc axis is dead
+
+**Status:** Accepted (measurement) · **Date:** 2026-09-01 (S113) ·
+**Follows** DEC-0128's "find the ceiling, not a setting" · **closes blocker 4** (`ppm`/`fc`
+unmeasured) · **sharpens blocker 6** (the ceiling itself)
+
+DEC-0128 closed the tuning axes and pointed at two free, read-only checks. Both ran this session.
+Neither touched prod.
+
+### (a) Is the denominator honest? Yes — the hypothesis is rejected
+
+`max_count = period // loop_times[x]` (`rtldavis.py:1622`), and `loop_times` is exactly Davis's own
+transmit interval `(41 + id)/16` seconds for ids 0–7 (2.5625, 2.625, … 3.0). It counts transmissions
+the ISS actually made; there is no phantom term and no hop discount because none is owed — a
+tracking receiver can in principle decode every transmission. **So the missing ~25% is genuinely
+undecoded packets, not a measurement artifact.** This was the highest-value thing to rule out and it
+is ruled out.
+
+**Incidental finding — `max_count` is not the constant it should be.** `rxCheckPercent` is
+`100 × count/max_count` with both integers, so the denominator is recoverable from the published
+values. Restricted to the 753 campaign-D-window records whose predecessor is *exactly* 60 s earlier
+— where `period` should be pinned and `max_count` therefore constant — it still varies across
+**19–23** (20 ≈ 24%, 22 ≈ 20% plus 123 more reduced to `11`, 19 ≈ 13%, 23 ≈ 8%, 21 ≈ 5%).
+`iss_channel` defaults to 1 → transmitter id 0 → loop_time 2.5625 s → `max_count` would be **23 on
+every record**, and since 23 is prime ~95% of records would carry a reduced denominator of 23.
+Observed: 7.9%. So the driver's internal `period = curr_ts - last_ts` is **not** the archive
+interval. Unresolved: whether that is period jitter or a transmitter-id mismatch. It needs the
+`ARCHIVE_STATS: station N: max_count=… count=… missed=…` line, which is `logdbg` and **is not
+currently emitted** — verified by grepping marvin's live `weewx.log` for `ARCHIVE_STATS` (zero hits,
+positive-controlled against an `rtldavis` grep that returns normally). Capturing it means raising
+debug on prod; not done, and deliberately not done unattended.
+
+**Incidental finding — per-minute variance is pure counting noise.** At ~20–25 packets per minute
+and p ≈ 0.73, binomial sd is 9.2–9.9 points. Measured across 747 clean minutes: **8.80**. There is
+**no excess variance.** Minute-to-minute reception is statistically indistinguishable from a
+constant-p Bernoulli process, which means the sd ≈ 9 every campaign has fought was never RF weather
+— it was counting statistics on ~20 trials. This is also why single-night pilots cannot resolve
+2-point effects and why DEC-0128's arms were correctly read as indistinguishable.
+
+### (b) `ppm`/`fc` by measurement — the axis is dead, and blocker 4 closes
+
+The standing prior in `BACKLOG.md` was that `FreqError` would be centred and the axis would die that
+way. **It is not centred.** 657 samples from the archive's remapped columns (`consBatteryVoltage` =
+freqError0, `hail` = freqError1) over the campaign-D window: mean **+2206 Hz**, median +2247, sd 460,
+**zero negative samples**, p05 still +1406. At 915 MHz that is a systematic **+2.41 ppm** offset while
+the driver runs `-ppm 0`. On its face, `-ppm 0` is measurably wrong.
+
+It does not matter, and this is what settles it — reception binned by freqError quintile:
+
+| Quintile | freqError (Hz) | reception | n |
+|---|---|---|---|
+| Q1 | 311–1954 | 72.92% | 130 |
+| Q2 | 1954–2165 | 72.54% | 130 |
+| Q3 | 2168–2315 | 74.39% | 130 |
+| Q4 | 2317–2494 | 73.27% | 130 |
+| Q5 | 2506–3227 | 74.42% | 130 |
+
+A **10× range** of frequency offset produces 1.9 points of spread, correlation **+0.075** — and the
+sign is slightly *positive*, i.e. noise. The AFC (`-noafc` defaults false, so it is on) absorbs the
+offset completely. Setting `ppm` would shift where the AFC starts and change nothing measurable.
+**Blocker 4 closes on evidence rather than remaining open, and no campaign was spent on it.** By the
+same result `-noafc` drops from "untested" to "contraindicated": disabling a correction that is
+demonstrably working is a way to lose points, not gain them.
+
+### What the ceiling now looks like, and the owner's field observation
+
+Assembled: a **constant ~25% loss, with no excess variance beyond binomial, that does not respond to
+tuner gain (DEC-0128), receive window (DEC-0128), physical siting (DEC-0128), or frequency offset
+(this DEC).** That combination argues against marginal-SNR packet loss, which would both respond to
+gain and show excess variance as conditions changed, and toward a **deterministic, structural** loss.
+
+**The owner's field observation makes this concrete and raises its priority:** a real Davis console
+at comparable distance from this same ISS runs **single-digit packet drop**. The signal is
+demonstrably there for the taking; a purpose-built receiver takes ~95%+ of it and this one takes
+~75%. The ~20-point gap is therefore **ours, not the link's** — it is a property of how the
+SDR-based receiver follows the transmission, not of the RF path. That is a much stronger claim than
+anything the campaigns could have produced, and it is the single most useful input this
+investigation has had.
+
+**The leading hypothesis, explicitly untested.** The Davis US band is 902–928 MHz (26 MHz, 51
+channels); an RTL-SDR's usable instantaneous bandwidth is ~2.4 MHz, so unlike a Davis console it
+**cannot watch the whole band at once** and must retune per hop. Any fraction of hops where the
+retune does not settle in time is a packet lost deterministically, regardless of signal strength —
+which matches every property measured above. 25% ≈ 1/4 is suggestive. **This is a hypothesis, not a
+finding; nothing here tests it.**
+
+**Next step, bounded and cheap.** The deployed Go demodulator's source is **publicly fetchable** —
+`Dockerfile:46` pulls `src.tgz` from `weewx-contrib/weewx-rtldavis` and builds
+`src/lheijst/rtldavis` from it. Reading its hop-tracking and retune path needs no prod access, no
+campaign, and no owner-mediated step, and `CONSTANTS.md` already records that the deployed source
+has **never been read directly** (it is demonstrably older than upstream master). That is where this
+goes next, ahead of any further measurement.
