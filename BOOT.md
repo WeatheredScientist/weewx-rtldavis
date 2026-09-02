@@ -89,8 +89,8 @@ adjacent in the cycle), ruling out a clock-drift artifact and pointing at someth
 8. **Durable logrotate fix for marvin** — still unaddressed.
 
 **Carried forward, untouched:** `main` promotion for v2.0.14 (DEC-0114) · DEC-0117 control-file
-conversion + image-rebuild question (can marvin build natively?) · Foundation decommission timing
-(owner) · NAS-LEASE cross-host wiring (low) · `CONSTANTS.md` infra re-verify · ops CONSTANTS §5
+conversion + image-rebuild question (can marvin build natively?) · NAS-LEASE cross-host wiring
+(low) · `CONSTANTS.md` infra re-verify · ops CONSTANTS §5
 register row check (`ef8e9af8`) · ops#241 BOOT-over-cap (this file sits right at the 2.5K cap by
 chars/4 — re-measure with ops' own `checks/tier-sweep.sh` before closing).
 
