@@ -1,9 +1,6 @@
 # BOOT — weewx-rtldavis
 
-**Always-load, tier 1.** Rewritten each session, never appended (STANDARD rule 1). *Temporarily
-over the 2.5K cap (~3.0K) by design: the LIVE-ON-PROD banner below is safety-critical and comes
-out the moment the debug window is reverted. Do not shrink this file by deleting that banner.*
-Resolved items
+**Always-load, tier 1.** Rewritten each session, never appended (STANDARD rule 1). Resolved items
 are deleted; a conclusion survives as one line. Load with `CONSTANTS.md` + `MANIFEST.md` — nothing
 else at start. Everything else is pulled by name from `MANIFEST.md`, on demand.
 
@@ -27,7 +24,8 @@ axes: **gain · receive window (`-ex`) · physical siting** (DEC-0118's closer, 
 moved 372 by −0.01, 496 by −0.85) **· frequency offset** (DEC-0129). The ~25% loss is **not
 SNR-limited, not reachable by tuning, and has no excess variance beyond binomial** — it is
 deterministic and structural. **The owner's Davis console at comparable distance drops single
-digits, so the signal is there and the gap is OURS.** That is job 1.
+digits, so the signal is there and the gap is OURS.** That is the active thread — see the S114
+job list.
 
 **History was rewritten and force-pushed 2026-09-01 (DEC-0127) — every SHA changed, old clones must
 re-clone.** Full story in the DEC; specifics in gitignored `docs/LOCAL_INFRA.md`. **Still owed: if
@@ -42,64 +40,45 @@ drift is the emptied block; the deploy rides the next real one. **No Class C wri
 `marvinctl exec-ro` *workaround* works (used for campaigns C and D); the tenant read verb the issue
 asks for does not exist.
 
-### ⚠ LIVE ON PROD RIGHT NOW — REVERT THIS FIRST (S113)
+### S113 debug window + Go source read — DEC-0130/DEC-0131 (S114)
 
-**A diagnostic window is running on marvin's live weewx config and MUST be reverted.** Two
-owner-authorized Class C edits on 2026-09-01 (~10:46–10:51 ET): top-level `debug = 1`, and the
-`[[[user]]]` logger raised `INFO` → `DEBUG`. The second is the one that mattered — DEC-0043's
-`[Logging]` block pins logger levels, so the global debug flag alone did nothing. Purpose: surface
-the three `logdbg` diagnostics that are otherwise invisible — the Go binary's per-channel miss
-histogram, `totInit`, and `ARCHIVE_STATS`.
-
-**To revert:** restore the `.s113-debug-backup` sibling of the live config (in
-`/srv/docker/weewx/weewx-data/`) over it, then
-`marvinctl --tenant weewx restart weewx.service`. The backup predates both edits, so one restore
-undoes both. A ready script — refuses if the backup is absent, verifies byte-identity, clears the
-backup after — is in S113's scratchpad as `revert_debug.sh`; if that scratchpad is gone the restore
-is a two-step copy + restart, and the backup on the box is authoritative. **Harvest before
-reverting** — the counters are cumulative in the Go process, so the LAST `missed per freq` line in
-`logs/weewx.log` carries the whole histogram.
-
-**If marvin is powered down before this is reverted** (a hardware install is planned this week,
-per the marvin session), the window's data is lost but the revert obligation still stands.
+Debug window: live 2026-09-01 ~10:46–20:55 ET, then reverted (`weewx.conf` restored from
+`.s113-debug-backup`, sha256-verified, `weewx.service` restarted 20:55:08 ET, confirmed
+INFO-only again). Transmitter ID is **4**, not the assumed 0 — resolves `max_count`'s 19–23
+jitter (blocker 7, closed). The miss histogram is **not uniform**: channels 46–48 ran ~2x the
+rest. Read the deployed Go source (`Dockerfile:46`'s tarball) to test the retune hypothesis:
+the code shows **no PLL-settle haste** (300+ ms cushion vs. sub-ms typical lock time), which
+weakly argues against "retune doesn't settle." Mapped 46–48 to actual frequencies —
+**925.500/926.002/926.503 MHz** — and found they're scattered across hop-sequence order (not
+adjacent in the cycle), ruling out a clock-drift artifact and pointing at something tied to
+**that specific frequency slice**. Full detail: DEC-0130, DEC-0131. **Blocker 6 stays open.**
 
 ### ▶▶ S114 JOB LIST
 
 **Live, in order:**
-1. **Harvest the debug window, then REVERT it (banner above), then read the histogram.** The
-   per-channel miss counts answer the hop question directly: **uniform across the 51 channels = a
-   timing/retune problem; clustered = specific frequencies are bad.** Owner's framing is that a
-   distinctive, teachable signature beats a one-off diagnosis — if the shape is clear it becomes a
-   detector (a monitor check, and something other rtldavis users can run), not a guess. Also grab
-   `totInit` (re-init count; each re-init costs up to ~149 s of near-total loss) and `ARCHIVE_STATS`.
-2. **Read the deployed Go demodulator's hop-tracking / retune path.** DEC-0129 established the
-   ~25% loss is deterministic and **ours**, not the link's — the owner's Davis console at comparable
-   distance runs single-digit drop. Leading (untested) hypothesis: the US band is 26 MHz/51 channels
-   and an RTL-SDR sees ~2.4 MHz, so it must retune per hop; hops whose retune doesn't settle are
-   lost regardless of signal. **The source is publicly fetchable** — `Dockerfile:46` pulls `src.tgz`
-   from `weewx-contrib/weewx-rtldavis`, building `src/lheijst/rtldavis`. No prod access, no
-   campaign, no owner-mediated step; `CONSTANTS.md` notes it has never been read directly. Do this
-   before any further measurement.
-3. **Check the GitHub Support purge ticket** — if purged, verify an old SHA 404s, update
+1. **Spectrum capture 924.5–927.5 MHz** (`gqrx`/`rtl_power`, same antenna) — DEC-0131's next
+   step, cheap and bounded, to see whether 925.5–926.5 MHz has a visible interferer or a gain
+   rolloff vs. the rest of the band. No campaign, no owner-mediated step.
+2. **Check the GitHub Support purge ticket** — if purged, verify an old SHA 404s, update
    `LOCAL_INFRA.md`'s PENDING line and drop this job.
-4. **Port `campaign_analyze.py` to marvin.** Its `fetch()` still ssh's to the NAS (pre-DEC-0118);
+3. **Port `campaign_analyze.py` to marvin.** Its `fetch()` still ssh's to the NAS (pre-DEC-0118);
    two campaigns have now been read through a hand-assembled `marvinctl exec-ro` transport. Port it
    before a third. Pairs naturally with commenting/closing ops#235.
-5. **Audit Phase 2, session A (mechanical, Sonnet-able):** version/doc sync per the BACKLOG item —
+4. **Audit Phase 2, session A (mechanical, Sonnet-able):** version/doc sync per the BACKLOG item —
    README + Docker Hub banner, driver/influx version numbers, weewx.conf.example, ARCHITECTURE
    stamps/paths, broken commands, CONTRIBUTING CI wording, tag + release v2.0.12–14, BIAS_TEE docs.
-6. **Audit Phase 2, session B (judgment, Opus):** scrub internal IDs from what the code emits at
+5. **Audit Phase 2, session B (judgment, Opus):** scrub internal IDs from what the code emits at
    RUNTIME (monitor emails, log lines — comments keep their DEC citations), driver docstring
    upstream defaults, stale test line refs, the unfailable assertion
    (`test_input_staleness.py:195`), internal-vs-user banners in `ops/`.
-7. **Audit Phase 2, session C (design, owner + Opus/Fable):** public-surface reorg — root governance
+6. **Audit Phase 2, session C (design, owner + Opus/Fable):** public-surface reorg — root governance
    files (8 of 14 root docs are internal; alphabetically ahead of README), docs/ index, PR-title
    convention, tier-label rename, GitHub topics/description/templates, `DECISIONS-FULL.md` over
    GitHub's render limit, and the privacy-first question of moving the governance corpus private.
    Needs DECs.
-8. **Flip `REMEDY_MODE=none` → `restart_unit`** — grant confirmed present (MARVIN-DEC-0099); only
+7. **Flip `REMEDY_MODE=none` → `restart_unit`** — grant confirmed present (MARVIN-DEC-0099); only
    the live-restart exercise remains, belongs at a real deploy.
-9. **Durable logrotate fix for marvin** — still unaddressed.
+8. **Durable logrotate fix for marvin** — still unaddressed.
 
 **Carried forward, untouched:** `main` promotion for v2.0.14 (DEC-0114) · DEC-0117 control-file
 conversion + image-rebuild question (can marvin build natively?) · Foundation decommission timing
@@ -128,15 +107,14 @@ chars/4 — re-measure with ops' own `checks/tier-sweep.sh` before closing).
    reception is flat across a 10x offset range: the AFC absorbs it. `-noafc` is contraindicated
    by the same result, not merely untested.
 5. **6-hourly reception-summary email broken** — Gmail 535, needs the owner's Google account.
-6. **The ~25% reception ceiling is unexplained** (DEC-0128, sharpened DEC-0129). Now known to be
-   **deterministic, structural, and ours**: no excess variance beyond binomial, unresponsive to
-   gain/window/siting/frequency offset, and a real Davis console at comparable distance drops only
-   single digits. Job 1 is the next attempt.
-7. ~~`max_count` is not the constant it should be~~ — **EXPLAINED, S113.** The debug window's
-   startup line reads `tr=16 … actChan=[4]`: our ISS is **transmitter ID 4, not 0**, so
-   `loop_times[4] = 2.8125 s` — confirmed independently, the init wait logs 149 s = 53 × 2.8125.
-   `curr_ts` is a packet arrival time, so `period` jitters in whole 2.8125 s quanta around 60 s,
-   mapping exactly onto the observed 19–23. Not a defect. Fold into a DEC at S114 close.
+6. **The ~25% reception ceiling is unexplained** (DEC-0128, sharpened DEC-0129/DEC-0130/DEC-0131).
+   Deterministic, structural, ours, and now sharpened further: the S113 miss histogram clusters
+   at 925.5–926.5 MHz specifically, scattered across hop-sequence order (not a drift artifact),
+   and the deployed source shows no PLL-settle haste — arguing against the simple retune theory.
+   Job 1 (spectrum capture 924.5–927.5 MHz) is the next attempt.
+7. ~~`max_count` is not the constant it should be~~ — **EXPLAINED and closed, DEC-0130.** Our ISS
+   is **transmitter ID 4, not 0** (`loop_times[4] = 2.8125 s`), which reproduces the observed
+   19–23 `max_count` spread exactly. Not a defect.
 
 ## Model tier
 
