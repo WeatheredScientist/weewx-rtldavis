@@ -330,21 +330,28 @@ failed resets currently produce no further action.
     privacy-first question of whether the governance corpus (BOOT/BACKLOG/DECISIONS narrating prod
     topology and known weaknesses) belongs in the private ops repo with pointers here.
 
-- **▶ Where is the ~25% ceiling? Items 1 and 3 are now ANSWERED (DEC-0129); the loss is
+- **▶ Where is the ~25% ceiling? Items 1 and 3 are ANSWERED (DEC-0129); the un-emitted
+  `ARCHIVE_STATS`/histogram is now captured too (S114, DEC-0130/DEC-0131) — the loss is
   deterministic and ours (opened S113, DEC-0128).** **Item 1 — denominator honest, hypothesis
   rejected:** `loop_times` is exactly Davis's `(41+id)/16` s, so the missing 25% is undecoded
-  packets, not an artifact. Two incidentals: `max_count` varies 19–23 where `iss_channel=1` implies
-  a fixed 23 (the driver's `period` is not the archive interval — needs the un-emitted
-  `ARCHIVE_STATS` line), and **per-minute variance is entirely binomial** (predicted sd 9.2–9.9 at
-  ~20–25 packets/min, measured 8.80 — no excess variance at all). **Item 3 — `ppm`/`fc` dead,
-  blocker 4 closed:** offset is real and one-sided (+2206 Hz = +2.41 ppm, zero negatives) but
-  reception is flat across a 10x offset range (corr +0.075), so the AFC absorbs it; item 4
-  (`-noafc`) is contraindicated by the same result. **What replaced them:** the owner's Davis
-  console at comparable distance runs **single-digit** packet drop, so the ~20-pt gap is ours, not
-  the link's. Leading untested hypothesis: 26 MHz/51 channels vs an RTL-SDR's ~2.4 MHz means it must
-  **retune per hop**, and hops that don't settle are lost deterministically. **Next: read the
-  deployed Go hop-tracking path — `Dockerfile:46` fetches `src.tgz` publicly, no prod access
-  needed.** Original framing kept below.
+  packets, not an artifact. Two incidentals: `max_count` varies 19–23, now **fully explained
+  (DEC-0130)** — this ISS is transmitter ID 4, not the assumed 0, and 2.8125 s quanta around a
+  60 s archive interval reproduces 19–23 exactly; and **per-minute variance is entirely binomial**
+  (predicted sd 9.2–9.9 at ~20–25 packets/min, measured 8.80 — no excess variance at all).
+  **Item 3 — `ppm`/`fc` dead, blocker 4 closed:** offset is real and one-sided (+2206 Hz =
+  +2.41 ppm, zero negatives) but reception is flat across a 10x offset range (corr +0.075), so the
+  AFC absorbs it; item 4 (`-noafc`) is contraindicated by the same result. **What replaced them:**
+  the owner's Davis console at comparable distance runs **single-digit** packet drop, so the
+  ~20-pt gap is ours, not the link's. **The Go hop-tracking source has now been read (S114,
+  DEC-0131):** the deployed code shows no PLL-settle haste (300+ ms cushion vs. sub-ms typical
+  tuner lock time), weakly arguing against the retune-doesn't-settle theory as originally framed.
+  A harvested S113 miss histogram instead clusters at **925.500–926.503 MHz specifically**
+  (channels 46–48), scattered across hop-sequence order — ruling out a clock-drift artifact and
+  pointing at something tied to that frequency slice (interferer, antenna null, or tuner gain
+  rolloff near the band top). **Next, cheapest first: a spectrum capture (`gqrx`/`rtl_power`)
+  over 924.5–927.5 MHz from the same antenna** — no campaign, no owner-mediated step, and it
+  distinguishes an interferer from a hardware rolloff before spending more on this axis. Original
+  framing kept below.
 
   *(as opened, S113)* Three independent axes are now measured flat at ~73–75%: tuner gain
   (328–496, campaign D, spread 1.70 pts), receive window (`-ex` 0 vs 50, +0.45 and −0.06 pts,
@@ -383,6 +390,12 @@ failed resets currently produce no further action.
      campaign D just showed does nothing. An LNA improves *noise figure* rather than gain alone, so
      it is not strictly the same axis, but a link that is demonstrably not noise-limited is the
      wrong place to spend a hardware change with a bias-tee risk attached.
+  7. **Spectrum capture, 924.5–927.5 MHz (added S114, DEC-0131) — now the leading item.** The S113
+     miss histogram clusters at 925.500–926.503 MHz specifically (channels 46–48), scattered across
+     hop-sequence order, so a clock-drift artifact is ruled out and something tied to that exact
+     frequency slice is implicated. `gqrx`/`rtl_power` from the same antenna would show whether it's
+     an external interferer (a visible signal in that slice) or a hardware rolloff (a gain dip with
+     no visible transmitter) — free, read-only, no campaign.
 
   **What this item is not.** It is not a licence to re-sweep gain (closed, DEC-0128) or to re-run
   the receive-window axis (a wash, twice). Items 1 and 3 are both free and read-only; neither

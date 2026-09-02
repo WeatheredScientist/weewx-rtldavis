@@ -8288,3 +8288,142 @@ finding; nothing here tests it.**
 campaign, and no owner-mediated step, and `CONSTANTS.md` already records that the deployed source
 has **never been read directly** (it is demonstrably older than upstream master). That is where this
 goes next, ahead of any further measurement.
+
+## DEC-0130 — The S113 debug window: transmitter ID 4 resolves the `max_count` jitter, and the miss histogram is clustered, not uniform
+
+**Status:** Accepted (measurement) · **Date:** 2026-09-01 (S114) ·
+**Resolves** DEC-0129's "unresolved: whether that is period jitter or a transmitter-id mismatch" ·
+**Answers** blocker 6's job 1 hop question · **closes blocker 7**
+
+DEC-0129 raised debug on prod deliberately, then declined to capture `ARCHIVE_STATS` unattended.
+S113 (2026-09-01, ~10:46–10:51 ET) made the two owner-authorized Class C edits — top-level
+`debug = 1` and the `[[[user]]]` logger `INFO` → `DEBUG` — and left the window running with an
+explicit revert obligation. S114 harvested it and reverted it the same session (`weewx.conf`
+restored from `.s113-debug-backup`, sha256 `f225ed53…9e1d5` verified identical to the live file
+pre-restore, `weewx.service` restarted 20:55:08 ET; post-restart log tail is INFO-only again, no
+lingering `user.rtldavis DEBUG` lines).
+
+### (a) `max_count`'s 19–23 jitter is a transmitter-id fact, not a defect
+
+The window's startup line reads `tr=16 … actChan=[4]`: this station's ISS is **transmitter ID 4**,
+not the driver's default assumption of ID 0. `loop_times[4] = (41+4)/16 = 2.8125 s` (`rtldavis.py`'s
+own `(41 + id)/16` formula, `DEC-0129`), confirmed independently by the same window's `Init
+channels: wait max 149 seconds` line — `149 = 53 × 2.8125`. Since `curr_ts` is a packet arrival
+time, `max_count = period // loop_times[4]` jitters in whole 2.8125 s quanta around the 60 s
+archive interval, landing on **19–23** depending on exactly when `period` falls relative to a
+quantum boundary. This reproduces DEC-0129's observed 19–23 spread exactly and rules out the other
+open branch (a `period` that isn't really the archive interval). **Not a defect** — `rxCheckPercent`
+is doing the correct division against the correct per-transmitter interval; nothing here changes
+what's published.
+
+A representative snapshot, captured 20:32:14 ET near the end of the window:
+`ARCHIVE_STATS: total_max_count=20 total_count=17 total_missed=3 pctGood=85.00` (station-level line
+identical). This is one archive interval, not a campaign statistic — it says nothing about the
+~73–75% baseline beyond confirming the line format and that `max_count=20` is a live, observed value
+consistent with transmitter ID 4's 2.8125 s loop time.
+
+### (b) The per-channel miss histogram is clustered, not flat
+
+Job 1's framing (`BOOT.md`) was binary: uniform across the 51 channels implicates a
+timing/retune problem that hits every hop equally; clustered implicates specific bad frequencies.
+The window's final (cumulative) `missed per freq` line for ID:4, captured before revert:
+
+```
+[76 70 83 67 68 73 71 47 67 70 80 58 71 60 86 67 65 77 43 76 70 56 74 76 82 73 61 65 63 72 65 76
+ 37 68 72 68 75 69 80 71 75 63 72 73 79 77 128 182 149 93 67]
+```
+
+51 values, sum 3806, mean ~74.6. 48 of the 51 channels sit in a 37–93 band — a spread consistent
+with ordinary per-channel variation, not a sharp cliff. But three **adjacent-index** channels
+(0-indexed 46, 47, 48) run **128, 182, 149** — roughly double the surrounding channels' counts, the
+single clearest feature in the data. **This is not the uniform signature.** It points toward
+specific frequencies (or a specific position in the 51-channel hop sequence) losing more packets
+than the rest, which is more consistent with the hop/retune hypothesis landing on a subset of
+channels than with a blanket timing problem hitting all 51 equally. **This is one session's
+cumulative counter, not a campaign** — it does not by itself confirm which physical channels those
+indices map to, or whether the pattern is stable across sessions; that reproduction is future work,
+not claimed here.
+
+Also logged during the window: **4 re-inits** (`Init channels: wait max 149 seconds…`) in the
+~9h42m after the initial startup at 10:51:13 ET (11:54:07, 12:01:10, 13:51:46, 14:02:27), each
+costing up to ~149 s of near-total loss while the demodulator re-acquires all transmitters.
+
+### What this changes
+
+Blocker 7 (`max_count` is not the constant it should be) is **explained and closed** — it is
+transmitter ID 4's loop time, not a bug. Blocker 6 (the ~25% ceiling) is **not closed**, but the
+clustered histogram is the first piece of direct evidence bearing on the leading hop/retune
+hypothesis, and it leans toward "some channels" rather than "every hop." The next step is
+unchanged from DEC-0129: read the deployed Go demodulator's hop-tracking/retune source
+(`src/lheijst/rtldavis`, publicly fetchable per `Dockerfile:46`) and check whether channels 46–48
+in its hop table correspond to anything structurally different (e.g. a wraparound boundary, an edge
+of the retune range) before drawing a stronger conclusion from one session's counts.
+
+## DEC-0131 — Read the deployed Go source: the retune-doesn't-settle hypothesis is weakly supported by the code, and channels 46–48 are frequency-adjacent but hop-sequence-scattered
+
+**Status:** Accepted (measurement) · **Date:** 2026-09-01 (S114) ·
+**Follows** DEC-0129's "next step, bounded and cheap" · **sharpens** DEC-0130's channel-46–48
+finding · **does NOT close blocker 6**
+
+DEC-0129's leading hypothesis was that the RTL-SDR "must retune per hop" and "hops whose retune
+doesn't settle" are lost regardless of signal. This DEC reads the actual deployed source
+(`Dockerfile:46`'s `weewx-contrib/weewx-rtldavis` tarball → `src/lheijst/rtldavis`, `main.go` +
+`protocol/protocol.go`, 491 + 281 lines, no other files carry demodulator logic) to test it — no
+prod access, no campaign, exactly as scoped.
+
+### (a) The retune mechanism exists, but the code shows no haste — the hypothesis is weakly supported
+
+Confirmed structurally: every hop calls `dev.SetCenterFreq(channelFreq + freqCorrection + fc)`
+(`main.go:291`) in a **separate goroutine** from the read loop, explicitly so "the callback will
+stall if we stop reading to hop" (the code's own comment, `main.go:267`). There is **no explicit
+PLL-lock wait or settle delay anywhere in the source** — the demodulator starts consuming buffered
+samples again immediately, with no `time.Sleep` or lock-status check between `SetCenterFreq` and
+resumed demodulation.
+
+But the timing budget argues against a *rushed* retune being the dominant loss mechanism: the
+default `receiveWindow` is **300 ms** (`main.go:129`, `-ex` adds more on top), and each hop's
+listen window is computed as `chNextVisits − curTime + 62.5 ms + (receiveWindow + ex)` — i.e. every
+hop gets the ISS's own ~2.5–3 s transmit-interval slack *plus* a 300+ ms cushion before being
+declared missed. RTL-SDR/R820T2 PLL lock times are conventionally sub-millisecond to low
+single-digit milliseconds — two to three orders of magnitude smaller than the cushion built in
+here. **The code does not show the tuner being rushed past its settle time.** This doesn't
+falsify the hypothesis (actual R820T2 lock behavior isn't visible from Go source — it's a
+`librtlsdr`/silicon property, not exercised here), but it removes the easy version of it: nothing
+in the deployed logic explains a "no time to settle" loss on paper. If retune settling is the
+mechanism, it would have to be the tuner itself misbehaving on large jumps, not the driver being
+impatient.
+
+### (b) Channels 46–48 are physically adjacent, but scattered across the hop sequence — not a drift artifact
+
+`protocol.go`'s hop table separates two coordinate systems: `hopPattern[seq] → channelID`
+(sequence position → physical channel, ascending frequency) and `chMissPerFreq[tr][channelID]`
+(indexed by the **channel ID returned from `p.SeqToHop`**, i.e. by physical frequency, not by
+position in the 51-step hop cycle). Mapping DEC-0130's elevated indices 46/47/48 through the US
+channel table (`protocol.go:110`, `902419338 + n×~501750` Hz, n=0..50) gives **925.499860 MHz,
+926.001611 MHz, 926.503361 MHz** — three back-to-back physical channels near, but not at, the top
+of the 902–927.5 MHz US band (channels 49–50, 927.0/927.5 MHz, were unremarkable in the same
+histogram: 93 and 67, in-band).
+
+Critically, these three channels are **not adjacent in hop-sequence order**: channel 46 is visited
+at sequence position 49 (second-to-last hop), channel 47 at position 5 (near the start), channel 48
+at position 24 (roughly mid-cycle) — `hopPattern = {0,19,41,25,8,47,32,13,36,22,3,29,44,16,5,27,38,
+10,49,21,2,30,42,14,48,7,24,34,45,1,17,39,26,9,31,50,37,12,20,33,4,43,28,15,35,6,40,11,23,46,18}`.
+**This rules out the simplest alternative explanation** — that the elevated counts are a
+sequence-position artifact (e.g. clock drift accumulating toward the end of each ~149 s full
+cycle) — since the three don't cluster in cycle position, only in physical frequency. Whatever is
+suppressing reception at 925.5–926.5 MHz is tied to the **frequency itself**, not to when in the
+hop cycle it's visited.
+
+### What this changes
+
+Blocker 6 (the ~25% ceiling) **stays open** — this is source-reading, not a new measurement of
+prod, and one session's histogram is not a campaign. But the working hypothesis shifts: instead of
+"the receiver can't watch the whole band and mistimes retunes," the evidence so far (ample settle
+margin in code; a physically-clustered, cycle-scattered miss pattern) points toward something
+**specific to 925.5–926.5 MHz** — an external interferer in that sub-band, an antenna/feedline
+resonance null, or the R820T2's own gain/noise-figure response happening to dip near the top of its
+tuning range. None of these can be told apart from source alone. **Next step, bounded and cheap:**
+a spectrum capture (e.g. `gqrx`/`rtl_power`) centered on 924.5–927.5 MHz from the same antenna,
+looking for a visible interferer or a gain rolloff specific to that slice — still no campaign, no
+owner-mediated step, and it would settle (a) vs. (b) vs. neither before spending any more RF-tuning
+campaign budget on an axis DEC-0128/DEC-0129 already closed.
