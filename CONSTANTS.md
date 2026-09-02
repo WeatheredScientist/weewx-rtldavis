@@ -26,13 +26,13 @@ first pass at S105; **verify rows against live infra before trusting them for an
 
 | Thing | Value |
 |-------|-------|
-| **marvin (prod host, since DEC-0118)** | Debian hypervisor · `<MARVIN_HOST>` · `<MARVIN_IP>` — access today is the guarded `marvin-admin` alias; self-service `marvinctl` for this repo isn't live yet (`t-weewx`'s key unminted, `BOOT.md` job 6) |
+| **marvin (prod host, since DEC-0118)** | Debian hypervisor · `<MARVIN_HOST>` · `<MARVIN_IP>` — self-service is `marvinctl --tenant weewx` (`marvin-weewx` alias, key live since 2026-08-29); the guarded `marvin-admin` alias remains for anything outside that scope |
 | Tenant root (marvin) | `/srv/docker/weewx/` (owned `t-weewx`, mode `0750`) |
 | Container | `weewx-rtldavis-v2` (now on marvin) |
 | NAS | Synology DS918+ · `<NAS_HOST>` · `<NAS_IP>` · SSH port `<SSH_PORT>` · user `<NAS_USER>` — still hosts InfluxDB; no longer hosts the weewx container |
 | SSH / SCP (NAS) | `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` · `scp -P <SSH_PORT> -O` (capital `-P`; `-O` for the legacy protocol) |
 | Real values | gitignored local-infra doc — never committed. **Needs a marvin entry added; not done as of S105** |
-| Read-only NAS access | `nasctl` (`ps`, `logs <c> [N]`, `inspect`, `cat/ls/head/tail/sha/grep/conf`). Rides a read-only key; mutations refused by the box. **No marvin-side equivalent for this repo yet** — that's what the unminted `t-weewx` key blocks |
+| Read-only NAS access | `nasctl` (`ps`, `logs <c> [N]`, `inspect`, `cat/ls/head/tail/sha/grep/conf`). Rides a read-only key; mutations refused by the box. **Marvin-side equivalent is `marvinctl --tenant weewx`** (same verb set plus `exec-ro`, DEC-0125) — live since 2026-08-29, not a gap |
 | Docker binary (NAS) | `/usr/local/bin/docker` (no sudo; not on default PATH) — relevant to InfluxDB and other NAS-resident containers now, not weewx |
 | Project root, real (marvin) | `/srv/docker/weewx/` |
 | Project root, NAS-side compat path | `/volume1/docker/weewx-rtldavis/` — **now an NFS overlay mount of marvin's export**, not local NAS storage. Dashboard and HLF still read this exact path unchanged; only what's behind it changed |
@@ -57,12 +57,12 @@ DEC-0046).**
 
 **Verify, don't recall** — an `inspect` of the live `weewx-rtldavis-v2` container lists the per-file
 bind mounts explicitly and is the authoritative answer for any file. **`nasctl inspect
-weewx-rtldavis-v2` no longer reaches it** (DEC-0118 — the container isn't on the NAS anymore); no
-marvin-side self-service equivalent exists yet for this repo (`t-weewx`'s `marvinctl` key is
-unminted, `BOOT.md` job 6). Until that lands, verifying this table means asking a marvin-side session
-directly, not running a command from here. S85 found `loop_json_writer.py` missing from this table
-entirely while being mounted, which would have made a change "ship" with an image cut and silently
-do nothing — DEC-0046's exact failure; don't let the lost self-service path regress that discipline.
+weewx-rtldavis-v2` no longer reaches it** (DEC-0118 — the container isn't on the NAS anymore); the
+self-service equivalent is **`marvinctl --tenant weewx inspect weewx-rtldavis-v2`**, live and
+working (verified 2026-09-02). S85 found `loop_json_writer.py` missing from this table entirely
+while being mounted, which would have made a change "ship" with an image cut and silently do
+nothing — DEC-0046's exact failure; keep using the self-service path above to re-verify this table
+rather than assuming a past session's pass still holds.
 
 **Ask "which layer actually wins in prod?" for every file, every time.** A previous session's answer
 about a *different* file proves nothing about this one.
