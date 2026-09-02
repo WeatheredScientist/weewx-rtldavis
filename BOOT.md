@@ -36,9 +36,10 @@ existence unconfirmed.
 no-ops on `want == have`, guard exits at its `BASELINE` check, nothing logged since 01:30:39. Only
 drift is the emptied block; the deploy rides the next real one. **No Class C write is owed.**
 
-**ops#235 is still OPEN — BOOT previously overstated it.** The `-i` stdin fix landed and the
-`marvinctl exec-ro` *workaround* works (used for campaigns C and D); the tenant read verb the issue
-asks for does not exist.
+**ops#235 is CLOSED — BOOT previously overstated it as open.** The `-i` stdin fix landed and the
+`marvinctl exec-ro` *workaround* works (used for campaigns C and D), which is what closed it. The
+tenant read verb it asked for still does not exist — that gap is now tracked separately as
+**ops#253** (`t-weewx`'s `marvinctl` key was never minted; blocks job 1 and ops#250).
 
 ### S113 debug window + Go source read — DEC-0130/DEC-0131 (S114)
 
@@ -58,12 +59,13 @@ adjacent in the cycle), ruling out a clock-drift artifact and pointing at someth
 **Live, in order:**
 1. **Spectrum capture 924.5–927.5 MHz** (`gqrx`/`rtl_power`, same antenna) — DEC-0131's next
    step, cheap and bounded, to see whether 925.5–926.5 MHz has a visible interferer or a gain
-   rolloff vs. the rest of the band. No campaign, no owner-mediated step.
+   rolloff vs. the rest of the band. Capture itself is ~15 min, but it runs on marvin's dongle
+   and there is no self-service path there yet — **blocked on ops#253** (`t-weewx` key unminted).
 2. **Check the GitHub Support purge ticket** — if purged, verify an old SHA 404s, update
    `LOCAL_INFRA.md`'s PENDING line and drop this job.
-3. **Port `campaign_analyze.py` to marvin.** Its `fetch()` still ssh's to the NAS (pre-DEC-0118);
-   two campaigns have now been read through a hand-assembled `marvinctl exec-ro` transport. Port it
-   before a third. Pairs naturally with commenting/closing ops#235.
+3. **Port `campaign_analyze.py` to marvin** (tracked as ops#250). Its `fetch()` still ssh's to the
+   NAS (pre-DEC-0118); two campaigns have now been read through a hand-assembled `marvinctl exec-ro`
+   transport. Port it before a third — blocked on ops#253's key mint for a real transport.
 4. **Audit Phase 2, session A (mechanical, Sonnet-able):** version/doc sync per the BACKLOG item —
    README + Docker Hub banner, driver/influx version numbers, weewx.conf.example, ARCHITECTURE
    stamps/paths, broken commands, CONTRIBUTING CI wording, tag + release v2.0.12–14, BIAS_TEE docs.
@@ -96,7 +98,7 @@ chars/4 — re-measure with ops' own `checks/tier-sweep.sh` before closing).
 | Git | History rewritten 2026-09-01 (DEC-0127) — all SHAs changed; old clones must re-clone. Support purge pending (job 2) |
 | Alerting | `weewx_monitor.py` (`REMEDY_MODE=none`) live; `weewx-rx-experiment.timer` still ticking but a confirmed no-op |
 | Open risks | Gmail SMTP 535 breaking the 6-hourly summary (owner-side, unchanged) |
-| Trackers | ops#233 (deploy+live-restart owed) · ops#235 (read verb, open — workaround works) · ops#241 (BOOT cap) · #216/#214/#110 open · repo #274/#253 open |
+| Trackers | ops#233 (deploy+live-restart owed) · ops#253 (t-weewx key unminted, blocks job 1/ops#250) · ops#241 (BOOT cap) · #216/#214/#110 open · repo #274/#253 open |
 
 ## Blockers
 
