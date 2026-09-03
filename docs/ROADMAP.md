@@ -417,7 +417,12 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       are in `BACKLOG.md`, cheapest-first, and none is another CLI sweep. **S115 (DEC-0133):** the
       ceiling is **frequency-independent** (the channels-46–48 RFI cluster is explained and worth
       ~2 pts) and the bulk of the loss is **periodic at ~7.75 s wall-clock, not hop-locked** —
-      `BACKLOG.md` item 8 is the designed capture that names the oscillating part.
+      `BACKLOG.md` item 8 is the designed capture that names the oscillating part. **RESOLVED
+      the same session (DEC-0134):** the capture ran; the "ceiling" is the Go demodulator's
+      byte-only duplicate filter discarding the ISS's genuine repeat packets and booking each as
+      a miss — real RF loss 0.3%. There is no RF ceiling. Fix (a time-gated duplicate check,
+      Go rebuild) is S116's lead item; every ~73% baseline in this section is the ISS's repeat
+      fraction, not link quality.
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,

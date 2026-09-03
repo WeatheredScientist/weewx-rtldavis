@@ -6,25 +6,27 @@ under [Pre-S16].
 
 ---
 
-## [S115] — 2026-09-02 — DEC-0133: RFI explains channels 46–48 but only ~2 pts; the bulk of the loss is a fixed ~7.75 s wall-clock modulation, not hop-locked
+## [S115] — 2026-09-02 — DEC-0134: the ~25% "loss" is the demodulator discarding the ISS's repeat packets as duplicates; real RF loss 0.3%. DEC-0133: RFI explains channels 46–48 (~2 pts); loss periodic in wall-clock time
 
-- **DEC-0133 (analysis, no capture, no prod change).** Crossed S114's `rtl_power` CSV against
-  DEC-0130's 51-channel miss histogram with the demodulator's ±134 kHz passband applied: in-band
-  exposure picks out exactly channels 46/47/48 (8/6/6 bursts, none for 45/49) — an FHSS neighbour on
-  a ~400 kHz comb — so DEC-0132's "the tie weakens" was a bare-MHz artifact. The cluster is ~250 of
-  3,806 misses (~2 pts); the other 48 channels sit flat at 69.7 ± 10: **the ceiling is
-  frequency-independent.**
-- **New finding:** the 3,047 miss timestamps are periodic in wall-clock time — Rayleigh peak at
-  7.7495 s (z = 97) vs z = 4 for the hop-locked 11/4-hop alternative; gaps peak at 3 hops,
-  autocorrelation undecayed to 60 hops, consecutive misses anticorrelated, smooth modulation (miss
-  probability ~0.17 → 0.5). Isolated single misses carry 21.9 of the window's 32.2 pts. Host stalls
-  ruled out read-only (cgroup pressure zero; loss identical to 0.01 pt across Foundation and marvin).
-- **Blocker 6 reframed** ("what oscillates at ~7.75 s or an alias in the shared chain"); `BACKLOG.md`
-  ceiling item rewritten with item 8, a designed ~25 min dongle-exclusive capture (`rtl_test` at the
-  Go geometry, standalone `rtldavis -v` for per-packet freqError, full-band `rtl_power -i 1`).
-- **Data loss noted:** the Sep 1 debug window's received-packet lines rotated away unharvested —
-  only S114's `missed` grep survives (session scratch). Trap logged in `docs/GOTCHAS.md` §3.
-- S111's entry rolled verbatim to `CHANGELOG-ARCHIVE.md`.
+- **DEC-0134 — blocker 6 RESOLVED.** Ran DEC-0133's designed capture (prod down 20:42–21:09 ET,
+  26.5 min, self-service): `rtl_test` at the Go geometry — zero lost samples; the deployed
+  `rtldavis` standalone with `-v` for 15 min — 295 hops, 81 misses (27.5%, prod's number with
+  nothing but the binary in the loop) and **89 `duplicate packet` lines**, 89/89 byte-identical to
+  the previous decoded packet, 84/89 one ISS interval later on the next channel, **80 of 81 misses
+  preceded by one within 0.6 s**: the loop `continue`s on a duplicate without hopping and the
+  pending timer books a miss 0.363 s later. Real loss 1/295. Explains every flat axis, the
+  console's single-digit loss, the flat histogram, the wall-clock period. Fix = time-gated
+  duplicate check (Go rebuild, S116). Full-band `rtl_power -i 1` kept for the RFI picture.
+- **DEC-0133 (analysis).** Crossed S114's capture against DEC-0130's histogram with the ±134 kHz
+  passband applied: exposure picks out exactly channels 46/47/48 (a ~400 kHz-comb FHSS neighbour);
+  the cluster is ~2 pts; the other 48 channels sit flat. The 3,047 Sep-1 miss timestamps are
+  periodic in wall-clock time (7.7495 s, z = 97; hop-locked alternative z = 4). Host stalls ruled
+  out read-only. Owner confirmed the single-digit console receives this ISS at this property.
+- Blocker 6 closed; `BACKLOG.md` ceiling item resolved and the fix queued as S116's lead;
+  `docs/ROADMAP.md` line updated; GOTCHAS §1 (read `missed` with `duplicate`) and §3 (harvest a
+  debug window whole — the Sep 1 received-packet lines had rotated away); upstream thread to draft
+  logged in `docs/UPSTREAM-THREADS.md`. S111's entry rolled verbatim to `CHANGELOG-ARCHIVE.md`.
+- PR #307 (this session's closeout).
 
 ## [S114] — 2026-09-02 — Spectrum capture finds wideband RFI, not a clean 925.5–926.5 MHz interferer (DEC-0132); ops#253 fully closed; PR #305 merged
 

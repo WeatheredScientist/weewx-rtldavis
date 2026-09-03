@@ -61,6 +61,11 @@ alone did not catch.
   `mon_resets` check already documents this trap for `weewx_monitor.log`; the same applies to
   `weewx.log`, and the soak's own window computation still has it (filed, not fixed).
 
+- **A demodulator "packet missed" line is a claim, not a lost packet.** The Go loop books a miss
+  for any packet it received and then discarded as a byte-identical duplicate (DEC-0134): 80 of 81
+  misses in a 15-min standalone run were preceded by a `duplicate packet` line 0.363 s earlier.
+  Read `missed` and `duplicate` together, never one grep alone (S115).
+
 ## §2 Git, PRs, and the handoff
 
 - **`gh pr merge`'s output is never trustworthy either way** — silent/empty stdout can mean success,

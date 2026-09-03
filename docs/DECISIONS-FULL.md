@@ -8618,3 +8618,104 @@ channels-46–48 finding is **explained** (an FHSS neighbour on a ~400 kHz comb)
 ~2 pt contributor. `BACKLOG.md`'s ceiling item is rewritten to match. A durable trap goes to
 `docs/GOTCHAS.md` §3: harvest a debug window whole before the daily rotation, not the one grep the
 current question needs.
+
+## DEC-0134 — Blocker 6 RESOLVED: the ~25% "loss" is the demodulator discarding legitimately received repeat packets as duplicates and booking each one as a miss. Real RF loss measured at 0.3%
+
+**Status:** Accepted (root cause, measured) · **Date:** 2026-09-02 (S115) ·
+**Supersedes** the mechanism search in DEC-0128 → DEC-0133 (their measurements stand; their
+question is answered) · **closes blocker 6** · **explains** DEC-0035's "double-decode" as a
+separate, harmless sub-case · **fix pending** (needs a Go rebuild — S116)
+
+### The capture
+
+DEC-0133's designed capture ran tonight, dongle-exclusive, prod down **20:42:41 → 21:09:10 ET
+(26.5 min)**, S114's self-service path (`marvinctl stop` / three `exec-ro` runs / `start`), no
+Class C:
+
+1. `rtl_test -s 268800 -b 1024`, 5 min — the Go binary's exact sample rate and block size:
+   **zero lost samples** (`Samples per million lost (minimum): 0`, no further output). The
+   USB/dongle transport is clean.
+2. The deployed `rtldavis` binary standalone, `-tr 16 -tf US -gain 372 -v -fc 0 -ppm 0`, 15 min,
+   stderr captured whole (1,601 lines, Go µs timestamps): **295 hops, 214 decoded, 81 "packet
+   missed" = 27.5%** — prod's number, reproduced with no weewx, no Python, no pipe in the loop.
+3. `rtl_power -f 902M:928M:10k -g 37.2 -i 1`, 5 min (300 rows): floor −45 dBFS; busy ISM band
+   (a continuous carrier at 921.6 MHz, bursts to −2 dBFS around 907.9 MHz, heavy activity
+   902.6–903.0 / 913.4–913.8 / 924.4–925.0 MHz); no channel's level is periodic at 7.75 s or an
+   alias (R ≤ 0.26 everywhere). Kept for the RFI picture; not the mechanism.
+
+### What the standalone log shows
+
+The run logged **89 `duplicate packet:` lines against 81 misses.** Reading them against the loop
+(`main.go:393–398`): a decoded packet whose bytes equal the previous decoded packet's bytes is
+logged as a duplicate and `continue`d — **the hop handler is skipped**, so the receiver does not
+retune and the timer armed at the previous packet (expected visit + 62.5 + 300 ms) fires 0.363 s
+later, lands in the "packet missed" branch, increments the per-channel histogram, and only then
+hops. In the log that is exactly what happens, every time:
+
+```
+   11.250 pkt  8401612C89000511 type 8
+   14.061 DUP  8401612C89000511 type 8      ← one hop (2.81 s) later, next channel
+   14.425 MISS                              ← 0.363 s after the duplicate
+   16.874 pkt  E4014D550103C6BE type E
+```
+
+- **89 of 89 duplicates are byte-identical to the immediately preceding decoded packet**
+  (same message type, same wind bytes, same payload, same CRC).
+- **84 of 89 arrive 2.811–2.813 s after it** — one full ISS interval, on the *next* hop channel.
+  A stale re-decode of buffered samples would appear within milliseconds; this is the ISS
+  transmitting the same packet again. The remaining 5 arrive within 2 ms of the first decode —
+  DEC-0035's within-burst double-decode, which costs nothing (the first decode already hopped).
+- **80 of the 81 misses are preceded by a one-hop-later duplicate within 0.6 s.** The one that is
+  not (t ≈ 515 s) is the run's only real loss: **1 of 295 hops, 0.3%.**
+- Every miss sits at **3.175 s after the last decoded packet** — the timer's own arithmetic
+  (2.8125 + 0.3625), not an RF event.
+- The repeats come every 2–3 fresh packets (fresh-packets-between-repeats: 2 → 42 times,
+  0–1 → 24, 5 → 10) — hence DEC-0133's "every third hop" gap structure. The ISS repeats a packet
+  on some cadence of its own (tonight ≈ 8.34 s, Sep 1 ≈ 7.75 s), which is why the period was
+  wall-clock, not hop-locked, and why it moved between nights.
+
+### Why every earlier axis was flat
+
+This explains the whole evidence chain at once: gain-flat, window-flat, siting-flat,
+offset-flat, frequency-flat, host-independent to 0.01 pt (72.83% vs 72.82% is the *ISS's* repeat
+fraction, measured twice), variance binomial, the console single-digit (a Davis console counts a
+repeat as a received packet — it *is* one), the miss histogram flat across 51 channels (the repeat
+lands on whichever channel is next), and the "pairs" (5.3 pts on Sep 1) as three-identical-in-a-row.
+The channels-46–48 RFI (DEC-0133, ~2 pts) and the runs ≥10 (blocker 2's RF-dead class) remain the
+only *real* loss mechanisms, and they are small. **`rxCheckPercent` has been under-reporting a
+~99% link as ~73% since the receiver was built.** DEC-0035's ~722/day figure was this mechanism's
+harmless sibling (the 5-per-15-min within-burst case) — the one-hop-later repeats went to stderr
+at DEBUG and were never counted; S114's harvest grepped `missed`, not `duplicate`.
+
+### What the driver sees
+
+The duplicate is dropped before it is written to stdout, so `rtldavis.py` never receives it,
+counts the slot against `max_count`, and publishes the deficit as `rxCheckPercent`. The loop
+packet cadence therefore has one gap in every ~3.7 slots; the *content* lost is nil (identical
+bytes), but consumers get fewer wind samples than the ISS sent and a reception metric that is
+wrong by ~26 pts.
+
+### The fix (design, not built here — needs a Go rebuild)
+
+Gate the duplicate check by **time**, not bytes alone: a packet identical to the last one is a
+double-decode only if it arrives within the same burst (say < 500 ms); one that arrives ≥ 1 s
+later is a new transmission and must be emitted and hopped on. ~3 lines in `main.go` around
+`lastRecMsg`. Consequences to design in the same change: (a) `rtldavis.py` will receive
+byte-identical consecutive packets — the rain wraparound (DEC-0022) and any "on change" logic
+(`log_humidity_raw`) must tolerate repeats (they should: identical bytes means identical counters);
+(b) `rxCheckPercent` will jump to ~99% and every campaign baseline, `BACKLOG.md` RF finding, and
+dashboard threshold keyed to ~73% becomes stale — dashboard is a separate repo (DEC-0010), notify
+via eaglehunt-ops; (c) the image must be rebuilt — DEC-0117's open question (can marvin build
+natively?) is now on the critical path; (d) upstream: this affects every `lheijst/rtldavis` user
+whose ISS repeats packets — draft an issue/PR (`docs/upstream/`, gitignored; never posted without
+an explicit go). Alternative rejected: leaving the Go binary alone and correcting the denominator
+in Python — the driver cannot see the discarded packets, so it cannot know which slots were repeats.
+
+### What this changes
+
+**Blocker 6 closes as explained.** ROADMAP P2's "where is the ceiling" is answered: there is no
+RF ceiling. The RF-tuning campaigns (A–D) were measuring the ISS's repeat fraction; their
+*negative* results (nothing moved the number) are exactly what this predicts and remain valid as
+"don't re-sweep" evidence. Reproduction is 15 min: stop weewx, run the standalone binary with
+`-v`, count `duplicate packet` lines against `packet missed`. Raw captures (rtl_test log,
+demodulator log, full-band CSV) are in local `ARCHIVE/s115-capture/` (gitignored, never tracked).
