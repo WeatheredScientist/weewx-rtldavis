@@ -160,9 +160,9 @@ THRESHOLDS = {
 # WU_RF_EXPECTED is the number of records the ISS *physically transmits* per 60s
 # window -- the correct denominator for a reception %. It is NOT a fixed 24. The
 # Davis ISS transmit period depends on the transmitter id: (41 + id) / 16 s for
-# packet id 0..7, i.e. DIP-switch ID 1..8 = 2.5625s..3.0s. Davis's own spec sheets
-# (Vue: "varies with transmitter ID code"; VP2: every sensor interval is N x 2.5-3 s)
-# and DeKay's protocol notes agree -- verified S119, #313. This station's ISS (packet
+# packet id 0..7, i.e. DIP-switch ID 1..8 = 2.5625s..3.0s. Davis's own VP2 spec sheet
+# (DS6152: every sensor's update interval is N x 2.5-3 s across the eight IDs) and
+# DeKay's protocol notes agree -- verified S119, #313. This station's ISS (packet
 # id 4 = DIP ID 5) transmits every 2.8125s, measured 2.8124s +/- 1 ms (S115 capture),
 # so 60 / 2.8125 = ~21.3 records/min. The old value 24 ("one per 2.5s") assumed the
 # fastest channel and under-reported reception by ~13%: a full-reception window

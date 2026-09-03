@@ -19,10 +19,13 @@ under [Pre-S16].
   `ops/campaign_analyze.py` and its test docstring corrected. **Not deployed yet** — the monitor
   runs host-side on marvin.
 - **Per-ID transmit interval verified from primary sources** (the owner asked whether 2.8125 s could
-  be a bad read of the docs). Davis's Vue spec sheet: "Transmission Interval: Varies with transmitter
-  ID code from 2.25 seconds (#1=shortest), to 3 seconds (#8=longest)"; the VP2 sheet (DS6152 Rev C)
-  states every sensor interval as N × (2.5 to 3.0 s) — temp/rain 10–12 s (4 slots), leaf wetness
-  15–18 (6), humidity/UV/solar 50–60 (20), soil moisture 62.5–75 (25). DeKay's RF-Protocol wiki
+  be a bad read of the docs). Davis's VP2 spec sheet (DS6152 Rev C, this station's product) states
+  every sensor interval as N × (2.5 to 3.0 s) — temp/rain 10–12 s (4 slots), leaf wetness 15–18 (6),
+  humidity/UV/solar 50–60 (20), soil moisture 62.5–75 (25) — ranges that exist only because the
+  packet period runs 2.5–3.0 s across the eight IDs. (Davis's Vue sheet says outright "varies with
+  transmitter ID code … (#1=shortest) … 3 seconds (#8=longest)", but it is a sibling product's
+  document and its 2.25 s figure does not fit (41+ID)/16 — corroboration of the design, not this
+  station's spec; owner correction via ops.) DeKay's RF-Protocol wiki
   (2.5 s at ID 0, +1/16 s per ID) and `lheijst/rtldavis` `idLoopPeriods` agree. Our S115 capture:
   303 receptions, all packet id 4, 292 single-slot gaps mean **2.8124 s, sd 1.0 ms**, span/2.8125 =
   294.00 = transmissions seen; a 2.5 s cadence would need 331 slots. (41+4)/16 = 2.8125 exactly; the
@@ -35,6 +38,13 @@ under [Pre-S16].
 - Filed **#314** (`campaign_analyze.py`'s `rx > 100` backstop now excludes most good minutes; split
   from #313, low priority). ops#256 closed on the ops side: the dashboard has no reception consumer,
   and HLF (measured locally) lists the field in a docs inventory only, no code reads it.
+- **#316, found while locating the deploy target:** `ops/weewx-monitor.service:82` had
+  `Environment=REMEDY_SYSTEMCTL=sudo systemctl` unquoted, which systemd parses as `sudo` and drops
+  the second token (journal warning at every load since Aug 30, including the 07:58:59 start that
+  armed `restart_unit`), so the armed remedy would have run `sudo restart weewx.service` and failed.
+  Tracked file quoted; the live root-owned unit needs the same owner-run edit at the #315 deploy.
+  Also measured: marvin runs S107's `weewx_monitor.py` (sha `a6065f5f…`) — S118's #312 monitor
+  change merged but never left the repo, so ops#257 limb 3 is closed-on-merge, not on-deploy.
 - S118's entries sit under the [S117] heading below (its closeout was partial: `BOOT.md`'s resume
   header was left at "S117 → S118"); numbering resumes here at S119.
 
