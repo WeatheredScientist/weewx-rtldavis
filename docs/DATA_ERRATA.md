@@ -460,6 +460,9 @@ byte-identical re-sent packets and the pending timer booked each as `packet miss
 **for the entire life of the receiver**, across both hosts and every gain setting. After the fix
 the repeats are counted as the receptions they always were.
 
+- **Boundary timestamp (S117, DEC-0136):** **2026-09-03 07:17:53 EDT** (`2026-09-03T11:17:53Z`) —
+  the `v2.0.15` cutover. Records before that instant are pre-fix, after it post-fix. The receiver
+  was down 07:01:44 → 07:17:53 EDT (16m09s), so that gap carries no records at all.
 - **Direction:** a step **up**, at the deploy timestamp. Not a reception improvement — the RF link
   did not change, and no weather value in any record before or after this point is affected.
 - **Scope:** `rxCheckPercent` only. Sensor fields, rain, wind and every derived quantity are
@@ -469,10 +472,20 @@ the repeats are counted as the receptions they always were.
   instrument fault. Compare across the boundary only with the offset in mind.
 
 **Consumers whose thresholds are keyed to the old baseline** and go stale at the same instant:
-`weewx_monitor.py`'s reception alerting, `BACKLOG.md` and `docs/ROADMAP.md`'s stated figures, the
+`BACKLOG.md` and `docs/ROADMAP.md`'s stated figures, the
 dashboard's (via eaglehunt-ops#256, DEC-0010) — **and the proposed reception-quality-correlated
 wind guard raised under `ERR-0004`/`ERR-0006` below**, whose "collapsed to 9.2% / 13.2% against a
 60–90% baseline" discriminator is stated in the pre-fix scale. That guard is not yet built; when it
 is, its thresholds must be derived from post-fix data, and the *pre*-fix incident figures it cites
 must be read against the pre-fix baseline, not the new one. The signal itself survives — a
 reception collapse during a corrupt frame is still a collapse — but every number in it moves.
+
+**`weewx_monitor.py` is NOT on that list, and was removed from it at S117 after being measured**
+(DEC-0136). Its `WINDOW` metric is not `rxCheckPercent`: it counts `len(set(epochs))` — distinct
+one-second epochs of publish lines against `WU_RF_EXPECTED = 21` — and already includes freqError
+hop packets, so the dedup saturates and the metric is substantially **insensitive** to this change.
+Measured across the boundary: mean **15.38/21 (73.2%)** over the eight windows before, **15.86/21
+(75.5%)** over the seven after. A real jump would have shown as ~19.7/21 and been unmissable.
+**Its thresholds, including `WU_RF_MIN_PCT = 60`, remain valid and must not be re-keyed to ~99%** —
+doing so would manufacture permanent false alarms. Only a consumer reading `rxCheckPercent` itself
+needs re-keying.
