@@ -6,6 +6,54 @@ under [Pre-S16].
 
 ---
 
+## [S117] — 2026-09-03 — DEC-0136: v2.0.15 deployed, `missed` 81 → 0 confirmed on production data, and the monitor's thresholds turn out not to be stale after all
+
+- **DEC-0136 — DEC-0135 deployed.** `v2.0.15` built on marvin from `origin/dev`@`2fa80a4`. Prod cut
+  over **07:17:53 EDT**, outage 07:01:44 → 07:17:53 (**16m09s**), gain unchanged at 372. Validation
+  met every pre-registered number over a like-for-like 15:00 capture: `missed` 81→**0**, `repeat`
+  0→**79**, `duplicate` 89→**6**, accepted 214→**274**, banner showing `dupWindow=500`.
+- **Confirmed in production**, which S116 could not do. The prod instrument is the driver's own
+  INFO frame counters — not `ARCHIVE_STATS`, which is DEBUG-level and absent at `debug_rtld=1`.
+  Duplicate frames/period **6.23 → 0.57**, repeat frames appearing at **5.81**, population
+  conserved (6.38 vs 6.23). So **91% of what the demodulator called a duplicate and discarded was
+  a real re-send**, and 5.81 per 21.33 slots = **27.2% of transmissions**, against DEC-0134's ~27%.
+- **`REMEDY_MODE` armed** `none` → `restart_unit` (07:58:59), in a second receiver-free step —
+  together with removing a **stale `campaign.inhibit`** that had outlived its campaign by 2.5 days.
+  `weewx_monitor.py` checks the inhibit at `:705` **before** the mode check at `:712`, so the flip
+  alone would have been a **silent no-op**. The lifecycle documented at
+  `ops/weewx-monitor.service:84` — "the campaign script creates this file for its duration" —
+  **does not exist in any code**; nothing creates or removes it.
+- **What `276` counts**, read from the upstream Go source rather than inferred: a hop is emitted
+  only on an accepted packet or a loopTimer expiry, plus init. So **hops = accepted + missed +
+  init**, reconciling both captures exactly (274+0+2 = 276; 214+81+2 = 297).
+- **Two corrections to S116's own numbers.** (a) The apparent 85.6% slot-arithmetic shortfall was
+  **cold-start acquisition**, not loss: 273 inter-arrival gaps, median 2.800 s, max 2.900 s, *zero*
+  above 4 s, with **128 s** between `Init channels` and the first accepted packet. The steady-state
+  window is 767.8 s, not 900 — 274 accepted against 273.0 expected is **~100%**. (b) A repeat falls
+  through to the normal path and emits a `msg.ID=` line, so the 274 "decoded" **already include**
+  the 79 repeats; unique payloads are **195**.
+- **Reverses a standing assumption: the monitor's ~73% thresholds do NOT go stale.** Measured
+  **15.38/21 (73.2%)** across the eight windows before vs **15.86/21 (75.5%)** across the seven
+  after; a real +28% jump would read ~19.7 and be unmissable. The metric is `len(set(epochs))` —
+  distinct one-second epochs, already counting freqError hop packets — so it saturates and is
+  substantially **insensitive** to what was fixed (DEC-0024's mechanism from a new direction).
+  `WU_RF_MIN_PCT = 60` stays valid. `DISC-0001`'s consumer list corrected accordingly; only
+  `rxCheckPercent` consumers need re-keying, and prod computes that over a **wall-clock**
+  denominator, never hops.
+- **Four self-service gaps in the deploy path, all found by doing it:** no tree transport
+  (`/srv/docker/weewx` is not a checkout, tenant has no `git_branch`; this release rode a one-off
+  owner-authorized `scp -r` of a `git archive` export, 126 tracked files, sha256-verified on both
+  ends), no image-tag control (a literal in a `0644 root:root` `ExecStart` — an `EnvironmentFile`
+  carrying `IMAGE=` would fix it, deliberately not bundled since it hands a tenant control over
+  what root launches), no config write, no ad-hoc archive read.
+- **Verification note.** DEC-0078's `BUILD-EXIT` marker belongs to `ops/nas_build.py` and does not
+  exist on the `marvinctl build` path, so the artifact was proven directly instead — `exec-ro`
+  running `rtldavis -h` on the new image, at **zero outage**, printing `-dupwindow … (default 500)`.
+  When the sanctioned proof does not cover the path taken, prove the artifact, not the pipeline.
+- **`DISC-0001` given its real boundary timestamp** (2026-09-03 07:17:53 EDT) now that one exists.
+- Gates: ruff clean · 466 passed / 17 skipped · mypy clean (67 files). Docs-only session — no
+  production code changed in this repo.
+
 ## [S116] — 2026-09-02 — DEC-0135: the duplicate filter is time-gated and the repeat suppressed one layer up; the fix unbiases the statistic, it does not improve reception
 
 - **DEC-0135 — DEC-0134's fix, built (deploy pending).** Verified first the one alternative
@@ -72,21 +120,3 @@ under [Pre-S16].
   debug window whole — the Sep 1 received-packet lines had rotated away); upstream thread to draft
   logged in `docs/UPSTREAM-THREADS.md`. S111's entry rolled verbatim to `CHANGELOG-ARCHIVE.md`.
 - PR #307 (this session's closeout).
-
-## [S114] — 2026-09-02 — Spectrum capture finds wideband RFI, not a clean 925.5–926.5 MHz interferer (DEC-0132); ops#253 fully closed; PR #305 merged
-
-- **Merged PR #305** (Foundation's stopped weewx container decommissioned).
-- **ops#253 closed, both stages.** Marvin's `exec_devices` grant (`0bda:2838` via a per-device
-  udev rule, owner-ratified S114) had only been smoke-tested with `rtl_test` before this session.
-  Ran the real thing: `weewx.service` stopped (~6 min outage, self-service), a 5-min `rtl_power`
-  sweep of 924.5–927.5 MHz through `marvinctl exec-ro`, prod restarted clean.
-- **DEC-0132: the capture's noise floor was flat and stable all 5 minutes** (no rolloff shape —
-  evidence against a static gain rolloff or fixed antenna null), **but 16 of 60 ten-second windows
-  carried transient bursts (5–34 dB above floor) spanning 925.15–927.48 MHz** — nearly the whole
-  capture band, not confined to DEC-0130's flagged 925.5–926.5 MHz channels 46–48 (only 7 of 16
-  fall there; the single largest, +34.5 dB, hit 927.34 MHz, well outside it). Reading: RFI
-  strengthens as the mechanism, but the exclusive tie to channels 46–48 weakens. Blocker 6 stays
-  open — free next step (cross the spike frequencies against DEC-0130's histogram) queued for
-  S115, explicitly on Fable per the owner's call, since it's open-ended analysis, not execution.
-
----

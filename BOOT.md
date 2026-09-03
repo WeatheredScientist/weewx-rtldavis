@@ -12,102 +12,118 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S116 → S117)
+## ▶ Resume here (S117 → S118)
 
 ### What's settled (do not re-derive)
 
-**The ~25% "loss" is solved AND fixed (DEC-0134 → DEC-0135).** The Go demodulator discarded the
-ISS's re-sent packets (byte-identical, one loop period later, ~27% of transmissions) without
-hopping, so the pending timer booked each as `packet missed`. `rxCheckPercent` under-reported a
-~99% link as ~73% since the receiver was built. **S116 built the fix** — a time-gated duplicate
-check (`patch/rtldavis-dupgate.patch`, `-dupwindow` 500 ms) plus the driver's `_last_pkt` guard,
-which had been **dead code since it was written**, made real so the redundant repeat is suppressed
-rather than forwarded. **It unbiases the statistic; it does not improve reception** — the data was
-always correct, and `maxmissed` re-inits are unaffected (`chAlarmCnts` max 2 vs a threshold of 51).
-**RF tuning stays closed.** Gain holds at 372. **Campaigns A–D are demoted to *untested*** (a flat
-result from an insensitive instrument is not evidence of flatness) but are **not re-run**: ~6 pts
-of headroom vs a 2.0-pt bar. Chain: DEC-0128 → … → 0134 → **0135**.
+**The ~25% "loss" is solved, fixed, AND deployed (DEC-0134 → DEC-0135 → DEC-0136).** The Go
+demodulator discarded the ISS's byte-identical re-sends without hopping, so the pending timer booked
+each as `packet missed`. `v2.0.15` shipped 2026-09-03 07:17:53 EDT (16m09s outage). Validation met
+every pre-registered number: `missed` **81 → 0**, `repeat` 0 → 79, `duplicate` 89 → 6.
+**Confirmed on production data**, not just a capture: duplicate frames/period **6.23 → 0.57** with
+repeat frames at **5.81**, population conserved — 91% of what was called a duplicate was a real
+re-send, and 5.81/21.33 slots = **27.2% of transmissions**, matching DEC-0134's ~27%.
+**It unbiased a statistic; it improved nothing.** The data was always correct. Gain holds at 372
+(owner-ratified 09-02). Campaigns A–D stay *untested* and are **not** re-run.
+
+**Three denominators measure three different things (DEC-0136) — don't conflate them.**
+`hops = accepted + missed + init` (read from the Go source), so `rxCheckPercent` asks "of slots the
+receiver tracked, how many decoded". Slot arithmetic asks "of transmissions the ISS made, how many
+did we take" — and over the steady-state window (excluding **128 s** of cold-start acquisition)
+that is **~100%**. The monitor's `WINDOW` asks a third question entirely.
+
+**The monitor's thresholds do NOT go stale — measured, reversing the old assumption.** 73.2% before
+vs 75.5% after; a real jump would read ~19.7/21. `len(set(epochs))` already counts hop packets and
+saturates, so the metric is **insensitive** to this fix. `WU_RF_MIN_PCT = 60` stays valid. Only
+`rxCheckPercent` consumers need re-keying (dashboard, via ops#256). `DISC-0001` carries the boundary
+timestamp and the corrected consumer list.
+
+**Also settled:** a `repeat` falls through to the normal path and emits a `msg.ID=` line, so
+"decoded" **includes** repeats — 274 accepted, 195 unique. `REMEDY_MODE=restart_unit` is armed
+(07:58:59) and the stale `campaign.inhibit` that would have made it a silent no-op is gone.
 
 **Real loss that remains:** ~2 pts of channels-46–48 RFI (DEC-0133) and RF-dead runs ≥10
-(blocker 2). Raw captures: local `ARCHIVE/s115-capture/`.
+(blocker 2) — now measurable for the first time against a flat baseline. Raw captures: local
+`ARCHIVE/s115-capture/`.
 
-**PR #308 open** (both S116 commits, CI green, dev-bound) — merge is the owner's / the token path.
-History was rewritten 2026-09-01 (DEC-0127); support purge pending (job 3). ops#253 CLOSED.
-
-### ▶▶ S117 JOB LIST
+### ▶▶ S118 JOB LIST
 
 **Live, in order:**
-1. **[Opus] DEPLOY DEC-0135 — the whole point of S116.** Merge #308 first. Then: (a) **build on
-   marvin** — `marvinctl build <path> -t <tag>` is a tier-2 own-resource verb, **self-service, no
-   NAS, no `docker save`/`load`** (answered S116); verify by the explicit `BUILD-EXIT` marker,
-   never a pipeline exit (DEC-0078). (b) **Validate standalone BEFORE prod** — 15 min of
-   `rtldavis -v`, pre-registered against S115's 295 hops / 214 decoded / 81 missed / 89 duplicate:
-   expect `duplicate` **89 → ~9**, `repeat` **~80** appears, `missed` **81 → ~1**, decoded
-   **214 → ~294**. (c) Deploy = a real release: **the driver AND the Go binary are both BAKED**
-   (DEC-0031), so one image cut carries both; pair with job 2 and the v2.0.14 `main` promotion.
-   (d) Post-deploy, re-key every ~73% baseline — the monitor's thresholds, the dashboard's
-   (ops#256, already open), and start the **post-fix baseline watch** (`BACKLOG.md`).
-2. **Flip `REMEDY_MODE=none` → `restart_unit`** at the job-1 deploy.
-3. **Check the GitHub Support purge ticket** — if purged, verify an old SHA 404s and update the
-   gitignored local-infra doc's PENDING line.
-4. **Upstream issue/PR to `lheijst/rtldavis`** — the patch header is already most of the text;
-   draft in `docs/upstream/` (gitignored), owner tone review, **never posted without a go**.
-5. **Port `campaign_analyze.py` to marvin** (ops#250) — low priority; campaigns are over.
-6. **Audit Phase 2, session A (mechanical, Sonnet):** version/doc sync per the BACKLOG item.
-7. **Audit Phase 2, session B (judgment, Opus):** runtime-emitted internal IDs, driver docstrings,
+1. **Post-fix baseline watch** — the point of the whole exercise. With pseudo-loss gone, blocker 2
+   (RF-dead episodes) stands out for the first time. Let it accumulate, then characterize. No
+   apparatus needed; observation only.
+2. **`v2.0.15` promotion to `main` + Docker Hub** — prod has proven out; per DEC-0078 the Hub push
+   follows prod proof. Tag a new `prod-baseline-YYYYMMDD`. Hub is still at `:v2.0.13`.
+3. **Make the monitor say what it will actually do (DEC-0074's own lesson, small repo change):**
+   (a) log `remedy_action()` at startup — today the armed state cannot be confirmed short of a real
+   fault; (b) `log()` the reception summary it already computes and only emails, which closes
+   ops#257's observability limb cheaply.
+4. **ops#257 limb 2 — `EnvironmentFile` with `IMAGE=`** so a cutover stops needing an owner-run
+   `sed` on a root-owned unit. Blocked on marvin recording an OPS-DEC-0159-class reading first: it
+   hands a tenant control over what root launches. Don't improvise it.
+5. **Retire the stale campaign residue** — `weewx-rx-experiment.timer` is still armed against a
+   campaign that ended 09-01 (self-service: `marvinctl disable --now`), and
+   `ops/weewx-monitor.service:84` documents a `campaign.inhibit` lifecycle **that no code
+   implements**. Fix the comment or implement the lifecycle; don't leave both.
+6. **Fix `ExecStop=docker stop` in `weewx.service`** — contradicts DEC-0008 (`docker kill`, never
+   `docker stop`), baked in at the DEC-0118 cutover. Needs the same root-edit path as job 4.
+7. **Upstream issue/PR to `lheijst/rtldavis`** — the patch header is already most of the text, and
+   the deploy now gives it production evidence. Draft in `docs/upstream/` (gitignored), owner tone
+   review, **never posted without a go**.
+8. **Audit Phase 2, session A (mechanical, Sonnet):** version/doc sync per the BACKLOG item.
+9. **Audit Phase 2, session B (judgment, Opus):** runtime-emitted internal IDs, driver docstrings,
    stale test refs, the unfailable assertion (`test_input_staleness.py:195`), `ops/` banners.
-8. **Audit Phase 2, session C (design, owner + Opus):** public-surface reorg. Needs DECs.
-9. **Durable logrotate fix for marvin** — `logs/` keeps only two rotated days.
+10. **Audit Phase 2, session C (design, owner + Opus):** public-surface reorg. Needs DECs.
+11. **Port `campaign_analyze.py` to marvin** (ops#250) — low priority; campaigns are over.
+12. **Durable logrotate fix for marvin** — `logs/` keeps only two rotated days.
 
 **Carried forward, untouched:** NAS-LEASE cross-host wiring (low) · `CONSTANTS.md` infra re-verify ·
-ops CONSTANTS §5 register row check (`ef8e9af8`) · ops#241 BOOT-over-cap.
+ops CONSTANTS §5 register row check (`ef8e9af8`) · GitHub Support purge ticket (verify an old SHA
+404s, then update the gitignored local-infra doc's PENDING line).
 
-### Current state (S116 close)
+### Current state (S117 close)
 
 | Thing | State |
 |---|---|
-| Prod host | marvin · `weewx.service` in `/weather.slice`, `docker run --rm` — two-tenant box (ops#234) |
-| Prod | v2.0.14, driver ws.5, weewx 5.5.0, gain 372. **Unchanged this session — S116 shipped no deploy** |
-| Campaigns | **None, and none needed.** A–D demoted to untested; re-baseline by observation instead |
-| Git | **PR #308 open, CI green.** History rewritten 2026-09-01 (DEC-0127) |
-| Alerting | the monitor (`REMEDY_MODE=none`) live; its ~73% thresholds go stale **at the job-1 deploy**, not before |
+| Prod host | marvin · `weewx.service` in `/weather.slice`, `docker run --rm` — two-tenant box |
+| Prod | **`v2.0.15`** (was v2.0.14), driver ws.5 + dupgate, weewx 5.5.0, gain 372. Deployed 09-03 |
+| Docker Hub | still `:v2.0.13` — v2.0.15's push is job 2 |
+| Alerting | monitor live, **`REMEDY_MODE=restart_unit` armed**; its thresholds are correct as-is |
+| Campaigns | none, and none needed. A–D untested, not re-run |
+| Git | PR #308 merged. This session's PR is S117's closeout |
 | Open risks | Gmail SMTP 535 breaking the 6-hourly summary (owner-side, unchanged) |
-| Trackers | ops#256 · #250 · #241 · #233 · #216 · #110 open · repo #274, #253 open |
+| Trackers | ops#256 · #257 (new, 3 limbs) · #250 · #233 · #216 · #110 open · repo #274, #253 open |
 
 ## Blockers
 
 1. **weewx process freezes — 1.31/day, median 240 s (DEC-0088-corrected).** Root cause unproven.
 2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open) — now the largest *real*
-   loss mechanism, and **it becomes measurable for the first time** once job 1 lands: today it hides
-   inside ~27% of background pseudo-loss; against a flat ~99% baseline it stands out.
+   loss mechanism, and **measurable for the first time** post-DEC-0136. Job 1.
 3. **ERR-0005** — unchanged.
 4. **6-hourly reception-summary email broken** — Gmail 535, needs the owner's Google account.
-5. ~~The ~25% ceiling~~ — **RESOLVED (DEC-0134) and FIXED (DEC-0135); deploy pending, job 1.**
+5. ~~The ~25% ceiling~~ — **RESOLVED, FIXED, and DEPLOYED (DEC-0134/0135/0136).**
 
 ## Model tier
 
-S116 ran on **Opus** (owner's call). **S117 is job 1 — recommend Opus:** the design is locked, but
-the session opens a prod outage and its expensive branch is unfamiliar debugging with the receiver
-down. Desktop switches persist (OPS-DEC-0036/0062): state the running model in the first reply.
+S117 ran on **Opus** (owner's call) — a prod deploy with an outage window. **S118's job 1 is
+observation and job 2 is a mechanical release: Sonnet is the right floor**; escalate only if job 3
+or 4's design questions are taken up. Desktop switches persist (OPS-DEC-0036/0062): state the
+running model in the first reply.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Durable traps are NOT carried here** (DEC-0105/ops#173). **Read it when:** trusting any tool's
-zero/empty/green result (§1 — now includes "a `packet missed` line is a claim") · any PR/merge
-sequence or handoff write (§2) · any NAS or campaign task (§3) · judging a component live, dead,
-or shipped (§4). **New traps are appended THERE.**
+zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) · any NAS or campaign
+task (§3) · judging a component live, dead, or shipped (§4). **New traps are appended THERE.**
 
-_Last updated: 2026-09-02 (S116). Session summary: designed and built DEC-0134's fix. First tested
-the one alternative DEC-0134 had not ruled out — a stale buffer replaying a decode would have made
-the miss booking honest — and 80 of 80 long-gap duplicates carry their own correlation magnitude and
-symbol vector, so they are fresh receptions, not replays. The Go side is a tracked patch applied in
-the build (not a fork); the driver side turned out to be a no-op as scoped, because its duplicate
-guard has been dead code since it was written, which made the real question emit-vs-suppress. The
-honest headline is that this unbiases a statistic and improves nothing: the data was always correct.
-The tripwire pass then demoted campaigns A–D from settled-negative to untested — a flat result from
-an insensitive instrument is not evidence of flatness — and closed a ROADMAP item open since S56 on
-a false premise. Two repo lessons bit again in the act of applying them: the first test draft
-asserted against a copy of the code rather than the code, and a piped secret-gate run reported exit
-0 while the script exited 1. Gate: ruff clean, 466 passed / 17 skipped, mypy clean (67 files),
-secret gate exit 0 + 54/54 positive control; the Go patch compiles and the new tests are
-mutation-tested 5/5._
+_Last updated: 2026-09-03 (S117). Session summary: deployed DEC-0135 and confirmed it on production
+data. The build path had no `BUILD-EXIT` marker (that belongs to `ops/nas_build.py`), so the
+artifact was proven directly instead — `exec-ro rtldavis -h` printing `-dupwindow`, at zero outage,
+before prod went down. Four self-service gaps surfaced by doing the deploy: no tree transport, no
+image-tag control, no config write, no ad-hoc archive read; the first two each cost an owner-run
+step. Three positions were reversed during the session, each time on measurement rather than
+argument — that the monitor's thresholds go stale (they don't), that the fix was unconfirmed in
+production (our own INFO counters confirm it), and that the slot arithmetic showed 85.6% loss (it
+was cold-start acquisition). Cross-repo dialog with ops caught three stale claims in both
+directions before any of them was acted on. Gate: ruff clean, 466 passed / 17 skipped, mypy clean
+(67 files). Docs-only in this repo — no production code changed._
