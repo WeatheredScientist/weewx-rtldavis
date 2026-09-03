@@ -159,9 +159,12 @@ THRESHOLDS = {
 # --- Reception tracking config ---
 # WU_RF_EXPECTED is the number of records the ISS *physically transmits* per 60s
 # window -- the correct denominator for a reception %. It is NOT a fixed 24. The
-# Davis ISS transmit period depends on the transmitter id (driver loop_times run
-# 2.5625s..3.0s); this station's ISS (Transmitter 4) transmits every ~2.8125s, so
-# 60 / 2.8125 = ~21.3 records/min. The old value 24 ("one per 2.5s") assumed the
+# Davis ISS transmit period depends on the transmitter id: (41 + id) / 16 s for
+# packet id 0..7, i.e. DIP-switch ID 1..8 = 2.5625s..3.0s. Davis's own VP2 spec sheet
+# (DS6152: every sensor's update interval is N x 2.5-3 s across the eight IDs) and
+# DeKay's protocol notes agree -- verified S119, #313. This station's ISS (packet
+# id 4 = DIP ID 5) transmits every 2.8125s, measured 2.8124s +/- 1 ms (S115 capture),
+# so 60 / 2.8125 = ~21.3 records/min. The old value 24 ("one per 2.5s") assumed the
 # fastest channel and under-reported reception by ~13%: a full-reception window
 # read 22/24 = 92% when it was really ~22/21 = ~100% (S29). Override per station
 # with the WU_RF_EXPECTED env var when re-pointing to a different transmitter id.
@@ -189,8 +192,11 @@ WU_RECORD_RE = re.compile(r'\((\d+)\)\s*$')
 ARCHIVE_DB = os.environ.get('WEEWX_ARCHIVE_DB', f'{BASE_DIR}/weewx-data/archive/weewx.sdb')
 # True physical ISS transmit rate (packets/min) for the dropped-packet estimate:
 # 60 / 2.8125s = 21.33. This is the UN-rounded WU_RF_EXPECTED; the driver itself
-# floor-divides the period, so rxCheckPercent runs ~1-2 pts optimistic (documented,
-# minor -- S31). Override per station (different transmitter id) via the env var.
+# floor-divides the period (60 s -> 21, 59 s -> 20), so a fully received minute
+# reads 101-105% -- ~3 pts, measured once DEC-0135 unmasked it (#313; S31 had
+# called it ~1-2 pts under the old ~73% ceiling). summarize_reception_rows() clamps
+# each record at 100 before multiplying it out. Override per station (different
+# transmitter id) via the env var.
 RF_TX_PER_MIN = float(os.environ.get('RF_TX_PER_MIN', 60.0 / 2.8125))
 # How often to email the reception summary. Default 6 h (00/06/12/18 local) so a
 # reception problem surfaces within ~6 h and can be acted on the same day, rather than
@@ -945,9 +951,20 @@ def summarize_reception_rows(rows, tx_per_min):
     """Pure reception math over archive rows -> summary dict (no DB, unit-testable).
 
     ROWS: iterable of (dateTime_utc_epoch, interval_minutes, rxCheckPercent-or-None).
-    rxCheckPercent is the driver's honest metric: good CRC-decoded packets over the
-    theoretical max for that archive period. Per record the ISS transmits
-    interval*tx_per_min packets; received ~= expected * pct/100, dropped = the rest.
+    rxCheckPercent is the driver's metric: good CRC-decoded packets over
+    floor(period / loop period) for that archive period. Per record the ISS
+    transmits interval*tx_per_min packets; received ~= expected * pct/100, dropped =
+    the rest.
+
+    Each record's pct is CLAMPED at 100 before it is multiplied out (#313). The
+    driver floors its denominator (60 s // 2.8125 s = 21 against 21.33 real
+    transmissions, and a 59 s period floors to 20), so a fully received minute reads
+    101-105% -- ~103% mean, measured once DEC-0135 unmasked it. Unclamped,
+    'received' exceeds 'expected' and 'dropped' goes negative every good hour, and a
+    daily total silently nets real loss against the over-read. Clamped, 'dropped' is
+    a lower bound on real loss: it can under-count, never invent a negative. The
+    number of clamped records is returned as 'over100' so the over-read stays
+    visible rather than hidden.
     NULL-rxCheckPercent records (first record after a restart, or the pre-fix
     deadlock era) carry no reception info, so they are counted as 'gaps' and left
     out of the expected/received totals -- a conservative under-count of drops.
@@ -955,19 +972,26 @@ def summarize_reception_rows(rows, tx_per_min):
     hours = {}
     for dt, interval_min, pct in rows:
         hour = time.localtime(dt).tm_hour
-        h = hours.setdefault(hour, {'pcts': [], 'expected': 0.0, 'received': 0.0, 'gaps': 0})
+        h = hours.setdefault(hour, {'pcts': [], 'expected': 0.0, 'received': 0.0,
+                                    'gaps': 0, 'over100': 0})
         if pct is None:
             h['gaps'] += 1
             continue
         exp = (interval_min or 1) * tx_per_min
+        if pct > 100.0:
+            h['over100'] += 1
+            pct = 100.0
         h['pcts'].append(pct)
         h['expected'] += exp
-        h['received'] += exp * pct / 100.0
-    day = {'expected': 0.0, 'received': 0.0, 'gaps': 0, 'records': 0, 'hours': {}}
+        # exp * 100.0 / 100.0 is not always exp in floating point; a fully received
+        # record must contribute exactly its expected packets so 'dropped' is 0, not 1e-13.
+        h['received'] += exp if pct == 100.0 else exp * pct / 100.0
+    day = {'expected': 0.0, 'received': 0.0, 'gaps': 0, 'records': 0, 'over100': 0,
+           'hours': {}}
     for hour, h in hours.items():
         exp, rec, n = h['expected'], h['received'], len(h['pcts'])
         day['hours'][hour] = {
-            'records': n, 'gaps': h['gaps'],
+            'records': n, 'gaps': h['gaps'], 'over100': h['over100'],
             'mean_pct': (100.0 * rec / exp) if exp else None,
             'min_pct': min(h['pcts']) if h['pcts'] else None,
             'expected': exp, 'received': rec, 'dropped': exp - rec,
@@ -976,6 +1000,7 @@ def summarize_reception_rows(rows, tx_per_min):
         day['received'] += rec
         day['gaps'] += h['gaps']
         day['records'] += n
+        day['over100'] += h['over100']
     if not day['records'] and not day['gaps']:
         return None
     day['mean_pct'] = (100.0 * day['received'] / day['expected']) if day['expected'] else None
@@ -1026,10 +1051,13 @@ def db_reception_summary(start_ts, end_ts, db_path=None):
 def format_reception_summary(summary, label):
     """Format the archive-sourced reception summary (S31) as a text table. Reports
     packets dropped -- not just windows above a threshold. LABEL names the reporting
-    window (e.g. '2026-07-08 00:00–12:00'); rows are the hours present in the window."""
+    window (e.g. '2026-07-08 00:00–12:00'); rows are the hours present in the window.
+    Per-record rxCheckPercent is clamped at 100% upstream (#313), so 'dropped' is a
+    lower bound on real loss; the count of clamped records is printed so the driver's
+    over-read stays visible."""
     lines = [
         f"{STATION_NAME} — RF Reception Summary — {label}",
-        "Source: driver rxCheckPercent (good decoded packets / transmitted, per record)",
+        "Source: driver rxCheckPercent per archive record, clamped at 100%",
         f"Physical TX rate: {RF_TX_PER_MIN:.1f} packets/min",
         "",
         f"{'Hour':<6} {'Recept.':>8} {'Min':>6} {'Dropped':>9} {'Recs':>6}",
@@ -1044,16 +1072,23 @@ def format_reception_summary(summary, label):
             lines.append(f"{hour:02d}:00 {'--':>6}  {'--':>5} {'--':>9} {('gap x%d' % h['gaps']):>6}")
     lines.append("-" * 40)
     mean = summary['mean_pct']
-    lines.append(f"Mean reception:            {mean:.0f}%" if mean is not None else
-                 "Mean reception:            --")
-    lines.append(f"Packets transmitted (est): {summary['expected']:.0f}")
-    lines.append(f"Packets received (est):    {summary['received']:.0f}")
-    lines.append(f"Packets dropped (est):     {summary['dropped']:.0f}")
+    lines.append(f"{'Mean reception:':<36}{mean:.0f}%" if mean is not None else
+                 f"{'Mean reception:':<36}--")
+    lines.append(f"{'Packets transmitted (est):':<36}{summary['expected']:.0f}")
+    lines.append(f"{'Packets received (est):':<36}{summary['received']:.0f}")
+    lines.append(f"{'Packets dropped (est, lower bound):':<36}{summary['dropped']:.0f}")
     if summary['gaps']:
         lines.append(f"Records with no reception data (gaps/restarts): {summary['gaps']}")
+    if summary.get('over100'):
+        lines.append(f"Records reading over 100% (clamped): {summary['over100']} of "
+                     f"{summary['records']}")
     lines.append("")
-    lines.append("Note: estimate = per-record rxCheckPercent x physical TX rate; the driver "
-                 "floor-divides per period so it runs ~1-2 pts optimistic (S31, DEC-0024).")
+    lines.append("Note: received = per-record rxCheckPercent x physical TX rate, each record "
+                 "clamped at 100%. The driver floor-divides the archive period by the loop "
+                 f"period (60 s -> {int(RF_TX_PER_MIN)}, a 59 s period -> {int(RF_TX_PER_MIN) - 1}) "
+                 f"against {RF_TX_PER_MIN:.2f} real transmissions/min, so a fully received minute "
+                 "reads 101-105% (~103% mean, measured since DEC-0135; #313). The clamp keeps "
+                 "'dropped' a lower bound on real loss instead of netting good hours negative.")
     return "\n".join(lines)
 
 

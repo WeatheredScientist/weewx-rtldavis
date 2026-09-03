@@ -79,7 +79,7 @@ Environment=INPUT_STALE_S=300
 # else's device.
 Environment=REMEDY_MODE=none
 Environment=REMEDY_UNIT=weewx.service
-Environment=REMEDY_SYSTEMCTL=sudo systemctl
+Environment="REMEDY_SYSTEMCTL=sudo systemctl"
 
 # Campaign inhibit. An RX campaign restarts weewx once per arm on purpose; every
 # one of those looks exactly like the fault this watchdog remedies, and a remedy
