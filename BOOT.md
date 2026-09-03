@@ -44,10 +44,20 @@ timestamp and the corrected consumer list.
 
 **PR #310 merged (S117's closeout, incl. the ops#216 job filing).** ops#233 (PWS alerting rebuild)
 **closed** — ops demonstrated both asks live during today's outage (`ALERT: … down 16min`,
-`INPUT RECOVERED`); the one remaining piece (log `remedy_action()` at startup) is job 3 below.
-ops#257 narrowed: limb 3 is now just "no ad-hoc read, scheduled read only goes to email" (job 3
-closes it); limb 2 (`EnvironmentFile` with `IMAGE=`) is blocked on marvin recording its own
-OPS-DEC-0159-class reading first — don't improvise past that.
+`INPUT RECOVERED`). ops#257 limb 3 **closed**: `weewx_monitor.py` now logs `remedy_action()` at
+startup and `log()`s the reception-summary body it used to only email. Limb 2
+(`EnvironmentFile` with `IMAGE=`) stays blocked on marvin recording its own OPS-DEC-0159-class
+reading first — don't improvise past that. Repo **#253** (chatty-stdout WARN) fixed —
+`ops/soak_check.sh` now excludes the six known entrypoint boot lines before counting. **#216**
+(DVB blacklist) fixed — README now covers it in both Quick Start step 2 and Troubleshooting.
+Repo **#274** closed (fully resolved, HLF confirmed no action needed on their end).
+
+**New finding while fixing #253: `ops/soak_check.sh` still targets `NAS_HOST`, unchanged since
+2026-08-21 — before DEC-0118's 08-28/29 host move.** It reads `/usr/local/bin/docker` on the NAS,
+which per `CONSTANTS.md` no longer hosts the container. The fix above is correct as filed, but the
+script itself likely can't reach prod's real state right now — same class of gap as ops#250/#257
+(NAS-hardwired tooling). Not yet re-verified live or filed; do that before trusting soak_check's
+output for anything on marvin.
 
 **Real loss that remains:** ~2 pts of channels-46–48 RFI (DEC-0133) and RF-dead runs ≥10
 (blocker 2) — now measurable for the first time against a flat baseline. Raw captures: local
@@ -61,35 +71,24 @@ OPS-DEC-0159-class reading first — don't improvise past that.
    apparatus needed; observation only.
 2. **`v2.0.15` promotion to `main` + Docker Hub** — prod has proven out; per DEC-0078 the Hub push
    follows prod proof. Tag a new `prod-baseline-YYYYMMDD`. Hub is still at `:v2.0.13`.
-3. **Make the monitor say what it will actually do (DEC-0074's own lesson, small repo change):**
-   (a) log `remedy_action()` at startup — today the armed state cannot be confirmed short of a real
-   fault; (b) `log()` the reception summary it already computes and only emails, which closes
-   ops#257's observability limb cheaply.
-4. **ops#257 limb 2 — `EnvironmentFile` with `IMAGE=`** so a cutover stops needing an owner-run
+3. **ops#257 limb 2 — `EnvironmentFile` with `IMAGE=`** so a cutover stops needing an owner-run
    `sed` on a root-owned unit. Blocked on marvin recording an OPS-DEC-0159-class reading first: it
    hands a tenant control over what root launches. Don't improvise it.
-5. **Retire the stale campaign residue** — `weewx-rx-experiment.timer` is still armed against a
+4. **Retire the stale campaign residue** — `weewx-rx-experiment.timer` is still armed against a
    campaign that ended 09-01 (self-service: `marvinctl disable --now`), and
    `ops/weewx-monitor.service:84` documents a `campaign.inhibit` lifecycle **that no code
    implements**. Fix the comment or implement the lifecycle; don't leave both.
-6. **Fix `ExecStop=docker stop` in `weewx.service`** — contradicts DEC-0008 (`docker kill`, never
-   `docker stop`), baked in at the DEC-0118 cutover. Needs the same root-edit path as job 4.
-7. **Document the DVB blacklist step — a public first-run failure we still don't mention (ops#216
-   Finding 1).** On vanilla Debian/Ubuntu the kernel auto-loads `dvb_usb_rtl28xxu` and claims the
-   RTL2832U, after which `rtl_sdr` cannot open it. Grepped `origin/dev` at S117:
-   `blacklist|dvb_usb|rtl28xxu|modprobe` → **0 hits**, positive-controlled (`RTL-SDR` → 48,
-   `rtl_test` → 14). Never needed here because DSM's kernel ships no DVB modules — but this is a
-   **public, published** extension, so every Debian/Ubuntu installer hits it and our docs are
-   silent. README/install docs. ops#216 carries the finding; this line is why it isn't invisible.
-8. **Upstream issue/PR to `lheijst/rtldavis`** — the patch header is already most of the text, and
+5. **Fix `ExecStop=docker stop` in `weewx.service`** — contradicts DEC-0008 (`docker kill`, never
+   `docker stop`), baked in at the DEC-0118 cutover. Needs the same root-edit path as job 3.
+6. **Upstream issue/PR to `lheijst/rtldavis`** — the patch header is already most of the text, and
    the deploy now gives it production evidence. Draft in `docs/upstream/` (gitignored), owner tone
    review, **never posted without a go**.
-9. **Audit Phase 2, session A (mechanical, Sonnet):** version/doc sync per the BACKLOG item.
-10. **Audit Phase 2, session B (judgment, Opus):** runtime-emitted internal IDs, driver docstrings,
+7. **Audit Phase 2, session A (mechanical, Sonnet):** version/doc sync per the BACKLOG item.
+8. **Audit Phase 2, session B (judgment, Opus):** runtime-emitted internal IDs, driver docstrings,
     stale test refs, the unfailable assertion (`test_input_staleness.py:195`), `ops/` banners.
-11. **Audit Phase 2, session C (design, owner + Opus):** public-surface reorg. Needs DECs.
-12. **Port `campaign_analyze.py` to marvin** (ops#250) — low priority; campaigns are over.
-13. **Durable logrotate fix for marvin** — `logs/` keeps only two rotated days.
+9. **Audit Phase 2, session C (design, owner + Opus):** public-surface reorg. Needs DECs.
+10. **Port `campaign_analyze.py` to marvin** (ops#250) — low priority; campaigns are over.
+11. **Durable logrotate fix for marvin** — `logs/` keeps only two rotated days.
 
 **Carried forward, untouched:** NAS-LEASE cross-host wiring (low) · `CONSTANTS.md` infra re-verify ·
 ops CONSTANTS §5 register row check (`ef8e9af8`) · GitHub Support purge ticket (verify an old SHA
@@ -106,7 +105,7 @@ ops CONSTANTS §5 register row check (`ef8e9af8`) · GitHub Support purge ticket
 | Campaigns | none, and none needed. A–D untested, not re-run |
 | Git | PR #308, #309, #310 merged (S117 closeout landed) |
 | Open risks | Gmail SMTP 535 breaking the 6-hourly summary (owner-side, unchanged) |
-| Trackers | ops#256 · #257 (2 limbs left, #3 narrowed) · #250 · #216 · #110 open · repo #274, #253 open. ops#233 closed |
+| Trackers | ops#256 · #257 (limb 2 only, blocked on marvin) · #250 · #110 open · repo #216, #253 open (fixes merged, not yet closed — await confirmation). ops#233, repo #274 closed |
 
 ## Blockers
 

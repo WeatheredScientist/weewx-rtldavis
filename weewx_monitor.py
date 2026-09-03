@@ -1164,6 +1164,7 @@ def main():
         wu_repeat_sent_at = time.time()
 
     log("Monitor started")
+    log(f"Remedy armed: {remedy_action()}")
     send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
 
     last_offset = get_log_size()
@@ -1314,6 +1315,9 @@ def main():
             else:
                 body = None
             if body:
+                # Logged, not just emailed (ops#257 limb 3): the email-only path meant
+                # this summary was unreachable by any ad-hoc tenant read.
+                log(body)
                 send_email(f"{STATION_NAME}: RF Reception — {label}", body)
             wu_hourly_buckets = {}
             wu_report_start   = block
