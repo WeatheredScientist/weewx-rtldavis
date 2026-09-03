@@ -6,6 +6,48 @@ under [Pre-S16].
 
 ---
 
+## [S119] — 2026-09-03 — #313: the reception summary clamps per-record rxCheckPercent at 100%, and the per-ID transmit interval is verified against Davis's own spec sheets
+
+- **#313 (monitor).** `summarize_reception_rows()` clamps each record's rxCheckPercent at 100 before
+  multiplying it out and counts the clamped records as `over100`; `format_reception_summary()`
+  relabels `Packets dropped (est, lower bound)`, prints `Records reading over 100% (clamped): N of
+  M`, and its footnote now says what the number is: the driver floor-divides the archive period by
+  the loop period (60 s → 21, 59 s → 20) against 21.33 real transmissions/min, so a fully received
+  minute reads 101–105% (~103% mean, measured since DEC-0135). The 06:00–12:00 email's "dropped
+  −37" hours now read 0 and the total is a lower bound on real loss instead of pre-fix loss netted
+  against post-fix over-count. Three new tests; the stale "applies no cap" claims in
+  `ops/campaign_analyze.py` and its test docstring corrected. **Not deployed yet** — the monitor
+  runs host-side on marvin.
+- **Per-ID transmit interval verified from primary sources** (the owner asked whether 2.8125 s could
+  be a bad read of the docs). Davis's VP2 spec sheet (DS6152 Rev C, this station's product) states
+  every sensor interval as N × (2.5 to 3.0 s) — temp/rain 10–12 s (4 slots), leaf wetness 15–18 (6),
+  humidity/UV/solar 50–60 (20), soil moisture 62.5–75 (25) — ranges that exist only because the
+  packet period runs 2.5–3.0 s across the eight IDs. (Davis's Vue sheet says outright "varies with
+  transmitter ID code … (#1=shortest) … 3 seconds (#8=longest)", but it is a sibling product's
+  document and its 2.25 s figure does not fit (41+ID)/16 — corroboration of the design, not this
+  station's spec; owner correction via ops.) DeKay's RF-Protocol wiki
+  (2.5 s at ID 0, +1/16 s per ID) and `lheijst/rtldavis` `idLoopPeriods` agree. Our S115 capture:
+  303 receptions, all packet id 4, 292 single-slot gaps mean **2.8124 s, sd 1.0 ms**, span/2.8125 =
+  294.00 = transmissions seen; a 2.5 s cadence would need 331 slots. (41+4)/16 = 2.8125 exactly; the
+  ISS is on DIP ID 5 (`-tr 16` = "tr5"; "Transmitter 4" is the zero-based packet id). A period
+  difference, not a phase offset: free-running transmit-only beacons cannot hold a phase, so only
+  distinct periods bound collisions between co-sited stations.
+- **DEC-0135's re-send model gets an independent check:** wind bytes changed in 33 of 213
+  different-type consecutive pairs but 0 of 80 same-type pairs (fresh samples would have changed
+  ~12), so the repeat is a verbatim copy, not a schedule coincidence.
+- Filed **#314** (`campaign_analyze.py`'s `rx > 100` backstop now excludes most good minutes; split
+  from #313, low priority). ops#256 closed on the ops side: the dashboard has no reception consumer,
+  and HLF (measured locally) lists the field in a docs inventory only, no code reads it.
+- **#316, found while locating the deploy target:** `ops/weewx-monitor.service:82` had
+  `Environment=REMEDY_SYSTEMCTL=sudo systemctl` unquoted, which systemd parses as `sudo` and drops
+  the second token (journal warning at every load since Aug 30, including the 07:58:59 start that
+  armed `restart_unit`), so the armed remedy would have run `sudo restart weewx.service` and failed.
+  Tracked file quoted; the live root-owned unit needs the same owner-run edit at the #315 deploy.
+  Also measured: marvin runs S107's `weewx_monitor.py` (sha `a6065f5f…`) — S118's #312 monitor
+  change merged but never left the repo, so ops#257 limb 3 is closed-on-merge, not on-deploy.
+- S118's entries sit under the [S117] heading below (its closeout was partial: `BOOT.md`'s resume
+  header was left at "S117 → S118"); numbering resumes here at S119.
+
 ## [S117] — 2026-09-03 — DEC-0136: v2.0.15 deployed, `missed` 81 → 0 confirmed on production data, and the monitor's thresholds turn out not to be stale after all
 
 - **DEC-0136 — DEC-0135 deployed.** `v2.0.15` built on marvin from `origin/dev`@`2fa80a4`. Prod cut
