@@ -142,6 +142,16 @@ lsusb | grep -i realtek
 # Should show a line containing: ID 0bda:2838 Realtek Semiconductor Corp.
 ```
 
+> **Linux hosts:** the kernel's own DVB-T driver (`dvb_usb_rtl28xxu`) auto-loads and claims
+> this chipset by default on stock Debian/Ubuntu, which then blocks the container from
+> opening the dongle even though `lsusb` shows it fine. If step 6 below shows no data,
+> blacklist it on the **host** (not in the container) and reboot or re-plug the dongle:
+> ```bash
+> echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/blacklist-rtl-sdr.conf
+> sudo rmmod dvb_usb_rtl28xxu 2>/dev/null || true
+> ```
+> Not needed on Synology DSM — its kernel ships no DVB modules to begin with.
+
 ### 3. Create directories
 ```bash
 mkdir -p /your/path/weewx-data
@@ -472,6 +482,9 @@ sleep 2
 - Use a USB extension cable (1–3m) away from the NAS
 - Check log: `tail -f /your/path/logs/weewx.log`
 - The USB watchdog will auto-reset after 150 seconds of no data
+- **Linux hosts:** the dongle can be visible to `lsusb` but still unusable — check
+  `lsmod | grep dvb_usb_rtl28xxu`. If it's loaded, the kernel's own DVB driver has claimed
+  the device; see the blacklist step under Quick Start step 2 above
 
 **Low RF reception**
 - Normal packet reception for Davis VP2 is ~24 packets/min at close range

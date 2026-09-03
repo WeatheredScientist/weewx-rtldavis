@@ -73,8 +73,12 @@ echo \"uptime_s=\$((now - \$(date -d \"\$started\" +%s 2>/dev/null || echo \$now
 echo \"since=\$t0\"
 
 # --- stdout: must be silent (DEC-0041) and traceback-free (DEC-0043) ---
+# stdout_lines excludes entrypoint.sh's own known boot lines (#253): those
+# accumulate across every restart on a long-lived container object and were
+# swamping the count with routine noise rather than the unexpected chatter
+# DEC-0041 actually cares about.
 so=\$(\$D logs --tail 200 \$C 2>&1)
-echo \"stdout_lines=\$(printf '%s' \"\$so\" | grep -c . )\"
+echo \"stdout_lines=\$(printf '%s' \"\$so\" | grep -vE '^(Starting weewx\.\.\.|Enabling RTL-SDR bias-tee for LNA\.\.\.|Bias-tee disabled \(BIAS_TEE=.*\), driving it off\.\.\.|Found [0-9]+ device\(s\):|  [0-9]+:  .*|Using device [0-9]+: .*|Found Rafael Micro R820T tuner)\$' | grep -c . )\"
 echo \"stdout_logerr=\$(printf '%s' \"\$so\" | grep -c -- '--- Logging error ---')\"
 
 # --- log lines only within the window ---

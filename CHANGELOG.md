@@ -57,6 +57,13 @@ under [Pre-S16].
   (PWS alerting rebuild) closed on ops's recommendation — both asks demonstrated live during today's
   outage. ops#257 narrowed: limb 3 down to "no ad-hoc read" (S118 job 3 closes it); limb 2 blocked
   on marvin's own OPS-DEC-0159-class reading.
+- **S118 issue triage.** `weewx_monitor.py` now logs `remedy_action()` at startup and `log()`s the
+  reception-summary body it previously only emailed, closing ops#257 limb 3. `ops/soak_check.sh`
+  excludes the six known entrypoint boot lines before counting `stdout_lines`, fixing #253's
+  cry-wolf WARN — found in the process: the script still targets `NAS_HOST`, unverified against
+  marvin since DEC-0118. `README.md` documents the DVB `dvb_usb_rtl28xxu` blacklist step (#216),
+  in Quick Start and Troubleshooting. Repo #274 closed (fully resolved). Gates: ruff clean, 466
+  passed / 17 skipped, mypy clean (67 files).
 
 ## [S116] — 2026-09-02 — DEC-0135: the duplicate filter is time-gated and the repeat suppressed one layer up; the fix unbiases the statistic, it does not improve reception
 
