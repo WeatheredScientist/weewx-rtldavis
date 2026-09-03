@@ -72,11 +72,23 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S116** (~10 sessions out). If the session counter is
-  at or past S116 and this line still says S116, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96 and S106 did (diff every open/pending item here against
+- **Next scheduled reconciliation check: by S126** (~10 sessions out). If the session counter is
+  at or past S126 and this line still says S126, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106 and S116 did (diff every open/pending item here against
   DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S106, 2026-08-29** — tripwire fired on time. **Nothing stale found** —
+- Last full reconciliation: **S116, 2026-09-02** — tripwire fired on time, and this was the
+  heaviest pass since S66. **Two findings.** (1) **P2's entire evidence base was demoted**: DEC-0134
+  showed the ~25% the campaigns chased was a demodulator accounting artifact, so every ~73–75%
+  figure in that section is a repeat fraction and every "axis is flat" verdict was measured with an
+  insensitive instrument. DEC-0135 rewrote P2's header accordingly and withdrew DEC-0134's own
+  "negative results remain valid as don't-re-sweep evidence" as too strong — campaigns A–D are
+  **untested**, though still not worth re-running (headroom arithmetic under Campaign D). This is
+  the first pass where the correction was to *evidence quality* rather than to a status. (2) The
+  `receiveWindow` item had been open since S56 on a **false premise** — "cannot be read from logs"
+  was an inference from one verbosity level, and three separate pieces of evidence (S114, S115,
+  S116) each closed it independently without anyone noticing. Both findings share a shape worth
+  naming: a claim that was true-as-observed got carried as true-in-general.
+- Prior: **S106, 2026-08-29** — tripwire fired on time. **Nothing stale found** —
   the four open P0-P3 items (freeze root cause, DB-lock bound, `receiveWindow` confirmation,
   INTERFACES.md hardening) all diffed clean against `DECISIONS.md`/`CHANGELOG.md`/`BOOT.md`; none
   gained a new DEC since S105's last targeted pass. This session's own DEC-0119 (ops#183's Influx
@@ -261,7 +273,17 @@ bound and done via reversible live hot-swap with an instant rollback path.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P2 — RF optimization, done honestly (PRINCIPLES §3) — **✅ CLOSED (S113, DEC-0128): the gain axis is exhausted**
+## P2 — RF optimization, done honestly (PRINCIPLES §3) — **✅ CLOSED (S116, DEC-0134/DEC-0135): there was never an RF problem to optimize**
+
+> **Read this header before any figure below it.** The section originally closed at S113
+> (DEC-0128) on "the gain axis is exhausted." That verdict survives; its *evidence* does not.
+> DEC-0134 found that the ~25% shortfall every campaign was chasing was the Go demodulator
+> discarding the transmitter's re-sent packets and booking each as a miss — real RF loss **0.3%**.
+> **Every ~73–75% figure in this section is a repeat fraction, not link quality**, and every
+> "axis is flat" result was measured with an instrument insensitive to the differences it was
+> looking for. DEC-0135 therefore demotes campaigns A–D from *settled negative* to **untested**:
+> a flat result from an insensitive instrument is not evidence of flatness. They are still not
+> re-run — see the closing note under Campaign D for the headroom arithmetic that settles it.
 DEC-0048 (S41) deferred this into one designed experiment; the apparatus (`ops/rx_experiment.sh` +
 `tests/test_rx_experiment.py`, S56/DEC-0059) is now deployed and executing. The seven
 pre-governance sweep scripts are deleted; two of them were silently broken.
@@ -423,6 +445,23 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       a miss — real RF loss 0.3%. There is no RF ceiling. Fix (a time-gated duplicate check,
       Go rebuild) is S116's lead item; every ~73% baseline in this section is the ISS's repeat
       fraction, not link quality.
+      **S116 reconciliation (DEC-0135) — the fix is built, and the campaigns are NOT re-run.**
+      The time-gate landed with the repeat suppressed one layer up; validation is pre-registered
+      against the S115 capture and needs no deploy. Two corrections to what is written above.
+      **(a)** DEC-0134's "their *negative* results … remain valid as don't-re-sweep evidence" is
+      **too strong** and is withdrawn: campaign B's own run-to-run scatter (sd 8.47 at 496,
+      sd 4.67 at 372) exceeded the entire real signal, so A–D are **untested**, not settled.
+      **(b)** They are nonetheless not worth re-running. Total remaining headroom is **~6 pts worst
+      case** — 0.3% real loss, ~2 pts of channels-46–48 RFI (DEC-0133), ~4 pts of RF-dead runs ≥10
+      (blocker 2) — against DEC-0059's **2.0-pt adoption bar**, and both named mechanisms are
+      already identified and **not gain-responsive**. A re-sweep would re-measure axes we have
+      independent reason to believe are flat, for a prize that mostly is not on them.
+      **Instead: re-baseline by observation** — run the fix several days and read the honest number.
+      Free, no apparatus, no pre-registration, no prod disruption. ~99% closes the question;
+      materially lower is a new signal a campaign could, for the first time, actually resolve.
+      **The real prize is diagnostic:** an RF-dead episode is currently buried in ~27% of background
+      pseudo-loss, so against a flat ~99% baseline **blocker 2 becomes measurable for the first
+      time** — which is worth more than any gain setting this section ever tested.
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,
@@ -579,10 +618,17 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       `-ex N` ≡ `receiveWindow 300+N` (upstream sums them), so the window is a mounted-config knob,
       no rebuild, and it is simply the second factor of the campaigns above. The `rw*` image tags
       were redundant, not merely misnamed.
-- [ ] Confirm the running binary's `receiveWindow` (ARCHITECTURE §6) — **narrowed, still open.** It
-      cannot be read from logs: the deployed binary is older than upstream master and lacks master's
-      startup settings line (absent from both `weewx.log` and container stdout, checked S56). Needs
-      the deployed `src.tgz` read directly, or a rebuild. No longer blocks the campaigns.
+- [x] ~~Confirm the running binary's `receiveWindow` (ARCHITECTURE §6)~~ — **CLOSED (S116):
+      `receiveWindow = 300`, the upstream default, unpatched.** The premise above was wrong: the
+      deployed binary *does* emit a startup settings line. S56 concluded otherwise from its absence
+      in `weewx.log` and container stdout at normal verbosity, but the driver gates it behind
+      `debug_rtld`. **Three independent confirmations, none of them a rebuild:** S114's debug window
+      logged `user.rtldavis DEBUG info: … ex=0 receiveWindow=300 actChan=[4]` (DEC-0130); S115's
+      standalone capture printed the same banner from the deployed binary directly; and S116 read
+      the deployed source itself (`main.go:129`, `receiveWindow = 300`) while building DEC-0135's
+      patch. The Dockerfile's in-build `grep -R receiveWindow` echo is a standing fourth check.
+      *Lesson, and it is this file's own recurring one: "cannot be read from logs" was an inference
+      from one verbosity level, carried as a fact for 60 sessions.*
 - [x] ~~Investigate rebuilding `rtldavis` from newer Go source for `FreqError`/`ChannelIdx`
       telemetry~~ — **moot.** S57 confirmed the *currently deployed* binary already emits it; no
       rebuild needed for this purpose.

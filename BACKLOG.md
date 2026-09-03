@@ -56,6 +56,15 @@ trigger below is plainly satisfied.
 - **DEC-0056 revisit trigger** — a rain-rejection email on a genuinely *wet* day.
 - **Upstream replies** — four open threads (lheijst #22/#23, issue #15, david-lutz#1).
   `docs/UPSTREAM-THREADS.md` holds the state and the etiquette.
+- **Post-DEC-0135 reception baseline (new S116)** — the deliberate replacement for re-running the
+  campaigns, and the one thing that decides whether any of them ever come back. After the fix
+  deploys, read `rxCheckPercent` over several days with no apparatus and no pre-registration.
+  **~99% closes the RF question permanently.** **Materially lower (say < 95%) is a real signal** —
+  and the first one a campaign could actually resolve, because the ~27% of background pseudo-loss
+  that swamped every previous sweep is gone. **This watch is also how blocker 2 becomes measurable:**
+  an RF-dead episode currently hides inside that background; against a flat ~99% baseline it stands
+  out sharply. Do not read a *pre*-fix figure against a post-fix one — the metric steps ~26 points at
+  the deploy (`docs/DATA_ERRATA.md` DISC-0001).
 - **Dependabot** may open a deps PR — review it, never auto-merge.
 - **RF-dead pause/resume incident rate (DEC-0087, new S79)** — first fired S81 (2026-08-13
   19:40:05, arm H) and immediately escalated to a hard abort at the 120-min ceiling — not the
@@ -346,14 +355,32 @@ failed resets currently produce no further action.
   (~2 pts, DEC-0133) and the RF-dead runs ≥10 (blocker 2, ~4 pts on Sep 1). Raw captures in local
   `ARCHIVE/s115-capture/`.
 
-  **What replaces it — S116 lead item, the fix (DEC-0134):** time-gate the duplicate check in
-  `main.go` (< 500 ms = within-burst double-decode, drop; ≥ 1 s = new transmission, emit and hop);
-  make `rtldavis.py` tolerate byte-identical consecutive packets (rain wraparound, `log_humidity_raw`
-  on-change logic); rebuild the image (DEC-0117's marvin-native-build question is on the critical
-  path); then every ~73% baseline here, in `docs/ROADMAP.md`, and in the dashboard's thresholds is
-  stale — dashboard via eaglehunt-ops (DEC-0010). Upstream issue/PR to `lheijst/rtldavis` drafted
-  in `docs/upstream/`, posted only on a go (`docs/UPSTREAM-THREADS.md`). Items 2/4/5/6 below are
-  moot; kept as opened, S113, for the record.
+  **The fix is BUILT — S116, DEC-0135** (`patch/rtldavis-dupgate.patch` + `rtldavis.py`; deploy
+  pending). Three corrections to how it was scoped above:
+  - **"make `rtldavis.py` tolerate byte-identical consecutive packets" was a no-op as written** —
+    the driver already tolerated them. Its `self._last_pkt` guard has been **dead code since it was
+    written**: `data` carries `curr_cnt0..3`, cumulative counters that advance on every packet, so
+    the comparison was unconditionally true. Rain and `log_humidity_raw` were never at risk. The
+    real question underneath was **emit or suppress**, and the call is **suppress** — the payload is
+    byte-identical, so forwarding it would add ~37% loop packets, InfluxDB points and loop-JSON
+    writes for zero information. `rxCheckPercent` is fixed by the Go change alone; it never depended
+    on that guard.
+  - **One threshold, not two.** Measured separation is 2.1 ms vs 2.8117 s with **nothing between
+    0.05 s and 2.5 s**, so the "< 500 ms / ≥ 1 s" pair collapses to a single 500 ms gate
+    (`-dupwindow`), which must stay under the shortest loop period (2.5625 s, id 0).
+  - **The build-host question is ANSWERED:** `marvinctl build <path> -t <tag>` is a tier-2
+    own-resource verb — self-service, no NAS, no `docker save`/`load`. `/srv/docker/weewx/` already
+    carries the whole `build-v2.0.4 … build-v2.0.14` tree.
+
+  Also verified this session, closing the one alternative DEC-0134 had not ruled out: the long-gap
+  duplicates are **fresh receptions, not buffer replays** — 80 of 80 carry their own correlation
+  magnitude and symbol vector, on a different channel after a retune. Every ~73% baseline here, in
+  `docs/ROADMAP.md`, and in the dashboard's thresholds is stale (dashboard via eaglehunt-ops#256,
+  DEC-0010) — **and so is the reception-quality-correlated wind guard proposed under
+  `ERR-0004`/`ERR-0006`**, whose "9.2% / 13.2% against a 60–90% baseline" discriminator is stated in
+  the pre-fix scale (see `docs/DATA_ERRATA.md` DISC-0001). Upstream issue/PR to `lheijst/rtldavis`
+  drafted in `docs/upstream/`, posted only on a go (`docs/UPSTREAM-THREADS.md`); the patch header is
+  already most of it. Items 2/4/5/6 below are moot; kept as opened, S113, for the record.
 
   *(as opened, S113)* Three independent axes are now measured flat at ~73–75%: tuner gain
   (328–496, campaign D, spread 1.70 pts), receive window (`-ex` 0 vs 50, +0.45 and −0.06 pts,
@@ -679,7 +706,24 @@ failed resets currently produce no further action.
   behind `debug_rtld` levels (2026-07-05 driver change) and prod runs with it off — S52 grepped the
   live log: zero `RAW_` lines. Log rotation is daily and working. Pruned S52.
 
-## Durable RF findings (from 2026-06-01 tuning sweeps — keep; these guide P2)
+## Durable RF findings (from 2026-06-01 tuning sweeps) — ⚠️ **DEMOTED S116 (DEC-0135): read the caveat first**
+
+> **Every percentage in this section is a repeat fraction, not link quality.** DEC-0134 showed the
+> ~25% these numbers were measuring was the demodulator discarding the transmitter's re-sent packets
+> and booking each as a miss; real RF loss is **0.3%**. So these findings no longer "guide P2" —
+> P2 is closed, and there was never an RF problem to optimize.
+>
+> **They are demoted from *settled negative* to *untested*, not deleted.** DEC-0134's line that the
+> campaigns' negative results "remain valid as don't-re-sweep evidence" is **withdrawn as too
+> strong** (DEC-0135): a flat result from an insensitive instrument is not evidence of flatness, and
+> campaign B's own run-to-run scatter (sd 8.47 at 496, sd 4.67 at 372) exceeded the entire real
+> signal. What survives is the *relative* comparisons made on one tool and one metric — they were
+> measured honestly, they just answer a smaller question than anyone thought.
+>
+> **They are still not worth re-running:** ~6 pts of total headroom (0.3% + ~2 pts channels-46–48
+> RFI + ~4 pts RF-dead runs) against DEC-0059's 2.0-pt bar, both mechanisms identified and neither
+> gain-responsive. Re-baseline by observation instead — see `docs/ROADMAP.md` P2, Campaign D's
+> closing note.
 
 **What campaign A says about the LNA — hold it loosely (moved from BOOT.md, S67):**
 - **Recomputed at S66 on per-minute `rxCheckPercent` (DEC-0069):** arm A (372/ex0) **74.81%** ·
