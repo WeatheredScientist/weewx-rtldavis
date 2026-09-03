@@ -42,6 +42,13 @@ timestamp and the corrected consumer list.
 "decoded" **includes** repeats — 274 accepted, 195 unique. `REMEDY_MODE=restart_unit` is armed
 (07:58:59) and the stale `campaign.inhibit` that would have made it a silent no-op is gone.
 
+**PR #310 merged (S117's closeout, incl. the ops#216 job filing).** ops#233 (PWS alerting rebuild)
+**closed** — ops demonstrated both asks live during today's outage (`ALERT: … down 16min`,
+`INPUT RECOVERED`); the one remaining piece (log `remedy_action()` at startup) is job 3 below.
+ops#257 narrowed: limb 3 is now just "no ad-hoc read, scheduled read only goes to email" (job 3
+closes it); limb 2 (`EnvironmentFile` with `IMAGE=`) is blocked on marvin recording its own
+OPS-DEC-0159-class reading first — don't improvise past that.
+
 **Real loss that remains:** ~2 pts of channels-46–48 RFI (DEC-0133) and RF-dead runs ≥10
 (blocker 2) — now measurable for the first time against a flat baseline. Raw captures: local
 `ARCHIVE/s115-capture/`.
@@ -97,9 +104,9 @@ ops CONSTANTS §5 register row check (`ef8e9af8`) · GitHub Support purge ticket
 | Docker Hub | still `:v2.0.13` — v2.0.15's push is job 2 |
 | Alerting | monitor live, **`REMEDY_MODE=restart_unit` armed**; its thresholds are correct as-is |
 | Campaigns | none, and none needed. A–D untested, not re-run |
-| Git | PR #308 merged. This session's PR is S117's closeout |
+| Git | PR #308, #309, #310 merged (S117 closeout landed) |
 | Open risks | Gmail SMTP 535 breaking the 6-hourly summary (owner-side, unchanged) |
-| Trackers | ops#256 · #257 (new, 3 limbs) · #250 · #233 · #216 · #110 open · repo #274, #253 open |
+| Trackers | ops#256 · #257 (2 limbs left, #3 narrowed) · #250 · #216 · #110 open · repo #274, #253 open. ops#233 closed |
 
 ## Blockers
 
@@ -123,14 +130,16 @@ running model in the first reply.
 zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) · any NAS or campaign
 task (§3) · judging a component live, dead, or shipped (§4). **New traps are appended THERE.**
 
-_Last updated: 2026-09-03 (S117). Session summary: deployed DEC-0135 and confirmed it on production
-data. The build path had no `BUILD-EXIT` marker (that belongs to `ops/nas_build.py`), so the
-artifact was proven directly instead — `exec-ro rtldavis -h` printing `-dupwindow`, at zero outage,
-before prod went down. Four self-service gaps surfaced by doing the deploy: no tree transport, no
-image-tag control, no config write, no ad-hoc archive read; the first two each cost an owner-run
-step. Three positions were reversed during the session, each time on measurement rather than
-argument — that the monitor's thresholds go stale (they don't), that the fix was unconfirmed in
-production (our own INFO counters confirm it), and that the slot arithmetic showed 85.6% loss (it
-was cold-start acquisition). Cross-repo dialog with ops caught three stale claims in both
-directions before any of them was acted on. Gate: ruff clean, 466 passed / 17 skipped, mypy clean
-(67 files). Docs-only in this repo — no production code changed._
+_Last updated: 2026-09-03 (S117 close, pointer synced post-merge). Session summary: deployed
+DEC-0135 and confirmed it on production data. The build path had no `BUILD-EXIT` marker (that
+belongs to `ops/nas_build.py`), so the artifact was proven directly instead — `exec-ro rtldavis -h`
+printing `-dupwindow`, at zero outage, before prod went down. Four self-service gaps surfaced by
+doing the deploy: no tree transport, no image-tag control, no config write, no ad-hoc archive read;
+the first two each cost an owner-run step. Three positions were reversed during the session, each
+time on measurement rather than argument — that the monitor's thresholds go stale (they don't),
+that the fix was unconfirmed in production (our own INFO counters confirm it), and that the slot
+arithmetic showed 85.6% loss (it was cold-start acquisition). Cross-repo dialog with ops caught
+three stale claims in both directions before any of them was acted on. Gate: ruff clean, 466
+passed / 17 skipped, mypy clean (67 files). Docs-only in this repo — no production code changed.
+Pointer-sync addendum: PR #310 merged (S117's own closeout commit) and ops#233 closed on ops's
+recommendation, both confirmed via `--json state,mergedAt` rather than command exit text._
