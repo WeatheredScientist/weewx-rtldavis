@@ -16,8 +16,12 @@ under [Pre-S16].
   minute reads 101–105% (~103% mean, measured since DEC-0135). The 06:00–12:00 email's "dropped
   −37" hours now read 0 and the total is a lower bound on real loss instead of pre-fix loss netted
   against post-fix over-count. Three new tests; the stale "applies no cap" claims in
-  `ops/campaign_analyze.py` and its test docstring corrected. **Not deployed yet** — the monitor
-  runs host-side on marvin.
+  `ops/campaign_analyze.py` and its test docstring corrected. **Merged (PR #315, `bd499d3`, 13:46 ET)
+  and deployed:** the merged file (sha `147f3eff…`) reached marvin at 16:10:38 ET by owner-run
+  `curl` + `sudo install` (the tenant key is forced-command, so no agent transport exists), and the
+  monitor restarted on it at 16:11:13 via self-service `marvinctl restart`. Verified by sha against
+  dev's tip, process start after file mtime, and the S118 startup line appearing for the first time.
+  The 18:00 ET summary is the first on the new format.
 - **Per-ID transmit interval verified from primary sources** (the owner asked whether 2.8125 s could
   be a bad read of the docs). Davis's VP2 spec sheet (DS6152 Rev C, this station's product) states
   every sensor interval as N × (2.5 to 3.0 s) — temp/rain 10–12 s (4 slots), leaf wetness 15–18 (6),
@@ -42,7 +46,10 @@ under [Pre-S16].
   `Environment=REMEDY_SYSTEMCTL=sudo systemctl` unquoted, which systemd parses as `sudo` and drops
   the second token (journal warning at every load since Aug 30, including the 07:58:59 start that
   armed `restart_unit`), so the armed remedy would have run `sudo restart weewx.service` and failed.
-  Tracked file quoted; the live root-owned unit needs the same owner-run edit at the #315 deploy.
+  Tracked file quoted in #315; live unit edited by the owner (`sed` + `daemon-reload`) and the
+  monitor restarted at 16:20:49 ET. Before/after proof from one instrument: the startup line read
+  `Remedy armed: sudo restart weewx.service` at 16:11 and `Remedy armed: sudo systemctl restart
+  weewx.service` at 16:20, with no systemd warning at the second load. #316 closed.
   Also measured: marvin runs S107's `weewx_monitor.py` (sha `a6065f5f…`) — S118's #312 monitor
   change merged but never left the repo, so ops#257 limb 3 is closed-on-merge, not on-deploy.
 - S118's entries sit under the [S117] heading below (its closeout was partial: `BOOT.md`'s resume

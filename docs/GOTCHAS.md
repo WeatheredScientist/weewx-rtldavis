@@ -66,6 +66,11 @@ alone did not catch.
   misses in a 15-min standalone run were preceded by a `duplicate packet` line 0.363 s earlier.
   Read `missed` and `duplicate` together, never one grep alone (S115).
 
+- **zsh parses `$var:word` as a parameter modifier.** `git show $c:weewx_monitor.py` in a loop ran
+  `git show` with a mangled argument, printed an error the loop swallowed, and every "hash" came out
+  `e3b0c442…` — the sha256 of EMPTY input — so the table looked healthy and every row was wrong
+  (S119). Brace it: `${c}:path`. Any `e3b0c442…` in a hash list means you hashed nothing.
+
 ## §2 Git, PRs, and the handoff
 
 - **`gh pr merge`'s output is never trustworthy either way** — silent/empty stdout can mean success,
@@ -159,3 +164,11 @@ alone did not catch.
   about every other mounted file in the deploy-layers table. Before trusting any "in sync" claim for a
   mounted file you're about to depend on, check that specific file directly (mtime/hash/grep for the
   feature, or a live output field), not the general fact that a recent image shipped clean.
+- **"Closed on merge" is not deployed — for the monitor, nothing transports it** (S119). #312 merged
+  at 10:11 and the old `weewx_monitor.py` kept running until 16:11; ops#257 limb 3 had been closed on
+  the merge. Before trusting "the monitor now does X", `marvinctl --tenant weewx sha` the file against
+  dev's tip and read the `Remedy armed:` startup line.
+- **systemd `Environment=A=b c` keeps `b` and drops `c`**, logging `Invalid environment assignment,
+  ignoring: c` only in the unit's journal — five days of warnings that no `unit` status read showed
+  (#316). Quote any value with a space, and after any unit change read the startup line that prints
+  the parsed value, not the file.
