@@ -67,15 +67,22 @@ timestamp and the corrected consumer list.
    implements**. Fix the comment or implement the lifecycle; don't leave both.
 6. **Fix `ExecStop=docker stop` in `weewx.service`** — contradicts DEC-0008 (`docker kill`, never
    `docker stop`), baked in at the DEC-0118 cutover. Needs the same root-edit path as job 4.
-7. **Upstream issue/PR to `lheijst/rtldavis`** — the patch header is already most of the text, and
+7. **Document the DVB blacklist step — a public first-run failure we still don't mention (ops#216
+   Finding 1).** On vanilla Debian/Ubuntu the kernel auto-loads `dvb_usb_rtl28xxu` and claims the
+   RTL2832U, after which `rtl_sdr` cannot open it. Grepped `origin/dev` at S117:
+   `blacklist|dvb_usb|rtl28xxu|modprobe` → **0 hits**, positive-controlled (`RTL-SDR` → 48,
+   `rtl_test` → 14). Never needed here because DSM's kernel ships no DVB modules — but this is a
+   **public, published** extension, so every Debian/Ubuntu installer hits it and our docs are
+   silent. README/install docs. ops#216 carries the finding; this line is why it isn't invisible.
+8. **Upstream issue/PR to `lheijst/rtldavis`** — the patch header is already most of the text, and
    the deploy now gives it production evidence. Draft in `docs/upstream/` (gitignored), owner tone
    review, **never posted without a go**.
-8. **Audit Phase 2, session A (mechanical, Sonnet):** version/doc sync per the BACKLOG item.
-9. **Audit Phase 2, session B (judgment, Opus):** runtime-emitted internal IDs, driver docstrings,
-   stale test refs, the unfailable assertion (`test_input_staleness.py:195`), `ops/` banners.
-10. **Audit Phase 2, session C (design, owner + Opus):** public-surface reorg. Needs DECs.
-11. **Port `campaign_analyze.py` to marvin** (ops#250) — low priority; campaigns are over.
-12. **Durable logrotate fix for marvin** — `logs/` keeps only two rotated days.
+9. **Audit Phase 2, session A (mechanical, Sonnet):** version/doc sync per the BACKLOG item.
+10. **Audit Phase 2, session B (judgment, Opus):** runtime-emitted internal IDs, driver docstrings,
+    stale test refs, the unfailable assertion (`test_input_staleness.py:195`), `ops/` banners.
+11. **Audit Phase 2, session C (design, owner + Opus):** public-surface reorg. Needs DECs.
+12. **Port `campaign_analyze.py` to marvin** (ops#250) — low priority; campaigns are over.
+13. **Durable logrotate fix for marvin** — `logs/` keeps only two rotated days.
 
 **Carried forward, untouched:** NAS-LEASE cross-host wiring (low) · `CONSTANTS.md` infra re-verify ·
 ops CONSTANTS §5 register row check (`ef8e9af8`) · GitHub Support purge ticket (verify an old SHA
