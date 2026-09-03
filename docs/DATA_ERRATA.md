@@ -444,3 +444,35 @@ the bad reading, against a 60–90% baseline every other minute — reception qu
 already-computed corroborating signal that neither the driver's frame co-rejection nor
 `dewpoint_service.py`'s delta filter currently consults. See `BACKLOG.md` for a proposed
 reception-quality-correlated wind guard raised in response to this incident.
+
+---
+
+## DISC-0001 — `rxCheckPercent` steps ~73% → ~99% at the DEC-0135 deploy (not an error)
+
+**Not an `ERR-####`.** No observation is wrong, before or after. This is a **metric-definition
+discontinuity**, recorded here because it is the file anyone consults when a stored series does
+something abrupt, and because a step of ~26 points in a field that is written into **every archive
+record** will otherwise be re-discovered later as a real event.
+
+**What changed.** Until the DEC-0135 deploy, the Go demodulator discarded the transmitter's
+byte-identical re-sent packets and the pending timer booked each as `packet missed` (DEC-0134).
+`rxCheckPercent` is derived from those counters, so it under-reported a ~99% link as ~73% —
+**for the entire life of the receiver**, across both hosts and every gain setting. After the fix
+the repeats are counted as the receptions they always were.
+
+- **Direction:** a step **up**, at the deploy timestamp. Not a reception improvement — the RF link
+  did not change, and no weather value in any record before or after this point is affected.
+- **Scope:** `rxCheckPercent` only. Sensor fields, rain, wind and every derived quantity are
+  untouched — the discarded packets were byte-identical, so nothing was ever lost.
+- **Correction status:** ⛔ **not corrected, deliberately.** Historical values are honest reports
+  of what the driver measured at the time; rewriting them would destroy the record of a real
+  instrument fault. Compare across the boundary only with the offset in mind.
+
+**Consumers whose thresholds are keyed to the old baseline** and go stale at the same instant:
+`weewx_monitor.py`'s reception alerting, `BACKLOG.md` and `docs/ROADMAP.md`'s stated figures, the
+dashboard's (via eaglehunt-ops#256, DEC-0010) — **and the proposed reception-quality-correlated
+wind guard raised under `ERR-0004`/`ERR-0006` below**, whose "collapsed to 9.2% / 13.2% against a
+60–90% baseline" discriminator is stated in the pre-fix scale. That guard is not yet built; when it
+is, its thresholds must be derived from post-fix data, and the *pre*-fix incident figures it cites
+must be read against the pre-fix baseline, not the new one. The signal itself survives — a
+reception collapse during a corrupt frame is still a collapse — but every number in it moves.

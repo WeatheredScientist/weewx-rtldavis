@@ -283,9 +283,13 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     Most such copies pick up bit errors, fail CRC and are dropped silently inside
     the Go binary (protocol.go ~L218), but ~1 in 65536 passes by chance and
     delivers garbage. Neither dedup catches a CORRUPTED near-duplicate: Go's
-    (`seen == lastRecMsg`, main.go ~L394) and the driver's own
-    (`data != self._last_pkt`, ~L1209) are both EXACT-equality, so a corrupted
-    copy is not a duplicate and sails past both.
+    (`seen == lastRecMsg`, main.go) and the driver's own (`pkt_key !=
+    self._last_pkt`, in genLoopPackets) are both EXACT-equality, so a corrupted
+    copy is not a duplicate and sails past both. DEC-0135 (S116) narrowed the Go
+    side to a 500 ms window, which is the double-decode population this filter
+    was built for -- the identical payloads arriving one loop period later were
+    the transmitter re-sending unchanged data, never a decode artifact, and are
+    now forwarded and suppressed one layer up instead of booked as misses.
     So CRC is not a defense here, and a decode-layer plausibility check is the
     only one available at this layer. The ORIGINAL driver treated *any* negative
     counter delta as a 127->0 wraparound and unconditionally added 128 to
@@ -326,6 +330,30 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     if delta < 0 or delta > max_tips:       # small-negative glitch, or implausible spike
         return None
     return delta
+
+
+def dedup_key(data):
+    """The identity of a reading, for deciding whether a packet repeats the last one.
+
+    WHY THIS IS NOT JUST `data` (DEC-0135, S116):
+    ---------------------------------------------
+    `data` carries curr_cnt0..3 -- the Go binary's CUMULATIVE per-transmitter
+    message counters, which advance on every accepted packet. Comparing whole
+    dicts therefore always found a difference, so genLoopPackets' duplicate
+    guard was unreachable from the day it was written and no test covered it.
+    It went unnoticed because the Go demodulator was dropping repeats itself --
+    and mis-booking each as `packet missed`, which is what held rxCheckPercent
+    at ~73% on a ~99% link. With the Go side time-gated, repeats now reach the
+    driver and this guard is what decides.
+
+    The counters are consumed by _update_stats() before this is called, and
+    rxCheckPercent is derived from them there, so dropping them here fixes the
+    comparison without touching the metric. What remains is the sensor reading,
+    which is what "the same packet" means.
+
+    Pure function (no I/O) so it is unit-testable -- see tests/test_dup_time_gate.py.
+    """
+    return {k: v for k, v in data.items() if not k.startswith('curr_cnt')}
 
 
 # --- Sensor plausibility filter (S33 bad-packet fix, DEC-0029) ---
@@ -1577,7 +1605,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             'missed': [0] * 4,         # missed messages per transmitter current archive period
             'pct_good': [None] * 4,    # percentage of good messages per transmitter
             'pct_good_all': None,      # percentage of good messages for all transmitters
-            'dup_count': 0}            # DEC-0035 (S43): Go demodulator double-decodes this period
+            'dup_count': 0,            # DEC-0035 (S43): Go demodulator double-decodes this period
+            'repeat_count': 0}         # DEC-0135 (S116): transmitter re-sent an unchanged payload
 
     def _reset_stats(self):
         self.stats['last_ts'] = self.stats['curr_ts']
@@ -1586,6 +1615,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             self.stats['pct_good'][i] = None
         self.stats['pct_good_all'] = None
         self.stats['dup_count'] = 0
+        self.stats['repeat_count'] = 0
 
     def _update_stats(self, curr_cnt0, curr_cnt1, curr_cnt2, curr_cnt3):
         # update the statistics
@@ -1604,6 +1634,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         # debug expedition into a standing measurement of how often the Go
         # demodulator double-decodes a single RF burst.
         loginf("duplicate frames this period: %d" % self.stats['dup_count'])
+        # DEC-0135 (S116): the other half of the pair. Before the Go time-gate,
+        # these were counted as duplicates AND booked as misses; dup_count was
+        # roughly 10x its true value and rxCheckPercent about 26 points under.
+        loginf("repeat frames this period: %d" % self.stats['repeat_count'])
         # if not the first time since startup
         if self.stats['last_ts'] > 0:
             total_count = 0
@@ -1857,6 +1891,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # (no debug gate); summarized once per archive period
                         # by _update_summaries().
                         self.stats['dup_count'] += 1
+                    if "repeat packet:" in _line:
+                        # DEC-0135 (S116): Go accepted an identical payload that
+                        # arrived a full loop period later -- a real transmission
+                        # whose bytes happened not to change. Counted here so the
+                        # transmitter's repeat fraction stays a standing
+                        # measurement; the packet itself is suppressed below.
+                        self.stats['repeat_count'] += 1
                 for data in PacketFactory.create(self, lines):
                     if data:
                         time_last_received = int(time.time())
@@ -1882,15 +1923,38 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                             # packet instead of yielding a standalone one.
                             self._cache_pending_freq_fields(data)
                             continue
-                        if data != self._last_pkt:
-                            self._last_pkt = data
+                        # DEC-0135 (S116): this guard was written to drop a
+                        # repeated reading and has never once fired, because
+                        # `data` carries curr_cnt0..3 -- Go's cumulative message
+                        # counters, which advance on EVERY accepted packet and so
+                        # made the dict comparison unconditionally true. It went
+                        # unnoticed because the Go binary was dropping repeats
+                        # itself (and mis-booking each as a miss); now that it
+                        # forwards them, this is the layer that decides.
+                        #
+                        # _update_stats() above has already consumed the counters,
+                        # and rxCheckPercent is computed from them there -- so
+                        # excluding them here fixes the comparison without
+                        # touching the metric. What is left is the sensor
+                        # reading, which is what "the same packet" means.
+                        #
+                        # Suppressing is deliberate: the transmitter re-sends
+                        # BYTE-IDENTICAL data, so a repeat carries no information,
+                        # and forwarding it would add ~37% loop packets, InfluxDB
+                        # points and loop-JSON writes for nothing.
+                        pkt_key = dedup_key(data)
+                        if pkt_key != self._last_pkt:
+                            self._last_pkt = pkt_key
                             packet = self._data_to_packet(data)
                             if packet is not None:
                                 dbg_parse(3, "pkt= %s" % packet)
                                 yield packet
                         else:
-                            if packet:
-                                dbg_parse(3, "ignoring duplicate packet %s" % packet)
+                            # Was `if packet:` -- a NameError waiting for the
+                            # first iteration on which this branch was reached
+                            # before `packet` was ever bound. Unreachable while
+                            # the guard above could never be false; reachable now.
+                            dbg_parse(3, "ignoring repeat packet %s" % pkt_key)
                     elif lines:
                         # NOTE (S24 L6): effectively unreachable -- PacketFactory
                         # .create() drains `lines` to empty before this loop ends,
