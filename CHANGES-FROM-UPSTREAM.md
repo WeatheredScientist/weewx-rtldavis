@@ -148,6 +148,28 @@ duplicate. Do not trust a null from an instrument you have not proven can see a 
 
 ---
 
+## `rtldavis` (the Go demodulator) — `patch/rtldavis-dupgate.patch`
+
+**A new kind of divergence for this repo: a fork of the Go binary's source, not of a Python file.**
+The demodulator is not vendored here — `Dockerfile` fetches `src.tgz` from
+`weewx-contrib/weewx-rtldavis` at an **unpinned `refs/heads/main`** and builds it. Our change ships
+as a tracked patch applied during the build, so the divergence stays one reviewable file.
+
+**What it changes (DEC-0135):** the duplicate-packet filter compared payload bytes with no time
+bound, so a payload the transmitter **re-sent one loop period later** was dropped without hopping,
+and the pending timer booked the received packet as `packet missed`. Measured live: ~27% of all
+transmissions, holding `rxCheckPercent` at ~73% on a ~99% link. The patch gates the drop on
+`-dupwindow` (default 500 ms — above the same-burst re-decode cluster at ~2 ms, below the shortest
+loop period of 2.5625 s) and logs the survivors as `repeat packet:`.
+
+**Belongs upstream** — it is not station-specific: any Davis station whose transmitter re-sends
+unchanged payloads has been mis-reporting reception the same way. Draft lives in `docs/upstream/`
+(gitignored); see `docs/UPSTREAM-THREADS.md`.
+
+**Maintenance note:** because the tarball is unpinned, the patch is also a tripwire. It is applied
+with `--batch --forward` and followed by a `grep -c dupwindow` assertion, so a build **fails loud**
+rather than silently producing an unpatched binary if upstream's source moves.
+
 ## `influx.py`
 
 Base: `david-lutz/weewx-influx2` (itself a fork of `matthewwall/weewx-influx` for InfluxDB 2.x).

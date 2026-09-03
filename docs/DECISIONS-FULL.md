@@ -8719,3 +8719,139 @@ RF ceiling. The RF-tuning campaigns (A–D) were measuring the ISS's repeat frac
 "don't re-sweep" evidence. Reproduction is 15 min: stop weewx, run the standalone binary with
 `-v`, count `duplicate packet` lines against `packet missed`. Raw captures (rtl_test log,
 demodulator log, full-band CSV) are in local `ARCHIVE/s115-capture/` (gitignored, never tracked).
+
+## DEC-0135 — The duplicate filter is time-gated, the repeat is suppressed one layer up, and the campaigns are not re-run: the fix unbiases the statistic, it does not improve reception
+
+**Status:** Accepted (design + implementation; deploy pending) · **Date:** 2026-09-02 (S116) ·
+**Implements** DEC-0134's pending fix · **hardens** DEC-0134's root cause with a test it had not
+run · **narrows** DEC-0035's duplicate filter to the population it was actually built for ·
+**demotes** the campaign A–D negative results from *settled negative* to *untested* ·
+**answers** DEC-0078/DEC-0117's build-host question
+
+### The verification DEC-0134 owed
+
+DEC-0134 rested on payload identity and timing. One alternative survived that evidence and would
+have inverted the conclusion: if the packet arriving one loop period later were our own buffer
+**replaying** a stale decode rather than a fresh reception, then the transmission really was
+missed and the miss booking was honest. Distinguishing them is free — every decode in the S115
+capture is preceded by its own demodulator line carrying a correlation magnitude `m1` and a
+16-symbol vector `x`. Cross-tabulated against the gap to the previous identical payload:
+
+| gap to prior identical packet | fresh demodulation | replay (identical m1/x) |
+|---|---|---|
+| < 0.05 s | 8 | 1 |
+| 0.05 – 2.5 s | 0 | 0 |
+| 2.5 – 3.0 s | **80** | 0 |
+
+**80 of 80** long-gap duplicates were demodulated from fresh samples, on a different channel,
+after a retune. They are real over-the-air receptions. Two supporting measurements: the low
+cluster medians **2.1 ms** and the high cluster **2.8117 s**, exactly `idLoopPeriods[4]`
+(2.5625 + 4 × 0.0625 s), a **1300× separation with nothing in between**; and **89 of 89**
+consecutive same-message-type pairs are byte-identical while *no* same-type pair is ever
+non-identical — the signature of a deliberate re-send, not of coincidence.
+
+### The fix, in two layers
+
+**Go (`patch/rtldavis-dupgate.patch`, 5 hunks).** `lastRecTime` is added beside `lastRecMsg`; the
+byte-equality drop is gated on `curTime - lastRecTime < dupWindow`; survivors fall through to the
+normal path (counted, logged, hopped on) and log a distinct `repeat packet:` line. `lastRecTime`
+advances **only on acceptance** — advancing it on a drop would let a chain of re-decodes ratchet
+the window forward one drop at a time. Default **500 ms**, `-dupwindow` flag: ~240× above the
+re-decode cluster and below the shortest possible loop period (2.5625 s, transmitter id 0), so it
+cannot swallow a real transmission on any id. The flag exists because rebuilds here are expensive
+and it lets the validation run sweep values on one binary.
+
+**Python (`rtldavis.py`).** With repeats now arriving, `self._last_pkt` decides whether one
+becomes a loop packet — and it could never fire: `data` carries `curr_cnt0..3`, the Go binary's
+cumulative counters, which advance on every packet, so the dict comparison was unconditionally
+true. **The guard has been dead code since it was written**, with no test covering it, hidden
+because the Go side was dropping repeats itself. Extracted as the pure function `dedup_key()`
+(the `rain_delta_tips` precedent) excluding those counters. `_update_stats()` consumes them first
+and `rxCheckPercent` is derived from them there, so the metric is untouched. The stale
+`else: if packet:` branch — a `NameError` waiting for the first iteration that reached it before
+`packet` was bound, unreachable only because the guard could never be false — is fixed in the same
+edit. A `repeat_count` stat mirrors `dup_count` so the suppression is measured, not silent.
+
+**Suppress, not emit (owner's call, recommended).** The re-sent payload is byte-identical, so it
+carries no information; forwarding it would add ~37% loop packets, InfluxDB points and loop-JSON
+writes for nothing. Suppressing keeps downstream volume and cadence exactly as today while the
+metric moves. Rain is safe either way (identical counter → delta 0).
+
+### Shipping it
+
+The Go source is not in this repo: `Dockerfile` curls `src.tgz` from `weewx-contrib/weewx-rtldavis`
+at an **unpinned `refs/heads/main`**. A tracked patch applied in the build was chosen over forking
+upstream (supply-chain weight for four lines) or vendoring the 3 MB Go tree into a WeeWX extension:
+it is the smallest reviewable diff in a public repo, it is the upstream PR verbatim, and it **fails
+loud** if that unpinned tarball shifts under us. `patch -p1 --batch --forward` plus a
+`test "$(grep -c dupwindow main.go)" = "2"` assertion, mirroring the existing `receiveWindow` echo.
+
+**The build-host question on BOOT's critical path is answered: `marvinctl build <path> -t <tag>` is
+a tier-2 own-resource verb** — self-service, no owner mediation, no NAS. `/srv/docker/weewx/`
+already carries the whole `build-v2.0.4 … build-v2.0.14` tree, so DEC-0078's `git archive` → build
+→ `BUILD-EXIT` workflow transfers unchanged; the `docker save`/`load` fallback is not needed.
+
+### What it does NOT do
+
+**It unbiases the statistic; it does not improve reception.** The weather data has been correct
+throughout — the discarded packets were byte-identical. The one place a real gain could have hidden
+was `maxmissed` re-inits, since a repeat today both fails to reset `chAlarmCnts` and increments it
+via the miss branch. Measured over the S115 window, `chAlarmCnts` reached **{1: 74, 2: 7} — max 2,
+against a threshold of 51**. That benefit is not real here; the re-inits are genuine RF-dead
+episodes (blocker 2), untouched by this.
+
+### The campaigns are not re-run
+
+The argument *for* re-running is real and is recorded so it is not lost: **a flat result from an
+insensitive instrument is not evidence of flatness.** Campaigns B–D swept gain, `-ex`, siting and
+offset against a metric dominated by a transmitter property, and Campaign B's own run-to-run
+scatter (sd 8.47 at gain 496, sd 4.67 at 372) exceeded the entire real signal. DEC-0134's
+"negative results remain valid as don't-re-sweep evidence" is therefore **too strong**: those
+results are demoted to *untested*, and `docs/ROADMAP.md` / `BACKLOG.md` are reconciled to say so.
+
+They are still not worth re-running. Total remaining headroom is **~6 pts worst case** — 0.3% real
+loss in the capture window, ~2 pts of channels 46–48 RFI (DEC-0133), ~4 pts of RF-dead runs ≥10
+(blocker 2) — against DEC-0059's **2.0-pt adoption bar**, and both named mechanisms are already
+identified and are **not gain-responsive**. Re-sweeping would re-measure axes we have independent
+reason to believe are flat, for a prize that mostly is not on them.
+
+**Instead: re-baseline by observation.** Let the fix run several days and read the honest number —
+no apparatus, no pre-registration, no prod disruption. ~99% closes the question; materially lower
+is a new signal that a campaign could, for the first time, actually resolve. The real prize is
+diagnostic: an RF-dead episode is currently buried in ~27% of background pseudo-loss, and against a
+flat ~99% baseline **blocker 2 becomes measurable for the first time**.
+
+### Validation before prod
+
+Provable without deploying — rebuild, run the patched binary standalone with `-v` for 15 min as
+S115 did. Pre-registered against that baseline (295 hops / 214 decoded / 81 missed / 89 duplicate
+lines): `duplicate packet` **89 → ~9**; `repeat packet` **~80** appears; `packet missed`
+**81 → ~1**; decoded **214 → ~294**. Only then does it go near prod, bundled with
+`REMEDY_MODE=restart_unit` and the v2.0.14 `main` promotion.
+
+Local gates, this session: ruff clean · **466 passed / 17 skipped** (+9 new, `tests/test_dup_time_gate.py`) ·
+mypy clean, **67 files** (+1 — the count is the only proof the new file was checked, S76) · secret
+gate exit 0 with a positive control that fired. The patched Go source **compiles** (real cgo build,
+2.98 MB binary) and its build check was positive-controlled with a deliberate error. The nine new
+tests were **mutation-tested**: five mutations (buggy whole-dict compare, gate removed, `dupwindow`
+raised above the minimum loop period, reset dropped, log renamed) each failed the suite, and the
+restore is green.
+
+### A consequence to record
+
+`rxCheckPercent` is written into every archive record, so post-fix the archive carries ~99% while
+all history shows ~73%, with a step at the deploy timestamp. Not bad data — a metric-definition
+change — but it will read as a real event to any later analysis, the dashboard's history views
+included. It is documented as a dated discontinuity in `docs/DATA_ERRATA.md` so nobody
+re-discovers it as an anomaly.
+
+### Rationale
+
+Two lessons the repo keeps re-learning drove the shape of this. First, DEC-0035/DEC-0071's *a
+passing test proves nothing if it is structurally blind*: the first draft of these tests asserted
+against a **copy** of the dedup expression rather than the shipped one, which would have stayed
+green through any change to the driver — hence `dedup_key()` as a real, imported, mutation-tested
+function. Second, *a green exit code is not evidence*: `./scripts/check_secrets.sh | tail` reported
+exit 0 while the script itself exited 1 — the documented false-zero, met again in the act of
+running the secret gate — and the real block was a false positive on a local named `key`, fixed by
+renaming the variable rather than widening the scanner's allow-list.
