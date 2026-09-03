@@ -121,6 +121,12 @@ alone did not catch.
 - **Fresh/low soak counters usually mean a scheduled arm swap, not a fault** — the soak window is
   "since container start". Confirm against the state file *and* container uptime before treating it
   as anything else (S93, S94).
+- **Harvest a debug window WHOLE before the daily rotation — not the one grep today's question
+  needs.** S114 pulled only `grep missed` from the S113 debug window; by S115 the Sep 1 log had
+  rotated out of `logs/` (only 08-28/08-29 copies and today's file remain), taking the ~12,000
+  received-packet, `Hop:`, and freqError lines with it. The miss lines alone were enough to find a
+  ~7.75 s periodicity (DEC-0133) — and not enough to resolve its alias or check freqError against it.
+  `marvinctl --tenant weewx grep DEBUG <log>` into scratch on the day, then grep locally (S115).
 
 ## §4 Liveness and deployment — proving a thing is actually running
 

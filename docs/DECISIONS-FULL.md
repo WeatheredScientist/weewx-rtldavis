@@ -8481,3 +8481,140 @@ for the window, since only one process can hold the dongle — so this character
 environment the antenna sees, but cannot correlate burst timing against actual packet loss.
 Blocker 6 stays open. Raw CSV (60 rows, 19:34:32–19:39:52 ET) kept in session scratch, not
 committed to the repo — a data artifact, not a documented interface.
+
+## DEC-0133 — Cross-referencing S114's capture against the miss histogram: RFI explains channels 46–48 cleanly but only ~2 pts of the ceiling; the bulk of the loss is a fixed-period (~7.75 s) modulation that is not locked to the hop clock
+
+**Status:** Accepted (analysis) · **Date:** 2026-09-02 (S115) ·
+**Follows** DEC-0132's "checkable for free" next step · **reframes** blocker 6 ·
+**does NOT close blocker 6**
+
+Job 1 of S115 was arithmetic over data already in hand: S114's `rtl_power` CSV (60 rows) and the
+S113/S114 debug window's 3,047 `packet missed` lines (both in session scratch, neither committed).
+No prod access beyond read-only `marvinctl` checks; no capture; no campaign.
+
+### (a) With the receiver's passband applied, the RFI does explain channels 46–48
+
+DEC-0132 compared spike frequencies to channel centres in bare MHz and read the result as
+"weakens the tie". That comparison skipped the receiver's own selectivity: the demodulator runs at
+`19200 × 14 = 268,800` samples/s (`dsp.go:210`), so a burst matters to a channel only if it lands
+within roughly **±134 kHz** of that channel's centre. Re-clustering the capture at that width
+(44 above-floor clusters in the same 16 rows DEC-0132 counted):
+
+| ch | MHz | misses (DEC-0130) | clusters within ±134 kHz | strongest (dB over floor) |
+|---|---|---|---|---|
+| 44 | 924.496 | 79 | 2 | 11.5 |
+| 45 | 924.998 | 77 | **0** | — |
+| 46 | 925.500 | **128** | **8** | 14.6 |
+| 47 | 926.002 | **182** | **6** | **19.1** (13 kHz off-centre) |
+| 48 | 926.503 | **149** | **6** | 17.3 |
+| 49 | 927.005 | 93 | **0** | — |
+| 50 | 927.507 | 67 | 2 | 16.2 |
+
+The two channels with zero in-passband exposure (45, 49) are the unremarkable ones; the three with
+6–8 exposures are exactly the elevated three; the channel with the strongest, most on-centre hit
+(47) has the most misses. DEC-0132's counter-examples — 925.15 MHz and 927.15–927.21 MHz — sit
++150 to +210 kHz from channels 45 and 49, *outside* the passband, which is why those channels are
+fine. **The exclusive tie holds once selectivity is applied; DEC-0132's "weakens" was an artifact of
+the bare-MHz comparison.**
+
+The interferer has structure: the same frequency triplets recur across windows (924.78/.81/.83,
+925.16/.19/.21, 925.56/.58/.61, 925.96/.98/.99, 926.36/.38/.41, 927.15/.18/.21 MHz), each ~25 kHz
+apart internally and the groups **~400 kHz apart** — one frequency-hopping device with a fixed
+channel comb, not random traffic. A 400 kHz comb against Davis's 501.75 kHz plan aligns within
+±134 kHz for about three of every four channels, so if this device covered the whole 902–928 MHz
+band, channels 40–43 would be elevated too. They are not (72–79 misses), so either the comb is
+confined to the top of the band or the S114 3 MHz window caught only part of it. Separate from the
+comb: two on-channel narrowband hits at channels 44 and 50 (source unknown, not the ISS — same
+channel in consecutive 10 s windows, which a 149 s revisit cannot do) and the single 193 kHz-wide
+near-full-scale event at 927.34 MHz.
+
+### (b) Explaining channels 46–48 explains ~2 points, not 25
+
+The other 48 channels average 69.7 misses (sd 10.0; channels 46–48 are z = 5.8 / 11.2 / 7.9). The
+excess at 46–48 over that baseline is **~250 misses of 3,806 — 6.6% of all misses, ~2 pts of the
+~30 pt loss in the window.** The remaining ~28 pts are flat across all 51 channels, including the
+44 channels nowhere near the captured band. **The ceiling is frequency-independent.** Nothing
+found in 924.5–927.5 MHz can be it, whatever it turns out to be.
+
+### (c) The bulk of the loss is periodic in wall-clock time, and not locked to the hop clock
+
+The 3,047 miss timestamps carry structure nobody had looked for:
+
+- **Miss-to-miss gaps peak at 3 hops** (1,176 of 2,357 runs, 50%), then 2 (497), 5 (228), 4 (142),
+  6 (104), 8 (95), 11 (27) — gaps ≡ 0 or 2 (mod 3) dominate, ≡ 1 is rare.
+- **Autocorrelation by hop lag** peaks at 3, 6, 8, 11, 14, 17, 19, 22, 25, 28, 31, 33, 36, 39, 41,
+  44, 47, 50, 52, 55, 58 — multiples of **2.755 hops** — with **no decay out to 60 hops** (~3 min).
+- **Consecutive misses are anticorrelated:** 12% of runs are ≥2 long vs 28% expected for
+  independent misses at p = 0.32.
+- **A Rayleigh scan of miss times** (steady stretch after the last re-init, 14:10–18:16 ET,
+  n = 1,553) peaks at **T = 7.7495 s** (R = 0.250, z = nR² = 97). The hop-locked alternative —
+  11/4 of the fitted ISS interval 2.81243 s = 7.7342 s — scores R = 0.049 (z = 4), its phase
+  wanders freely between 40-min chunks, and folding the misses modulo 11 hops is flat
+  (123–167 per bin). **The period is a wall-clock period, not a hop count.** On a 2.81 s sampling
+  grid it is indistinguishable from its aliases (~4.41 s, ~2.06 s, …); the true fundamental is one
+  of that set.
+- **The modulation is smooth, not a hard blank:** folded at 7.7495 s the miss density runs from
+  ~0.5× to ~1.6× the mean across the cycle (miss probability roughly 0.17 → 0.5), and the phase
+  holds within about ±0.2 cycle across 40-min chunks — stable to ~0.05% over hours, which is
+  mechanical- or RC-timer-grade, not crystal-grade.
+
+Loss decomposition over the whole 9,463-hop window: **32.2% missed = 21.9 pts in isolated single
+misses (the periodic component lives here) + 5.3 pts in pairs + 0.7 pts in 3–9 runs + 4.3 pts in
+runs ≥ 10** (the four `maxmissed` re-inits and the 25–42-long dead stretches — blocker 2's class,
+not this one). The periodic component is roughly two-thirds of everything lost.
+
+### What this rules out, and what survives
+
+Ruled out or disfavoured for the periodic component: any hop-locked mechanism (message-type
+rotation, hop-table position, per-channel AFC history — all would fold cleanly on the hop grid,
+and none does); host-side stalls (cgroup cpu/memory/io pressure all zero on both the container and
+`weather.slice`, no throttling, container at ~1.8% CPU, no timer near the period — and the loss was
+**72.83% on Foundation vs 72.82% on marvin**, two unrelated hosts agreeing to 0.01 pt); an in-band
+interferer in 924.5–927.5 MHz (a 30%-duty process there would have lit every 10 s window; the floor
+was flat); a static frequency offset (DEC-0129). Still standing: the parts that moved intact between
+hosts — the dongle and its USB geometry (`ReadAsync` with one 1 KB buffer into an unbuffered
+`io.Pipe`, `main.go:262`), the Go pipeline, the antenna and feedline, the ISS itself, and the outdoor
+path. A smooth periodic modulation with a wandering phase reads most naturally as a **frequency
+wobble** (ISS transmitter or receiver LO — DEC-0129 tested static offsets only, and a 7.75 s wobble
+is far too fast for a per-channel AFC with a 149 s revisit) or a **slow mechanical modulation of the
+path**; either would be gain-flat, siting-flat and window-flat, which is exactly the profile
+DEC-0128/0129 measured.
+
+One fact split the field and was not in any doc until now: **the owner's "single-digit loss" Davis
+console receives *this* ISS at *this* property** (owner, S115). So the ISS and the outdoor path are
+exonerated — a Davis receiver in the same house decodes the same transmissions with ~5% loss — and
+**the periodic component lives in our receiver chain: antenna/feedline, dongle, USB geometry, or the
+Go pipeline.**
+
+### Next step — a designed capture, not another 10 s-integration sweep
+
+The received-packet side of the debug window is gone: `/srv/docker/weewx/logs/` now holds only
+Sep 2's `weewx.log` (daily rotation; the Sep 1 file is not among the rotated copies) and S114
+harvested the `missed` grep only. Only the miss lines survive, in session scratch. The next capture
+should be dongle-exclusive (weewx stopped, ~25–30 min, same self-service path as S114) and answer
+three questions at once, in this order:
+
+1. **Sample drops at the Go binary's own geometry** — `rtl_test -s 268800 -b 1024`, ~5 min,
+   locally timestamped: any periodic "lost bytes" reports at ~7.75 s (or an alias) implicate the
+   USB/dongle path outright.
+2. **Per-packet frequency error and timing** — the deployed `rtldavis` binary standalone with `-v`
+   (`-tr 16 -gain 372`), ~15 min: the verbose hop line prints the measured `lastFreqError` per
+   packet. A 7.75 s oscillation in that series is a frequency wobble and names the axis; its absence
+   pushes toward path or sample-stream mechanisms. Also yields the first received-plus-missed
+   sequence with µs timestamps.
+3. **In-band RF at sub-period resolution** — `rtl_power` over the full 902–928 MHz at `-i 1`, ~5 min:
+   a periodic in-band signal shows as a level that beats at the period; also settles whether the
+   400 kHz comb spans the band or stays near the top.
+
+All three tools are present in the prod image (`/usr/local/bin/rtl_test`, `rtl_power`, `rtl_sdr`,
+`rtl_fm`, `rtldavis`), so no image change is needed. `exec-ro` takes one whitespace-free token per
+argument (no `sh -c` wrappers), so each run is its own invocation.
+
+### What this changes
+
+Blocker 6 stays open but changes shape: it is no longer "which frequency slice" but "what oscillates
+at ~7.75 s (or an alias) in the chain the ISS, antenna, dongle and demodulator share." The
+channels-46–48 finding is **explained** (an FHSS neighbour on a ~400 kHz comb) and **demoted** to a
+~2 pt contributor. `BACKLOG.md`'s ceiling item is rewritten to match. A durable trap goes to
+`docs/GOTCHAS.md` §3: harvest a debug window whole before the daily rotation, not the one grep the
+current question needs.

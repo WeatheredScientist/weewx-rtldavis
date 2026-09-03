@@ -3,7 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-08-31 (S111 — targeted line update per DEC-0057, not a full pass; tripwire
+**Last updated:** 2026-09-02 (S115 — targeted line update per DEC-0057, not a full pass; tripwire
+still due S116.)
+Prior: 2026-08-31 (S111 — targeted line update per DEC-0057, not a full pass; tripwire
 still S116: DEC-0125 decided Campaign C's verdict (496 does not clear the bar at marvin's position,
 372 holds) — closed the Campaign B item's marvin-remeasurement thread, which DEC-0124 had left open
 last session. Nothing else touched.)
@@ -412,7 +414,10 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       move. With `-ex` already a wash (+0.45/−0.06), that is **three axes — gain, receive window,
       siting — all flat at ~73–75%**, so the missing ~25% is not SNR-limited and not reachable by
       tuning. The open question is no longer *which setting* but *where the ceiling is*; candidates
-      are in `BACKLOG.md`, cheapest-first, and none is another CLI sweep.
+      are in `BACKLOG.md`, cheapest-first, and none is another CLI sweep. **S115 (DEC-0133):** the
+      ceiling is **frequency-independent** (the channels-46–48 RFI cluster is explained and worth
+      ~2 pts) and the bulk of the loss is **periodic at ~7.75 s wall-clock, not hop-locked** —
+      `BACKLOG.md` item 8 is the designed capture that names the oscillating part.
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,

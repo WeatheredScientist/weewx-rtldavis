@@ -6,6 +6,26 @@ under [Pre-S16].
 
 ---
 
+## [S115] — 2026-09-02 — DEC-0133: RFI explains channels 46–48 but only ~2 pts; the bulk of the loss is a fixed ~7.75 s wall-clock modulation, not hop-locked
+
+- **DEC-0133 (analysis, no capture, no prod change).** Crossed S114's `rtl_power` CSV against
+  DEC-0130's 51-channel miss histogram with the demodulator's ±134 kHz passband applied: in-band
+  exposure picks out exactly channels 46/47/48 (8/6/6 bursts, none for 45/49) — an FHSS neighbour on
+  a ~400 kHz comb — so DEC-0132's "the tie weakens" was a bare-MHz artifact. The cluster is ~250 of
+  3,806 misses (~2 pts); the other 48 channels sit flat at 69.7 ± 10: **the ceiling is
+  frequency-independent.**
+- **New finding:** the 3,047 miss timestamps are periodic in wall-clock time — Rayleigh peak at
+  7.7495 s (z = 97) vs z = 4 for the hop-locked 11/4-hop alternative; gaps peak at 3 hops,
+  autocorrelation undecayed to 60 hops, consecutive misses anticorrelated, smooth modulation (miss
+  probability ~0.17 → 0.5). Isolated single misses carry 21.9 of the window's 32.2 pts. Host stalls
+  ruled out read-only (cgroup pressure zero; loss identical to 0.01 pt across Foundation and marvin).
+- **Blocker 6 reframed** ("what oscillates at ~7.75 s or an alias in the shared chain"); `BACKLOG.md`
+  ceiling item rewritten with item 8, a designed ~25 min dongle-exclusive capture (`rtl_test` at the
+  Go geometry, standalone `rtldavis -v` for per-packet freqError, full-band `rtl_power -i 1`).
+- **Data loss noted:** the Sep 1 debug window's received-packet lines rotated away unharvested —
+  only S114's `missed` grep survives (session scratch). Trap logged in `docs/GOTCHAS.md` §3.
+- S111's entry rolled verbatim to `CHANGELOG-ARCHIVE.md`.
+
 ## [S114] — 2026-09-02 — Spectrum capture finds wideband RFI, not a clean 925.5–926.5 MHz interferer (DEC-0132); ops#253 fully closed; PR #305 merged
 
 - **Merged PR #305** (Foundation's stopped weewx container decommissioned).
@@ -89,41 +109,3 @@ under [Pre-S16].
 - Phase 0 before the rewrite: NAS SSH port rotated (owner, DSM), UniFi port-forwarding verified
   empty — the exposed values were never WAN-reachable. Ops session briefed cross-session for their
   own nas.env/alias/DEC follow-through.
-
-## [S111] — 2026-08-31 — Campaign C's real verdict: 496 does not clear the adoption bar at marvin; 372 holds (DEC-0125)
-
-- **ops#235 fixed mid-session (ops-side): `marvinctl exec-ro`'s missing `-i` flag was closing
-  container stdin.** Verified end-to-end with the exact read DEC-0124 left blocked: a read-only
-  `sqlite3` query piped through `exec-ro` against the live, mode-`0500` archive DB returned 1333
-  clean rows, exit 0. Confirmed on ops#235.
-- **Ran DEC-0069's own `campaign_analyze.py` logic (unmodified) against the real per-minute data.**
-  Result: **A (372) 72.82% (n=368) vs B (496) 73.98% (n=350), B +1.16 pts — under DEC-0059's 2.0-pt
-  adoption bar**, smaller than DEC-0124's coarse 5-min proxy (+1.87 pts), not larger.
-- **Verdict logged as DEC-0125: 496 does not clear the bar at marvin's RF position — gain holds at
-  372, no config change.** Per `BACKLOG.md`'s S107 pre-commitment, this is a standalone finding
-  that Foundation's DEC-0115 answer doesn't transfer to marvin's site, not a reversal of DEC-0115.
-  Also verifies `BOOT.md` job 4 (archive DB opens `mode=ro` cleanly under `journal_mode=DELETE`).
-- **Reconciled:** `CONSTANTS.md`'s gain row/hardware-site prose/timeline, `docs/ROADMAP.md`'s
-  Campaign B/C item (now closed as a marvin result too), `BACKLOG.md`'s gain re-sweep item (closed).
-- **Fixed two stale claims `BOOT.md` was carrying from ops#233.** The restart-grant question is
-  resolved (MARVIN-DEC-0099: the grant already exists, corrected upstream mid-Campaign-C — this
-  file was still quoting the earlier "no grant exists" finding), and `usb_watchdog.sh`'s fate is
-  decided (retiring, MARVIN-DEC-0100), not still open.
-- **Campaign D pre-registered and shipped (DEC-0126): a marvin-site gain pilot, launching
-  2026-08-31T21:00 ET.** Six gain-only blocks HIGH→LOW — 496, 449, 402, 372, 328, 207 — reusing
-  Foundation's original pilot points plus 207 (dropped from campaign C on a Foundation-only
-  judgment DEC-0125 just showed doesn't transfer). Arm-selection input only, never adoption
-  evidence. `arm_cmd()` gains `P207`; `SCHEDULE=` populated; `campaign_analyze.py`'s `LEGENDS`
-  gains `"D"`; `tests/test_rx_experiment.py` gains `_require_campaign_d()` + 3 structural tests,
-  and `_require_campaign_b()`'s over-broad gate ("any P* row") is corrected to require the H hold
-  specifically — the old gate would have misfired campaign B's assertions against campaign D's
-  pilot-only shape. Full suite green (465 passed / 9 skipped).
-- **Campaign D deployed and armed live on marvin, same session.** `rx_experiment.sh` shipped and
-  hash-verified, Campaign C's stale baseline snapshot archived to `.campaignC` (was blocking
-  `install`), `install` succeeded (fresh baseline snapshotted, schedule armed), `logs/campaign.inhibit`
-  set, monitor confirmed healthy. No further action needed for the 21:00 ET launch. Also caught and
-  reverted a wrong turn: attempted wiring `marvinctl pull`-based deploy for weewx before finding
-  marvin's own MARVIN-DEC-0079, which already tried and rejected that design for this tenant (the
-  on-disk layout doesn't match this repo's structure — deploy stays flat/scp, deliberately).
-
----

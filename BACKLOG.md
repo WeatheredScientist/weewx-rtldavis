@@ -330,34 +330,42 @@ failed resets currently produce no further action.
     privacy-first question of whether the governance corpus (BOOT/BACKLOG/DECISIONS narrating prod
     topology and known weaknesses) belongs in the private ops repo with pointers here.
 
-- **▶ Where is the ~25% ceiling? Items 1, 3 and 7 are ANSWERED (DEC-0129, DEC-0132) — the loss is
-  deterministic and ours (opened S113, DEC-0128), and the mechanism now looks like RFI rather than
-  a fixed rolloff, but the tie to one specific sub-band did not hold up.** **Item 1 — denominator
-  honest, hypothesis rejected:** `loop_times` is exactly Davis's `(41+id)/16` s, so the missing 25%
-  is undecoded packets, not an artifact. Two incidentals: `max_count` varies 19–23, now **fully
-  explained (DEC-0130)** — this ISS is transmitter ID 4, not the assumed 0, and 2.8125 s quanta
-  around a 60 s archive interval reproduces 19–23 exactly; and **per-minute variance is entirely
-  binomial** (predicted sd 9.2–9.9 at ~20–25 packets/min, measured 8.80 — no excess variance at
-  all). **Item 3 — `ppm`/`fc` dead, blocker 4 closed:** offset is real and one-sided (+2206 Hz =
-  +2.41 ppm, zero negatives) but reception is flat across a 10x offset range (corr +0.075), so the
-  AFC absorbs it; item 4 (`-noafc`) is contraindicated by the same result. **What replaced them:**
-  the owner's Davis console at comparable distance runs **single-digit** packet drop, so the
-  ~20-pt gap is ours, not the link's. **Item 7 — spectrum capture, RUN (S114, DEC-0132):** 5-min
-  `rtl_power` sweep of 924.5–927.5 MHz, weewx stopped for the window (~6 min outage, ops#253's
-  `exec_devices` grant used live for the first time). The floor was flat and stable the whole run
-  (~-38.7 dBFS, no rolloff shape) — **evidence against a static gain-rolloff or fixed antenna
-  null.** But 16 of 60 ten-second windows carried transient bursts (5–34 dB above floor) spanning
-  **925.15–927.48 MHz — nearly the whole capture band**, not confined to DEC-0130's flagged
-  925.5–926.5 MHz channels 46–48 (only 7 of 16 fall there; the single largest burst, +34.5 dB, hit
-  927.34 MHz, well outside it). **Reading: RFI as the mechanism strengthens (bursty + wideband is
-  its signature); the exclusive tie to channels 46–48 weakens** — comparably strong traffic hits
-  frequencies that weren't flagged as elevated-miss. **Next, free and unchased this session: cross
-  the capture's 16 spike frequencies against DEC-0130's full 51-channel miss histogram** — if
-  925.15 MHz and 927.15–927.48 MHz's channels *also* run elevated misses, RFI explains the whole
-  pattern, not just 46–48; if they don't, something channel-specific beyond generic band noise is
-  still needed. One evening's data, no concurrent reception measurement (dongle single-owner) —
-  **not enough to call blocker 6 closed.** Original framing kept below for items 2/4/5/6, still
-  untouched.
+- **▶ Where is the ~25% ceiling? Items 1, 3 and 7 are ANSWERED (DEC-0129, DEC-0132, DEC-0133) —
+  the loss is deterministic and ours (opened S113, DEC-0128); the channels-46–48 cluster is
+  explained and demoted; and the bulk of the loss is a fixed ~7.75 s wall-clock modulation that no
+  frequency-specific story can reach.** **Item 1 — denominator honest, hypothesis rejected:**
+  `loop_times` is exactly Davis's `(41+id)/16` s, so the missing 25% is undecoded packets, not an
+  artifact; `max_count` 19–23 is transmitter ID 4's 2.8125 s quantum (DEC-0130); per-minute
+  variance is entirely binomial. **Item 3 — `ppm`/`fc` dead, blocker 4 closed:** the static offset
+  (+2206 Hz) is absorbed by the AFC, reception flat across a 10x range; item 4 (`-noafc`) is
+  contraindicated by the same result. **Item 7 — spectrum capture RUN (S114, DEC-0132) and
+  CROSS-REFERENCED (S115, DEC-0133):** with the demodulator's ±134 kHz passband applied, in-band
+  exposure picks out exactly channels 46/47/48 (8/6/6 bursts) and none for 45/49 — an FHSS
+  neighbour on a ~400 kHz channel comb — so DEC-0132's "the tie weakens" was a bare-MHz artifact.
+  But that whole cluster is ~250 of 3,806 misses (~2 pts); the other 48 channels sit flat at
+  69.7 ± 10. **The ceiling is frequency-independent.** **What replaced the frequency question
+  (DEC-0133):** the 3,047 miss timestamps are periodic in wall-clock time — Rayleigh peak at
+  **7.7495 s (z = 97)**, hop-locked alternative z = 4, fold mod 11 hops flat; gaps peak at 3 hops,
+  autocorrelation undecayed to 60 hops, consecutive misses anticorrelated; smooth modulation
+  (miss probability ~0.17 → 0.5 over the cycle), phase stable to ~0.05%. Aliases (~4.41 s,
+  ~2.06 s) are indistinguishable on the hop grid. Isolated single misses carry 21.9 of the window's
+  32.2 pts. Ruled out: host stalls (cgroup pressure zero; **72.83% on Foundation vs 72.82% on
+  marvin**), in-band RF in 924.5–927.5, every hop-locked mechanism, static offset. Survivors: the
+  parts that moved intact — dongle + its 1 KB single-buffer USB geometry, Go pipeline, antenna,
+  ISS, outdoor path. A frequency wobble or a slow path modulation fits every flat axis measured.
+  The owner's Davis console at comparable distance runs **single-digit** loss **on this same ISS at
+  this property (owner, S115)** — ISS and outdoor path exonerated; **the periodic loss is in our
+  receiver chain** (antenna/feedline, dongle, USB geometry, Go pipeline). Original
+  framing kept below for items 2/4/5/6, still untouched.
+
+  **▶ Item 8 — the designed capture (S116, ~25–30 min dongle-exclusive outage, same self-service
+  path as S114; all tools already in the prod image):** (1) `rtl_test -s 268800 -b 1024` ~5 min,
+  locally timestamped — periodic "lost bytes" at ~7.75 s or an alias implicates the USB/dongle
+  path; (2) standalone `rtldavis -tr 16 -gain 372 -v` ~15 min — `lastFreqError` per packet: a
+  7.75 s oscillation names a frequency wobble; also the first received+missed sequence with µs
+  timestamps (harvest it WHOLE, GOTCHAS §3); (3) `rtl_power -f 902M:928M:10k -g 37.2 -i 1` ~5 min —
+  periodic in-band level, and whether the 400 kHz comb spans the band. `exec-ro` takes one
+  whitespace-free token per argument: three invocations, no `sh -c`.
 
   *(as opened, S113)* Three independent axes are now measured flat at ~73–75%: tuner gain
   (328–496, campaign D, spread 1.70 pts), receive window (`-ex` 0 vs 50, +0.45 and −0.06 pts,
@@ -396,12 +404,10 @@ failed resets currently produce no further action.
      campaign D just showed does nothing. An LNA improves *noise figure* rather than gain alone, so
      it is not strictly the same axis, but a link that is demonstrably not noise-limited is the
      wrong place to spend a hardware change with a bias-tee risk attached.
-  7. **Spectrum capture, 924.5–927.5 MHz (added S114, DEC-0131) — now the leading item.** The S113
-     miss histogram clusters at 925.500–926.503 MHz specifically (channels 46–48), scattered across
-     hop-sequence order, so a clock-drift artifact is ruled out and something tied to that exact
-     frequency slice is implicated. `gqrx`/`rtl_power` from the same antenna would show whether it's
-     an external interferer (a visible signal in that slice) or a hardware rolloff (a gain dip with
-     no visible transmitter) — free, read-only, no campaign.
+  7. ~~**Spectrum capture, 924.5–927.5 MHz (added S114, DEC-0131).**~~ **DONE — S114 ran it
+     (DEC-0132), S115 cross-referenced it (DEC-0133): an FHSS neighbour on a ~400 kHz comb explains
+     channels 46–48 exactly once the ±134 kHz passband is applied, and the whole cluster is ~2 pts.
+     Superseded by item 8 above.**
 
   **What this item is not.** It is not a licence to re-sweep gain (closed, DEC-0128) or to re-run
   the receive-window axis (a wash, twice). Items 1 and 3 are both free and read-only; neither
