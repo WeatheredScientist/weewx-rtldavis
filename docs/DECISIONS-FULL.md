@@ -8427,3 +8427,57 @@ a spectrum capture (e.g. `gqrx`/`rtl_power`) centered on 924.5–927.5 MHz from 
 looking for a visible interferer or a gain rolloff specific to that slice — still no campaign, no
 owner-mediated step, and it would settle (a) vs. (b) vs. neither before spending any more RF-tuning
 campaign budget on an axis DEC-0128/DEC-0129 already closed.
+
+## DEC-0132 — S114 spectrum capture: transient wideband bursts up to +34 dB, not confined to 925.5–926.5 MHz — RFI as mechanism strengthens, the exclusive tie to channels 46–48 weakens
+
+**Status:** Accepted (measurement) · **Date:** 2026-09-02 (S114) ·
+**Follows** DEC-0131's "next step, bounded and cheap" · **sharpens** DEC-0130/DEC-0131's
+channel-46–48 finding · **does NOT close blocker 6**
+
+Ran DEC-0131's proposed capture: `rtl_power -f 924.5M:927.5M:10k -g 37.2 -i 10 -e 5m` through
+`marvinctl exec-ro`, gain 37.2 dB matching prod's `-gain 372` (`weewx.conf.example:64`'s own
+comment: tenths of dB). This was also the **first live exercise of ops#253's `exec_devices`
+grant beyond its `rtl_test` smoke test** — the grant (owner-ratified, installed same day, passes
+`0bda:2838` through a per-device udev rule) had only been proven busy-but-permissioned before this
+session; this is the first time it actually opened the device and streamed data. `weewx.service`
+was stopped first (own-tenant tier-2 self-service, no Class C gate — only one process can hold the
+dongle) and restarted immediately after; **outage ~19:34–19:40 ET (~6 min)**, inside the
+pre-registered bound, confirmed back up (`marvinctl ps`) before the capture was examined.
+
+### What the capture shows
+
+60 rows — 30 ten-second FFT integrations × the two 1.5 MHz half-band segments `rtl_power` split
+the sweep into, ~257 bins/segment, ~5.86 kHz/bin. The noise floor is flat and stable for the full
+5 minutes: every row's median sits at **-38.6 to -38.8 dBFS**, no drift, no shape distinguishing
+either half of the band — that flatness itself argues against a static gain-rolloff explanation.
+
+**16 of 60 rows (27%) carry a transient peak >5 dB above that row's own floor** — magnitudes 5.2 to
+**34.5 dB**, frequencies spanning **925.15 to 927.48 MHz**, i.e. across virtually the whole
+capture band, not one slice. A loose majority (7 of 16) fall in or near DEC-0130's flagged
+925.5–926.5 MHz channels 46–48, including the strongest hit inside that range (925.98 MHz,
+-19.58 dBFS, +19.1 dB) — but comparable or larger bursts also land well outside it: 925.15 MHz
+(+12.2/+12.7/+12.3 dB across three separate 10 s windows) and 927.15–927.48 MHz (+11.6 to
+**+34.5 dB**, the single largest event of the capture — 23:38:12 UTC / 19:38:12 ET, 927.34 MHz,
+peaking at -3.07 dBFS, essentially full-scale). **Every spike is transient** — no frequency shows
+an elevated level in two consecutive 10 s windows — the signature of intermittent Part-15 ISM
+traffic sharing 902–928 MHz, not a fixed narrowband/CW interferer or a static null.
+
+### What this changes, and what it doesn't
+
+**Strengthens:** DEC-0131 left "an interferer, a feedline/antenna null, or tuner gain rolloff" as
+indistinguishable candidates. A flat, stable floor plus bursty, transient, wideband activity is
+RFI's signature, not a rolloff's or a fixed null's — this lowers the relative likelihood of the
+rolloff/null candidates, though it doesn't rule them out (a null could still sit under the floor,
+masked by the same bursts).
+
+**Weakens:** the exclusive tie to 925.5–926.5 MHz specifically. If this traffic caused DEC-0130's
+channels-46–48 miss cluster, comparably strong bursts at 925.15 MHz and 927.15–927.48 MHz should
+show elevated misses at *those* channels too — checkable for free against DEC-0130's existing
+51-channel histogram (channels well outside 46–48 sit at 37–93 misses, unremarkable) without a new
+capture. **Not done this session** — flagged as the obvious next look, not chased further here.
+
+**One 5-minute capture, one evening, no reception data collected concurrently** — weewx was down
+for the window, since only one process can hold the dongle — so this characterizes the RF
+environment the antenna sees, but cannot correlate burst timing against actual packet loss.
+Blocker 6 stays open. Raw CSV (60 rows, 19:34:32–19:39:52 ET) kept in session scratch, not
+committed to the repo — a data artifact, not a documented interface.
