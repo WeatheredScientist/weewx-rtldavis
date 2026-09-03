@@ -81,11 +81,21 @@ def _make_driver():
 
 def _run_period(d, curr_cnt0, period_s=60):
     """Simulate one archive period that received curr_cnt0 messages since
-    startup, spanning period_s seconds, and close it via _update_summaries."""
+    startup, spanning period_s seconds, and close it via _update_summaries.
+
+    S120/#317: the denominator is now slot-count (last_pkt_ts - prev_pkt_ts),
+    not wall-clock last_ts. These tests never drive the real per-packet
+    _update_stats(), so last_pkt_ts/prev_pkt_ts are seeded directly here to
+    span period_s -- matching what a real receiver spanning that period would
+    have produced via _update_stats().
+    """
     d.stats['curr_cnt'][0] = curr_cnt0
     # backdate last_ts so _update_summaries sees a real elapsed period
     if d.stats['last_ts'] > 0:
-        d.stats['last_ts'] = int(time.time()) - period_s
+        now = time.time()
+        d.stats['last_ts'] = int(now) - period_s
+        d.stats['prev_pkt_ts'][0] = now - period_s
+        d.stats['last_pkt_ts'][0] = now
     RtldavisDriver._update_summaries(d)
 
 
@@ -107,7 +117,10 @@ def test_new_archive_record_stores_rxCheckPercent():
     RtldavisDriver._reset_stats(d)
     # Second period arrives as a NEW_ARCHIVE_RECORD event.
     d.stats['curr_cnt'][0] = 40
-    d.stats['last_ts'] = int(time.time()) - 60
+    now = time.time()
+    d.stats['last_ts'] = int(now) - 60
+    d.stats['prev_pkt_ts'][0] = now - 60  # S120/#317: slot-count baseline
+    d.stats['last_pkt_ts'][0] = now
     event = types.SimpleNamespace(record={'dateTime': int(time.time()),
                                            'usUnits': 16})
     RtldavisDriver.new_archive_record(d, event)
