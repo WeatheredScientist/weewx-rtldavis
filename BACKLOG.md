@@ -725,6 +725,19 @@ failed resets currently produce no further action.
 > gain-responsive. Re-baseline by observation instead — see `docs/ROADMAP.md` P2, Campaign D's
 > closing note.
 
+**Per-ID loop period — verified from primary sources, S119 (#313).** `(41 + id) / 16` s for packet
+id 0..7 = DIP ID 1..8 = 2.5625..3.0 s; this ISS is packet id 4 = DIP ID 5 = 2.8125 s. Davis's VP2 spec
+sheet (DS6152 Rev C) gives every sensor's update interval as N × (2.5–3.0 s): temp/rain 10–12 s = 4
+slots, leaf wetness 15–18 = 6, humidity/UV/solar 50–60 = 20, soil moisture 62.5–75 = 25 — ranges that
+exist only because the packet period spans the eight IDs. DeKay's RF-Protocol notes: 2.5 s at ID 0,
++1/16 s per ID. `lheijst/rtldavis` `idLoopPeriods[0] = 2562500 µs`, +62500 µs per id. Our S115 capture:
+292 single-slot gaps, mean **2.8124 s, sd 1.0 ms**, span / 2.8125 = 294.00 = transmissions seen; a
+2.5 s cadence would have needed 331 slots. Period, not phase: transmit-only beacons on free-running
+crystals cannot hold a phase offset, so only distinct periods bound collisions between co-sited
+stations. **Re-send check (DEC-0135's model):** wind bytes changed in 33 of 213 different-type
+consecutive pairs and 0 of 80 same-type pairs — fresh samples would have changed ~12 — so the repeat
+is a verbatim copy. (The Vantage Vue sheet is a sibling product's document; not a source here.)
+
 **What campaign A says about the LNA — hold it loosely (moved from BOOT.md, S67):**
 - **Recomputed at S66 on per-minute `rxCheckPercent` (DEC-0069):** arm A (372/ex0) **74.81%** ·
   C (372/ex50) 74.37 · D (207/ex50) 74.17 · B (207/ex0) 73.87. Spread **0.94 pts** — no arm anywhere
