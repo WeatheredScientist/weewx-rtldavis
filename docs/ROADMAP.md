@@ -3,7 +3,16 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-02 (S115 — targeted line update per DEC-0057, not a full pass; tripwire
+**Last updated:** 2026-09-03 (S117 — targeted line update per DEC-0057, not a full pass; tripwire
+now S126. DEC-0136 deployed DEC-0135's fix and confirmed it on production data, so P2's "re-baseline
+by observation" plan moved from *proposed* to *live*; three corrections landed with it — the
+monitor's thresholds do **not** go stale, "~99%" and the slot arithmetic answer different questions
+though they agree, and "decoded" includes repeats.)
+Prior: 2026-09-02 (S116 — **scheduled full reconciliation, tripwire fired on time**, the heaviest
+pass since S66: P2's entire evidence base demoted and the `receiveWindow` item closed as
+false-premise. **Recorded only in the guardrail section at the time, never promoted into this
+banner — corrected at S117**, the same omission S92/S89 made and S96 caught.)
+Prior: 2026-09-02 (S115 — targeted line update per DEC-0057, not a full pass; tripwire
 still due S116.)
 Prior: 2026-08-31 (S111 — targeted line update per DEC-0057, not a full pass; tripwire
 still S116: DEC-0125 decided Campaign C's verdict (496 does not clear the bar at marvin's position,
@@ -273,7 +282,7 @@ bound and done via reversible live hot-swap with an instant rollback path.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P2 — RF optimization, done honestly (PRINCIPLES §3) — **✅ CLOSED (S116, DEC-0134/DEC-0135): there was never an RF problem to optimize**
+## P2 — RF optimization, done honestly (PRINCIPLES §3) — **✅ CLOSED (S116, DEC-0134/DEC-0135; DEPLOYED S117, DEC-0136): there was never an RF problem to optimize**
 
 > **Read this header before any figure below it.** The section originally closed at S113
 > (DEC-0128) on "the gain axis is exhausted." That verdict survives; its *evidence* does not.
@@ -462,6 +471,22 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       **The real prize is diagnostic:** an RF-dead episode is currently buried in ~27% of background
       pseudo-loss, so against a flat ~99% baseline **blocker 2 becomes measurable for the first
       time** — which is worth more than any gain setting this section ever tested.
+      **S117 reconciliation (DEC-0136) — DEPLOYED, and confirmed on production data.** `v2.0.15`
+      cut over 2026-09-03 07:17:53 EDT (16m09s outage). Validation met every pre-registered
+      number (`missed` **81 → 0**, `repeat` 0 → 79, `duplicate` 89 → 6), and prod's own INFO frame
+      counters confirm it independently: duplicate frames/period **6.23 → 0.57** with repeat frames
+      at **5.81**, population conserved — **27.2% of transmissions are repeats**, against
+      DEC-0134's ~27%. The "re-baseline by observation" plan above is now **live and is S118's
+      job 1**. Three corrections to what is written above and elsewhere in this file.
+      **(a)** The monitor's thresholds do **NOT** go stale, contrary to the standing assumption:
+      measured 73.2% before vs 75.5% after, because its `len(set(epochs))` metric already counts
+      hop packets and saturates. Only `rxCheckPercent` consumers need re-keying.
+      **(b)** "~99%" is `rxCheckPercent`'s answer over `hops = accepted + missed`, which is
+      self-referential; over the steady-state window excluding **128 s** of cold-start acquisition
+      the slot arithmetic also gives **~100%**, so the two agree — but they are different questions
+      and should not be quoted interchangeably.
+      **(c)** A `repeat` falls through to the normal path and emits a `msg.ID=` line, so "decoded"
+      **includes** repeats: 274 accepted, **195 unique**.
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,

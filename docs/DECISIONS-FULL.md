@@ -8855,3 +8855,140 @@ function. Second, *a green exit code is not evidence*: `./scripts/check_secrets.
 exit 0 while the script itself exited 1 — the documented false-zero, met again in the act of
 running the secret gate — and the real block was a false positive on a local named `key`, fixed by
 renaming the variable rather than widening the scanner's allow-list.
+
+## DEC-0136 — DEC-0135 deployed and confirmed in production: `missed` 81 → 0, and three reception denominators turn out to measure three different things
+
+**Status:** Accepted (deployment + measurement) · **Date:** 2026-09-03 (S117) ·
+**Deploys** DEC-0135 · **confirms** DEC-0134's root cause on live production data ·
+**corrects** DEC-0135's pre-registered reading of its own validation counters ·
+**corrects** the standing assumption that the monitor's ~73% thresholds go stale at this deploy ·
+**arms** the remedy path DEC-0074 documented
+
+### What shipped
+
+`v2.0.15`, built on marvin from `origin/dev`@`2fa80a4`, carrying DEC-0135's Go patch and driver
+change. Prod cut over at **07:17:53 EDT**, outage 07:01:44 → 07:17:53 (**16m09s**). Gain unchanged
+at 372. `REMEDY_MODE` flipped `none` → `restart_unit` at 07:58:59 in a second, receiver-free step.
+
+### Validation, pre-registered and met
+
+15:00 standalone capture on the built image, same flags as S115 (`-tf US -tr 16 -gain 372 -v -fc 0
+-ppm 0`), banner confirming `dupWindow=500`:
+
+| metric | S115 (v2.0.14) | pre-registered | measured (v2.0.15) |
+|---|---|---|---|
+| `packet missed` | 81 | ~1 | **0** |
+| `repeat packet` | 0 | ~80 | **79** |
+| `duplicate packet` | 89 | ~9 | **6** |
+| accepted packets | 214 | ~294 | **274** |
+| hops | 297 | — | 276 |
+
+### Confirmed in production, which DEC-0135 could not do
+
+The prod instrument is the driver's own INFO counters, not `ARCHIVE_STATS` (DEBUG-level, absent at
+`debug_rtld = 1`). Per ~60 s period:
+
+| | duplicate frames | repeat frames |
+|---|---|---|
+| 2026-09-02, full day (n=1398) | 6.28 | line did not exist |
+| 2026-09-03 pre-restart (n=421) | 6.23 | — |
+| **2026-09-03 post-restart (n=37)** | **0.57** | **5.81** |
+
+**The population is conserved** — 0.57 + 5.81 = 6.38 against 6.23 before. **91% of what the
+demodulator was calling a duplicate and silently discarding was a real re-send.** At 5.81 repeats
+per 21.33 slots that is **27.2% of transmissions**, against DEC-0134's ~27% prediction, measured
+this time on production rather than a capture.
+
+### Three denominators, three different questions
+
+The open question was what `276` counts. Read from the upstream Go source rather than inferred: a
+hop is emitted on exactly two paths — an accepted packet (`handleNxtPacket`) and a loopTimer
+expiry (the `packet missed` branch) — plus init. So **hops = accepted + missed + init**, which
+reconciles both captures exactly (274 + 0 + 2 = 276; 214 + 81 + 2 = 297).
+
+| instrument | denominator | what it answers |
+|---|---|---|
+| `rxCheckPercent` (standalone) | hops = accepted + missed | of slots the receiver tracked, how many decoded |
+| slot arithmetic | wall-clock ÷ 2.8125 s | of transmissions the ISS made, how many we took |
+| monitor `WINDOW` | `WU_RF_EXPECTED = 21` | distinct 1-second epochs of publish lines |
+
+None is wrong; they are not interchangeable, and DEC-0135's headline used the first while the
+natural reading of "reception" is the second.
+
+### Two corrections to DEC-0135's own numbers
+
+**(a) The 85.6% slot-arithmetic shortfall was cold-start acquisition, not loss.** Measured every
+inter-arrival gap across the capture: **273 gaps, median 2.800 s, max 2.900 s, zero gaps above
+4 s** — locked hard to the 2.8125 s cadence with no dropouts at all. The log shows `Init channels:
+wait max 149 seconds` at 11:01:56 and `TRANSMITTER 4 SEEN` at 11:04:04, i.e. **128 s of
+acquisition** before the first accepted packet. The steady-state window is **767.8 s**, not 900.
+Expected transmissions = 767.8 / 2.8125 = **273.0**; accepted = **274**. Reception over the
+measured window is **~100%**. Dividing the full 900 s by the slot period counts 46 slots during
+which the receiver was not yet tracking anything.
+
+**(b) A repeat is counted as a decode.** The patched branch logs `repeat packet` and then **falls
+through** to the normal path, emitting a `msg.ID=` line and hopping. So the 274 "decoded" already
+include the 79 repeats — **unique payloads are 195**. Reception is unaffected (all 274 are genuine
+transmissions), but any future reading of these counters must not treat "decoded" as "distinct
+readings".
+
+### The monitor's thresholds do NOT go stale — reversing a standing assumption
+
+`BOOT.md` and ops#256 both carried the claim that the monitor's ~73%-keyed thresholds expire at
+this deploy. **Measured, they do not.** Seven clean windows post-restart against eight pre-outage:
+
+- pre-fix: 17, 17, 16, 16, 13, 17, 13, 14 → mean **15.38/21 = 73.2%**
+- post-fix: 16, 16, 17, 16, 14, 18, 14 → mean **15.86/21 = 75.5%**
+
+A real +28% publish jump would put the mean near 19.7 and be unmissable across seven windows. It is
+absent, and the mechanism is DEC-0024's arriving from a new direction: the metric is
+`len(set(epochs))` — **distinct one-second epochs**, already counting freqError hop packets as well
+as data packets, so the dedup saturates long before the change shows. **The metric is substantially
+insensitive to what was fixed.** `WU_RF_MIN_PCT = 60` and the existing thresholds stay valid.
+
+Only a consumer reading `rxCheckPercent` needs re-keying, and prod computes that in
+`_update_summaries()` as delta `chTotMsgs` over a **wall-clock** denominator — never hops — so
+readings **above 100%** are expected where the floor()'d denominator lands low.
+
+### Deployment is not self-service — four gaps, all found by doing
+
+1. **No transport.** `/srv/docker/weewx` is not a checkout and the tenant has no `git_branch`, so
+   `marvinctl pull` refuses. Every past build context is an unpacked tarball snapshot. This release
+   rode a one-off owner-authorized `scp -r` of a `git archive` export (126 tracked files, verified
+   byte-for-byte by sha256 on both ends).
+2. **No image-tag control.** The tag is a literal in `ExecStart` of a `0644 root:root` unit — no
+   `EnvironmentFile`, no parameterization — so the cutover required an owner-run `sed` +
+   `daemon-reload` + `start`. An `EnvironmentFile` carrying `IMAGE=` in the tenant dir would make
+   every future cutover self-service; deliberately **not** bundled into this session's monitor
+   batch, because it hands a tenant control over what root launches and that reading is marvin's
+   to record first.
+3. **No config write.** `weewx.conf` is tenant-owned but `marvinctl` has no write verb, so the
+   mounted-config layer is owner-run too.
+4. **No ad-hoc archive read.** `rxCheckPercent` reaches a human only through the monitor's
+   scheduled email. Cheapest fix is the monitor also `log()`-ing the summary it already computes.
+
+### Stale campaign residue
+
+Campaign D completed 2026-09-01 01:30:39 ("prod restored to baseline"), but two of its artifacts
+outlived it. **`campaign.inhibit`** (born 2026-08-31 17:40) was still present, and
+`weewx_monitor.py` checks `campaign_inhibited()` at :705 **before** the `REMEDY_MODE` check at
+:712 — so flipping `REMEDY_MODE` to `restart_unit` while that file existed would have been a
+**silent no-op**, logging `SKIP remedy` forever. Removed in the same step as the flip. Worse, the
+lifecycle documented at `ops/weewx-monitor.service:84` ("the campaign script creates this file for
+its duration") **does not exist in any code** — nothing creates or removes it.
+**`weewx-rx-experiment.timer`** likewise remains armed, firing every 5 minutes against a finished
+campaign; harmless (it has written nothing in 2.5 days) but unfiled residue.
+
+### Verification notes
+
+The build ran through `marvinctl build`, so DEC-0078's `BUILD-EXIT` marker — which belongs to
+`ops/nas_build.py` — did not exist on this path. Rather than trust a pipeline exit, the artifact
+was proven directly: `exec-ro` running `rtldavis -h` on the new image, at **zero outage**, printing
+`-dupwindow int … (default 500)`. Generalizes: when the sanctioned proof does not cover the path
+taken, prove the artifact, not the pipeline.
+
+Also unresolved and recorded rather than smoothed over: the monitor never logs its remedy mode at
+startup, so the armed state cannot be positively confirmed short of a real fault. `remedy_action()`
+exists for exactly DEC-0074's reason and is only called at remedy time. Ordering of this session's
+flip is guaranteed by the `&&` chain, not by timestamps — the unit mtime and the process start fall
+in the same second.
