@@ -144,7 +144,12 @@ def test_pct_good_storage_uses_equality_not_substring_containment():
     # Period 2: both transmitters report real, DIFFERENT counts.
     d.stats["curr_cnt"][0] = 40
     d.stats["curr_cnt"][1] = 60
-    d.stats["last_ts"] = int(time.time()) - 60
+    now = time.time()
+    d.stats["last_ts"] = int(now) - 60
+    # S120/#317: slot-count baseline -- these tests don't drive the real
+    # per-packet _update_stats(), so seed it directly to span the period.
+    d.stats["prev_pkt_ts"][0] = d.stats["prev_pkt_ts"][1] = now - 60
+    d.stats["last_pkt_ts"][0] = d.stats["last_pkt_ts"][1] = now
     event = types.SimpleNamespace(record={})
     RtldavisDriver.new_archive_record(d, event)
 
@@ -169,7 +174,11 @@ def test_pct_good_storage_still_stores_a_real_exact_match():
 
     d.stats["curr_cnt"][0] = 40
     d.stats["curr_cnt"][1] = 60
-    d.stats["last_ts"] = int(time.time()) - 60
+    now = time.time()
+    d.stats["last_ts"] = int(now) - 60
+    # S120/#317: slot-count baseline -- seed directly, as above.
+    d.stats["prev_pkt_ts"][0] = d.stats["prev_pkt_ts"][1] = now - 60
+    d.stats["last_pkt_ts"][0] = d.stats["last_pkt_ts"][1] = now
 
     # Peek at the value _update_summaries computes this period -- idempotent
     # against unchanged curr_cnt/last_cnt/last_ts, so the second call inside

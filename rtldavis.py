@@ -1603,6 +1603,14 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             'max_count': [0] * 4,      # max to receive messages per transmitter current archive period
             'count': [0] * 4,          # received messages per transmitter current archive period
             'missed': [0] * 4,         # missed messages per transmitter current archive period
+            # S120/#317: slot-count denominator. last_pkt_ts is the epoch of
+            # the most recent accepted packet per transmitter, updated on
+            # every packet (not just archive boundaries); prev_pkt_ts is
+            # last_pkt_ts as of the previous archive boundary -- the baseline
+            # _update_summaries diffs against. Both 0.0 means "no packet seen
+            # yet for this transmitter since startup or the last counter reset".
+            'last_pkt_ts': [0.0] * 4,
+            'prev_pkt_ts': [0.0] * 4,
             'pct_good': [None] * 4,    # percentage of good messages per transmitter
             'pct_good_all': None,      # percentage of good messages for all transmitters
             'dup_count': 0,            # DEC-0035 (S43): Go demodulator double-decodes this period
@@ -1620,10 +1628,23 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
     def _update_stats(self, curr_cnt0, curr_cnt1, curr_cnt2, curr_cnt3):
         # update the statistics
         # save the message counts since startup
-        self.stats['curr_cnt'][0] = int(curr_cnt0)
-        self.stats['curr_cnt'][1] = int(curr_cnt1)
-        self.stats['curr_cnt'][2] = int(curr_cnt2)
-        self.stats['curr_cnt'][3] = int(curr_cnt3)
+        new_cnt = [int(curr_cnt0), int(curr_cnt1), int(curr_cnt2), int(curr_cnt3)]
+        # S120/#317: this packet belongs to whichever transmitter's
+        # cumulative counter just changed -- compared, not just increased,
+        # so a post-reset counter (which moves backward) is still detected.
+        # The ISS clock is exact (S115), so recording the arrival wall-clock
+        # time here is what lets _update_summaries count slots instead of
+        # dividing by a jittery, floor-biased wall-clock period.
+        now = time.time()
+        for i in range(0, 4):
+            if new_cnt[i] != self.stats['curr_cnt'][i]:
+                if self.stats['prev_pkt_ts'][i] == 0.0:
+                    # first packet for this transmitter since startup or the
+                    # last counter reset -- seed the baseline to this packet
+                    # too, so the denominator starts counting from here.
+                    self.stats['prev_pkt_ts'][i] = now
+                self.stats['last_pkt_ts'][i] = now
+            self.stats['curr_cnt'][i] = new_cnt[i]
 
     def _update_summaries(self):
         self.stats['curr_ts'] = int(time.time())
@@ -1643,7 +1664,6 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             total_count = 0
             total_missed = 0
             total_max_count = 0
-            period = self.stats['curr_ts'] - self.stats['last_ts']
             # do for the first 4 active transmitters
             # Note: the stats of the 5th and more active transmitters are not calculated.
             for i in range(0, 4):
@@ -1652,17 +1672,39 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     # y is a pointer to the channel number of the active transmitters (9 means: not-active)
                     # the loop_time is different for each transmitter
                     x = self.stats['activeTrIds'][i]
-                    # calculate per transmitter the theoretical maximum number of received message this archive period
-                    self.stats['max_count'][i] = period // self.stats['loop_times'][x]
                     self.stats['count'][i] = self.stats['curr_cnt'][i] - self.stats['last_cnt'][i]
                     # test if not init (counters reset to zero)
                     if self.stats['count'][i] > 0:
-                        self.stats['missed'][i] = self.stats['max_count'][i] - self.stats['count'][i]
-                        self.stats['pct_good'][i] = 100.0 * self.stats['count'][i] / self.stats['max_count'][i]
-                        # calculate the totals for all active transmitters
-                        total_count = total_count + self.stats['count'][i]
-                        total_missed = total_missed + self.stats['missed'][i]
-                        total_max_count = total_max_count + self.stats['max_count'][i]
+                        # S120/#317: denominate by ISS slots between the
+                        # first and last packet received THIS period, not by
+                        # floor(wall-clock period / loop period) -- that
+                        # floored a fractional slot count every period
+                        # (+1.6 pts mean) and rode the archive event's 1 s
+                        # jitter (up to +5 pts). The ISS clock is exact, so
+                        # round() has no ambiguity, and count[i] <= max_count[i]
+                        # holds by construction: one accepted packet per slot.
+                        delta = self.stats['last_pkt_ts'][i] - self.stats['prev_pkt_ts'][i]
+                        self.stats['max_count'][i] = round(delta / self.stats['loop_times'][x])
+                        self.stats['prev_pkt_ts'][i] = self.stats['last_pkt_ts'][i]
+                        if self.stats['max_count'][i] > 0:
+                            self.stats['missed'][i] = self.stats['max_count'][i] - self.stats['count'][i]
+                            self.stats['pct_good'][i] = 100.0 * self.stats['count'][i] / self.stats['max_count'][i]
+                            # calculate the totals for all active transmitters
+                            total_count = total_count + self.stats['count'][i]
+                            total_missed = total_missed + self.stats['missed'][i]
+                            total_max_count = total_max_count + self.stats['max_count'][i]
+                    elif self.stats['count'][i] < 0:
+                        # counter reset (child respawn, hot swap, stall
+                        # restart): curr_cnt moved backward. This period is
+                        # skipped (as before); also clear both timestamps so
+                        # next period's baseline starts fresh at the first
+                        # post-reset packet instead of spanning the reset.
+                        self.stats['prev_pkt_ts'][i] = 0.0
+                        self.stats['last_pkt_ts'][i] = 0.0
+                    # count[i] == 0: genuinely no packets this period (RF-dead),
+                    # not a reset. Leave last_pkt_ts/prev_pkt_ts untouched so
+                    # the next period's delta spans the full gap once
+                    # reception resumes -- max_count grows to match.
             # if there is a total
             # NOTE (S24, DEC-0024 review H2): this was previously also gated on
             # `self.stats['pct_good_all'] is not None`, but _init_stats and
