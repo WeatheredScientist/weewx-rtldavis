@@ -12,66 +12,58 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S113 → S114)
+## ▶ Resume here (S114 → S115)
 
 ### What's settled (do not re-derive)
 
 **RF TUNING IS OVER — every axis is measured flat (DEC-0128, DEC-0129). Do not re-sweep any of
-them without a new reason.** Campaign D ran clean and gain 328–496 came back as one plateau (1.70
-pts spread vs a ~1.61-pt per-arm SE, best delta +0.01); 207 is the only real arm (−6.80, t=−3.75),
-consistent with the LNA being out. Gain holds at 372, no config change, ROADMAP P2 closed. Flat
-axes: **gain · receive window (`-ex`) · physical siting** (DEC-0118's closer, fewer-walls position
-moved 372 by −0.01, 496 by −0.85) **· frequency offset** (DEC-0129). The ~25% loss is **not
-SNR-limited, not reachable by tuning, and has no excess variance beyond binomial** — it is
-deterministic and structural. **The owner's Davis console at comparable distance drops single
-digits, so the signal is there and the gap is OURS.** That is the active thread — see the S114
-job list.
+them without a new reason.** Gain holds at 372; flat axes are **gain · receive window (`-ex`) ·
+physical siting · frequency offset**. The ~25% loss is **not SNR-limited, not reachable by tuning,
+has no excess variance beyond binomial** — deterministic and structural, and **the owner's Davis
+console at comparable distance drops single digits, so the gap is OURS.** Full chain of evidence:
+DEC-0128 → 0129 → 0130 → 0131 → **0132 (S114, this session)**.
 
 **History was rewritten and force-pushed 2026-09-01 (DEC-0127) — every SHA changed, old clones must
-re-clone.** Full story in the DEC; specifics in gitignored `docs/LOCAL_INFRA.md`. **Still owed: if
-any NAS/marvin bare mirror of this repo exists it needs a force-push re-seed** — flagged to ops,
-existence unconfirmed.
+re-clone.** Support purge ticket still pending (job 2, untouched this session).
 
-**`SCHEDULE=` is stood down (DEC-0096), and marvin's live copy is inert** — state `BASELINE`, tick
-no-ops on `want == have`, guard exits at its `BASELINE` check, nothing logged since 01:30:39. Only
-drift is the emptied block; the deploy rides the next real one. **No Class C write is owed.**
+**`SCHEDULE=` is stood down (DEC-0096), marvin's live copy is inert** (state `BASELINE`, no-ops on
+`want == have`). No Class C write owed.
 
-**ops#235 is CLOSED — BOOT previously overstated it as open.** The `-i` stdin fix landed and the
-`marvinctl exec-ro` *workaround* works (used for campaigns C and D), which is what closed it. The
-dedicated SQLite read verb it asked for still doesn't exist, but that's a nicety, not a blocker —
-`exec-ro` is the working transport. **ops#253 was a false alarm** (filed on a stale "`t-weewx`'s key
-is unminted" claim in `CONSTANTS.md`; ops measured the key live and working since 2026-08-29,
-355 audit lines through it — see the issue). The one real gap it surfaced: `exec-ro` has no USB
-device passthrough, which is job 1's actual blocker below, not a missing key.
+**ops#253 is CLOSED (both stages, this session).** `exec_devices = 0bda:2838` is live on marvin
+(owner-ratified, installed S114 before this session's capture); stage 2 (a real capture, not just
+`rtl_test`) ran clean — see below. `t-weewx`'s `marvinctl` key was never actually unminted (S113's
+finding); that confusion is fully resolved now.
 
-### S113 debug window + Go source read — DEC-0130/DEC-0131 (S114)
+### S114 spectrum capture — DEC-0132: RFI looks right, the 925.5–926.5 MHz tie doesn't hold up
 
-Debug window: live 2026-09-01 ~10:46–20:55 ET, then reverted (`weewx.conf` restored from
-`.s113-debug-backup`, sha256-verified, `weewx.service` restarted 20:55:08 ET, confirmed
-INFO-only again). Transmitter ID is **4**, not the assumed 0 — resolves `max_count`'s 19–23
-jitter (blocker 7, closed). The miss histogram is **not uniform**: channels 46–48 ran ~2x the
-rest. Read the deployed Go source (`Dockerfile:46`'s tarball) to test the retune hypothesis:
-the code shows **no PLL-settle haste** (300+ ms cushion vs. sub-ms typical lock time), which
-weakly argues against "retune doesn't settle." Mapped 46–48 to actual frequencies —
-**925.500/926.002/926.503 MHz** — and found they're scattered across hop-sequence order (not
-adjacent in the cycle), ruling out a clock-drift artifact and pointing at something tied to
-**that specific frequency slice**. Full detail: DEC-0130, DEC-0131. **Blocker 6 stays open.**
+Ran DEC-0131's proposed capture (`rtl_power`, 924.5–927.5 MHz, 5 min, gain 37.2 dB matching prod's
+372) via `marvinctl exec-ro`; weewx down ~6 min. Noise floor flat and stable the whole run
+(no rolloff shape) — argues against a static gain rolloff or fixed antenna null. But **16 of 60
+ten-second windows carried transient bursts (5–34 dB above floor) spanning 925.15–927.48 MHz**,
+nearly the whole capture band — only 7 of 16 fall in DEC-0130's flagged 925.5–926.5 MHz
+(channels 46–48); the single largest (+34.5 dB) hit 927.34 MHz, well outside it. **Reading: RFI
+strengthens as the mechanism (bursty + wideband is its signature); the exclusive tie to
+channels 46–48 weakens.** Blocker 6 stays open — full detail and numbers in DEC-0132,
+`BACKLOG.md`'s ceiling item. **Free next step, not done yet: cross the 16 spike frequencies
+against DEC-0130's existing 51-channel miss histogram** — arithmetic over data already in hand,
+no new capture.
 
-### ▶▶ S114 JOB LIST
+**Owner's call for S115: run that analysis on Fable, not Sonnet** — it's open-ended
+hypothesis-forming over an ambiguous result (does RFI explain the whole channels-46–48 cluster, or
+does something channel-specific survive it?), not mechanical execution. Escalate at session start.
+
+### ▶▶ S115 JOB LIST
 
 **Live, in order:**
-1. **Spectrum capture 924.5–927.5 MHz** (`gqrx`/`rtl_power`, same antenna) — DEC-0131's next
-   step, cheap and bounded, to see whether 925.5–926.5 MHz has a visible interferer or a gain
-   rolloff vs. the rest of the band. Capture itself is ~15 min. Real blocker: `marvinctl exec-ro`
-   has no USB device passthrough (no `exec_devices` manifest field, no `--device`/`--privileged`),
-   and the live container holds the dongle regardless. Needs either a marvin-side manifest addition
-   (ops#253, retitled) or the owner running it one-off from a marvin-side session, dongle stopped
-   first via `marvinctl stop` (own resource, self-service).
+1. **[Fable — judgment work, escalate at start] DEC-0132 follow-up analysis** — cross the 16 spike
+   frequencies against DEC-0130's 51-channel miss histogram; decide whether RFI explains the whole
+   cluster or something channel-specific remains, and whether blocker 6 has a next real step or
+   needs a longer/repeated capture to say more.
 2. **Check the GitHub Support purge ticket** — if purged, verify an old SHA 404s, update
    `LOCAL_INFRA.md`'s PENDING line and drop this job.
 3. **Port `campaign_analyze.py` to marvin** (tracked as ops#250). Its `fetch()` still ssh's to the
-   NAS (pre-DEC-0118); two campaigns have now been read through the working `marvinctl exec-ro`
-   transport (DEC-0125). No blocker — the transport already works; this is weewx's own porting work.
+   NAS (pre-DEC-0118); transport already works via `marvinctl exec-ro` — this is weewx's own
+   porting work, no blocker.
 4. **Audit Phase 2, session A (mechanical, Sonnet-able):** version/doc sync per the BACKLOG item —
    README + Docker Hub banner, driver/influx version numbers, weewx.conf.example, ARCHITECTURE
    stamps/paths, broken commands, CONTRIBUTING CI wording, tag + release v2.0.12–14, BIAS_TEE docs.
@@ -94,7 +86,7 @@ conversion + image-rebuild question (can marvin build natively?) · NAS-LEASE cr
 register row check (`ef8e9af8`) · ops#241 BOOT-over-cap (this file sits right at the 2.5K cap by
 chars/4 — re-measure with ops' own `checks/tier-sweep.sh` before closing).
 
-### Current state (S113 close)
+### Current state (S114 close)
 
 | Thing | State |
 |---|---|
@@ -104,7 +96,7 @@ chars/4 — re-measure with ops' own `checks/tier-sweep.sh` before closing).
 | Git | History rewritten 2026-09-01 (DEC-0127) — all SHAs changed; old clones must re-clone. Support purge pending (job 2) |
 | Alerting | `weewx_monitor.py` (`REMEDY_MODE=none`) live; `weewx-rx-experiment.timer` still ticking but a confirmed no-op |
 | Open risks | Gmail SMTP 535 breaking the 6-hourly summary (owner-side, unchanged) |
-| Trackers | ops#233 (deploy+live-restart owed) · ops#253 (device passthrough for job 1, retitled from a false-alarm key claim) · ops#241 (BOOT cap) · #216/#214/#110 open · repo #274/#253 open |
+| Trackers | ops#233 (deploy+live-restart owed) · ops#241 (BOOT cap) · #216/#214/#110 open · repo #274 open. **ops#253 CLOSED this session (both stages).** |
 
 ## Blockers
 
@@ -115,21 +107,23 @@ chars/4 — re-measure with ops' own `checks/tier-sweep.sh` before closing).
    reception is flat across a 10x offset range: the AFC absorbs it. `-noafc` is contraindicated
    by the same result, not merely untested.
 5. **6-hourly reception-summary email broken** — Gmail 535, needs the owner's Google account.
-6. **The ~25% reception ceiling is unexplained** (DEC-0128, sharpened DEC-0129/DEC-0130/DEC-0131).
-   Deterministic, structural, ours, and now sharpened further: the S113 miss histogram clusters
-   at 925.5–926.5 MHz specifically, scattered across hop-sequence order (not a drift artifact),
-   and the deployed source shows no PLL-settle haste — arguing against the simple retune theory.
-   Job 1 (spectrum capture 924.5–927.5 MHz) is the next attempt.
+6. **The ~25% reception ceiling is unexplained** (DEC-0128, sharpened DEC-0129/0130/0131/**0132**).
+   Deterministic, structural, ours. S114's spectrum capture (DEC-0132) found transient RFI bursts
+   across nearly the whole 925.15–927.48 MHz band, not confined to the 925.5–926.5 MHz cluster
+   DEC-0130 flagged — RFI as the mechanism strengthens, but the exclusive tie to channels 46–48
+   does not hold up as cleanly as hoped. Next: cross the spike frequencies against DEC-0130's
+   histogram (S115 job 1, Fable).
 7. ~~`max_count` is not the constant it should be~~ — **EXPLAINED and closed, DEC-0130.** Our ISS
    is **transmitter ID 4, not 0** (`loop_times[4] = 2.8125 s`), which reproduces the observed
    19–23 `max_count` spread exactly. Not a defect.
 
 ## Model tier
 
-S113 ran on Opus (desktop picker, still on the escalated tier after S112's Fable session). Reading a
-pre-registered campaign and writing its decision is judgment work, so this was defensible — but per
-OPS-DEC-0036 the picker persists across sessions: **the owner flips it back to Sonnet; a mechanical
-session (job 4) should not start on Opus unflagged.**
+S114 ran on Sonnet (default floor) — appropriate, it was execution against a pre-scoped step
+(run DEC-0131's proposed capture, merge a green PR) plus mechanical DEC/BOOT writeup, not
+open-ended hypothesis-forming. **S115 job 1 is different: the owner has explicitly called for
+Fable** to analyze DEC-0132's ambiguous result and decide what it means — escalate via the
+desktop picker at session start, per OPS-DEC-0036/0062 (the switch persists until flipped back).
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 

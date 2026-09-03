@@ -6,6 +6,24 @@ under [Pre-S16].
 
 ---
 
+## [S114] — 2026-09-02 — Spectrum capture finds wideband RFI, not a clean 925.5–926.5 MHz interferer (DEC-0132); ops#253 fully closed; PR #305 merged
+
+- **Merged PR #305** (Foundation's stopped weewx container decommissioned).
+- **ops#253 closed, both stages.** Marvin's `exec_devices` grant (`0bda:2838` via a per-device
+  udev rule, owner-ratified S114) had only been smoke-tested with `rtl_test` before this session.
+  Ran the real thing: `weewx.service` stopped (~6 min outage, self-service), a 5-min `rtl_power`
+  sweep of 924.5–927.5 MHz through `marvinctl exec-ro`, prod restarted clean.
+- **DEC-0132: the capture's noise floor was flat and stable all 5 minutes** (no rolloff shape —
+  evidence against a static gain rolloff or fixed antenna null), **but 16 of 60 ten-second windows
+  carried transient bursts (5–34 dB above floor) spanning 925.15–927.48 MHz** — nearly the whole
+  capture band, not confined to DEC-0130's flagged 925.5–926.5 MHz channels 46–48 (only 7 of 16
+  fall there; the single largest, +34.5 dB, hit 927.34 MHz, well outside it). Reading: RFI
+  strengthens as the mechanism, but the exclusive tie to channels 46–48 weakens. Blocker 6 stays
+  open — free next step (cross the spike frequencies against DEC-0130's histogram) queued for
+  S115, explicitly on Fable per the owner's call, since it's open-ended analysis, not execution.
+
+---
+
 ## [S113] — 2026-09-01 — Campaign D closes the gain axis at marvin: the curve is flat, no candidate shortlists (DEC-0128)
 
 - **Campaign D ran exactly as pre-registered and self-terminated clean** — six 45-min gain-only
