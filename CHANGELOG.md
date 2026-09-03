@@ -53,6 +53,10 @@ under [Pre-S16].
 - **`DISC-0001` given its real boundary timestamp** (2026-09-03 07:17:53 EDT) now that one exists.
 - Gates: ruff clean · 466 passed / 17 skipped · mypy clean (67 files). Docs-only session — no
   production code changed in this repo.
+- **Closeout tail:** PR #310 (this closeout, plus the ops#216 Finding-1 job filing) merged. ops#233
+  (PWS alerting rebuild) closed on ops's recommendation — both asks demonstrated live during today's
+  outage. ops#257 narrowed: limb 3 down to "no ad-hoc read" (S118 job 3 closes it); limb 2 blocked
+  on marvin's own OPS-DEC-0159-class reading.
 
 ## [S116] — 2026-09-02 — DEC-0135: the duplicate filter is time-gated and the repeat suppressed one layer up; the fix unbiases the statistic, it does not improve reception
 
