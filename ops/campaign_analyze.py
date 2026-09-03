@@ -50,10 +50,14 @@ THE 200% RECORD
 2-minute span while still stamped interval=1. This is DEC-0067's predicted
 post-freeze inflation. It is rare (weewx usually advances past the gap and
 starts a fresh accumulator instead) but it is real, and it is non-physical:
-weewx_monitor.summarize_reception_rows() applies no cap, so such a record
-contributes twice its expected packets. Excluding the record on BOTH sides of
-every gap catches truncation and absorption without having to know which
-occurred; `rx > 100` is kept as a second, independent backstop.
+weewx_monitor.summarize_reception_rows() clamps each record at 100 since S119
+(#313), so the monitor no longer counts it twice; it is still not a valid
+sample here. Excluding the record on BOTH sides of every gap catches truncation
+and absorption without having to know which occurred; `rx > 100` is kept as a
+second, independent backstop. CAVEAT (S119, #313): since DEC-0135 a fully
+received minute reads 101-105% (the driver's floored denominator), so this
+backstop now also excludes most GOOD post-fix minutes -- open on the tracker,
+not changed here.
 
 CAMPAIGN ARM LABELS mean different settings in each campaign -- see --campaign.
 Campaign A's arm A and campaign B's arm A are the SAME settings (gain 372, ex 0)

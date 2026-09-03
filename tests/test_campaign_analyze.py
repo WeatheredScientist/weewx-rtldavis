@@ -78,8 +78,9 @@ def test_nonphysical_record_is_excluded():
     """The measured 2026-07-29 03:10 record: rxCheckPercent = 200.0.
 
     A record that absorbed a 2-minute span while still stamped interval=1.
-    summarize_reception_rows() applies no cap, so it would contribute twice its
-    expected packets.
+    summarize_reception_rows() clamps each record at 100 since S119 (#313), so the
+    monitor no longer counts it twice; the campaign readout still excludes it
+    outright, because a clamped absorbed record is not a valid sample either.
     """
     recs = [_rec(0, 75.0), _rec(1, 200.0), _rec(2, 75.0)]
     keep, drop = ca.partition(recs)

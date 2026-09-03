@@ -15,7 +15,9 @@ from weewx_monitor.py, so the deployed behaviour is under test:
   * NULL-rxCheckPercent records count as gaps, excluded from the totals;
   * rows group into local-hour buckets; an empty day yields None;
   * a real temp .sdb round-trips; a missing DB returns None without raising;
-  * the formatted email actually reports "Packets dropped".
+  * the formatted email actually reports "Packets dropped";
+  * a record over 100% (the driver's floored denominator, #313) is clamped to 100,
+    counted as 'over100', and can never drive 'dropped' negative.
 
 weewx_monitor.py writes a pidfile at import; `--test-alert` in argv bypasses that
 guard, letting the module import cleanly without touching a running monitor.
@@ -114,10 +116,55 @@ def test_format_reports_dropped_and_mean():
     rows = [(100000, 1, 100.0), (100060, 1, 50.0)]
     s = wm.summarize_reception_rows(rows, 20.0)
     out = wm.format_reception_summary(s, "2026-07-08 00:00–12:00")
-    assert "Packets dropped (est):" in out
+    assert "Packets dropped (est, lower bound):" in out
     assert "Mean reception:" in out
     assert "rxCheckPercent" in out
     assert "2026-07-08 00:00–12:00" in out   # window label in the header
+
+
+def test_over_100_records_are_clamped_and_counted():
+    # #313: since DEC-0135 a fully received minute reads 101-105% because the driver
+    # floors its denominator (21, or 20 on a 59 s period, against 21.33 real tx/min).
+    # Each such record contributes exactly its expected packets, never more, so
+    # 'dropped' is a lower bound on real loss and cannot go negative.
+    rows = [(100000, 1, 104.76), (100060, 1, 105.0), (100120, 1, 100.0), (100180, 1, 71.43)]
+    s = wm.summarize_reception_rows(rows, 21.3333)
+    assert s['records'] == 4
+    assert s['over100'] == 2
+    assert s['received'] <= s['expected']
+    assert abs(s['dropped'] - 21.3333 * (1 - 0.7143)) < 1e-3   # only the real loss
+    assert s['mean_pct'] <= 100.0
+    hour = next(iter(s['hours'].values()))
+    assert hour['over100'] == 2
+    assert hour['min_pct'] == 71.43
+    assert hour['dropped'] >= 0.0
+
+
+def test_all_over_100_reads_exactly_100_and_zero_dropped():
+    # The measured 2026-09-03 08:00-11:00 shape: every record over 100 (mean 103%).
+    rows = [(100000 + 60 * i, 1, 103.0) for i in range(60)]
+    s = wm.summarize_reception_rows(rows, 21.3333)
+    assert s['over100'] == 60
+    assert abs(s['dropped']) < 1e-9
+    assert abs(s['mean_pct'] - 100.0) < 1e-9
+    hour = next(iter(s['hours'].values()))
+    assert hour['min_pct'] == 100.0
+    assert hour['mean_pct'] == 100.0
+
+
+def test_format_reports_clamp_count_and_lower_bound_label():
+    import re
+    rows = [(100000, 1, 104.76), (100060, 1, 50.0)]
+    s = wm.summarize_reception_rows(rows, 21.3333)
+    out = wm.format_reception_summary(s, "2026-09-03 06:00–12:00")
+    m = re.search(r"Packets dropped \(est, lower bound\):\s+(-?\d+)", out)
+    assert m and int(m.group(1)) >= 0, out
+    assert "Records reading over 100% (clamped): 1 of 2" in out
+    assert "clamped at 100%" in out                     # header says what the number is
+    assert "-1" not in out.split("Dropped")[1].split("Mean")[0]   # no negative hour row
+    # No over-100 record -> the clamp line is omitted, nothing else changes.
+    s2 = wm.summarize_reception_rows([(100000, 1, 80.0)], 21.3333)
+    assert "Records reading over 100%" not in wm.format_reception_summary(s2, "x")
 
 
 def test_period_floor_aligns_to_local_blocks():
@@ -147,6 +194,9 @@ ALL_TESTS = [
     test_db_reception_summary_reads_temp_sdb,
     test_db_reception_summary_missing_db_returns_none,
     test_format_reports_dropped_and_mean,
+    test_over_100_records_are_clamped_and_counted,
+    test_all_over_100_reads_exactly_100_and_zero_dropped,
+    test_format_reports_clamp_count_and_lower_bound_label,
     test_period_floor_aligns_to_local_blocks,
     test_period_block_advances_after_interval,
 ]
