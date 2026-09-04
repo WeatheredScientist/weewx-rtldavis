@@ -52,11 +52,19 @@ S118. Marvin releases need **two** separate Class C confirmations, not one — `
 
 ### ▶▶ S124 JOB LIST
 
-1. **ops#265 — Docker Hub self-service publish from marvin.** No `git_branch`/`.git` in the tenant
-   root (ops#257, same root cause); read both before designing a path. Hub push is otherwise the
-   only thing left on the `v2.0.16` release. Judgment work if it needs a new transport design.
-2. **ops#257 limb 2 — `EnvironmentFile` with `IMAGE=`.** MARVIN-DEC-0109 approved the property;
-   read ops#257 for what marvin now allows before building.
+1. **ops#265 — first Hub push, once marvin installs `983b43b`.** Design is settled, not open:
+   ops built the client (`marvinctl push`/`tag`, OPS-DEC-0190, installed 09-04), and **weewx's yes
+   to `latest`-as-a-gesture is given** (S123, on the thread) — versioned push is self-service
+   Class B, `:latest` moves only by the owner's own gesture on marvin. Waits on the owner's Hub PAT
+   (root terminal on marvin) + marvin's install; both not ours. Then: `marvinctl --tenant weewx
+   push weatheredscientist/weewx-rtldavis:v2.0.16`; done = tag visible on Hub (at `:v2.0.13` now).
+2. **ops#257 limb 2 — the `tag` step is weewx's, in order.** S122 picked the **tag shape**
+   (`:marvin-live` floating own-tag + `tag` verb, MARVIN-DEC-0109) — *not* `EnvironmentFile`.
+   Install order is load-bearing (MARVIN-DEC-0116): marvin installs `marvin-own` with `tag` →
+   **weewx** runs `marvinctl --tenant weewx tag weatheredscientist/weewx-rtldavis:<running>
+   …:marvin-live` (read `<running>` off `inspect weewx-rtldavis-v2`, never assume) → marvin
+   installs the unit + `daemon-reload`, no restart. Skipping our step strands the unit on a
+   missing tag at the next restart. Same installer run as job 1's verbs.
 3. **#327 — GPLv3 §5(a) notice in the dupgate patch's `main.go`** (cheap code, but it is a Go
    source change → needs a build, a sibling `grep` tripwire in the Dockerfile, and a deploy pass;
    ride it with the next image cut rather than cutting one for it).
@@ -100,8 +108,8 @@ S118. Marvin releases need **two** separate Class C confirmations, not one — `
 S123 ran on **Sonnet** for the closeout repair and #320, then the owner switched to **Fable** for
 #314's design call — and the Sonnet first-pass recommendation was wrong (DEC-0140): it had not
 checked whether #317 already changed the ceiling. Lesson carried: *"moot once X ships" in a job
-list is a claim to re-verify against source, not a fact.* S124's job 1 (ops#265) is judgment work
-if a new transport design is needed — say so in the first reply. Desktop switches persist
+list is a claim to re-verify against source, not a fact.* S124's jobs 1–2 are now execution of
+settled designs (OPS-DEC-0190 / MARVIN-DEC-0109) — **Sonnet**. Desktop switches persist
 (OPS-DEC-0036/0062): **the Fable switch from S123 is still live unless the owner restored Sonnet**;
 state the running model in the first reply.
 
