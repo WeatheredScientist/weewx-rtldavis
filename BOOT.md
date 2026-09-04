@@ -25,9 +25,10 @@ pre-fix 197/360 (55%) — **#317 closed** (DEC-0139). `docs/DATA_ERRATA.md`'s `D
 boundaries. Campaigns A-D remain *untested*, not re-run (no reason to — see `docs/ROADMAP.md` P2).
 
 **`v2.0.16` promoted to `main`, tagged `prod-baseline-20260904`** (PR #324, 267 commits S75->S122).
-`main`/`dev` are in sync. Docker Hub is still `:v2.0.13` (two releases behind) — no self-service
-publish path since the marvin move; filed as
-[ops#265](https://github.com/WeatheredScientist/eaglehunt-ops/issues/265).
+`main`/`dev` are in sync. **Docker Hub has `:v2.0.16`** (owner-pushed 09-04 11:30 ET, verified
+byte-identical to prod — `CONSTANTS.md` Release row); `:latest` still `v2.0.13`. The self-service
+publish path is [ops#265](https://github.com/WeatheredScientist/eaglehunt-ops/issues/265) — for the
+*next* release. **GitHub Releases stopped at v2.0.11** — five versions untagged/unreleased, #331.
 
 **S122's public-release audit found two more items:** README three releases stale — fixed (PR
 #325); this file over its 2,500-token cap — [ops#264](https://github.com/WeatheredScientist/eaglehunt-ops/issues/264),
@@ -52,12 +53,12 @@ S118. Marvin releases need **two** separate Class C confirmations, not one — `
 
 ### ▶▶ S124 JOB LIST
 
-1. **ops#265 — first Hub push, once marvin installs `983b43b`.** Design is settled, not open:
-   ops built the client (`marvinctl push`/`tag`, OPS-DEC-0190, installed 09-04), and **weewx's yes
-   to `latest`-as-a-gesture is given** (S123, on the thread) — versioned push is self-service
-   Class B, `:latest` moves only by the owner's own gesture on marvin. Waits on the owner's Hub PAT
-   (root terminal on marvin) + marvin's install; both not ours. Then: `marvinctl --tenant weewx
-   push weatheredscientist/weewx-rtldavis:v2.0.16`; done = tag visible on Hub (at `:v2.0.13` now).
+1. **ops#265 — the durable self-service push, once marvin installs `983b43b`.** `:v2.0.16` is
+   **already on Hub** (owner-pushed 09-04 11:30 ET, byte-identical to prod — `CONSTANTS.md`
+   Release row; S123 wrongly told ops it was at `:v2.0.13` and corrected it). Design settled: ops'
+   client (`marvinctl push`/`tag`, OPS-DEC-0190) installed; **weewx's yes to `latest`-as-a-gesture
+   given** (S123). Waits on the owner's Hub PAT + marvin's install. First self-service use is the
+   *next* release. `:latest` (= v2.0.13) moves only by the owner's gesture — their call, not a job.
 2. **ops#257 limb 2 — the `tag` step is weewx's, in order.** S122 picked the **tag shape**
    (`:marvin-live` floating own-tag + `tag` verb, MARVIN-DEC-0109) — *not* `EnvironmentFile`.
    Install order is load-bearing (MARVIN-DEC-0116): marvin installs `marvin-own` with `tag` →
@@ -65,18 +66,22 @@ S118. Marvin releases need **two** separate Class C confirmations, not one — `
    …:marvin-live` (read `<running>` off `inspect weewx-rtldavis-v2`, never assume) → marvin
    installs the unit + `daemon-reload`, no restart. Skipping our step strands the unit on a
    missing tag at the next restart. Same installer run as job 1's verbs.
-3. **#327 — GPLv3 §5(a) notice in the dupgate patch's `main.go`** (cheap code, but it is a Go
+3. **#331 — GitHub Releases backfill** (`git tag v2.0.12`…`v2.0.16` on the commits that built each
+   image + `gh release create` with CHANGELOG notes) **and write the step into CONVENTIONS.md /
+   the closeout skeleton** so a version-changing `main` promotion is not "done" without it. Cheap;
+   public-facing. Tags/releases are Class-C-shaped (public, hard to unpublish) — owner go per step.
+4. **#327 — GPLv3 §5(a) notice in the dupgate patch's `main.go`** (cheap code, but it is a Go
    source change → needs a build, a sibling `grep` tripwire in the Dockerfile, and a deploy pass;
    ride it with the next image cut rather than cutting one for it).
-4. **Retire the campaign residue** — `weewx-rx-experiment.timer` (self-service `marvinctl disable
+5. **Retire the campaign residue** — `weewx-rx-experiment.timer` (self-service `marvinctl disable
    --now`) and the `campaign.inhibit` lifecycle at `ops/weewx-monitor.service:88` that no code
    implements. Fix the comment or implement it; not both.
-5. **Fix `ExecStop=docker stop` in `weewx.service`** (DEC-0008) — owner root-edit path.
-6. **Upstream issue/PR to `lheijst/rtldavis`** — draft in `docs/upstream/`, owner tone review,
+6. **Fix `ExecStop=docker stop` in `weewx.service`** (DEC-0008) — owner root-edit path.
+7. **Upstream issue/PR to `lheijst/rtldavis`** — draft in `docs/upstream/`, owner tone review,
    never posted without a go.
-7. **Post-fix baseline watch** — RF-dead episodes (blocker 2) are measurable now; observation only.
-8. **Audit Phase 2** sessions A (Sonnet, mechanical), B (judgment), C (design, owner) — unchanged.
-9. `campaign_analyze.py` port to marvin (ops#250) · durable logrotate for marvin `logs/` ·
+8. **Post-fix baseline watch** — RF-dead episodes (blocker 2) are measurable now; observation only.
+9. **Audit Phase 2** sessions A (Sonnet, mechanical), B (judgment), C (design, owner) — unchanged.
+10. `campaign_analyze.py` port to marvin (ops#250) · durable logrotate for marvin `logs/` ·
    ops#260 (Foundation decoupling umbrella, frontier) · ops#110 (frontier, 2027 build).
 
 **Carried forward, untouched:** NAS-LEASE cross-host wiring (low) · `CONSTANTS.md` infra re-verify ·
@@ -89,17 +94,18 @@ S118. Marvin releases need **two** separate Class C confirmations, not one — `
 | Prod host | marvin · `weewx.service` in `/weather.slice`, `docker run --rm` — two-tenant box |
 | Prod | **`v2.0.16`**, driver ws.5 + dupgate + slot-count denominator, weewx 5.5.0, gain 372. Since 09-03 20:29:06 ET (DEC-0138) |
 | `main` | promoted, tag `prod-baseline-20260904` (PR #324) — in sync with `dev` |
-| Docker Hub | `:v2.0.13` — job 2 (ops#265), two releases behind |
+| Docker Hub | **`:v2.0.16`** since 09-04 11:30 ET (owner route), byte-identical to prod · `:latest` = `v2.0.13` · `v2.0.14`/`v2.0.15` never pushed · job 1 (ops#265) is the next release's path |
+| GitHub Releases | **dead since `v2.0.11`** (2026-07-28) — no `v2.0.12`…`v2.0.16` tags or releases; #331, job 3 |
 | Monitor | dev tip `bd499d3`'s file (sha `147f3eff...`); `REMEDY_MODE=restart_unit` armed and executable |
-| Git | S122: PRs #322–#325 · S123: #326 (closeout repair), #328 (#314/#320) — all merged to `dev`; `main` unchanged at `prod-baseline-20260904` |
+| Git | S122: PRs #322–#325 · S123: #326 (closeout repair), #328 (#314/#320), #329 (close), #330 (job-list fix), #332 (Hub state) — all merged to `dev`; `main` unchanged at `prod-baseline-20260904` |
 | Open risks | the 6-hourly email was thought broken (Gmail 535) and arrived 09-03; cause of recovery unknown, not ours to chase |
-| Trackers | repo **#327** (cheap, needs a build pass) open · ops **#264** (closes on the next green sweep), **#265**, #257 (limb 2), #250, #110, #260 open · repo #314, #317, #320, #313, #316, #253, #216 closed; ops#256, #233 closed |
+| Trackers | repo **#327** (cheap, needs a build pass), **#331** (GitHub Releases dead since v2.0.11 — backfill v2.0.12–16 tags/releases, add the step to the convention) open · ops **#264** (closes on the next green sweep), **#265**, #257 (limb 2), #250, #110, #260 open · repo #314, #317, #320, #313, #316, #253, #216 closed; ops#256, #233 closed |
 
 ## Blockers
 
 1. **weewx process freezes — 1.31/day, median 240 s (DEC-0088-corrected).** Root cause unproven.
 2. **RF-dead episode root cause unknown** (DEC-0081, deliberately open) — measurable post-DEC-0136.
-   Job 7.
+   Job 8.
 3. **ERR-0005** — unchanged.
 4. ~~6-hourly reception-summary email~~ — arriving again as of 09-03; watch, don't chase.
 
