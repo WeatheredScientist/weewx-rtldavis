@@ -137,6 +137,15 @@ alone did not catch.
   received-packet, `Hop:`, and freqError lines with it. The miss lines alone were enough to find a
   ~7.75 s periodicity (DEC-0133) — and not enough to resolve its alias or check freqError against it.
   `marvinctl --tenant weewx grep DEBUG <log>` into scratch on the day, then grep locally (S115).
+- **A marvin release's "one-off owner-authorized transport" is at least TWO Class C gates, not one**
+  (S121, DEC-0138): the `scp` of the build tarball onto marvin and the `sudo tar` extraction of it
+  into the `t-weewx`-owned tenant root are separately guarded — an approved-and-spent token for the
+  transfer says nothing about the extraction. After the scp's guard was satisfied, the extraction
+  attempt via `marvin-admin` came back a plain `Permission denied`, not another guard block —
+  the owner account has no write access to `/srv/docker/weewx` (mode `0750`, `t-weewx:t-weewx`) and
+  passwordless sudo is retired (MARVIN-DEC-0105), so that step needs the owner's own hands (an
+  interactive `sudo` password prompt an agent structurally cannot supply), not a mint. Budget for
+  two separate owner confirmations on every marvin build until `ops#257` closes the self-service gap.
 
 ## §4 Liveness and deployment — proving a thing is actually running
 

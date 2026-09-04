@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S120 → S121)
+## ▶ Resume here (S121 → S122)
 
 ### What's settled (do not re-derive)
 
@@ -23,15 +23,24 @@ in 33 of 213 different-type consecutive pairs and **0 of 80** same-type pairs, a
 coincidence. It unbiased a statistic; the data was always correct. Gain 372 holds. Campaigns A–D
 are *untested* and not re-run.
 
-**#317's fix is on `dev`, not yet deployed (DEC-0137, S120, PR #319 → `e158741`).**
-`rxCheckPercent` now denominates by `round((last − prev) / loop_time)` — the ISS's own inter-arrival
-clock per transmitter — instead of `floor(wall-clock period / loop period)`, so `count <= max_count`
-holds by construction and PR #315's clamp (S119) should stop firing rather than just hide the
-over-count. Pre-fix scale measured directly: 197/360 records (55%) over 100% in the 12:00–18:00
-window. 475 passed/17 skipped (+6), ruff/mypy/secret gate clean. **#317 stays open** until it ships
-as `v2.0.16` and is verified live — a `dev` merge is a silent no-op in prod. **S120 shipped this
-code but never ran its own closeout** (ops#218) — repaired retroactively at S121's start: this
-pointer, the CHANGELOG entry, DEC-0137. S120 does not get a done-marker.
+**#317's fix is built, deployed, and running — `v2.0.16` since 2026-09-03 20:29:06 EDT (DEC-0137 →
+DEC-0138).** `rxCheckPercent` now denominates by `round((last − prev) / loop_time)` — the ISS's own
+inter-arrival clock per transmitter — instead of `floor(wall-clock period / loop period)`, so
+`count <= max_count` holds by construction and PR #315's clamp (S119) should stop firing rather than
+just hide the over-count. Pre-fix scale measured directly: 197/360 records (55%) over 100% in the
+12:00–18:00 window. Cutover outage **31 s** (same-host recreate); artifact verified directly
+(`grep -n last_pkt_ts` in the built image) before the unit-file flip, not from the build pipeline's
+exit. Driver banner unchanged `0.20+ws.5`; no CRITICAL since restart. **#317 stays open** — deploy-
+verified, not yet metric-verified; close it once the 18:00/00:00 ET monitor email shows the 55%
+baseline reading ~0%, then write `DISC-0001`'s second boundary in `docs/DATA_ERRATA.md`.
+
+**Two Class C gates per marvin release, not one** (`docs/GOTCHAS.md` §3, S121) — the tarball `scp`
+and the `sudo tar` extraction into the `t-weewx`-owned tenant root are separately guarded; the
+extraction needs the owner's own hands (interactive sudo password, no passwordless path since
+MARVIN-DEC-0105), not a mint. Budget for two owner confirmations per build until `ops#257` closes.
+
+**S120 shipped #317's code but never ran its own closeout** (ops#218) — repaired at S121's start:
+BOOT pointer, CHANGELOG `[S120]` entry, DEC-0137 (PR #321). S120 does not get a done-marker.
 
 **The per-transmitter-ID loop period is verified, not inherited (S119, #313).** `(41 + id) / 16` s
 for packet id 0..7 = DIP ID 1..8 = 2.5625..3.0 s. Davis's own VP2 spec sheet (DS6152: every sensor
@@ -67,19 +76,17 @@ weewx.service` since 16:20 ET. Still untested end-to-end (no stall since).
 inventories the field. `ops/soak_check.sh` still targets `NAS_HOST` (unverified since DEC-0118).
 Repo #253 and #216 were fixed in S118; close them once the owner confirms.
 
-### ▶▶ S121 JOB LIST
+### ▶▶ S122 JOB LIST
 
-1. **`v2.0.16` — ship #317's fix.** Code is done (DEC-0137, PR #319 → `dev`@`e158741`). Remaining:
-   tree transport to marvin (owner-authorized — `ops#257` has no self-service `git_branch`/checkout
-   on the tenant, same one-off `scp` of a `git archive` export DEC-0136 used) → `marvinctl build`
-   (self-service) → unit image-tag flip (owner-run root edit) → cutover → confirm the 18:00 / 00:00
-   monitor emails read the new denominator (`marvinctl --tenant weewx tail
-   /srv/docker/weewx/logs/weewx_monitor.log N`) → close #317 with the live proof → `DISC-0001`'s
-   second boundary in `docs/DATA_ERRATA.md` (a metric-definition step change, same treatment
-   DEC-0135's ~73%→~99% got).
+1. **Close #317.** `v2.0.16` is built, deployed, and running (DEC-0138, 31 s cutover, 2026-09-03
+   20:29:06 EDT) — code and deploy are done. Only remaining: confirm the 18:00/00:00 ET monitor
+   email shows the pre-fix 55%-over-100% baseline reading ~0% (`marvinctl --tenant weewx tail
+   /srv/docker/weewx/logs/weewx_monitor.log N`) → close #317 with that number → `DISC-0001`'s second
+   boundary in `docs/DATA_ERRATA.md` (a metric-definition step change, same treatment DEC-0135's
+   ~73%→~99% got).
 2. **Post-fix baseline watch** — RF-dead episodes (blocker 2) are measurable now; observation only.
-3. **`v2.0.15` promotion to `main` + Docker Hub** (DEC-0078; Hub is at `:v2.0.13`). Tag a new
-   `prod-baseline-YYYYMMDD`. Could ride with v2.0.16.
+3. **`v2.0.16` promotion to `main` + Docker Hub** (DEC-0078; Hub is at `:v2.0.13`, now two releases
+   behind). Tag a new `prod-baseline-YYYYMMDD` once #317 closes and the metric is confirmed.
 4. **ops#257 limb 2 — `EnvironmentFile` with `IMAGE=`.** MARVIN-DEC-0109 approved the property;
    read ops#257 for what marvin now allows before building.
 5. **Retire the campaign residue** — `weewx-rx-experiment.timer` (self-service `marvinctl disable
@@ -101,17 +108,17 @@ Repo #253 and #216 were fixed in S118; close them once the owner confirms.
 (S119 corrected the prod-image row and added the monitor row; the rest is unverified) · ops
 CONSTANTS §5 register row check (`ef8e9af8`) · GitHub Support purge ticket.
 
-### Current state (S121 open, repairing S120's debt)
+### Current state (S121 close)
 
 | Thing | State |
 |---|---|
 | Prod host | marvin · `weewx.service` in `/weather.slice`, `docker run --rm` — two-tenant box |
-| Prod | **`v2.0.15`**, driver ws.5 + dupgate, weewx 5.5.0, gain 372. Since 09-03 07:17 ET. `dev`@`e158741` (#317's fix) not yet built or deployed |
-| Docker Hub | `:v2.0.13` — job 3 |
+| Prod | **`v2.0.16`**, driver ws.5 + dupgate + slot-count denominator, weewx 5.5.0, gain 372. Since 09-03 20:29:06 ET (DEC-0138), 31 s cutover |
+| Docker Hub | `:v2.0.13` — job 3, now two releases behind |
 | Monitor | dev tip `bd499d3`'s file (sha `147f3eff…`), running since 16:20:49 ET; `REMEDY_MODE=restart_unit` armed and executable |
-| Git | PR #319 merged (squash `e158741`, S120); this session's closeout pending at write time |
+| Git | PR #319 (S120 code) + PR #321 (closeout repair + DEC-0137/0138) merged to `dev`@`73acc3d` |
 | Open risks | the 6-hourly email was thought broken (Gmail 535) and arrived 09-03; cause of the recovery unknown, not ours to chase |
-| Trackers | repo **#317** (mid, fix landed/deploy pending), **#314** (cheap), **#320** (cheap, new) open · ops#257 (limb 2), #250, #110, #260 open · repo #313, #316 closed; ops#256, #233 closed |
+| Trackers | repo **#317** (mid, deploy-verified/metric-verification pending), **#314** (cheap), **#320** (cheap) open · ops#257 (limb 2), #250, #110, #260 open · repo #313, #316 closed; ops#256, #233 closed |
 
 ## Blockers
 
@@ -123,9 +130,10 @@ CONSTANTS §5 register row check (`ef8e9af8`) · GitHub Support purge ticket.
 
 ## Model tier
 
-S119 ran on **Fable** (owner's desktop session; the interval question was judgment work). S120 ran
-on Sonnet and shipped #317's design (already written into the issue) without incident. S121's job 1
-is the v2.0.16 build/deploy, equally mechanical — **Sonnet or Opus, not frontier**. Desktop switches
+S119 ran on **Fable** (owner's desktop session; the interval question was judgment work). S120 and
+S121 both ran on **Sonnet** — implementation, closeout repair, and the v2.0.16 build/deploy were all
+execution of an already-settled design, no judgment call needed. S122's job 1 (confirm the monitor
+email, close #317) is equally mechanical — **Sonnet or Opus, not frontier**. Desktop switches
 persist (OPS-DEC-0036/0062): state the running model in the first reply.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
@@ -134,10 +142,12 @@ persist (OPS-DEC-0036/0062): state the running model in the first reply.
 zero/empty/green result (§1) · any PR/merge sequence or handoff write (§2) · any NAS or campaign
 task (§3) · judging a component live, dead, or shipped (§4). **New traps are appended THERE.**
 
-_Last updated: 2026-09-03 (S121 open, repairing S120's undone closeout — ops#218). S120 summary
-(reconstructed from git + the #317 comment thread, no live transcript needed): implemented #317's
-already-designed fix (slot-count denominator, 6 new tests), merged PR #319 → `e158741`, commented on
-#317 explaining why it stays open until `v2.0.16` deploys, but never wrote BOOT/CHANGELOG/DEC or a
-session title. S121 repairs that here — this pointer, the `[S120]` CHANGELOG entry, DEC-0137 — before
-picking up the job list's remainder (v2.0.16 build/deploy). Gate re-verified clean at S121 start:
-ruff clean, 475 passed / 17 skipped, mypy clean (68 files)._
+_Last updated: 2026-09-03 (S121 close). Session summary: opened on a closeout-debt hook (ops#218) —
+S120 had shipped #317's fix (PR #319 → `e158741`) without running BOOT/CHANGELOG/DEC or a session
+title. Repaired that first (DEC-0137, PR #321), then continued straight into the job list's
+remainder: built `v2.0.16` self-service (`marvinctl build`), transported via the same one-off
+owner-authorized path DEC-0136 used (two separate Class C gates found this time, not one —
+`docs/GOTCHAS.md` §3), verified the artifact directly before touching prod, and cut prod over in
+31 s (DEC-0138). #317 stays open pending the 18:00/00:00 ET monitor email's metric confirmation —
+first job for S122. Gate clean throughout: ruff clean, 475 passed / 17 skipped, mypy clean (68
+files), secret gate clean on every commit._
