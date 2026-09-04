@@ -25,9 +25,10 @@ pre-fix 197/360 (55%) — **#317 closed** (DEC-0139). `docs/DATA_ERRATA.md`'s `D
 boundaries. Campaigns A-D remain *untested*, not re-run (no reason to — see `docs/ROADMAP.md` P2).
 
 **`v2.0.16` promoted to `main`, tagged `prod-baseline-20260904`** (PR #324, 267 commits S75->S122).
-`main`/`dev` are in sync. Docker Hub is still `:v2.0.13` (two releases behind) — no self-service
-publish path since the marvin move; filed as
-[ops#265](https://github.com/WeatheredScientist/eaglehunt-ops/issues/265).
+`main`/`dev` are in sync. **Docker Hub has `:v2.0.16`** (owner-pushed 09-04 11:30 ET, verified
+byte-identical to prod — `CONSTANTS.md` Release row); `:latest` still `v2.0.13`. The self-service
+publish path is [ops#265](https://github.com/WeatheredScientist/eaglehunt-ops/issues/265) — for the
+*next* release. **GitHub Releases stopped at v2.0.11** — five versions untagged/unreleased, #331.
 
 **S122's public-release audit found two more items:** README three releases stale — fixed (PR
 #325); this file over its 2,500-token cap — [ops#264](https://github.com/WeatheredScientist/eaglehunt-ops/issues/264),
@@ -93,9 +94,10 @@ S118. Marvin releases need **two** separate Class C confirmations, not one — `
 | Prod host | marvin · `weewx.service` in `/weather.slice`, `docker run --rm` — two-tenant box |
 | Prod | **`v2.0.16`**, driver ws.5 + dupgate + slot-count denominator, weewx 5.5.0, gain 372. Since 09-03 20:29:06 ET (DEC-0138) |
 | `main` | promoted, tag `prod-baseline-20260904` (PR #324) — in sync with `dev` |
-| Docker Hub | `:v2.0.13` — job 2 (ops#265), two releases behind |
+| Docker Hub | **`:v2.0.16`** since 09-04 11:30 ET (owner route), byte-identical to prod · `:latest` = `v2.0.13` · `v2.0.14`/`v2.0.15` never pushed · job 1 (ops#265) is the next release's path |
+| GitHub Releases | **dead since `v2.0.11`** (2026-07-28) — no `v2.0.12`…`v2.0.16` tags or releases; #331, job 3 |
 | Monitor | dev tip `bd499d3`'s file (sha `147f3eff...`); `REMEDY_MODE=restart_unit` armed and executable |
-| Git | S122: PRs #322–#325 · S123: #326 (closeout repair), #328 (#314/#320) — all merged to `dev`; `main` unchanged at `prod-baseline-20260904` |
+| Git | S122: PRs #322–#325 · S123: #326 (closeout repair), #328 (#314/#320), #329 (close), #330 (job-list fix), #332 (Hub state) — all merged to `dev`; `main` unchanged at `prod-baseline-20260904` |
 | Open risks | the 6-hourly email was thought broken (Gmail 535) and arrived 09-03; cause of recovery unknown, not ours to chase |
 | Trackers | repo **#327** (cheap, needs a build pass), **#331** (GitHub Releases dead since v2.0.11 — backfill v2.0.12–16 tags/releases, add the step to the convention) open · ops **#264** (closes on the next green sweep), **#265**, #257 (limb 2), #250, #110, #260 open · repo #314, #317, #320, #313, #316, #253, #216 closed; ops#256, #233 closed |
 
