@@ -6,6 +6,29 @@ under [Pre-S16].
 
 ---
 
+## [S120] — 2026-09-03 — DEC-0137: #317's fix lands on dev — rxCheckPercent denominates by ISS slots between received packets, not floor(wall-clock period / loop period); >100% becomes structurally impossible
+
+- **#317 (driver).** `_update_stats` records each transmitter's last accepted-packet arrival time;
+  `_update_summaries` denominates by `round((last − prev) / loop_time)` instead of
+  `period // loop_time`, so `count[i] <= max_count[i]` holds by construction instead of relying on
+  PR #315's after-the-fact clamp. Counter resets clear both timestamps so a discontinuity can't
+  manufacture a spurious baseline. The 12:00–18:00 email measured the pre-fix scale directly: 197 of
+  360 records (55%) read over 100%. `tests/test_slot_count_denominator.py` (new, 6 tests: the four
+  synthetic cases from #317, the reset guard, a 500-period randomized invariant sweep);
+  `test_reception_stats.py` + `test_issue_225_qc_fixes.py` reseeded to the new baseline. Squash-merged
+  PR #319 → `dev`@`e158741`. Gate: ruff clean · 475 passed / 17 skipped (+6) · mypy clean, 68 files ·
+  secret gate clean.
+- **#317 stays open — deploy is the remaining half, not a formality.** A `dev` merge is a silent
+  no-op in prod (driver is BAKED into the image). Remaining: tree transport to marvin (owner-run,
+  `ops#257` — no self-service `git_branch`/checkout on the tenant yet) → `marvinctl build`
+  (self-service) → unit image-tag flip (owner-run) → `v2.0.16` → confirm the 18:00/00:00 monitor
+  emails on the new denominator → `DISC-0001`'s second boundary in `docs/DATA_ERRATA.md`.
+- DEC-0137 recorded (owed since S119's clamp shipped tracker-only, no DEC).
+- **Closeout debt (ops#218):** this session's code landed (PR #319, e158741) without running the
+  closeout ritual — no BOOT/CHANGELOG/DEC update, no session title. Repaired retroactively by S121:
+  this entry, DEC-0137, and the BOOT.md pointer rewrite below. S120 never wrote its own done-marker
+  and does not get one now.
+
 ## [S119] — 2026-09-03 — #313: the reception summary clamps per-record rxCheckPercent at 100%, and the per-ID transmit interval is verified against Davis's own spec sheets
 
 - **#313 (monitor).** `summarize_reception_rows()` clamps each record's rxCheckPercent at 100 before

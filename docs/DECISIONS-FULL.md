@@ -8992,3 +8992,57 @@ startup, so the armed state cannot be positively confirmed short of a real fault
 exists for exactly DEC-0074's reason and is only called at remedy time. Ordering of this session's
 flip is guaranteed by the `&&` chain, not by timestamps — the unit mtime and the process start fall
 in the same second.
+
+## DEC-0137 — #317: rxCheckPercent denominates by ISS slots between received packets, not floor(wall-clock period / loop period); >100% becomes structurally impossible, not just clamped
+
+**Status:** Accepted (implementation; merged to `dev`, deploy pending as `v2.0.16`) · **Date:**
+2026-09-03 (S120) · **Root-causes** #313, superseding its own clamp (PR #315, tracker-recorded, no
+DEC) with a fix at the source · **implements** the design `BOOT.md`'s S120 job list wrote into #317
+
+### The bias the clamp could only mask
+
+DEC-0136 already named the mechanism: `_update_summaries()` computed `max_count = period //
+loop_time`, floor-dividing a wall-clock archive period by the per-transmitter loop period
+(2.8125 s for this ISS). A 60 s period floors 21.33 to 21; a 59 s period (the archive event's own
+~1 s jitter) floors 20.13 to 20 — both below the 21.33 real transmissions/minute, so a fully
+received minute reads 101–105% (~103% mean). PR #315 (#313, S119) clamped each record at 100 and
+relabeled `dropped` a lower bound — correct reporting, but the over-count was still being computed
+every period, just capped after the fact. The 2026-09-03 12:00–18:00 email (routed via ops, #317
+comment) measured the scale directly: **197 of 360 records (55%) read over 100%** under the old
+denominator, at the top of S35's original "a third to a half" estimate — meaning 59 s periods are
+at least as common as 60 s ones.
+
+### The fix
+
+`_update_stats` now records each transmitter's **last accepted-packet arrival time**
+(`last_pkt_ts[i]`) alongside the existing counters. `_update_summaries` denominates by
+`round((last_pkt_ts[i] - prev_pkt_ts[i]) / loop_time[i])` instead of `period // loop_time[i]` — the
+ISS's own clock, not the archive engine's. S115's capture measured that clock at **2.8124 s mean,
+1.0 ms sd** across 292 gaps, tight enough that `count[i] <= max_count[i]` holds by construction:
+the denominator is now the actual number of slots the ISS could have transmitted in, not an
+estimate of it. **Over 100% becomes structurally impossible, not just invisible** — PR #315's clamp
+stays in place as a defensive floor (a `NaN`/negative-delta guard, not the everyday case) but should
+never fire again outside a counter discontinuity.
+
+Counter resets — child respawn, hot-swap, a stall-triggered restart — clear both timestamps so the
+baseline never spans a discontinuity and doesn't manufacture a spurious `max_count`.
+
+### Coverage and gates
+
+`tests/test_slot_count_denominator.py` (new): the four synthetic cases from #317, the counter-reset
+guard, and a 500-period randomized invariant sweep asserting `count <= max_count` never breaks.
+`test_reception_stats.py` and `test_issue_225_qc_fixes.py` updated to seed the new baseline — both
+drive `_update_summaries` directly, bypassing `_update_stats`. Squash-merged PR #319 → `dev`@`e158741`.
+Gate: ruff clean · 475 passed / 17 skipped (+6) · mypy clean, 68 files · secret gate clean.
+
+### Deploy is the remaining half of this DEC, not a formality
+
+Per this repo's own deploy-layer lesson (`CONSTANTS.md` — the driver is BAKED into the image, never
+mounted), a `dev` merge is a silent no-op in prod. #317 stays **open** until `v2.0.16` actually
+ships and is verified live — the 55%-clamped baseline above is the pre-measurement; post-deploy the
+expectation is ~0. Remaining, per `ops#257` (no self-service tree transport to marvin — no
+`git_branch`, no `.git` in the tenant root, so this routes through the same one-off
+owner-authorized transport DEC-0136 used for `v2.0.15`): tree transport (owner) → `marvinctl build`
+(self-service) → unit image-tag flip (owner) → confirm the 18:00/00:00 monitor emails on the new
+denominator → `docs/DATA_ERRATA.md`'s `DISC-0001` second boundary (a metric-definition step change,
+same treatment DEC-0135's ~73%→~99% discontinuity got).
