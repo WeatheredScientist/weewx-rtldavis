@@ -9096,3 +9096,45 @@ needs real archive periods to accumulate and compare against the pre-fix 55%-ove
 18:00/00:00 ET monitor email confirms the new denominator, and only then gets `DISC-0001`'s second
 boundary in `docs/DATA_ERRATA.md` — the same two-step DEC-0135→DEC-0136 pattern this decision
 continues.
+
+## DEC-0139 — DEC-0138 confirmed by the metric: the first fully-post-cutover monitor window reads 0 records over 100%, down from 197/360 (55%); #317 closed
+
+**Status:** Accepted (measurement) · **Date:** 2026-09-04 (S122) · **confirms** DEC-0137/DEC-0138 on
+production data · **closes** #317 · **completes** the DEC-0135→0136→0137→0138→0139 verification
+chain for the rxCheckPercent fixes
+
+### What was checked
+
+`weewx_monitor.py`'s 6-hourly `RECEPTION SUMMARY (rxCheckPercent)` email log
+(`/srv/docker/weewx/logs/weewx_monitor.log`, read via `marvinctl grep`/`tail`), across the three
+windows spanning the `v2.0.16` cutover (2026-09-03 20:29:06 EDT):
+
+| Window (ET) | Relative to cutover | Records over 100% (clamped) |
+|---|---|---|
+| 2026-09-03 12:00–18:00 | fully pre-fix | **197 of 360 (55%)** — matches `BOOT.md`'s S121 figure exactly |
+| 2026-09-03 18:00–00:00 | spans the cutover | 86 of 358 — already dropping, window is a mix |
+| 2026-09-04 00:00–06:00 | fully post-fix | **0 of 360 (0%)** — no "Records reading over 100%" line at all |
+
+The 00:00–06:00 body shows every hour at exactly 100% reception, mean reception 100%, `Packets
+dropped (est, lower bound): 4` against 7,680 transmitted (est.) — a real, small, physically
+plausible loss, not a divisor artifact. This is the first monitor window entirely after the
+20:29:06 EDT cutover, so it is the cleanest possible read: no mixed pre/post records to average
+across.
+
+### Why this settles it, not just suggests it
+
+`round((last − prev) / loop_time)` (DEC-0137) makes `count[i] <= max_count[i]` hold **by
+construction** — the fix isn't statistical, it's structural, so one clean window is sufficient
+confirmation, not a sample requiring a longer run. The 197→86→0 progression across the three
+windows is also the expected shape if the fix is real: a step at the deploy instant, not a gradual
+drift that could be confused with normal RF variance.
+
+### Actions taken
+
+- `docs/DATA_ERRATA.md`'s `DISC-0001` gets a second boundary (2026-09-03 20:29:06 EDT / `v2.0.16`)
+  documenting this as a metric-definition step, same treatment as DEC-0135's ~73%→~99% step —
+  historical `rxCheckPercent` values are not corrected, only the boundary is recorded.
+- **#317 closed** with this measurement as the closing comment.
+- `BOOT.md` job 3 (Docker Hub promotion, `main` tag) and job 5 (campaign-residue retirement) remain
+  open — this DEC closes the metric question only, not the release-promotion or cleanup jobs still
+  on the S122 list.
