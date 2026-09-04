@@ -6,6 +6,33 @@ under [Pre-S16].
 
 ---
 
+## [S122] — 2026-09-04 — DEC-0139: #317 closed on production data; `v2.0.16` promoted to `main` (`prod-baseline-20260904`); README banner refreshed
+
+- **#317 closed (PR #323, DEC-0139).** Read the 6-hourly `RECEPTION SUMMARY` log across the three
+  windows spanning the `v2.0.16` cutover (20:29:06 EDT, 2026-09-03): 12:00–18:00 (fully pre-fix)
+  197/360 (55%) over 100%, matching `BOOT.md`'s S121 figure exactly; 18:00–00:00 (spans the
+  cutover) 86/358, already dropping; 00:00–06:00 (fully post-fix) **0 of 360** — every hour exactly
+  100%, `dropped (est, lower bound)` 4 of 7,680. One clean window sufficed because
+  `round((last − prev) / loop_time)` makes `count <= max_count` hold by construction — the fix is
+  structural, not statistical. `docs/DATA_ERRATA.md`'s `DISC-0001` gets a second boundary.
+  Completes the DEC-0135 → 0136 → 0137 → 0138 → 0139 verification chain.
+- **`v2.0.16` promoted to `main` (PR #324), tag `prod-baseline-20260904`.** 267 commits (S75 → S122)
+  of accumulated `dev` work promoted in one merge — the duplicate-decode fix (DEC-0134/0135/0136)
+  and the slot-count denominator fix (DEC-0137/0138/0139). Docker Hub push still pending: the
+  save/scp/load/push mechanism (DEC-0078) predates the marvin host move and has no mapped
+  equivalent yet — filed as [ops#265](https://github.com/WeatheredScientist/eaglehunt-ops/issues/265).
+- **Public-release readiness audit ahead of the promotion** turned up two more findings, both
+  filed rather than fixed inline: README.md had drifted three releases stale at `v2.0.12` (fixed
+  same session, PR #325 — the version banner, driver tag, base-image weewx version, and
+  changelog bullets for v2.0.13–v2.0.16, since `.github/workflows/dockerhub-description.yml`
+  pushes this file to Docker Hub's public listing on every `main` push) and `BOOT.md` measured
+  over its 2,500-token cap ([ops#264](https://github.com/WeatheredScientist/eaglehunt-ops/issues/264)).
+- **Session never ran its own closeout** (ops#218 recurring pattern) — no CHANGELOG entry, stale
+  `BOOT.md` pointer, no session title. Repaired retroactively by S123 (this entry); S122 gets no
+  done-marker.
+- Gate state not independently re-verified by S123 — S122's own PRs report clean gates (ruff,
+  pytest, mypy, secret scan) at merge time; take that on the PR record, not re-run here.
+
 ## [S121] — 2026-09-03 — DEC-0138: `v2.0.16` built and deployed (31 s cutover); #317 stays open pending the metric-level proof
 
 - **Closeout debt repaired** (ops#218): wrote DEC-0137, the `[S120]` CHANGELOG entry below, and moved

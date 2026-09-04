@@ -487,6 +487,16 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       and should not be quoted interchangeably.
       **(c)** A `repeat` falls through to the normal path and emits a `msg.ID=` line, so "decoded"
       **includes** repeats: 274 accepted, **195 unique**.
+      **S122 reconciliation (DEC-0137→0138→0139) — a second, independent `rxCheckPercent`
+      artifact found and closed: the metric's denominator, not its repeat-dedup.** `#317`:
+      `max_count = period // 2.8125` floored a full minute to 21 slots instead of ~21.33, making
+      `count <= max_count` fail by construction and reading 101–105% on fully-received minutes
+      (197/360 records, 55%, over 100% in the 12:00–18:00 pre-fix window). Fixed by denominating
+      on the ISS's own inter-arrival clock (`round((last − prev) / loop_time)`), shipped as
+      `v2.0.16` (31 s cutover, DEC-0138), confirmed on the first fully-post-cutover window
+      (0/360 over 100%, DEC-0139) — `#317` closed. `docs/DATA_ERRATA.md`'s `DISC-0001` carries
+      this as a second boundary. `v2.0.16` promoted to `main` the same session (`prod-baseline-
+      20260904`); Docker Hub push still pending (`ops#265`).
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,
