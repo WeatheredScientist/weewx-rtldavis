@@ -6,6 +6,25 @@ under [Pre-S16].
 
 ---
 
+## [S121] — 2026-09-03 — DEC-0138: `v2.0.16` built and deployed (31 s cutover); #317 stays open pending the metric-level proof
+
+- **Closeout debt repaired** (ops#218): wrote DEC-0137, the `[S120]` CHANGELOG entry below, and moved
+  `BOOT.md`'s pointer to S120 → S121 before starting new work (PR #321).
+- **`v2.0.16` built and deployed.** Tree transport rode the same one-off owner-authorized path
+  DEC-0136 used for v2.0.15 (`ops#257` is still open — no self-service checkout on the marvin
+  tenant): local `git archive` of `dev`@`73acc3d` → `scp` to marvin (sha256-verified both ends) →
+  owner `sudo tar` extraction (a second, distinct Class C wall — `marvin-admin` has no write access
+  to the `t-weewx`-owned tenant root, found by hitting a plain `Permission denied` after the transfer
+  step's own confirmation had already been spent). `marvinctl build` then ran self-service, no gate.
+  Verified the artifact directly (`grep -n last_pkt_ts` inside the built image) before touching prod,
+  not from the build pipeline's exit alone.
+- **Cutover: 31 s** (`20:28:35` → `20:29:06` ET) — a same-host container recreate, not a rebuild
+  wait. Container sha matches the build; driver banner unchanged (`0.20+ws.5`); `weewxd` published
+  records within seconds; no `CRITICAL` since restart. DEC-0138 recorded.
+- **#317 stays open** — deploy-verified, not yet metric-verified. Next: the 18:00/00:00 ET monitor
+  email should show the pre-fix 55%-over-100% baseline reading ~0%; close #317 with that number and
+  write `DISC-0001`'s second boundary in `docs/DATA_ERRATA.md`.
+
 ## [S120] — 2026-09-03 — DEC-0137: #317's fix lands on dev — rxCheckPercent denominates by ISS slots between received packets, not floor(wall-clock period / loop period); >100% becomes structurally impossible
 
 - **#317 (driver).** `_update_stats` records each transmitter's last accepted-packet arrival time;

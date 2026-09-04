@@ -9046,3 +9046,53 @@ owner-authorized transport DEC-0136 used for `v2.0.15`): tree transport (owner) 
 (self-service) → unit image-tag flip (owner) → confirm the 18:00/00:00 monitor emails on the new
 denominator → `docs/DATA_ERRATA.md`'s `DISC-0001` second boundary (a metric-definition step change,
 same treatment DEC-0135's ~73%→~99% discontinuity got).
+
+## DEC-0138 — DEC-0137 built and deployed as `v2.0.16`: 31 s cutover, artifact verified directly before touching prod, statistical proof still pending the next monitor cycle
+
+**Status:** Accepted (deployment) · **Date:** 2026-09-03 (S121) · **Deploys** DEC-0137 · **advances**
+#317 from "merged" to "running in prod, deploy-verified" · does **not** close #317 — that needs the
+metric-level proof this DEC explicitly defers
+
+### Transport and build
+
+Same shape as DEC-0136's v2.0.15 precedent, because `ops#257` (self-service `git_branch`/checkout
+on the marvin tenant) is still open: `git archive --format=tar.gz` of `dev`@`73acc3d` locally →
+owner-authorized `scp` to `/srv/docker/weewx/` (Class C — no restricted key or forced command covers
+file transfer to marvin; sha256 `1ca2e768…` verified identical on both ends) → owner `sudo tar -xzf`
+extraction into `/srv/docker/weewx/build-v2.0.16/` (a second, distinct Class C wall: the owner's
+`marvin-admin` account has no write access to the `t-weewx`-owned tenant root regardless of the
+scp-transfer confirmation already given — two different gates, two different mints, discovered by
+hitting a plain `Permission denied` after the guard's own token had already been consumed). `marvinctl
+build /srv/docker/weewx/build-v2.0.16 -t weatheredscientist/weewx-rtldavis:v2.0.16` then ran
+**self-service**, no further gate — confirming DEC-0135's build-host answer still holds.
+
+### Verified directly, not from the pipeline's exit
+
+Per this repo's own `docs/GOTCHAS.md` §1 discipline (a green result is a claim, not proof) and
+DEC-0136's precedent (the `BUILD-EXIT` marker doesn't exist on the `marvinctl build` path):
+`marvinctl exec-ro weatheredscientist/weewx-rtldavis:v2.0.16 -- grep -n last_pkt_ts
+.../rtldavis.py` — confirmed the slot-count fields and denominator logic are actually baked into the
+image before the unit file was touched.
+
+### Cutover
+
+Owner root-edited `/etc/systemd/system/weewx.service`'s `ExecStart` (`v2.0.15` → `v2.0.16` literal —
+the ops#257 limb-2 `EnvironmentFile IMAGE=` gap, `BOOT.md` job 4, is still open) and ran
+`daemon-reload` + `restart`. Journal: `Stopping…` 20:28:35 EDT → `Started…` 20:29:06 EDT — **31 s**,
+a same-host container recreate, nowhere near DEC-0136's 16m09s (which included the marvin host-move
+build/transfer wait, not repeated here). Container image sha (`1a9daeb6c7…`) matches the build
+exactly; driver banner unchanged (`0.20+ws.5` — confirms no regression on the dupgate/ws.5 patch
+lineage); `weewxd` reached `Starting main packet loop` and published its first records within
+seconds. No `CRITICAL` in the log since restart; the one `ERROR` (`WOW: HTTP Error 429`) matches a
+rate-limit pattern present before this deploy too (07:19:16 and 14:07:53 the same day), not a new
+fault.
+
+### What this DEC does not claim
+
+**Deploy-verified is not metric-verified.** This confirms the code is genuinely running in prod with
+no startup regression — it does not yet show `rxCheckPercent` behaving differently, because that
+needs real archive periods to accumulate and compare against the pre-fix 55%-over-100% baseline
+(#317 comment, 12:00–18:00 window). Per `BOOT.md`'s own job-1 sequencing, #317 stays open until the
+18:00/00:00 ET monitor email confirms the new denominator, and only then gets `DISC-0001`'s second
+boundary in `docs/DATA_ERRATA.md` — the same two-step DEC-0135→DEC-0136 pattern this decision
+continues.
