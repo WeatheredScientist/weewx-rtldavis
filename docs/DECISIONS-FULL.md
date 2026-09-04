@@ -9138,3 +9138,59 @@ drift that could be confused with normal RF variance.
 - `BOOT.md` job 3 (Docker Hub promotion, `main` tag) and job 5 (campaign-residue retirement) remain
   open — this DEC closes the metric question only, not the release-promotion or cleanup jobs still
   on the S122 list.
+
+## DEC-0140 — `campaign_analyze.py`'s `rx > 100` backstop stays exactly as it is — not raised, not removed (#314 closed as overtaken by #317)
+
+**Status:** Accepted (decision, no code change) · **Date:** 2026-09-04 (S123) · **closes** #314 ·
+**depends on** DEC-0137 (the slot-count denominator) and DEC-0139 (its production confirmation)
+
+### Context
+
+#314 was filed at 2026-09-03 12:41 ET, split out of #313. At that moment prod ran `v2.0.15`:
+DEC-0135's repeat-packet fix had pushed the numerator to ~100% against the driver's old floored
+denominator (`period // 2.8125` → 20 or 21 slots for 21.33 real transmissions/min), so a fully
+received minute read 101–105%, and `ops/campaign_analyze.py`'s `partition()` excluded it as
+"nonphysical". The issue's own text said any readout over data after 07:17:53 ET was low by
+construction — true when written.
+
+Eight hours later, at 20:29:06 ET, #317's fix (`v2.0.16`, DEC-0137/0138) replaced that denominator
+with `round((last_pkt_ts − prev_pkt_ts) / loop_time)` per transmitter (`rtldavis.py:1684-1691`).
+
+### What that changes
+
+The new denominator scales with *real elapsed time between received packets*, which has two
+consequences the issue could not have anticipated:
+
+1. `count <= max_count` holds by construction, so `rx <= 100` on every good minute — confirmed on
+   the first fully-post-cutover window, 0/360 over (DEC-0139).
+2. The DEC-0067 absorption artifact — a record stamped `interval=1` that absorbed two minutes and
+   read 200% — cannot recur either: both `count` and `max_count` grow with the span, so such a
+   record reads ~100.
+
+So across the three driver regimes:
+
+| Data span | Good minutes | The `rx > 100` rule |
+|---|---|---|
+| Pre-v2.0.15 — every campaign A–D row | ~73%, never >100 | Correct: fires only on the genuine 2026-07-29 03:10 absorption record |
+| v2.0.15, 09-03 07:17:53 → 20:29:06 ET (~13 h) | 101–105% | Over-excludes — the **only** affected span; no campaign ran in it |
+| Post-v2.0.16 | ≤100 by construction | Dormant: cannot fire on good minutes or on absorption records |
+
+### Options weighed (on Fable, owner's call)
+
+- **A — docstring only.** Record the three-regime analysis in `partition()`'s module docstring;
+  close #314. No logic, no test change. **Chosen.**
+- **B — raise the threshold to 150 and clamp survivors at 100.** The Sonnet-tier first pass
+  recommended this. It is future-proofing against a denominator regression nothing predicts, the
+  clamp half is a no-op today (nothing reads >100), and it rewrites two passing tests.
+- **C — drop the magnitude rule.** Removes a dormant rule and its tests (churn) and would re-admit
+  the 2026-07-29 record into any Campaign A re-read unless `gap_adjacent()` independently catches
+  it — likely, but not proven, and not worth proving for a tool whose campaigns are not re-run
+  (DEC-0135).
+
+### Why the record matters
+
+The first-pass recommendation was wrong for a reason worth keeping: it evaluated the fix options
+without first checking whether the premise still held. The escalation to Fable was requested by
+the owner *before* implementation, and the re-read is what found that #317 had already moved the
+ceiling. "Moot once #317 ships" was in `BOOT.md`'s own job list; it was not acted on until read
+against the driver source. Lands with PR #328; docstring text in `ops/campaign_analyze.py`.
