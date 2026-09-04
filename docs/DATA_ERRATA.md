@@ -489,3 +489,28 @@ Measured across the boundary: mean **15.38/21 (73.2%)** over the eight windows b
 **Its thresholds, including `WU_RF_MIN_PCT = 60`, remain valid and must not be re-keyed to ~99%** —
 doing so would manufacture permanent false alarms. Only a consumer reading `rxCheckPercent` itself
 needs re-keying.
+
+**Second boundary (S121→S122, DEC-0137/DEC-0138): `rxCheckPercent`'s > 100% ceiling artifact
+removed.** Also not an `ERR-####` — no observation was ever wrong; this is the metric's *divisor*
+correcting, not the link.
+
+- **Boundary timestamp:** **2026-09-03 20:29:06 EDT** (`2026-09-04T00:29:06Z`) — the `v2.0.16`
+  cutover (31 s outage, same-host container recreate; #317).
+- **What changed.** Before this fix, the driver denominated `rxCheckPercent` by
+  `floor(wall-clock archive period / loop period)` — 60 s // 2.8125 s = 21 — against 21.33 real
+  transmissions/min, so a fully-received minute still floor-divided low and read 101–105%
+  (~103% mean). Not a reception change, a divisor artifact present since the metric existed.
+  `v2.0.16` replaced it with `round((last − prev) / loop_time)`, the ISS's own inter-arrival slot
+  count per transmitter, so `count <= max_count` holds by construction and 100% is now a true
+  ceiling.
+- **Direction:** a step **down** in over-100% incidence, at the deploy timestamp. The RF link did
+  not move.
+- **Scope:** `rxCheckPercent`'s over-100% readings and the monitor's `dropped` lower-bound only. No
+  sensor field, rain, wind, or derived quantity is affected — this is purely how the existing
+  counters are denominated.
+- **Measured:** pre-fix window (2026-09-03 12:00–18:00 ET): 197 of 360 records (55%) read over
+  100% (clamped, PR #315's stopgap). First window entirely after cutover (2026-09-04 00:00–06:00
+  ET): 0 of 360 records over 100% — every hour reads exactly 100%, mean reception 100%. Closed
+  #317 on this number.
+- **Correction status:** ⛔ not corrected, deliberately — same rationale as the first boundary:
+  historical `rxCheckPercent` values reflect what the driver computed at the time.
