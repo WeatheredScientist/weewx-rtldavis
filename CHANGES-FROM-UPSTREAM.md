@@ -1,7 +1,7 @@
 # Changes from upstream
 
 **Status:** Source of truth for what this project changed in code it did not write.
-**Last updated:** 2026-07-28 (S54)
+**Last updated:** 2026-09-04 (S123)
 
 This project is a Docker distribution of a **modified** Davis/rtldavis receiver stack. It is not
 stock upstream, and several of the files it ships are other people's work with our patches on top.
@@ -28,7 +28,7 @@ verified from `Dockerfile` (which fetches `weewx-contrib/weewx-rtldavis/src.tgz`
 
 | Component | Chain |
 |-----------|-------|
-| Go decoder | [bemasher/rtldavis](https://github.com/bemasher/rtldavis) → [lheijst/rtldavis](https://github.com/lheijst/rtldavis) → bundled in `weewx-contrib` `src.tgz` → us (unmodified) |
+| Go decoder | [bemasher/rtldavis](https://github.com/bemasher/rtldavis) → [lheijst/rtldavis](https://github.com/lheijst/rtldavis) → bundled in `weewx-contrib` `src.tgz` → **patched by us** ([`patch/rtldavis-dupgate.patch`](patch/rtldavis-dupgate.patch), [DEC-0135](docs/DECISIONS.md)) |
 | Driver | [matthewwall/weewx-sdr](https://github.com/matthewwall/weewx-sdr) + [weewx-meteostick](https://github.com/matthewwall/weewx-meteostick) → merged by **Luc Heijst** into [weewx-rtldavis](https://github.com/lheijst/weewx-rtldavis) v0.20 → repackaged by **Vince Skahan** ([weewx-contrib/weewx-rtldavis](https://github.com/weewx-contrib/weewx-rtldavis)) → **patched by us** |
 | InfluxDB uploader | [matthewwall/weewx-influx](https://github.com/matthewwall/weewx-influx) → [david-lutz/weewx-influx2](https://github.com/david-lutz/weewx-influx2) (InfluxDB 2.x port) → **patched by us** |
 | WeatherCloud uploader | [matthewwall/weewx-wcloud](https://github.com/matthewwall/weewx-wcloud) → us (unmodified except an SPDX tag) |
@@ -64,8 +64,10 @@ you see it, the baked driver is the one running).
 ## `rtldavis.py`
 
 Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 2025-12-20
-`re.compile` deprecation patch). Delta: **+815 / −149 lines** (1422 → 2088 lines), recounted
-2026-08-20 (S97).
+`re.compile` deprecation patch). Delta: **+1204 / −166 lines** (1422 → 2460 lines), recounted
+2026-09-04 (S123) — includes DEC-0135's driver-side repeat counters (`dedup_key`, `repeat_count`,
+`duplicate`) and #317's slot-count `rxCheckPercent` denominator (PR #319), both landed since the
+prior S97 count (**+815 / −149**, 1422 → 2088 lines).
 
 The baseline is not vendored here — the Dockerfile fetches it at build time — so recount it rather
 than trusting this number:
@@ -169,6 +171,16 @@ unchanged payloads has been mis-reporting reception the same way. Draft lives in
 **Maintenance note:** because the tarball is unpinned, the patch is also a tripwire. It is applied
 with `--batch --forward` and followed by a `grep -c dupwindow` assertion, so a build **fails loud**
 rather than silently producing an unpatched binary if upstream's source moves.
+
+**GPLv3 §5(a) notice: not yet added to `main.go` itself.** The patch's `From:`/`Subject:` header
+identifies the fork, and the added code comments explain the change, but unlike `rtldavis.py`
+(which logs a fork-identity line at startup) nothing in the patched binary states outright that it
+carries a modification. `main.go`'s existing `log.Printf` startup line does now print `dupWindow=%d`
+alongside the other flags, which at least surfaces the new flag — but that is not the same as a
+"you modified this, on this date" notice. Tracked as
+[#327](https://github.com/WeatheredScientist/weewx-rtldavis/issues/327) rather than patched here:
+it is a Go source change to a file that is not vendored in this repo, and belongs with a
+build/deploy verification pass, not a docs-only session.
 
 ## `influx.py`
 
