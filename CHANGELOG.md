@@ -6,6 +6,33 @@ under [Pre-S16].
 
 ---
 
+## [S123] — 2026-09-04 — S122's closeout repaired; #320 fixed, #314 closed as overtaken (DEC-0140), #327 filed; BOOT.md back under cap
+
+- **Closeout debt repaired first** (ops#218, third recurrence after S120): the `[S122]` entry
+  below, `BOOT.md`'s pointer S122 → S123, and `docs/ROADMAP.md`'s P2 reconciliation line for
+  DEC-0137→0139 (PR #326, `90797d1`). S122 gets no done-marker.
+- **#320 fixed.** `CHANGES-FROM-UPSTREAM.md`'s Provenance row for the Go decoder said "unmodified"
+  while the Dockerfile has applied `patch/rtldavis-dupgate.patch` since DEC-0135 — now "patched by
+  us" with pointers (the `## rtldavis (the Go demodulator)` section already existed; the table row
+  had drifted). `rtldavis.py` delta recounted per the file's own recipe: **+1204 / −166** (1422 →
+  2460 lines), up from S97's +815 / −149; base tarball unchanged at 1422. Last-updated bumped from
+  S54. The issue's "worth checking" question answered: the patched `main.go` carries **no GPLv3
+  §5(a) notice** of its own — **#327** filed (Go source change, needs a build+deploy pass).
+- **#314 closed as overtaken by #317 — DEC-0140, docstring-only.** The Sonnet first pass
+  recommended raising the backstop to 150 + clamp; the owner escalated to Fable before
+  implementation, and the re-read against `rtldavis.py:1684-1691` found #317's denominator already
+  makes `rx <= 100` hold by construction *and* makes an absorbed multi-minute record read ~100, not
+  200 — so the rule is correct on every campaign row, dormant post-v2.0.16, and over-excludes only
+  in v2.0.15's ~13 h, where no campaign ran. Left as-is on purpose; `ops/campaign_analyze.py`'s
+  docstring says why. (PR #328, `33fd982`.)
+- **ops#264 remedied:** `BOOT.md` rewritten under STANDARD rule 1 — 2664 → **≈1993 tok** (chars/4
+  under a UTF-8 locale, ops' `boot-cap-check` method), 80% of the 2,500 cap. Closes on the next
+  green sweep; not closed by hand.
+- ROADMAP: no line touched by DEC-0140 (`campaign_analyze.py` is not a P0–P3 item); tripwire at
+  S126, not due.
+- Gates, every commit: ruff clean · 475 passed / 17 skipped · mypy clean, 68 files · secret gate 0.
+  Merges verified by `gh pr view --json state,mergedAt`, not by `gh pr merge`'s (silent) output.
+
 ## [S122] — 2026-09-04 — DEC-0139: #317 closed on production data; `v2.0.16` promoted to `main` (`prod-baseline-20260904`); README banner refreshed
 
 - **#317 closed (PR #323, DEC-0139).** Read the 6-hourly `RECEPTION SUMMARY` log across the three
