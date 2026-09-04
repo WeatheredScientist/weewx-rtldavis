@@ -54,10 +54,20 @@ weewx_monitor.summarize_reception_rows() clamps each record at 100 since S119
 (#313), so the monitor no longer counts it twice; it is still not a valid
 sample here. Excluding the record on BOTH sides of every gap catches truncation
 and absorption without having to know which occurred; `rx > 100` is kept as a
-second, independent backstop. CAVEAT (S119, #313): since DEC-0135 a fully
-received minute reads 101-105% (the driver's floored denominator), so this
-backstop now also excludes most GOOD post-fix minutes -- open on the tracker,
-not changed here.
+second, independent backstop.
+
+The backstop's reach depends on which driver wrote the record (#314, closed
+S123). Pre-v2.0.15 -- every campaign A-D row -- good minutes read ~73% and only
+the genuine absorption artifact above exceeds 100, so the rule is correct.
+Post-v2.0.16 (2026-09-03 20:29:06 ET, #317/DEC-0137) the driver denominates by
+ISS slots between received packets, so `count <= max_count` holds by
+construction AND an absorbed multi-minute record reads ~100 rather than 200:
+the rule is dormant, unable to fire either way. The ONE span where it
+over-excludes is v2.0.15's ~13 h (2026-09-03 07:17:53 -> 20:29:06 ET), when
+DEC-0135 had unmasked the old floored denominator and a fully received minute
+read 101-105%. No campaign ran in that window. Left as-is on purpose: raising
+the threshold would be future-proofing against a regression nothing predicts,
+and removing it would re-admit the 2026-07-29 record to any Campaign A re-read.
 
 CAMPAIGN ARM LABELS mean different settings in each campaign -- see --campaign.
 Campaign A's arm A and campaign B's arm A are the SAME settings (gain 372, ex 0)
