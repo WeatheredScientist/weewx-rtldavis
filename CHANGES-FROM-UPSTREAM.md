@@ -64,8 +64,8 @@ you see it, the baked driver is the one running).
 ## `rtldavis.py`
 
 Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 2025-12-20
-`re.compile` deprecation patch). Delta: **+477 / −88 lines** (1422 → 1811 lines), recounted
-2026-07-28 (S54).
+`re.compile` deprecation patch). Delta: **+815 / −149 lines** (1422 → 2088 lines), recounted
+2026-08-20 (S97).
 
 The baseline is not vendored here — the Dockerfile fetches it at build time — so recount it rather
 than trusting this number:
@@ -93,9 +93,11 @@ count at `cd49214`, and the S37 commit that recorded it added the fork-identity 
 | 10 | **Outside temperature decoded UNSIGNED** — `parse_raw`, message type 8 | 2026-07-28 | Davis encodes the 12-bit digital temperature as **two's complement**; upstream divides the raw value by 10 with no sign handling, so every sub-0 °F reading decodes to ~+400 °F. On this station that trips the SensorQC bounds and (since DEC-0054) co-rejects the whole frame, i.e. real winter reads as RF corruption. Upstream also lacks the second no-sensor sentinel `0xFF8` that the sibling weewx-meteostick driver checks; both are fixed here. We use `temp_raw - 0x1000`, **not** meteostick's `-(temp_raw ^ 0xFFF)` — the latter is one's complement and is 0.1 °F warm on every negative reading. [DEC-0055] |
 
 | 12 | **Killed child processes are never reaped** — `ProcManager` | 2026-08-11 | `startup()` and `shutdown()` kill rtldavis by `pidof` + `SIGKILL` and never `wait()`; the engine builds a fresh `ProcManager` on every `WeeWxIOError` retry, so no instance holds a handle to its predecessor's corpse. Every stall-respawn cycle therefore leaks one zombie — three stacked under a single weewxd were forensically captured on 2026-08-11. Spawned children are now registered module-wide and reaped (`poll()`) on shutdown and before each startup. Any user of the stock driver whose RF drops long enough to trip the 150 s stall watchdog accumulates zombies the same way. |
-Numbers 1–4, 10 and 12 are real defects in upstream that any US Davis user hits — 10 bites any
-cold-climate user of the stock driver. They are the intended content of an upstream contribution
-(see [Upstreaming](#upstreaming) below).
+| 14 | **Four public-facing CLI/config bugs** — `default_stanza`, `ProcManager.startup()`, the weewx-version gate, `--action show-packets` | 2026-08-20 | The shipped config template's `cmd =` line carried a literal, unsubstituted `[options]` token; a new user accepting it as-is ships that token into `weewx.conf`, and Go's `flag.Parse()` stops at the first non-flag argument, silently discarding the auto-appended `-tf`/`-tr` and falling back to 868MHz EU instead of 915MHz US. `startup()` split the command line on `cmd.split(' ')`, breaking on a double space or a quoted, space-containing path. The weewx-version gate compared `weewx.__version__ < "3"` as a bare string — lexicographic, not numeric; `"10.0.0" < "3"` is `True` in Python. `--action show-packets` crashed on first use: `get_stderr()`'s expected empty-list queue-timeout yield raised `IndexError`, and `get_stdout()`'s flat list of decoded strings was indexed like `get_stderr()`'s list-of-lists, raising `AttributeError`. |
+| 15 | **Three more decode-path bugs** — `transm_to_store` rotation, legacy v12 `freqError`, `pct_good` storage | 2026-08-20 | `transm_to_store` (which transmitter's `freqError` gets stored, meant to rotate every 2 days) was computed once before `genLoopPackets`'s `while` loop and never recomputed inside it — the rotation only ever happened across a process restart. The legacy v12 `freqError` decode (older rtldavis binaries) has no `Transmitter` field to gate storage on, unlike v13 — with more than one active transmitter it silently mixed transmitters' data into the same fields; now refused when `tr_count > 1`. Per-transmitter `pct_good` storage tested `self.sensor_map[k] in data` where `data` had been rebound from the packet dict to a plain string (`'pct_good_%s' % tr`) — substring containment, not the intended equality; harmless with the shipped default `sensor_map` but silently wrong on a plausible user typo or an empty-string value. |
+Numbers 1–4, 10, 12, 14 and 15 are real defects in upstream that any US Davis user hits — 10 bites
+any cold-climate user of the stock driver. They are the intended content of an upstream
+contribution (see [Upstreaming](#upstreaming) below).
 
 ### Behavior changes (ours; would need discussion upstream)
 
@@ -108,6 +110,8 @@ cold-climate user of the stock driver. They are the intended content of an upstr
 | 11 | **Frame-level co-rejection** — a bounds failure condemns the whole frame | 2026-07-27 | Extends 6, which vetted each field independently — so a frame carrying *positive proof* of corruption could still have its other fields trusted. On 2026-07-27 one CRC-valid frame decoded humidity to 144.9 %RH (out of spec, rejected) and a wind byte to 39 mph from dead calm (in spec, under the delta cap, accepted) — the phantom became the archive interval's gust max and went out to ten external networks (ERR-0004). Every weather field rides the same 8-byte frame, so a **bounds** failure on any one of them now nulls all of them (`FRAME_WEATHER_KEYS`), skips the rain counter *without* resyncing `last_rain_count`, and moves no delta baselines. Diagnostics (battery flags, supercap, freqError, `pct_good`) deliberately survive: they describe the link, not the weather. A **delta** trip never co-rejects — a large step can be genuine weather; an impossible value cannot. Zero fitted parameters, so nothing can drift. Shipped in v2.0.9 (S52). [DEC-0054] |
 
 | 13 | **Stall/drought self-classification** — `STALL DIAGNOSIS` + `DATA DROUGHT` log lines | 2026-08-11 | Seven sessions (S67–S73) could not tell outage classes apart after the fact: a mute child (process/USB fault), a child emitting but decoding nothing (RF-quiet), and genuine reception collapse all looked identical in the logs, and USB resets were fired blind at all three. The driver now counts raw stderr lines and hop-only packets since the last real data packet: the 150 s stall raise is preceded by a `STALL DIAGNOSIS` line (raw count 0 = mute; >0 = emitting), and a paced `DATA DROUGHT` line covers the RF-quiet case, which never trips the stall watchdog because hop packets reset it. Plus a 10-line stderr tail via `drain_stderr()` at every stall. |
+| 17 | **Hot swap of `-gain` / `-ex` via a watched control file** — no weewx or container restart | 2026-08-26 | Both are startup-only CLI flags on the Go binary, so upstream's only way to change them is a full restart; campaign work paid a 600 s settle window and a restart transient per swap. Opt-in via `hotswap_control_file` (unset = off, so stock behavior is unchanged). The driver polls that path about every 10 s at the top of `genLoopPackets`, and on an mtime change respawns the child with the new flags via the `shutdown()`/`startup(cmd, …)` path that already existed. **The control file accepts only bounds-checked `gain` (0–496) and `ex` (0–1000) integers, never a command string** — `cmd` reaches `shlex.split()` → `Popen`, so a raw-command channel would be arbitrary code execution for anything able to write that path. A swap resets the stall-watchdog counters and widens the threshold to 240 s until the first packet, because a respawned child restarts its radio init period (US: 133 s) and the normal 150 s watchdog — whose timer a respawn does *not* reset — would otherwise tear the driver down mid-init. Plus rollback to the last known-good command on a failed startup, an atomic ack file recording the measured respawn gap, and the control file honored at init so a restart cannot silently revert a swapped value. [DEC-0117] |
+| 16 | **SensorQC bounds extended to the extra-sensor fields and `rain_rate`** | 2026-08-20 | `temp_1`/`temp_2`/`humid_1`/`humid_2` and `rain_rate` were listed in `FRAME_WEATHER_KEYS` (co-rejected when a frame is corrupt) but absent from `SENSOR_QC_DEFAULTS` — a corrupted reading on any of them could never trigger its own bounds rejection, only ride along on some other field's. Extended to match `temperature`/`humidity`'s bounds (`temp_1`/`temp_2`/`humid_1`/`humid_2` share the identical decode expression as those fields) and `weewx.conf.example`'s existing `StdQC` `rainRate` backstop (0–16 in/h) for `rain_rate`. Dormant on this station (single ISS, no `temp_hum` channel), but a real gap for other users' multi-transmitter or temp/humidity-extension configs. |
 ### Why these filters exist: the corruption mechanism
 
 Items 1 and 6 both exist because **corrupt sensor readings arrive with a valid CRC**. The cause is now
@@ -144,11 +148,35 @@ duplicate. Do not trust a null from an instrument you have not proven can see a 
 
 ---
 
+## `rtldavis` (the Go demodulator) — `patch/rtldavis-dupgate.patch`
+
+**A new kind of divergence for this repo: a fork of the Go binary's source, not of a Python file.**
+The demodulator is not vendored here — `Dockerfile` fetches `src.tgz` from
+`weewx-contrib/weewx-rtldavis` at an **unpinned `refs/heads/main`** and builds it. Our change ships
+as a tracked patch applied during the build, so the divergence stays one reviewable file.
+
+**What it changes (DEC-0135):** the duplicate-packet filter compared payload bytes with no time
+bound, so a payload the transmitter **re-sent one loop period later** was dropped without hopping,
+and the pending timer booked the received packet as `packet missed`. Measured live: ~27% of all
+transmissions, holding `rxCheckPercent` at ~73% on a ~99% link. The patch gates the drop on
+`-dupwindow` (default 500 ms — above the same-burst re-decode cluster at ~2 ms, below the shortest
+loop period of 2.5625 s) and logs the survivors as `repeat packet:`.
+
+**Belongs upstream** — it is not station-specific: any Davis station whose transmitter re-sends
+unchanged payloads has been mis-reporting reception the same way. Draft lives in `docs/upstream/`
+(gitignored); see `docs/UPSTREAM-THREADS.md`.
+
+**Maintenance note:** because the tarball is unpinned, the patch is also a tripwire. It is applied
+with `--batch --forward` and followed by a `grep -c dupwindow` assertion, so a build **fails loud**
+rather than silently producing an unpatched binary if upstream's source moves.
+
 ## `influx.py`
 
 Base: `david-lutz/weewx-influx2` (itself a fork of `matthewwall/weewx-influx` for InfluxDB 2.x).
-Delta: **+33 / −14 lines.** The Dockerfile installs the upstream extension and then copies our
-patched file over it.
+Delta through item 5: **+33 / −14 lines**; item 6 (2026-08-21) adds roughly 64 more, not
+re-measured against true upstream here — the number above predates it and is left as historical
+rather than guessed at. The Dockerfile installs the upstream extension and then copies our patched
+file over it.
 
 | # | Change | Date | Why |
 |---|--------|------|-----|
@@ -157,8 +185,9 @@ patched file over it.
 | 3 | **CLI `KeyError` when env vars unset** | 2026-07-04 | `os.environ['INFLUX_HOST']` (and `_ORG`, `_TOKEN`) are read at option-parse time, so `--help` crashes with `KeyError` unless all three are exported. Now `os.environ.get()`. Also fixed the `InluxDfB` help-text typos. |
 | 4 | **Per-record logging at INFO** | 2026-07-05 | `loginf("Add Bindding Tag = ...")` and `loginf("tags = ...")` fire on every record. Demoted to `logdbg`. |
 | 5 | **`distutils.StrictVersion` removed** | 2026-07-04 | `distutils` is gone in Python 3.12+; this image runs 3.14. Replaced with a tuple compare. |
+| 6 | **NAS-LEASE courtesy yield (opt-in)** | 2026-08-21 | `InfluxThread` gains a `lease_dir` param (default `None`, off unless `weewx.conf` sets it) and a thin `skip_this_post` override: while another tenant's `NAS-LEASE.md` lease is held and unexpired, `post_interval` rises from its configured value to 1800s (safe per DEC-0092's own data-integrity analysis: prod runs `stale=None`/`max_backlog=1,000,000`, so a 30-minute deferral queues ~30 records against a million-record cap and loses none). Any lease-file read/parse failure, or weewx's own held lease, is treated as "not held" — fails toward normal operation, never toward silently slowing our own uploads. Design: DEC-0099/DEC-0104; build: DEC-0111. |
 
-Items 1, 2, 3 and 5 are unambiguous upstream bugs. Item 2 is a security fix.
+Items 1, 2, 3 and 5 are unambiguous upstream bugs. Item 2 is a security fix. Item 6 is original functionality, not an upstream-divergence fix.
 
 ---
 

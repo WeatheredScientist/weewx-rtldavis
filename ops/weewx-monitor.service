@@ -1,0 +1,114 @@
+# weewx-monitor.service -- marvin-side alerting for weewx-rtldavis (S107, ops#233)
+#
+# WHAT THIS REPLACES
+# ------------------
+# On Foundation this ran as a DSM Task Scheduler entry named `weewx_monitor`.
+# weewx moved to marvin on 2026-08-28 (DEC-0118) and the monitor did not: it kept
+# reading Foundation's `logs/weewx.log`, which froze at the cutover. It then sent
+# ~14 hours of confident "STILL DOWN" mail about six uploaders that were all
+# healthy -- live rxCheckPercent ran 74-77% while it reported reception "below
+# 60%". The thing that would have reported the failure WAS the failure.
+#
+# Two changes make that specific outcome impossible rather than unlikely:
+#   - INPUT_STALE_S: the monitor now checks whether its input is alive BEFORE
+#     evaluating any threshold, and reports blindness as its own alert class.
+#   - REMEDY_MODE: the Foundation USB unbind/rebind is not ported. See below.
+#
+# INSTALL (marvin session / owner -- NOT from the weewx repo session)
+# ------------------------------------------------------------------
+#   install -m 0644 weewx-monitor.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now weewx-monitor.service
+#
+# Deploy `weewx_monitor.py` from the MERGED dev tip, never from a local edit --
+# the repo is the source of truth, and marvin's copy was already found stale
+# against dev at S107 (the ops#214 silent-drift pattern).
+
+[Unit]
+Description=weewx-rtldavis monitoring (uploader alerting, RF reception, input-staleness watchdog)
+Documentation=https://github.com/WeatheredScientist/weewx-rtldavis
+# Ordering only, deliberately NOT Requires=/BindsTo=. The monitor's whole job is
+# to notice when weewx is unhealthy; tying its lifecycle to weewx.service would
+# stop it at exactly the moment it becomes useful.
+After=weewx.service
+Wants=weewx.service
+
+[Service]
+Type=simple
+User=t-weewx
+Group=t-weewx
+Slice=weather.slice
+
+# Credentials (ALERT_FROM / GMAIL_PASS / ALERT_TO / STATION_NAME). Never
+# committed -- this repo is public (DEC-0012).
+EnvironmentFile=/srv/docker/weewx/monitor.env
+
+# Paths. Everything below derives from BASE_DIR; the Foundation default
+# (/volume1/docker/weewx-rtldavis) is what froze, so it is set explicitly here
+# rather than left to the module default.
+Environment=WEEWX_RTLDAVIS_DIR=/srv/docker/weewx
+Environment=WEEWX_LOG=/srv/docker/weewx/logs/weewx.log
+Environment=WEEWX_ARCHIVE_DB=/srv/docker/weewx/weewx-data/archive/weewx.sdb
+
+# Input staleness. weewx publishes every ~3 s and archives every 60 s, so five
+# minutes of silence is already far outside normal. Lower this and a routine
+# container restart starts mailing; raise it and the ops#233 blind window grows.
+Environment=INPUT_STALE_S=300
+
+# REMEDY_MODE -- START AT 'none', ON PURPOSE.
+#
+# 'none' means detect and escalate, never act. That is the correct posture until
+# two things are true:
+#   1. This unit has been observed running clean through at least one full day,
+#      including a log rotation (00:00) and a deliberate weewx restart.
+#   2. t-weewx has actually been granted a way to restart weewx.service -- a
+#      path-scoped sudoers entry or marvinctl's tier-2 own-unit verb. That is a
+#      privilege grant and belongs to the marvin session / owner, not to this
+#      file. Setting restart_unit without it yields a remedy that fails every
+#      time, which is worse than one that never runs: it looks like it tried.
+#
+# Then switch to 'restart_unit'. On marvin that is a FULL container recreate --
+# weewx.service is `docker run --rm` with `ExecStartPre=docker rm -f` -- which is
+# the remedy that actually resolved ERR-0005 and the one the Foundation monitor
+# could only rebuild via `docker inspect` and mail to a human.
+#
+# Do NOT set 'usb_reset' here. That body is Foundation's: it unbinds a driver at
+# a hardcoded Synology bus path, and marvin's USB topology differs
+# (MARVIN-DEC-0051 reassigned two controller roles). On a box hosting two live
+# tenants and a passed-through ASM3142 it would either no-op or reset someone
+# else's device.
+Environment=REMEDY_MODE=none
+Environment=REMEDY_UNIT=weewx.service
+Environment="REMEDY_SYSTEMCTL=sudo systemctl"
+
+# Campaign inhibit. An RX campaign restarts weewx once per arm on purpose; every
+# one of those looks exactly like the fault this watchdog remedies, and a remedy
+# landing mid-arm corrupts the block being measured. The campaign script creates
+# this file for its duration. Detection and alerting continue; only action stops.
+Environment=CAMPAIGN_INHIBIT=/srv/docker/weewx/logs/campaign.inhibit
+
+ExecStart=/usr/bin/python3 /srv/docker/weewx/weewx_monitor.py
+
+Restart=always
+RestartSec=30
+
+# The monitor is an observer: it must never be the reason the box is under
+# pressure. These are ceilings, not reservations.
+MemoryMax=192M
+CPUQuota=10%
+
+# It reads logs and one SQLite file, writes its own logs, and sends mail.
+# NoNewPrivileges MUST stay false even while REMEDY_MODE=none: sudo cannot work
+# under it, so setting it true now would leave a unit that looks correct and
+# whose remedy silently fails the first time it is ever needed -- DEC-0061's
+# "configured-looking, never exercised, therefore never disproved" trap, which
+# has bitten this repo twice. If the remedy is ever routed through marvinctl
+# instead of sudo, set this true in the same change.
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/docker/weewx/logs
+
+[Install]
+WantedBy=multi-user.target

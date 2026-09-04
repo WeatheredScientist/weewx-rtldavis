@@ -1,0 +1,14 @@
+# weewx-rx-experiment.timer -- fires weewx-rx-experiment.service every 5 min,
+# matching ops/rx_experiment.sh's own documented cadence for `tick`/`guard`.
+# See weewx-rx-experiment.service for the full rationale and install steps.
+
+[Unit]
+Description=Periodic driver for weewx-rtldavis RX campaigns (S108)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

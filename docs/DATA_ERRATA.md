@@ -400,3 +400,117 @@ backlog — its packet counts and `rxCheckPercent` are inflated. Both artifacts 
 weather, and neither is corrected in the archive. Treat freeze-adjacent records as suspect rather
 than nulling them: the underlying observations are real, only their timestamps are wrong. Known
 freezes so far: **2026-07-30 08:04 (218 s), 2026-08-02 13:46 (209 s), 2026-08-03 02:59 (208 s)**.
+
+---
+
+## ERR-0006 — 2026-08-20 phantom 37 mph wind gust (calm, light rain)
+
+| Field | Value |
+|---|---|
+| **Observed (bad)** | `windGust = 37 mph` (windGustDir 175.3°) in the single archive record at **2026-08-20 11:12:00 EDT** (epoch `1787238720`); `windSpeed = 3.64 mph` (the interval mean, contaminated by the same ~1 sample at 37). Surrounding minutes both sides: 1–2 mph. |
+| **Corrected** | `windSpeed`, `windDir`, `windGust`, `windGustDir` → **NULL**, plus the derived `ET`, `appTemp`, `windrun` (DEC-0037). Day-max `windGust` for 2026-08-20 now **19 mph**, genuine. |
+| **Actual weather** | Light, continuous rain throughout (rainRate 0.2–0.4 in/h, `rain` accumulating 0.01–0.02 in/min) — a real shower, but **rainRate itself shows no corruption signature**: no absurd spike, no gap, no StdQC nulling. Wind baseline 0–2 mph both sides of the event; no supporting pressure jump or temperature drop in the same record — the signature of an isolated corrupt sample, not a squall front (a genuine gust front usually perturbs at least one other field). |
+| **Root cause** | Same class as `ERR-0004`: `rxCheckPercent` for this one minute collapsed to **9.2%** (vs. 60–90% every surrounding minute) — a reception collapse. `weewx.log` is silent 11:11:35→11:15:22 (3 min 47 s), confirmed RF-dead (no restart banner anywhere near the window — checked directly, this is not a container/process restart). Among the few packets that passed CRC that minute, at least one carried a corrupted wind byte; every *other* field in the archive row (temp, humidity, pressure, rainRate) reads normally, so nothing else in the frame tripped a bounds check for DEC-0054's frame co-rejection to catch. |
+| **Why the filter didn't catch it** | Identical gap to `ERR-0004`, confirmed still open: 37 mph is inside the 6410's 0–200 mph spec (bounds pass), and the ~35 mph delta from a calm baseline is under `dewpoint_service.py`'s 75 mph/packet delta cap (deliberately loose so a genuine squall gust is never false-rejected). **Investigated and ruled out as the mechanism here:** issue `#225` item 2 (rain-rate corruption failing to co-reject sibling wind fields, fixed same-day in PR #260/dev, not yet deployed to prod) — checked `rainRate` directly for this exact window and it's clean, so that specific gap is not what happened this time. This is `ERR-0004`'s already-documented residual risk (mid-magnitude, single-field corruption during a reception collapse) recurring independently — not a new bug, and tightening thresholds still can't close it without risking false rejection of real squall gusts. |
+
+**Provenance:** found by the owner directly on the dashboard, ~5 h after publication. Cross-checked independently in parallel by an eaglehunt-weather-dashboard session (InfluxDB via its own query path — exact same 37.0/3.64 values, confirming two independent read paths agree) and an eaglehunt-ops session (raised issue `#225` item 2 as a candidate mechanism and a possible container-restart confound; both checked directly and ruled out for this specific incident — see cross-repo thread, ops issue `#192`). No new code shipped; this is a straight data correction against an already-understood, already-accepted gap.
+
+**Propagation & correction status:**
+
+- **local-archive:** ✅ **applied 2026-08-20 (S98)** — guarded `UPDATE archive SET windSpeed=NULL,
+  windDir=NULL, windGust=NULL, windGustDir=NULL, ET=NULL, appTemp=NULL, windrun=NULL WHERE
+  dateTime=1787238720 AND windGust>30` (rows_changed=1), then `weectl database rebuild-daily
+  --date=2026-08-20`. Verified: row reads all-NULL; day-max gust now 19 mph. Backup:
+  `weewx.sdb.bak-err0006-20260820`.
+- **influxdb:** ✅ **applied 2026-08-20 (S98)** — point at `record,binding=archive` 15:12:00Z deleted
+  and rewritten minus `windGust_mph`, `windGustDir`, `windSpeed_mph`, `windDir`, `appTemp_F`, `ET_in`,
+  `windrun_mile`, with sparse **`windGust_qc = 1`** and **`windSpeed_qc = 1`** flags (the
+  DEC-0032/DEC-0099 contract). `windchill_F` kept — at 70.1 °F it is wind-independent (weewx returns
+  temperature above 50 °F). **Note:** the dashboard's own read-only proxy token cannot write/delete
+  (403, confirmed) — the correction used `weewx.conf`'s `[[Influx]]` uploader token instead. Verified
+  via direct query: 24 fields, both flags present, matches `ERR-0004`'s own field count exactly.
+- **external:** ⛔ immutable — published within minutes to all configured sinks: Wunderground (PWS
+  *and* RapidFire, at the corrupt frame's own near-instant cadence — RapidFire is a live ticker, not
+  an archive of record, so it isn't reachable by this correction regardless), PWSWeather, OWM,
+  CWOP → NOAA MADIS, AWEKAS, Windy, WOW, WOW-BE, Ogoxe. As with `ERR-0004`, MADIS's buddy-check on
+  wind gives CWOP's copy a real chance of being auto-flagged downstream; every other external copy
+  stands permanently.
+
+**Lesson:** the exact same blind spot as `ERR-0004` — bounds-and-delta-only wind QC cannot
+distinguish a genuine sudden gust from a corrupted single sample of similar magnitude, and no other
+field happened to co-fail this time either. The one signal that WOULD discriminate the two cases and
+isn't yet used: `rxCheckPercent` collapsed to 9.2% (`ERR-0004`: 13.2%) in the exact same minute as
+the bad reading, against a 60–90% baseline every other minute — reception quality is an independent,
+already-computed corroborating signal that neither the driver's frame co-rejection nor
+`dewpoint_service.py`'s delta filter currently consults. See `BACKLOG.md` for a proposed
+reception-quality-correlated wind guard raised in response to this incident.
+
+---
+
+## DISC-0001 — `rxCheckPercent` steps ~73% → ~99% at the DEC-0135 deploy (not an error)
+
+**Not an `ERR-####`.** No observation is wrong, before or after. This is a **metric-definition
+discontinuity**, recorded here because it is the file anyone consults when a stored series does
+something abrupt, and because a step of ~26 points in a field that is written into **every archive
+record** will otherwise be re-discovered later as a real event.
+
+**What changed.** Until the DEC-0135 deploy, the Go demodulator discarded the transmitter's
+byte-identical re-sent packets and the pending timer booked each as `packet missed` (DEC-0134).
+`rxCheckPercent` is derived from those counters, so it under-reported a ~99% link as ~73% —
+**for the entire life of the receiver**, across both hosts and every gain setting. After the fix
+the repeats are counted as the receptions they always were.
+
+- **Boundary timestamp (S117, DEC-0136):** **2026-09-03 07:17:53 EDT** (`2026-09-03T11:17:53Z`) —
+  the `v2.0.15` cutover. Records before that instant are pre-fix, after it post-fix. The receiver
+  was down 07:01:44 → 07:17:53 EDT (16m09s), so that gap carries no records at all.
+- **Direction:** a step **up**, at the deploy timestamp. Not a reception improvement — the RF link
+  did not change, and no weather value in any record before or after this point is affected.
+- **Scope:** `rxCheckPercent` only. Sensor fields, rain, wind and every derived quantity are
+  untouched — the discarded packets were byte-identical, so nothing was ever lost.
+- **Correction status:** ⛔ **not corrected, deliberately.** Historical values are honest reports
+  of what the driver measured at the time; rewriting them would destroy the record of a real
+  instrument fault. Compare across the boundary only with the offset in mind.
+
+**Consumers whose thresholds are keyed to the old baseline** and go stale at the same instant:
+`BACKLOG.md` and `docs/ROADMAP.md`'s stated figures, the
+dashboard's (via eaglehunt-ops#256, DEC-0010) — **and the proposed reception-quality-correlated
+wind guard raised under `ERR-0004`/`ERR-0006` below**, whose "collapsed to 9.2% / 13.2% against a
+60–90% baseline" discriminator is stated in the pre-fix scale. That guard is not yet built; when it
+is, its thresholds must be derived from post-fix data, and the *pre*-fix incident figures it cites
+must be read against the pre-fix baseline, not the new one. The signal itself survives — a
+reception collapse during a corrupt frame is still a collapse — but every number in it moves.
+
+**`weewx_monitor.py` is NOT on that list, and was removed from it at S117 after being measured**
+(DEC-0136). Its `WINDOW` metric is not `rxCheckPercent`: it counts `len(set(epochs))` — distinct
+one-second epochs of publish lines against `WU_RF_EXPECTED = 21` — and already includes freqError
+hop packets, so the dedup saturates and the metric is substantially **insensitive** to this change.
+Measured across the boundary: mean **15.38/21 (73.2%)** over the eight windows before, **15.86/21
+(75.5%)** over the seven after. A real jump would have shown as ~19.7/21 and been unmissable.
+**Its thresholds, including `WU_RF_MIN_PCT = 60`, remain valid and must not be re-keyed to ~99%** —
+doing so would manufacture permanent false alarms. Only a consumer reading `rxCheckPercent` itself
+needs re-keying.
+
+**Second boundary (S121→S122, DEC-0137/DEC-0138): `rxCheckPercent`'s > 100% ceiling artifact
+removed.** Also not an `ERR-####` — no observation was ever wrong; this is the metric's *divisor*
+correcting, not the link.
+
+- **Boundary timestamp:** **2026-09-03 20:29:06 EDT** (`2026-09-04T00:29:06Z`) — the `v2.0.16`
+  cutover (31 s outage, same-host container recreate; #317).
+- **What changed.** Before this fix, the driver denominated `rxCheckPercent` by
+  `floor(wall-clock archive period / loop period)` — 60 s // 2.8125 s = 21 — against 21.33 real
+  transmissions/min, so a fully-received minute still floor-divided low and read 101–105%
+  (~103% mean). Not a reception change, a divisor artifact present since the metric existed.
+  `v2.0.16` replaced it with `round((last − prev) / loop_time)`, the ISS's own inter-arrival slot
+  count per transmitter, so `count <= max_count` holds by construction and 100% is now a true
+  ceiling.
+- **Direction:** a step **down** in over-100% incidence, at the deploy timestamp. The RF link did
+  not move.
+- **Scope:** `rxCheckPercent`'s over-100% readings and the monitor's `dropped` lower-bound only. No
+  sensor field, rain, wind, or derived quantity is affected — this is purely how the existing
+  counters are denominated.
+- **Measured:** pre-fix window (2026-09-03 12:00–18:00 ET): 197 of 360 records (55%) read over
+  100% (clamped, PR #315's stopgap). First window entirely after cutover (2026-09-04 00:00–06:00
+  ET): 0 of 360 records over 100% — every hour reads exactly 100%, mean reception 100%. Closed
+  #317 on this number.
+- **Correction status:** ⛔ not corrected, deliberately — same rationale as the first boundary:
+  historical `rxCheckPercent` values reflect what the driver computed at the time.

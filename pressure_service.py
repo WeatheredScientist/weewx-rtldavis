@@ -1,5 +1,6 @@
 import hmac
 import hashlib
+import re
 import time
 import threading
 import weewx
@@ -16,6 +17,21 @@ except ImportError:
     REQUESTS_AVAILABLE = False
     log.error("requests module not available")
 
+# S91: requests/urllib3 embed the full request URL -- credential and all --
+# in the string form of any connection-level exception (ConnectionError,
+# SSLError, MaxRetryError). fetch_pressure() puts api-key and api-signature
+# in that URL's query string, so an ordinary DNS blip or WeatherLink outage
+# put the live key into weewx.log at ERROR level -- a channel DEC-0047's
+# read-guard does not cover. Redact by query-param NAME, not by a known
+# value: get_signature() can itself raise before `sig` is ever bound, so
+# there is no local variable guaranteed to be in scope at the failure point.
+_SECRET_PARAM_RE = re.compile(r'(api-key|api-signature)=[^&\s]*')
+
+
+def _redact_secrets(text):
+    return _SECRET_PARAM_RE.sub(r'\1=REDACTED', text)
+
+
 class DavisPressureFetcher(StdService):
     def __init__(self, engine, config_dict):
         super().__init__(engine, config_dict)
@@ -25,7 +41,8 @@ class DavisPressureFetcher(StdService):
         self.station_id = int(pressure_dict.get('station_id', 0))
         self.fetch_interval = int(pressure_dict.get('fetch_interval', 3600))
         self.last_pressure = None
-        self.last_fetch = 0
+        self.last_fetch = 0        # throttle stamp: set at every ATTEMPT, success or not
+        self.last_success = None   # epoch of the last fetch that actually yielded a value (#172)
         # S57b: never log key material, not even a prefix. This line used to log
         # api_key[:8], putting 8 characters of the live WeatherLink key into
         # weewx.log -- and its 30 daily rotations -- on EVERY startup. weewx.log
@@ -69,15 +86,17 @@ class DavisPressureFetcher(StdService):
                 for record in sensor.get('data', []):
                     if 'bar_sea_level' in record and record['bar_sea_level']:
                         self.last_pressure = record['bar_sea_level']
+                        self.last_success = time.time()
                         log.info("DavisPressureFetcher: got pressure %.3f", self.last_pressure)
                         return
                     if 'bar' in record and record['bar']:
                         self.last_pressure = record['bar']
+                        self.last_success = time.time()
                         log.info("DavisPressureFetcher: got pressure %.3f", self.last_pressure)
                         return
             log.warning("DavisPressureFetcher: no pressure found in response")
         except Exception as e:
-            log.error("DavisPressureFetcher: error fetching pressure: %s", e)
+            log.error("DavisPressureFetcher: error fetching pressure: %s", _redact_secrets(str(e)))
 
     def new_loop_packet(self, event):
         now = time.time()
@@ -89,9 +108,21 @@ class DavisPressureFetcher(StdService):
             t.start()
         if self.last_pressure is not None:
             packet = event.packet
+            # barometer (sea-level, WeatherLink-corrected) is the quantity we
+            # fetched -- inject it; that is this service's whole purpose.
+            #
+            # pressure (station) and altimeter are DIFFERENT quantities. The
+            # old backfill wrote this same sea-level number into both, so the
+            # archive's station-pressure column carried sea-level values at
+            # any nonzero elevation (#144, hlf#302) -- not a reader trap but a
+            # wrong number. Honest nulls instead (DEC-0006): the ISS never
+            # provides them, so they stay None and the archive columns go NULL
+            # rather than borrowed. DEC-0086 documents the passthrough itself.
             if packet.get('barometer') is None:
                 packet['barometer'] = self.last_pressure
-            if packet.get('pressure') is None:
-                packet['pressure'] = self.last_pressure
-            if packet.get('altimeter') is None:
-                packet['altimeter'] = self.last_pressure
+        if self.last_success is not None:
+            # #172: the fetch's own freshness, distinct from last_fetch (a
+            # throttle stamp that advances on FAILED attempts too). Stamped
+            # into every packet; loop_json_writer publishes it verbatim so the
+            # dashboard can see how stale the relayed barometer actually is.
+            event.packet['barometer_fetch_epoch'] = int(self.last_success)

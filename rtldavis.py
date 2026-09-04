@@ -146,6 +146,16 @@ Run rtld on a thread and push the output onto a queue.
     # This has only effect with 2 transmitters or more
     save_pct_good_per_transmitter = False
 
+    # Hot-swap of -gain / -ex without restarting weewx or the container.
+    # Unset (the default) disables the feature entirely. When set, the driver
+    # polls this file about every 10s; on an mtime change it validates the
+    # contents, respawns the rtldavis child with the new flags, and writes the
+    # outcome to <hotswap_control_file>.ack (override with hotswap_ack_file).
+    # The file accepts ONLY these integer keys -- never a command string:
+    #     gain = 0..496     tuner gain in tenths of a dB (0 = auto)
+    #     ex   = 0..1000    extra loopTime in ms
+    # hotswap_control_file = /path/to/rtldavis-hotswap.conf
+
     # The driver to use:
     driver = user.rtldavis
 
@@ -157,6 +167,7 @@ from subprocess import check_output
 import signal
 import os
 import re
+import shlex
 import subprocess
 import math
 import threading
@@ -204,9 +215,15 @@ weewx.units.MetricWXUnits['group_frequency'] = 'hertz'
 weewx.units.default_unit_format_dict['hertz'] = '%.0f'
 weewx.units.default_unit_label_dict['hertz'] = ' Hz'
 
-if weewx.__version__ < "3":
-    raise weewx.UnsupportedFeature("weewx 3 is required, found %s" %
-                                   weewx.__version__)
+def check_weewx_version(version_string, minimum_major=3):
+    """A bare string compare (version_string < "3") is lexicographic, not
+    numeric -- "10.0.0" < "3" is True in Python, which would reject a
+    genuinely newer weewx 10.x (issue #226 item 3)."""
+    if int(version_string.split('.')[0]) < minimum_major:
+        raise weewx.UnsupportedFeature("weewx %d is required, found %s" %
+                                       (minimum_major, version_string))
+
+check_weewx_version(weewx.__version__)
 
 # Rtldavis Usage
 #
@@ -266,9 +283,13 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     Most such copies pick up bit errors, fail CRC and are dropped silently inside
     the Go binary (protocol.go ~L218), but ~1 in 65536 passes by chance and
     delivers garbage. Neither dedup catches a CORRUPTED near-duplicate: Go's
-    (`seen == lastRecMsg`, main.go ~L394) and the driver's own
-    (`data != self._last_pkt`, ~L1209) are both EXACT-equality, so a corrupted
-    copy is not a duplicate and sails past both.
+    (`seen == lastRecMsg`, main.go) and the driver's own (`pkt_key !=
+    self._last_pkt`, in genLoopPackets) are both EXACT-equality, so a corrupted
+    copy is not a duplicate and sails past both. DEC-0135 (S116) narrowed the Go
+    side to a 500 ms window, which is the double-decode population this filter
+    was built for -- the identical payloads arriving one loop period later were
+    the transmitter re-sending unchanged data, never a decode artifact, and are
+    now forwarded and suppressed one layer up instead of booked as misses.
     So CRC is not a defense here, and a decode-layer plausibility check is the
     only one available at this layer. The ORIGINAL driver treated *any* negative
     counter delta as a 127->0 wraparound and unconditionally added 128 to
@@ -309,6 +330,30 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     if delta < 0 or delta > max_tips:       # small-negative glitch, or implausible spike
         return None
     return delta
+
+
+def dedup_key(data):
+    """The identity of a reading, for deciding whether a packet repeats the last one.
+
+    WHY THIS IS NOT JUST `data` (DEC-0135, S116):
+    ---------------------------------------------
+    `data` carries curr_cnt0..3 -- the Go binary's CUMULATIVE per-transmitter
+    message counters, which advance on every accepted packet. Comparing whole
+    dicts therefore always found a difference, so genLoopPackets' duplicate
+    guard was unreachable from the day it was written and no test covered it.
+    It went unnoticed because the Go demodulator was dropping repeats itself --
+    and mis-booking each as `packet missed`, which is what held rxCheckPercent
+    at ~73% on a ~99% link. With the Go side time-gated, repeats now reach the
+    driver and this guard is what decides.
+
+    The counters are consumed by _update_stats() before this is called, and
+    rxCheckPercent is derived from them there, so dropping them here fixes the
+    comparison without touching the metric. What remains is the sensor reading,
+    which is what "the same packet" means.
+
+    Pure function (no I/O) so it is unit-testable -- see tests/test_dup_time_gate.py.
+    """
+    return {k: v for k, v in data.items() if not k.startswith('curr_cnt')}
 
 
 # --- Sensor plausibility filter (S33 bad-packet fix, DEC-0029) ---
@@ -367,6 +412,12 @@ SENSOR_QC_DEFAULTS = {
     'wind_speed':      (0.0, 89.4, 20.0),     # 6410 spec 0..200 mph (89.4 m/s)
     'uv':              (0.0, 16.0, 8.0),      # spec 0..16; real cloud flicker <=~5.5 observed
     'solar_radiation': (0.0, 1800.0, None),   # spec 0..1800; no delta (cloud edges genuine)
+    'rain_rate':       (0.0, 406.4, None),    # matches weewx.conf.example's StdQC backstop
+                                                # (0-16 in/h); no delta -- a downpour's onset is genuine
+    'temp_1':          (-40.0, 65.0, 4.0),    # same decode/bounds as temperature
+    'temp_2':          (-40.0, 65.0, 4.0),
+    'humid_1':         (0.0, 100.0, 10.0),    # identical decode expression to humidity
+    'humid_2':         (0.0, 100.0, 10.0),
 }
 
 # Frame-level co-rejection (DEC-0054): every weather-observation key a single
@@ -476,19 +527,23 @@ def calculate_thermistor_temp(temp_raw):
     # Convert temp_raw to a resistance (R) in kiloOhms
     a = 18.81099
     b = 0.0009988027
-    r = a / (1.0 / temp_raw - b) / 1000 # k ohms
 
     # Steinhart-Hart parameters
     s1 = 0.002783573
     s2 = 0.0002509406
     try:
+        # temp_raw=0 (a real, in-range decode of a shorted/absent sensor,
+        # not one of the driver's own sentinel values) divides by zero here
+        # -- moved inside the try, alongside math.log()'s ValueError, so
+        # both degrade the same way instead of one of them crashing the
+        # driver (issue #221).
+        r = a / (1.0 / temp_raw - b) / 1000 # k ohms
         thermistor_temp = 1 / (s1 + s2 * math.log(r)) - 273
         dbg_parse(3, 'r (k ohm) %s temp_raw %s thermistor_temp %s' %
                   (r, temp_raw, thermistor_temp))
         return thermistor_temp
-    except ValueError as e:
-        logerr('thermistor_temp failed for temp_raw %s r (k ohm) %s'
-               'error: %s' % (temp_raw, r, e))
+    except (ValueError, ZeroDivisionError) as e:
+        logerr('thermistor_temp failed for temp_raw %s: %s' % (temp_raw, e))
     return DEFAULT_SOIL_TEMP
 
 
@@ -695,7 +750,11 @@ class AsyncReader(threading.Thread):
     def run(self):
         logdbg("start async reader for %s" % self.getName())
         self._running = True
-        for line in iter(self._fd.readline, ''):
+        # fd is opened in binary mode (Popen without text=True), so EOF is
+        # b'', never the str '' this compared against -- readline() returns
+        # b'' forever without blocking once the child exits, so the loop
+        # busy-spun instead of stopping (issue #219).
+        for line in iter(self._fd.readline, b''):
             self._queue.put(line)
             if not self._running:
                 break
@@ -727,6 +786,102 @@ def reap_spawned_children():
             _SPAWNED_CHILDREN.remove(p)
             reaped += 1
     return reaped
+
+
+# --- Hot-swap of gain / receive-window (S103, DEC-0117) --------------------
+# Gain and -ex are CLI flags on the Go binary, carried inside the `cmd` string
+# and read by it only at startup -- there is no runtime control channel in the
+# binary. So a "hot swap" is a child respawn: shutdown() -> rewrite cmd ->
+# startup(). That path already existed (ProcManager.startup takes the command
+# as a parameter, and the 150s watchdog exercises kill->respawn routinely);
+# the only thing missing was a trigger.
+#
+# The trigger is a watched control file of VALIDATED INTEGER FIELDS -- never a
+# command string. `cmd` flows to shlex.split() -> Popen, so a control file
+# carrying raw command text would hand arbitrary code execution inside the
+# container to anything able to write that path. Two bounded ints spliced into
+# the existing command is a config knob; a command string is a shell. This
+# repo is public and the file lives on a NAS share -- keep the boundary.
+STALL_TIMEOUT_S = 150
+
+# A freshly spawned child is legitimately silent for the radio's init period
+# (US/AU/NZ: 133s, EU: 16s), so the normal 150s stall watchdog leaves only 17s
+# of margin on a post-swap respawn. Nowhere near enough to run a campaign on:
+# a slow init would raise WeeWxIOError and tear the driver down, reintroducing
+# the abort-on-unhealthy-swap failure class this feature exists to retire.
+# The first packet after a swap gets this longer deadline instead; the normal
+# threshold returns as soon as anything is received.
+HOTSWAP_GRACE_S = 240
+
+# Accepted control-file keys and their inclusive bounds. gain is tuner gain in
+# tenths of a dB (0 = the binary's "auto"; 496 = the R820T's 49.6 dB maximum);
+# ex is extra loopTime in ms. Anything outside this table is rejected.
+HOTSWAP_LIMITS = {
+    'gain': (0, 496),
+    'ex': (0, 1000),
+}
+
+
+def parse_hotswap_control(text, limits=None):
+    """Parse a hot-swap control file into a validated {key: int} dict.
+
+    Pure (no I/O) so the validation can be pinned by tests without a live
+    process, same pattern as stall_diagnosis/drought_due. Raises ValueError
+    with a human-readable reason on anything malformed, unknown or out of
+    range -- the caller logs that reason and keeps the current command.
+    """
+    if limits is None:
+        limits = HOTSWAP_LIMITS
+    settings = {}
+    for raw in text.splitlines():
+        line = raw.split('#', 1)[0].strip()
+        if not line:
+            continue
+        if '=' not in line:
+            raise ValueError("malformed line (want 'key = value'): %r"
+                             % raw.strip())
+        # Named `name`, not `key`: `key = ...` trips the repo's secret scanner
+        # (scripts/check_secrets.sh). Renaming the local is the right fix --
+        # widening that allow-list to admit this line would weaken a control
+        # that has already missed real secrets more than once (DEC-0084).
+        name, _, value = line.partition('=')
+        name = name.strip().lower()
+        value = value.strip()
+        if name not in limits:
+            raise ValueError("unknown key %r (accepted: %s)"
+                             % (name, ", ".join(sorted(limits))))
+        try:
+            number = int(value)
+        except ValueError:
+            raise ValueError("key %r wants an integer, got %r" % (name, value))
+        low, high = limits[name]
+        if not low <= number <= high:
+            raise ValueError("key %r out of range: %d not in [%d, %d]"
+                             % (name, number, low, high))
+        settings[name] = number
+    if not settings:
+        raise ValueError("no settings found")
+    return settings
+
+
+def splice_cmd_flag(cmd, flag, value):
+    """Return `cmd` with `flag`'s argument replaced by `value`, appending the
+    flag if it is not present at all (DEFAULT_CMD carries neither -gain nor
+    -ex). The lookaround guards stop `-ex` matching inside a longer token.
+    """
+    pattern = re.compile(r'(?<!\S)' + re.escape(flag) + r'\s+\S+(?!\S)')
+    replacement = '%s %d' % (flag, value)
+    spliced, count = pattern.subn(replacement, cmd)
+    if count == 0:
+        return cmd + ' ' + replacement
+    return spliced
+
+
+def apply_hotswap_settings(cmd, settings):
+    """Splice every validated setting into `cmd`, in a fixed order."""
+    for key in sorted(settings):
+        cmd = splice_cmd_flag(cmd, '-' + key, settings[key])
+    return cmd
 
 
 class ProcManager():
@@ -765,7 +920,7 @@ class ProcManager():
         if ld_library_path:
             env['LD_LIBRARY_PATH'] = ld_library_path
         try:
-            self._process = subprocess.Popen(cmd.split(' '),
+            self._process = subprocess.Popen(shlex.split(cmd),
                                              env=env,
                                              stderr=subprocess.PIPE,
                                              stdout=subprocess.PIPE)
@@ -783,11 +938,36 @@ class ProcManager():
         loginf('shutdown process %s' % self._cmd)
         self.stderr_reader.stop_running()
         self.stdout_reader.stop_running()
-        # kill existiing rtldavis processes
-        pid_list = self.get_pid("rtldavis")
+        # kill existiing rtldavis processes. Guarded like startup()'s
+        # identical call (issue #219): the common path here is the child
+        # already exited on its own (a stall/reset triggered this shutdown),
+        # so pidof finds nothing and raises -- unguarded, that used to abort
+        # shutdown() before the wait()+reap below ever ran, silently
+        # skipping the S73/DEC-0081 zombie-reap fix for the case it is
+        # actually most needed.
+        try:
+            pid_list = self.get_pid("rtldavis")
+        except Exception:
+            pid_list = []
         for pid in pid_list:
             os.kill(int(pid), signal.SIGKILL)
             loginf("rtldavis with pid %s killed" % pid)
+        # Belt-and-braces direct kill via the Popen handle (#233): the sweep
+        # above only ends the child if `pidof rtldavis` matches its name.
+        # That has held across every DEC-0081 incident, but has no fallback
+        # if it ever doesn't -- a name mismatch or pidof quirk would leave
+        # shutdown() with nothing signaling the child, and the wait() below
+        # would just time out over a still-running orphan holding the
+        # RTL-SDR device. Signaling our own handle is independent of
+        # whatever pidof does or doesn't find. Not a replacement for the
+        # sweep above: that also catches strays from outside this instance
+        # (e.g. startup()'s own kill of a prior leaked process), which a
+        # handle-based kill alone would miss.
+        if self._process is not None:
+            try:
+                self._process.kill()
+            except Exception:
+                pass
         # Reap our own child so the kill above does not strand a zombie
         # (S73, ws.5). wait() cannot hang >5s on a SIGKILLed process.
         if self._process is not None:
@@ -801,6 +981,15 @@ class ProcManager():
         return self._process.poll() is None
 
     def get_stdout(self):
+        # Only called from the standalone --action show-packets CLI, never
+        # from genLoopPackets -- the bundled Go binary sends everything to
+        # stderr, so stdout_queue stays empty in the live driver path. That
+        # premise is external and unpinned (Dockerfile fetches Go source
+        # from refs/heads/main, nothing vendored here): if it's ever
+        # violated, this queue would grow unbounded for the life of a
+        # long-running child, same shape as issue #219's AsyncReader finding
+        # but from a live process feeding real data, not a dead one
+        # busy-spinning -- AsyncReader's EOF fix does not cover this case.
         lines = []
         while not self.stdout_queue.empty():
             lines.append(self.stdout_queue.get().decode('utf-8'))
@@ -813,9 +1002,18 @@ class ProcManager():
         # Therefor a maximum run-time of get_stderr of 10 seconds
         # is invoked to let genLoopPackets process the yielded lines.
         start_time = int(time.time())
-        while self.running() and int(time.time()) - start_time < 10:
+        while self.running():
+            # Budget the blocking get() to what's left of the 10s cap, not a
+            # fresh 10s every call (issue #219): the while guard above was
+            # checked before this call, so a quick line arriving near the
+            # 10s boundary let the old hardcoded get(True, 10) block a full
+            # second 10s, doubling the cap genLoopPackets' 150s stall
+            # watchdog and 300s drought log rely on for their own cadence.
+            remaining = 10 - (int(time.time()) - start_time)
+            if remaining <= 0:
+                break
             try:
-                line = self.stderr_queue.get(True, 10).decode('utf-8')
+                line = self.stderr_queue.get(True, remaining).decode('utf-8')
                 lines.append(line)
                 yield lines
                 lines = []
@@ -870,7 +1068,15 @@ class Packet:
 
 
 class DATAPacket(Packet):
-    IDENTIFIER = re.compile(r"^\d\d:\d\d:\d\d.[\d]{6} [0-9A-F][0-7][0-9A-F]{14}")
+    # The 2nd hex digit used to be restricted to [0-7] -- that's the low
+    # nibble of payload byte 0, whose bit 3 is the battery-low flag
+    # (parse_raw's battery_low = (pkt[0] >> 3) & 0x1). Any transmitter
+    # reporting low battery flipped that nibble into 8-F and failed this
+    # dispatch gate, silently dropping the entire frame -- not just battery
+    # status, but wind/temp/humidity/rain too (issue #220). PATTERN below
+    # never had this restriction, so decoding was never actually at risk;
+    # only dispatch was gated on it.
+    IDENTIFIER = re.compile(r"^\d\d:\d\d:\d\d.[\d]{6} [0-9A-F]{16}")
     PATTERN = re.compile(r'([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2}) ([\d]+) ([\d]+) ([\d]+) ([\d]+)')
 
     @staticmethod
@@ -882,7 +1088,19 @@ class DATAPacket(Packet):
             raw_msg = [0] * 8
             for i in range(0, 8):
                 raw_msg[i] = chr(int(m.group(i + 1), 16))
-            PacketFactory._check_crc(raw_msg)
+            try:
+                PacketFactory._check_crc(raw_msg)
+            except ValueError as e:
+                # A CRC mismatch is a corrupted/malformed frame, not a
+                # program bug -- log and skip it like the "unrecognized
+                # data" case below, instead of letting it propagate
+                # uncaught out of genLoopPackets and take the whole daemon
+                # down (issue #221). The shipped Go binary already
+                # checksums before emitting, so this is unreachable via the
+                # real driver today; guarded anyway for defense-in-depth.
+                dbg_rtld(1, "DATAPacket: CRC check failed: %s" % e)
+                lines.pop(0)
+                return None
             for i in range(0, 8):
                 raw_msg[i] = m.group(i + 1)
             raw_pkt = bytearray([int(i, base=16) for i in raw_msg])
@@ -941,12 +1159,23 @@ class CHANNELPacket(Packet):
                     raise weewx.WeeWxIOError("RESTART RTLDAVIS PROGRAM: abs freqOffset channel %s too big (> 20000): %s" % (m.group(1), m.group(3)))
                 # save frequency errors only for EU band
                 if self.frequency in ['EU', 'US', 'NZ']:
-                    pkt['dateTime'] = int(time.time() + 0.5)
-                    pkt['usUnits'] = weewx.METRICWX
-                    for y in range(0, 5):
-                        if int(m.group(1)) == y:
-                            pkt['freqError%d' % y] = int(m.group(3))
-                    dbg_rtld(3, "chan_pkt: %s" % pkt)
+                    # Unlike PATTERNv13 above, this protocol has no
+                    # Transmitter field to gate on -- with more than one
+                    # active transmitter there is no way to know which one
+                    # a v12 freqError came from, so storing it would
+                    # silently mix transmitters' data into the same
+                    # per-transmitter fields.
+                    if self.tr_count > 1:
+                        dbg_rtld(1, "CHANNELPacket: v12 protocol has no "
+                                    "per-transmitter field; not storing "
+                                    "freqError with tr_count=%d" % self.tr_count)
+                    else:
+                        pkt['dateTime'] = int(time.time() + 0.5)
+                        pkt['usUnits'] = weewx.METRICWX
+                        for y in range(0, 5):
+                            if int(m.group(1)) == y:
+                                pkt['freqError%d' % y] = int(m.group(3))
+                        dbg_rtld(3, "chan_pkt: %s" % pkt)
                 else:
                     dbg_rtld(3, "Don't store freqErrors for frequency band %s" % self.frequency)
                 lines.pop(0)
@@ -1006,7 +1235,7 @@ class RtldavisConfigurationEditor(weewx.drivers.AbstractConfEditor):
 [Rtldavis]
     # This section is for the rtldavis sdr-rtl USB receiver.
 
-    cmd = /home/pi/work/bin/rtldavis [options]
+    cmd = /home/pi/work/bin/rtldavis
     # Options:
     # -ppm = frequency correction of rtl dongle in ppm; default = 0
     # -gain = tuner gain in tenths of Db; default = 0 means "auto gain"
@@ -1043,6 +1272,16 @@ class RtldavisConfigurationEditor(weewx.drivers.AbstractConfEditor):
     # The pct_good per transmitter can be saved to the database
     # This has only effect with 2 transmitters or more
     save_pct_good_per_transmitter = False
+
+    # Hot-swap of -gain / -ex without restarting weewx or the container.
+    # Unset (the default) disables the feature entirely. When set, the driver
+    # polls this file about every 10s; on an mtime change it validates the
+    # contents, respawns the rtldavis child with the new flags, and writes the
+    # outcome to <hotswap_control_file>.ack (override with hotswap_ack_file).
+    # The file accepts ONLY these integer keys -- never a command string:
+    #     gain = 0..496     tuner gain in tenths of a dB (0 = auto)
+    #     ex   = 0..1000    extra loopTime in ms
+    # hotswap_control_file = /path/to/rtldavis-hotswap.conf
 
     # The driver to use:
     driver = user.rtldavis
@@ -1164,6 +1403,12 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         channels['leaf_soil'] = int(stn_dict.get('leaf_soil_channel', 0))
         channels['temp_hum_1'] = int(stn_dict.get('temp_hum_1_channel', 0))
         channels['temp_hum_2'] = int(stn_dict.get('temp_hum_2_channel', 0))
+        nonzero_channels = [c for c in (
+            channels['iss'], channels['anemometer'], channels['leaf_soil'],
+            channels['temp_hum_1'], channels['temp_hum_2']) if c != 0]
+        if len(nonzero_channels) != len(set(nonzero_channels)):
+            raise ValueError("duplicate channel number in station config: %s" %
+                              sorted(nonzero_channels))
         if channels['anemometer'] == 0:
             channels['wind_channel'] = channels['iss']
         else:
@@ -1193,6 +1438,26 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         # packet, held here until the next real DATA packet rides them in --
         # never published as their own dataless loop packet.
         self._pending_freq_fields = {}
+        # Hot-swap control channel (S103, DEC-0117). Absent config key = the
+        # feature is off entirely, which is the stock/upstream behavior.
+        self._hotswap_path = stn_dict.get('hotswap_control_file', None)
+        self._hotswap_ack_path = stn_dict.get('hotswap_ack_file', None)
+        if self._hotswap_path and not self._hotswap_ack_path:
+            self._hotswap_ack_path = self._hotswap_path + '.ack'
+        self._hotswap_mtime = None
+        if self._hotswap_path:
+            loginf('hotswap control file %s' % self._hotswap_path)
+            # Apply a pre-existing control file BEFORE the first startup, so
+            # the running command reflects it with no extra respawn -- and,
+            # more importantly, so a container restart cannot silently revert
+            # a swapped gain back to the config value while the ack file still
+            # advertises the swapped one. That silent-revert shape is exactly
+            # what DEC-0116 cost four weeks to notice.
+            settings, mtime = self._read_hotswap_settings()
+            self._hotswap_mtime = mtime
+            if settings:
+                self.cmd = apply_hotswap_settings(self.cmd, settings)
+                loginf('hotswap applied at init: %s' % settings)
         self._mgr = ProcManager()
         self._mgr.startup(self.cmd, self.path, self.ld_library_path)
 
@@ -1205,7 +1470,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
     def ch_to_xmit(self, iss_channel, anemometer_channel, leaf_soil_channel,
                    temp_hum_1_channel, temp_hum_2_channel):
         transmitters = 0
-        transmitters += 1 << (iss_channel - 1)
+        # Unlike the other 4 channels below, this one had no `!= 0` guard,
+        # even though 0="not present" is documented as valid for iss_channel
+        # too -- 1 << -1 raises ValueError and crashes startup (issue #221).
+        if iss_channel != 0:
+            transmitters += 1 << (iss_channel - 1)
         if anemometer_channel != 0:
             transmitters += 1 << (anemometer_channel - 1)
         if leaf_soil_channel != 0:
@@ -1334,9 +1603,18 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             'max_count': [0] * 4,      # max to receive messages per transmitter current archive period
             'count': [0] * 4,          # received messages per transmitter current archive period
             'missed': [0] * 4,         # missed messages per transmitter current archive period
+            # S120/#317: slot-count denominator. last_pkt_ts is the epoch of
+            # the most recent accepted packet per transmitter, updated on
+            # every packet (not just archive boundaries); prev_pkt_ts is
+            # last_pkt_ts as of the previous archive boundary -- the baseline
+            # _update_summaries diffs against. Both 0.0 means "no packet seen
+            # yet for this transmitter since startup or the last counter reset".
+            'last_pkt_ts': [0.0] * 4,
+            'prev_pkt_ts': [0.0] * 4,
             'pct_good': [None] * 4,    # percentage of good messages per transmitter
             'pct_good_all': None,      # percentage of good messages for all transmitters
-            'dup_count': 0}            # DEC-0035 (S43): Go demodulator double-decodes this period
+            'dup_count': 0,            # DEC-0035 (S43): Go demodulator double-decodes this period
+            'repeat_count': 0}         # DEC-0135 (S116): transmitter re-sent an unchanged payload
 
     def _reset_stats(self):
         self.stats['last_ts'] = self.stats['curr_ts']
@@ -1345,14 +1623,28 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             self.stats['pct_good'][i] = None
         self.stats['pct_good_all'] = None
         self.stats['dup_count'] = 0
+        self.stats['repeat_count'] = 0
 
     def _update_stats(self, curr_cnt0, curr_cnt1, curr_cnt2, curr_cnt3):
         # update the statistics
         # save the message counts since startup
-        self.stats['curr_cnt'][0] = int(curr_cnt0)
-        self.stats['curr_cnt'][1] = int(curr_cnt1)
-        self.stats['curr_cnt'][2] = int(curr_cnt2)
-        self.stats['curr_cnt'][3] = int(curr_cnt3)
+        new_cnt = [int(curr_cnt0), int(curr_cnt1), int(curr_cnt2), int(curr_cnt3)]
+        # S120/#317: this packet belongs to whichever transmitter's
+        # cumulative counter just changed -- compared, not just increased,
+        # so a post-reset counter (which moves backward) is still detected.
+        # The ISS clock is exact (S115), so recording the arrival wall-clock
+        # time here is what lets _update_summaries count slots instead of
+        # dividing by a jittery, floor-biased wall-clock period.
+        now = time.time()
+        for i in range(0, 4):
+            if new_cnt[i] != self.stats['curr_cnt'][i]:
+                if self.stats['prev_pkt_ts'][i] == 0.0:
+                    # first packet for this transmitter since startup or the
+                    # last counter reset -- seed the baseline to this packet
+                    # too, so the denominator starts counting from here.
+                    self.stats['prev_pkt_ts'][i] = now
+                self.stats['last_pkt_ts'][i] = now
+            self.stats['curr_cnt'][i] = new_cnt[i]
 
     def _update_summaries(self):
         self.stats['curr_ts'] = int(time.time())
@@ -1363,12 +1655,15 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         # debug expedition into a standing measurement of how often the Go
         # demodulator double-decodes a single RF burst.
         loginf("duplicate frames this period: %d" % self.stats['dup_count'])
+        # DEC-0135 (S116): the other half of the pair. Before the Go time-gate,
+        # these were counted as duplicates AND booked as misses; dup_count was
+        # roughly 10x its true value and rxCheckPercent about 26 points under.
+        loginf("repeat frames this period: %d" % self.stats['repeat_count'])
         # if not the first time since startup
         if self.stats['last_ts'] > 0:
             total_count = 0
             total_missed = 0
             total_max_count = 0
-            period = self.stats['curr_ts'] - self.stats['last_ts']
             # do for the first 4 active transmitters
             # Note: the stats of the 5th and more active transmitters are not calculated.
             for i in range(0, 4):
@@ -1377,17 +1672,39 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     # y is a pointer to the channel number of the active transmitters (9 means: not-active)
                     # the loop_time is different for each transmitter
                     x = self.stats['activeTrIds'][i]
-                    # calculate per transmitter the theoretical maximum number of received message this archive period
-                    self.stats['max_count'][i] = period // self.stats['loop_times'][x]
                     self.stats['count'][i] = self.stats['curr_cnt'][i] - self.stats['last_cnt'][i]
                     # test if not init (counters reset to zero)
                     if self.stats['count'][i] > 0:
-                        self.stats['missed'][i] = self.stats['max_count'][i] - self.stats['count'][i]
-                        self.stats['pct_good'][i] = 100.0 * self.stats['count'][i] / self.stats['max_count'][i]
-                        # calculate the totals for all active transmitters
-                        total_count = total_count + self.stats['count'][i]
-                        total_missed = total_missed + self.stats['missed'][i]
-                        total_max_count = total_max_count + self.stats['max_count'][i]
+                        # S120/#317: denominate by ISS slots between the
+                        # first and last packet received THIS period, not by
+                        # floor(wall-clock period / loop period) -- that
+                        # floored a fractional slot count every period
+                        # (+1.6 pts mean) and rode the archive event's 1 s
+                        # jitter (up to +5 pts). The ISS clock is exact, so
+                        # round() has no ambiguity, and count[i] <= max_count[i]
+                        # holds by construction: one accepted packet per slot.
+                        delta = self.stats['last_pkt_ts'][i] - self.stats['prev_pkt_ts'][i]
+                        self.stats['max_count'][i] = round(delta / self.stats['loop_times'][x])
+                        self.stats['prev_pkt_ts'][i] = self.stats['last_pkt_ts'][i]
+                        if self.stats['max_count'][i] > 0:
+                            self.stats['missed'][i] = self.stats['max_count'][i] - self.stats['count'][i]
+                            self.stats['pct_good'][i] = 100.0 * self.stats['count'][i] / self.stats['max_count'][i]
+                            # calculate the totals for all active transmitters
+                            total_count = total_count + self.stats['count'][i]
+                            total_missed = total_missed + self.stats['missed'][i]
+                            total_max_count = total_max_count + self.stats['max_count'][i]
+                    elif self.stats['count'][i] < 0:
+                        # counter reset (child respawn, hot swap, stall
+                        # restart): curr_cnt moved backward. This period is
+                        # skipped (as before); also clear both timestamps so
+                        # next period's baseline starts fresh at the first
+                        # post-reset packet instead of spanning the reset.
+                        self.stats['prev_pkt_ts'][i] = 0.0
+                        self.stats['last_pkt_ts'][i] = 0.0
+                    # count[i] == 0: genuinely no packets this period (RF-dead),
+                    # not a reset. Leave last_pkt_ts/prev_pkt_ts untouched so
+                    # the next period's delta spans the full gap once
+                    # reception resumes -- max_count grows to match.
             # if there is a total
             # NOTE (S24, DEC-0024 review H2): this was previously also gated on
             # `self.stats['pct_good_all'] is not None`, but _init_stats and
@@ -1420,8 +1737,12 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 for tr in range(0, 4):
                     data = 'pct_good_%s' % tr
                     for k in self.sensor_map:
-                        # Test if sensor is in the sensor map.
-                        if self.sensor_map[k] in data:
+                        # Test if sensor is in the sensor map. `data` is a
+                        # plain string here ('pct_good_%s' % tr), not the
+                        # packet dict -- equality, not substring containment,
+                        # is what's meant (an empty-string or truncated
+                        # sensor_map value would otherwise match every tr).
+                        if self.sensor_map[k] == data:
                             if tr == 0 and self.tr_count > 1:
                                 # When tr_count = 1 we don't store the pct_good of transmitter 1
                                 # because the value is the same as in rxCheckPercent
@@ -1438,6 +1759,99 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
     def hardware_name(self):
         return 'Rtldavis'
 
+    # ── Hot-swap control channel (S103, DEC-0117) ────────────────────────────
+    def _read_hotswap_settings(self):
+        """Read + validate the control file. Returns (settings_or_None, mtime).
+
+        An absent file is the normal idle state, not an error: the feature can
+        be configured on with nothing ever written to the path.
+        """
+        try:
+            mtime = os.stat(self._hotswap_path).st_mtime
+        except OSError:
+            return None, None
+        try:
+            with open(self._hotswap_path, 'r') as f:
+                return parse_hotswap_control(f.read()), mtime
+        except (OSError, ValueError) as e:
+            logerr("HOTSWAP rejected %s: %s" % (self._hotswap_path, e))
+            self._write_hotswap_ack(None, "rejected: %s" % e)
+            return None, mtime
+
+    def _write_hotswap_ack(self, settings, status, gap=None):
+        """Publish what actually happened, atomically.
+
+        The harness must be able to CONFIRM a swap took rather than assume it
+        (GOTCHAS §4). The respawn gap is recorded because how fast the RTL-SDR
+        device re-opens after a deliberate SIGKILL has never been measured
+        under normal conditions -- this makes the feature self-measuring in
+        production instead of leaving that a known-unknown.
+        """
+        if not self._hotswap_ack_path:
+            return
+        lines = ["status = %s" % status, "at = %d" % int(time.time())]
+        for key in sorted(settings or {}):
+            lines.append("%s = %d" % (key, settings[key]))
+        if gap is not None:
+            lines.append("respawn_gap_s = %.2f" % gap)
+        lines.append("cmd = %s" % self.cmd)
+        tmp = self._hotswap_ack_path + '.tmp'
+        try:
+            with open(tmp, 'w') as f:
+                f.write("\n".join(lines) + "\n")
+            os.replace(tmp, self._hotswap_ack_path)
+        except OSError as e:
+            logerr("HOTSWAP ack write failed: %s" % e)
+
+    def _maybe_hotswap(self):
+        """Poll the control file; respawn the child if it asks for a change.
+
+        Returns True if the child was respawned -- the caller MUST then reset
+        its stall-watchdog state, because those counters are locals in
+        genLoopPackets and a respawned child starts its init period from
+        scratch. Returns True on a rolled-back swap too: the child was still
+        replaced, so the reset is owed either way.
+        """
+        if not self._hotswap_path:
+            return False
+        try:
+            mtime = os.stat(self._hotswap_path).st_mtime
+        except OSError:
+            return False
+        if mtime == self._hotswap_mtime:
+            return False
+        self._hotswap_mtime = mtime
+        settings, _ = self._read_hotswap_settings()
+        if not settings:
+            return False          # rejected; _read_hotswap_settings logged it
+        new_cmd = apply_hotswap_settings(self.cmd, settings)
+        if new_cmd == self.cmd:
+            loginf("HOTSWAP no-op: %s already running" % settings)
+            self._write_hotswap_ack(settings, "no-op")
+            return False
+        prev_cmd = self.cmd
+        loginf("HOTSWAP %s -- respawning child" % settings)
+        started = time.time()
+        self._mgr.shutdown()
+        try:
+            self._mgr.startup(new_cmd, self.path, self.ld_library_path)
+            self.cmd = new_cmd
+        except Exception as e:
+            # A bad value must not cost us the receiver. Put the last
+            # known-good command back before giving up -- losing the child
+            # over a rejected gain is the failure class this feature exists
+            # to retire, not one to reintroduce. If the rollback ALSO fails,
+            # its WeeWxIOError propagates, which is the pre-existing behavior.
+            logerr("HOTSWAP startup failed (%s) -- rolling back to: %s"
+                   % (e, prev_cmd))
+            self._mgr.startup(prev_cmd, self.path, self.ld_library_path)
+            self._write_hotswap_ack(settings, "rollback: %s" % e)
+            return True
+        gap = time.time() - started
+        loginf("HOTSWAP applied %s in %.2fs" % (settings, gap))
+        self._write_hotswap_ack(settings, "applied", gap)
+        return True
+
     def genLoopPackets(self):
         packet = dict()
         time_last_received = int(time.time())
@@ -1450,15 +1864,41 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         # change the presentation of the FrequencyErrors of the transmitters
         #  each period
         periodShowOneTransm = 2*24*3600  # 2 days
-        rel_transm_to_store = int(((time_last_received-(3*3600)) % (periodShowOneTransm * self.tr_count)) / periodShowOneTransm)
-        self.transm_to_store = self.stats['activeTrIds'][rel_transm_to_store]
-        dbg_parse(1, "Number of transmitters: %s, store freqError data for transmitter with ID=%s" % (self.tr_count, self.transm_to_store))
+        self.transm_to_store = None  # forces the first loop pass to log below
+
+        # Normally 150s; widened to HOTSWAP_GRACE_S for the first packet after
+        # a hot swap, then restored below when anything is received.
+        stall_timeout = STALL_TIMEOUT_S
 
         while self._mgr.running():
+            # Hot-swap poll (S103, DEC-0117). This runs about every 10s on its
+            # own -- get_stderr() below budgets 10s per pass -- so no thread or
+            # signal handler is needed. Resetting the watchdog state here is
+            # not optional: a respawned child restarts its init period (US:
+            # 133s) and would otherwise be judged against a time_last_received
+            # inherited from before the swap.
+            if self._maybe_hotswap():
+                _swapped_at = int(time.time())
+                time_last_received = _swapped_at
+                time_last_data = _swapped_at
+                raw_since_data = 0
+                hop_since_data = 0
+                stall_timeout = HOTSWAP_GRACE_S
+                continue
             # the stalled timeout must be greater than the init period
             # init period is EU: 16 s, US, AU and NZ: 133 s
             _now = int(time.time())
-            if _now - time_last_received > 150:
+            # Recomputed every iteration (a few integer ops -- the loop
+            # already blocks up to 10s per get_stderr() call, so this is
+            # not a meaningful cost) so the rotation actually happens
+            # while the driver keeps running, not only across a process
+            # restart.
+            rel_transm_to_store = int(((_now-(3*3600)) % (periodShowOneTransm * self.tr_count)) / periodShowOneTransm)
+            new_transm_to_store = self.stats['activeTrIds'][rel_transm_to_store]
+            if new_transm_to_store != self.transm_to_store:
+                dbg_parse(1, "Number of transmitters: %s, store freqError data for transmitter with ID=%s" % (self.tr_count, new_transm_to_store))
+            self.transm_to_store = new_transm_to_store
+            if _now - time_last_received > stall_timeout:
                 # Classify before raising (S73, ws.5): raw_since_data == 0
                 # means the child went totally mute (process/USB class);
                 # anything else means it was emitting but nothing decoded.
@@ -1493,9 +1933,19 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # (no debug gate); summarized once per archive period
                         # by _update_summaries().
                         self.stats['dup_count'] += 1
+                    if "repeat packet:" in _line:
+                        # DEC-0135 (S116): Go accepted an identical payload that
+                        # arrived a full loop period later -- a real transmission
+                        # whose bytes happened not to change. Counted here so the
+                        # transmitter's repeat fraction stays a standing
+                        # measurement; the packet itself is suppressed below.
+                        self.stats['repeat_count'] += 1
                 for data in PacketFactory.create(self, lines):
                     if data:
                         time_last_received = int(time.time())
+                        # The child is alive and emitting -- any post-swap
+                        # grace has served its purpose (S103, DEC-0117).
+                        stall_timeout = STALL_TIMEOUT_S
                         if 'curr_cnt0' in data:
                             # A real DATA packet -- reset the classification
                             # counters (S73, ws.5).
@@ -1515,15 +1965,38 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                             # packet instead of yielding a standalone one.
                             self._cache_pending_freq_fields(data)
                             continue
-                        if data != self._last_pkt:
-                            self._last_pkt = data
+                        # DEC-0135 (S116): this guard was written to drop a
+                        # repeated reading and has never once fired, because
+                        # `data` carries curr_cnt0..3 -- Go's cumulative message
+                        # counters, which advance on EVERY accepted packet and so
+                        # made the dict comparison unconditionally true. It went
+                        # unnoticed because the Go binary was dropping repeats
+                        # itself (and mis-booking each as a miss); now that it
+                        # forwards them, this is the layer that decides.
+                        #
+                        # _update_stats() above has already consumed the counters,
+                        # and rxCheckPercent is computed from them there -- so
+                        # excluding them here fixes the comparison without
+                        # touching the metric. What is left is the sensor
+                        # reading, which is what "the same packet" means.
+                        #
+                        # Suppressing is deliberate: the transmitter re-sends
+                        # BYTE-IDENTICAL data, so a repeat carries no information,
+                        # and forwarding it would add ~37% loop packets, InfluxDB
+                        # points and loop-JSON writes for nothing.
+                        pkt_key = dedup_key(data)
+                        if pkt_key != self._last_pkt:
+                            self._last_pkt = pkt_key
                             packet = self._data_to_packet(data)
                             if packet is not None:
                                 dbg_parse(3, "pkt= %s" % packet)
                                 yield packet
                         else:
-                            if packet:
-                                dbg_parse(3, "ignoring duplicate packet %s" % packet)
+                            # Was `if packet:` -- a NameError waiting for the
+                            # first iteration on which this branch was reached
+                            # before `packet` was ever bound. Unreachable while
+                            # the guard above could never be false; reachable now.
+                            dbg_parse(3, "ignoring repeat packet %s" % pkt_key)
                     elif lines:
                         # NOTE (S24 L6): effectively unreachable -- PacketFactory
                         # .create() drains `lines` to empty before this loop ends,
@@ -1567,58 +2040,59 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # message examples:
             # 51 06 B2 FF 73 00 76 61
             # E0 00 00 4E 05 00 72 61 (no sensor)
-            wind_speed_raw = pkt[1]
-            wind_dir_raw = pkt[2]
-            # Calm-air gate: raw speed <= 2 with dir == 0 is the 6410 hall
-            # effect sensor floor (EC table has zero correction for raw 1-2;
-            # calc_wind_speed_ec returns raw unchanged for raw_mph < 3).
-            # Null both fields rather than recording a false 2 mph from north.
-            if wind_speed_raw <= 2 and wind_dir_raw == 0:
-                # Calm air: sensor floor, not real wind. Write explicit 0 so
-                # charts stay continuous, but null direction (no direction when calm).
-                data['wind_speed'] = 0.0
-                data['wind_speed_ec'] = 0
-                data['wind_speed_raw'] = wind_speed_raw
-                data['wind_dir'] = None
-                data['windBatteryStatus'] = data.get('windBatteryStatus')
-            elif not(wind_speed_raw == 0 and wind_dir_raw == 0):
-                """ The elder Vantage Pro and Pro2 stations measured
-                the wind direction with a potentiometer. This type has
-                a fairly big dead band around the North. The Vantage
-                Vue station uses a hall effect device to measure the
-                wind direction. This type has a much smaller dead band,
-                so there are two different formulas for calculating
-                the wind direction. To be able to select the right
-                formula the Vantage type must be known.
-                For now we use the traditional 'pro' formula for all
-                wind directions.
-                """
-                dbg_parse(2, "wind_speed_raw=%03x wind_dir_raw=0x%03x" %
-                          (wind_speed_raw, wind_dir_raw))
+            if data['channel'] == self.channels['wind_channel']:
+                wind_speed_raw = pkt[1]
+                wind_dir_raw = pkt[2]
+                # Calm-air gate: raw speed <= 2 with dir == 0 is the 6410 hall
+                # effect sensor floor (EC table has zero correction for raw 1-2;
+                # calc_wind_speed_ec returns raw unchanged for raw_mph < 3).
+                # Null both fields rather than recording a false 2 mph from north.
+                if wind_speed_raw <= 2 and wind_dir_raw == 0:
+                    # Calm air: sensor floor, not real wind. Write explicit 0 so
+                    # charts stay continuous, but null direction (no direction when calm).
+                    data['wind_speed'] = 0.0
+                    data['wind_speed_ec'] = 0
+                    data['wind_speed_raw'] = wind_speed_raw
+                    data['wind_dir'] = None
+                    data['windBatteryStatus'] = data.get('windBatteryStatus')
+                elif not(wind_speed_raw == 0 and wind_dir_raw == 0):
+                    """ The elder Vantage Pro and Pro2 stations measured
+                    the wind direction with a potentiometer. This type has
+                    a fairly big dead band around the North. The Vantage
+                    Vue station uses a hall effect device to measure the
+                    wind direction. This type has a much smaller dead band,
+                    so there are two different formulas for calculating
+                    the wind direction. To be able to select the right
+                    formula the Vantage type must be known.
+                    For now we use the traditional 'pro' formula for all
+                    wind directions.
+                    """
+                    dbg_parse(2, "wind_speed_raw=%03x wind_dir_raw=0x%03x" %
+                              (wind_speed_raw, wind_dir_raw))
 
-                # Vantage Pro and Pro2
-                if wind_dir_raw == 0:
-                    wind_dir_pro = 5.0
-                elif wind_dir_raw == 255:
-                    wind_dir_pro = 355.0
-                else:
-                    wind_dir_pro = 9.0 + (wind_dir_raw - 1) * 342.0 / 253.0
+                    # Vantage Pro and Pro2
+                    if wind_dir_raw == 0:
+                        wind_dir_pro = 5.0
+                    elif wind_dir_raw == 255:
+                        wind_dir_pro = 355.0
+                    else:
+                        wind_dir_pro = 9.0 + (wind_dir_raw - 1) * 342.0 / 253.0
 
-                # Vantage Vue
-                wind_dir_vue = wind_dir_raw * 1.40625 + 0.3
+                    # Vantage Vue
+                    wind_dir_vue = wind_dir_raw * 1.40625 + 0.3
 
-                # wind error correction is by raw byte values
-                wind_speed_ec = round(calc_wind_speed_ec(wind_speed_raw, wind_dir_raw))
+                    # wind error correction is by raw byte values
+                    wind_speed_ec = round(calc_wind_speed_ec(wind_speed_raw, wind_dir_raw))
 
-                data['wind_speed_ec'] = wind_speed_ec
-                data['wind_speed_raw'] = wind_speed_raw
-                data['wind_dir'] = wind_dir_pro
-                data['wind_speed'] = wind_speed_ec * MPH_TO_MPS
-                dbg_parse(2, "WS=%s WD=%s WS_raw=%s WS_ec=%s WD_raw=%s WD_pro=%s WD_vue=%s" %
-                          (data['wind_speed'], data['wind_dir'],
-                           wind_speed_raw, wind_speed_ec,
-                           wind_dir_raw if wind_dir_raw <= 180 else 360 - wind_dir_raw,
-                           wind_dir_pro, wind_dir_vue))
+                    data['wind_speed_ec'] = wind_speed_ec
+                    data['wind_speed_raw'] = wind_speed_raw
+                    data['wind_dir'] = wind_dir_pro
+                    data['wind_speed'] = wind_speed_ec * MPH_TO_MPS
+                    dbg_parse(2, "WS=%s WD=%s WS_raw=%s WS_ec=%s WD_raw=%s WD_pro=%s WD_vue=%s" %
+                              (data['wind_speed'], data['wind_dir'],
+                               wind_speed_raw, wind_speed_ec,
+                               wind_dir_raw if wind_dir_raw <= 180 else 360 - wind_dir_raw,
+                               wind_dir_pro, wind_dir_vue))
 
             # data from both iss sensors and extra sensors on
             # Anemometer Transport Kit
@@ -1675,6 +2149,14 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # no rain
                         rain_rate = 0
                         dbg_parse(3, "no_rain=%s mm/h" % rain_rate)
+                    elif time_between_tips_raw == 0:
+                        # Distinct from the 0x3FF no-rain sentinel above --
+                        # both the heavy- and light-rain branches below
+                        # divide by this, which crashes the driver on a
+                        # value 0 tip interval instead of degrading like
+                        # every other malformed-input case (issue #221).
+                        logerr("rain-rate decode: implausible "
+                               "time_between_tips_raw=0, skipping rain_rate")
                     elif pkt[4] & 0x40 == 0:
                         # heavy rain. typical value:
                         # 64/16 - 1020/16 = 4 - 63.8 (180.0 - 11.1 mm/h)
@@ -1814,16 +2296,17 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 # message examples:
                 # E0 00 00 05 05 00 9F 3D
                 # E1 00 DB 80 03 00 16 8D (no sensor)
-                rain_count_raw = pkt[3]
-                """We have seen rain counters wrap around at 127 and
-                others wrap around at 255.  When we filter the highest
-                bit, both counter types will wrap at 127.
-                """
-                if rain_count_raw != 0x80:
-                    rain_count = rain_count_raw & 0x7F  # skip high bit
-                    data['rain_count'] = rain_count
-                    dbg_parse(2, "rain_count_raw=0x%02x value=%s" %
-                              (rain_count_raw, rain_count))
+                if data['channel'] == self.channels['iss']:  # rain sensor is present
+                    rain_count_raw = pkt[3]
+                    """We have seen rain counters wrap around at 127 and
+                    others wrap around at 255.  When we filter the highest
+                    bit, both counter types will wrap at 127.
+                    """
+                    if rain_count_raw != 0x80:
+                        rain_count = rain_count_raw & 0x7F  # skip high bit
+                        data['rain_count'] = rain_count
+                        dbg_parse(2, "rain_count_raw=0x%02x value=%s" %
+                                  (rain_count_raw, rain_count))
             else:
                 # unknown message type
                 logerr("unknown message type 0x%01x" % message_type)
@@ -1902,6 +2385,29 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         obs_group_dict['heatingVoltage']    = 'group_frequency'
 
 
+def show_packets(mgr):
+    """Drive the --action show-packets CLI: print each decoded stderr
+    payload and stdout line as they arrive.
+
+    get_stderr() yields possibly-EMPTY lists on every queue-read timeout --
+    an expected, frequent event per its own docstring ("a hangup will occur
+    regularly, sometimes of more than a minute"). get_stdout() returns a
+    flat list of already-decoded line strings, not a list of 1-line lists
+    like get_stderr() -- the two have different shapes on purpose (issue
+    #226 item 4)."""
+    while mgr.running():
+        for lines in mgr.get_stderr():
+            if not lines:
+                continue
+            payload = lines[0].strip()
+            if payload:
+                print(payload)
+        for line in mgr.get_stdout():
+            line = line.strip()
+            if line:
+                print(line)
+
+
 ############################## Conf Editor ##############################
 
 if __name__ == '__main__':
@@ -1951,14 +2457,4 @@ Actions:
         mgr = ProcManager()
         mgr.startup(options.cmd, path=options.path,
                     ld_library_path=options.ld_library_path)
-        while mgr.running():
-            for lines in mgr.get_stderr():
-                payload = lines[0].strip()
-                if payload:
-                    print(payload)
-                lines.pop(0)
-            for lines in mgr.get_stdout():
-                err = lines[0].strip()
-                if err:
-                    print(err)
-                lines.pop(0)
+        show_packets(mgr)

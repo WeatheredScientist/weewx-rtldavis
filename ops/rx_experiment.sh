@@ -40,12 +40,24 @@
 #   5. The schedule SELF-TERMINATES into the production baseline. If everyone
 #      forgets this is running, it ends at prod-normal, not on an experimental arm.
 #   6. Every failure path restores the baseline snapshot and emails.
+#   7. RF-dead reception dips PAUSE rather than trip property #4's abort: no
+#      config/container touched, auto-clears on the monitor's own RECOVERY
+#      signal OR on its periodic level reading back at/above the pause floor,
+#      escalates to the full sticky abort if it runs past a ceiling with no
+#      recovery. A due swap is DEFERRED while paused (BASELINE exempt) rather
+#      than fired into the episode. Scoped to the reception-floor check only --
+#      a failed write or an unhealthy post-swap check still go straight
+#      through #4, unchanged. The guard stands down once the campaign has
+#      self-terminated to BASELINE.
+#   8. tick/guard/abort serialize behind one lock: a slow health check cannot
+#      be interleaved with the next scheduled pass (abort proceeds even
+#      unlocked -- a human's emergency stop is never skipped).
 #
 # Usage:
 #   ops/rx_experiment.sh schedule     # print the block table and exit (review this)
 #   ops/rx_experiment.sh install      # snapshot baseline, write state, arm nothing
 #   ops/rx_experiment.sh tick         # scheduled entry point (every 5 min)
-#   ops/rx_experiment.sh guard        # abort tripwire check (every 5 min)
+#   ops/rx_experiment.sh guard        # reception check: pause/resume/abort (every 5 min)
 #   ops/rx_experiment.sh status       # where are we
 #   ops/rx_experiment.sh abort        # manual emergency stop -> restore baseline
 #   DRY_RUN=1 ops/rx_experiment.sh tick    # print actions, touch nothing
@@ -61,13 +73,42 @@ CONF="$BASE/weewx-data/weewx.conf"
 BASELINE_SNAP="$BASE/weewx.conf.rx-baseline"
 STATE="$BASE/rx_experiment.state"
 STOP="$BASE/rx_experiment.STOP"
+PAUSE="$BASE/rx_experiment.PAUSE"
 XLOG="$BASE/logs/rx_experiment.log"
 DATALOG="$BASE/logs/rx_experiment_data.log"
 MONLOG="$BASE/logs/weewx_monitor.log"
 WXLOG="$BASE/logs/weewx.log"
 ENVFILE="$BASE/monitor.env"
-DOCKER=/usr/local/bin/docker
-CONTAINER=weewx-rtldavis-v2
+CONTAINER="${RX_CONTAINER:-weewx-rtldavis-v2}"
+
+# ── Host profile (S107) ───────────────────────────────────────────────────────
+# Prod moved from the NAS to marvin (DEC-0118) and the two hosts restart weewx by
+# genuinely different mechanisms. This is NOT a path difference that a variable
+# tidies away -- getting it wrong takes production DOWN:
+#
+#   NAS      the container is long-lived. `docker kill` + `docker start` is
+#            correct, and `start` finds the same container still there.
+#   marvin   `weewx.service` runs `docker run --rm` with
+#            `ExecStartPre=/usr/bin/docker rm -f`. The `--rm` means a kill
+#            DESTROYS the container, so `docker start` has nothing to start and
+#            fails. The unit restart IS the supported operation, and because of
+#            that ExecStartPre it is also a full recreate.
+#
+# Default stays `docker` so an existing NAS install is unchanged by this edit.
+# preflight refuses to run if the selected mode cannot actually work here, rather
+# than discovering it at the first arm swap in the middle of the night.
+DOCKER="${RX_DOCKER:-/usr/local/bin/docker}"
+RESTART_MODE="${RX_RESTART_MODE:-docker}"     # docker | systemd
+RESTART_UNIT="${RX_RESTART_UNIT:-weewx.service}"
+SYSTEMCTL="${RX_SYSTEMCTL:-systemctl}"
+
+# How stale the monitor's log may be before its reception signal is untrustworthy.
+# The abort tripwire and the RF-dead pause guard BOTH read MONLOG; if nothing is
+# writing it, every reception read is silently empty and the campaign runs with
+# its safety net disconnected while looking healthy. That is the ops#233 failure
+# shape exactly, so preflight treats it as a refusal, not a warning. The monitor
+# writes a RECEPTION line every ~5 min, so 15 min is three missed writes.
+MONLOG_STALE_SECS="${RX_MONLOG_STALE_SECS:-900}"
 
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -83,6 +124,16 @@ DRY_RUN="${DRY_RUN:-0}"
 ABORT_PCT=50
 ABORT_SAMPLES=6          # 6 x 5-min samples = 30 min
 SETTLE_SECS=600          # ignore the first 10 min after a swap (restart transient)
+PAUSE_CEILING_SECS=7200  # 120 min -- longest known RF-dead episode on record is
+                         # the 75.8-min ERR-0005 outlier (ops/stall_baseline.py);
+                         # this clears every known case with ~60% margin while
+                         # still escalating something genuinely novel (dongle
+                         # fault, disconnected antenna) to a human instead of
+                         # pausing silently forever.
+LOCKDIR="$BASE/rx_experiment.lock"
+LOCK_STALE_SECS=1800     # a holder older than this is hung, not working: the
+                         # longest legitimate critical section is a full-budget
+                         # health_ok (~500s wall) plus restore/restart slack.
 
 # ── The arms ──────────────────────────────────────────────────────────────────
 # CAMPAIGN B — LNA PHYSICALLY REMOVED (antenna -> coax -> dongle, bias tee OFF
@@ -114,6 +165,7 @@ arm_cmd() {
     P402) echo "    cmd = /usr/local/bin/rtldavis -gain 402 -v -fc 0 -ppm 0 -ex 0" ;;
     P372) echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0" ;;
     P328) echo "    cmd = /usr/local/bin/rtldavis -gain 328 -v -fc 0 -ppm 0 -ex 0" ;;
+    P207) echo "    cmd = /usr/local/bin/rtldavis -gain 207 -v -fc 0 -ppm 0 -ex 0" ;;
     H)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0" ;;
     A)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0"  ;;
     B)    echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 0"  ;;
@@ -160,52 +212,133 @@ arm_cmd() {
 # tests/test_rx_experiment.py machine-checks the balance, order, pilot
 # structure, hold placement and terminator.
 # LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
+# BETWEEN CAMPAIGNS this block is EMPTY — the stand-down state (DEC-0096):
+# `install` refuses it loudly, the structural tests skip, and the staleness
+# guard passes. Empty it when a campaign completes (a fully-elapsed table must
+# never sit here looking installable — DEC-0066's trap); regenerate it with
+# the recipe above to schedule the next one.
+# ── CAMPAIGN C (S107) — gain 372 vs 496 at marvin's RF position ───────────────
+# One night, two arms, 90-minute blocks. Pre-registered in BACKLOG.md before any
+# data existed; this table is the executable half of that registration.
+#
+# WHY TWO ARMS, NOT THE 2x2 SQUARE. The question is narrow: DEC-0115 adopted 496
+# on Foundation's evidence, the 08-29 migration incident set prod to 372 without
+# a controlled comparison, and the host has since moved to a closer, fewer-walls
+# position. `ex` is not in question (campaign B found it inert), and 207 is the
+# known-worst and barely separable at Foundation (spread 0.94 pts). A third arm
+# would cost ~40% of the power on the only question being asked.
+#
+# WHY 90-MINUTE BLOCKS. Each swap is a container restart (driver RF acquisition
+# can take ~130 s), so 10 swaps at 90 min lose ~3% of the window while 20 at
+# 45 min lose ~7% and double the disturbances. Longer than 90 buys little and
+# shrinks the block count the variance estimate rests on.
+#
+# WHY THIS ORDER, AND NOT THE ONE FIRST PRE-REGISTERED. The first draft was
+# `A B B A B A A B B A`, balanced against LINEAR drift (block-index sums 28/27).
+# Laying the blocks against the clock showed that is not sufficient here: the
+# site's morning notch is not one hour but **hours 07-09, deepening to 2-3.5 pts
+# down during a campaign** (BACKLOG §Durable RF findings, S58) -- larger than the
+# 2.0-pt effect being measured. Under the first order blocks 8 AND 9 were both B,
+# so the entire deep notch landed on gain 496, the arm expected to win. That
+# design would have manufactured a false negative and looked clean doing it.
+#
+# A 15 h overnight window cannot dodge both notches (19:00 and 07-09 are 12 h
+# apart), so the order absorbs it instead. `A B B A B A A B A B` splits notch
+# exposure exactly 1.00/1.00 block-equivalents while keeping index sums 27/28
+# and no run longer than two. Both balances hold at once; neither was traded.
+#
+# Blocks 8/9/10 carry notch weight 0.67/1.00/0.33 and are B/A/B respectively.
+# LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
+# Empty this block when the campaign completes (DEC-0096 stand-down).
+# ── CAMPAIGN D (S111) — marvin gain pilot, arm-selection input only ───────────
+# Triggered directly by Campaign C (DEC-0125): 496 lost to 372 at marvin after
+# winning at Foundation, which means Foundation's pilot-derived shortlist
+# {372, 496} was never actually validated as the right candidates FOR MARVIN —
+# it was just carried over. This re-runs the shortlisting step, at marvin,
+# before spending another multi-day campaign on a guess.
+#
+# Pre-registered in BACKLOG.md before any data exists; this table is the
+# executable half of that registration.
+#
+# SIX gain-only blocks, HIGH -> LOW: 496, 449, 402, 372, 328, 207. The first
+# five reuse Foundation's own original pilot points (real R820T2 steps,
+# directly comparable to that curve); 207 is added because it was dropped from
+# campaign C's square on a Foundation-only judgment ("known-worst there") that
+# Campaign C's own result shows cannot be trusted to transfer — it has zero
+# data at marvin. `-ex 0` fixed throughout (found inert, campaign B).
+#
+# WHY HIGH -> LOW, NOT RANDOMIZED. Matches Foundation precedent, and is a
+# deliberate safety choice for a PILOT specifically: if a weak low-gain arm
+# hits the abort floor and kills the run, the higher/more-likely-useful arms
+# are already harvested. A pilot is arm-selection input only (PRINCIPLES §3) —
+# it does not need Latin-square-grade drift/notch balancing the way campaign
+# C's adoption-grade square did; strictly monotonic order is the right trade
+# here, not a defect.
+#
+# WHY 45-MIN BLOCKS. Matches Foundation's original pilot exactly — pilot-grade
+# duration, not adoption-grade. Six blocks = 4h30m, comfortably inside one
+# evening/overnight window.
+#
+# WHY 21:00 START. Clears the site's known notch hours entirely (07-09 AND 19,
+# NOTCH_HOURS in tests/test_rx_experiment.py — 19 is Foundation's own finding,
+# kept as a conservative inclusion since marvin hasn't been separately
+# characterized at that hour). Six blocks from 21:00 finish at 01:30, crossing
+# midnight but never touching a notch hour on either side.
+#
+# NOT adoption evidence, no matter how the curve reads. Output feeds arm
+# selection for a follow-up confirmatory campaign, same doctrine as
+# Foundation's own pilots.
+#
+# LAST ROW IS THE SELF-TERMINATOR — arm "BASELINE" restores prod and stops.
+# Empty this block when the campaign completes (DEC-0096 stand-down).
+#
+# RAN AND CLOSED (S113, DEC-0128). All six blocks completed, no aborts,
+# self-terminated to BASELINE 2026-09-01 01:30:39 ET. Result: 207 is real and
+# bad (-6.80 pts, t=-3.75); 328/372/402/449/496 are one flat plateau, 1.70 pts
+# of spread against a ~1.61-pt per-arm SE, so NOTHING clears DEC-0059's 2.0-pt
+# bar and the pilot shortlists no candidate. Gain holds at 372. Schedule stood
+# down below — the gain axis is closed at marvin, do not re-sweep it without a
+# new reason.
 SCHEDULE="
-2026-08-11T00:35|P496
-2026-08-11T01:20|P449
-2026-08-11T02:05|P402
-2026-08-11T02:50|P372
-2026-08-11T03:35|P328
-2026-08-11T04:20|H
-2026-08-12T00:05|A
-2026-08-12T06:05|B
-2026-08-12T12:05|C
-2026-08-12T18:05|D
-2026-08-13T00:05|B
-2026-08-13T06:05|C
-2026-08-13T12:05|D
-2026-08-13T18:05|A
-2026-08-14T00:05|C
-2026-08-14T06:05|D
-2026-08-14T12:05|A
-2026-08-14T18:05|B
-2026-08-15T00:05|D
-2026-08-15T06:05|A
-2026-08-15T12:05|B
-2026-08-15T18:05|C
-2026-08-16T00:05|A
-2026-08-16T06:05|B
-2026-08-16T12:05|C
-2026-08-16T18:05|D
-2026-08-17T00:05|B
-2026-08-17T06:05|C
-2026-08-17T12:05|D
-2026-08-17T18:05|A
-2026-08-18T00:05|C
-2026-08-18T06:05|D
-2026-08-18T12:05|A
-2026-08-18T18:05|B
-2026-08-19T00:05|D
-2026-08-19T06:05|A
-2026-08-19T12:05|B
-2026-08-19T18:05|C
-2026-08-20T00:05|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$XLOG"; }
 
 say_dry() { [ "$DRY_RUN" = "1" ] && printf 'DRY-RUN would: %s\n' "$*" && return 0; return 1; }
+
+# Concurrency guard (S82). tick and guard fire from the same 5-minute scheduler,
+# and a full-budget health_ok outlives the period (measured 383s wall on the
+# 2026-08-11 02:05 abort, and the budget has since grown to 60 tries): without
+# exclusion the next tick re-runs the SAME swap mid-verification (duplicate
+# harvest rows, container killed under the health check it is being judged by),
+# and guard judges reception mid-swap -- the guard/tick interleave is on record
+# at 02:05:03 that morning, two processes restoring/rewriting the same conf in
+# the same second. mkdir is the atomic primitive; the pid file distinguishes a
+# crashed holder (break immediately) from a live one (skip this pass); the age
+# ceiling breaks a HUNG live holder loudly, because a silently-skipped tick
+# forever would be the due_arm() silent no-op trap wearing a new hat.
+# kill -0, not /proc: tick/guard run as root on the NAS so the probe always
+# reaches its target, and the test suite runs on macOS where /proc is absent.
+acquire_lock() {
+  if mkdir "$LOCKDIR" 2>/dev/null; then echo "$$" > "$LOCKDIR/pid"; return 0; fi
+  local pid now mt age
+  pid="$(cat "$LOCKDIR/pid" 2>/dev/null)"
+  now="$(date '+%s')"; mt="$(stat -c %Y "$LOCKDIR" 2>/dev/null || echo "$now")"
+  age=$(( now - mt ))
+  if [ -z "$pid" ] && [ "$age" -lt 60 ]; then
+    return 1    # young lock, pid not written yet: a winner mid-acquisition, not debris
+  fi
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && [ "$age" -lt "$LOCK_STALE_SECS" ]; then
+    return 1                                  # live, sane-aged holder is working
+  fi
+  log "LOCK: breaking stale lock (holder pid ${pid:-unknown}, age ${age}s)"
+  rm -rf "$LOCKDIR"
+  mkdir "$LOCKDIR" 2>/dev/null || return 1    # lost the retake race to another breaker
+  echo "$$" > "$LOCKDIR/pid"
+  return 0
+}
+release_lock() { rm -rf "$LOCKDIR"; }
 
 # Independent of weewx_monitor.py on purpose: if the monitor is wedged, the abort
 # path must still be able to reach a human.
@@ -229,13 +362,15 @@ send_mail() {
   say_dry "email '$subj'" && return 0
   load_env || { log "MAIL SKIPPED (no $ENVFILE)"; return 1; }
   python3 - "$subj" "$body" <<'PYEOF' 2>>"$XLOG" || log "MAIL FAILED"
-import os, smtplib, sys
+import os, smtplib, ssl, sys
 from email.message import EmailMessage
 m = EmailMessage()
 m['Subject'] = f"{os.environ.get('STATION_NAME','PWS')} RX-EXPERIMENT: {sys.argv[1]}"
 m['From'] = os.environ['ALERT_FROM']; m['To'] = os.environ['ALERT_TO']
 m.set_content(sys.argv[2])
-s = smtplib.SMTP('smtp.gmail.com', 587); s.starttls()
+# S91: explicit verifying context -- see weewx_monitor.py's send_email() for
+# the same fix and why (bare starttls() defaults to no cert/hostname check).
+s = smtplib.SMTP('smtp.gmail.com', 587); s.starttls(context=ssl.create_default_context())
 s.login(os.environ['ALERT_FROM'], os.environ['GMAIL_PASS']); s.send_message(m); s.quit()
 PYEOF
 }
@@ -248,6 +383,14 @@ current_arm()     { [ -f "$STATE" ] && cut -d'|' -f1 "$STATE" || echo "NONE"; }
 last_swap_epoch() { [ -f "$STATE" ] && cut -d'|' -f2 "$STATE" || echo "0"; }
 last_swap_human() { [ -f "$STATE" ] && cut -d'|' -f3 "$STATE" || echo "1970-01-01 00:00:00"; }
 write_state()     { echo "$1|$(date '+%s')|$(date '+%Y-%m-%d %H:%M:%S')" > "$STATE"; }
+
+# True (0) when SCHEDULE carries at least one row. An EMPTY block is the
+# deliberate between-campaigns stand-down state (DEC-0096): a completed
+# campaign's table is emptied rather than left fully-elapsed-but-installable
+# (DEC-0066's trap), and `install` refuses the stand-down state loudly.
+schedule_has_rows() {
+  [ -n "$(echo "$SCHEDULE" | grep -v '^$' | head -1)" ]
+}
 
 # Which arm should be live right now? Latest schedule row whose time <= now.
 # Self-healing: a missed scheduler run swaps late rather than skipping a block.
@@ -317,10 +460,84 @@ restore_baseline() {
 }
 
 restart_container() {
+  if [ "$RESTART_MODE" = "systemd" ]; then
+    # marvin. One operation, and it is a full recreate (see the host-profile
+    # block): the unit's own ExecStartPre does `docker rm -f` and `--rm` clears
+    # the old container on exit. No kill/start pair to get wrong, and no
+    # dongle-release sleep needed because the unit does not return until the
+    # previous ExecStart has been torn down.
+    say_dry "$SYSTEMCTL restart $RESTART_UNIT" && return 0
+    $SYSTEMCTL restart "$RESTART_UNIT" >/dev/null 2>&1
+    return $?
+  fi
   say_dry "$DOCKER kill $CONTAINER; sleep 3; $DOCKER start $CONTAINER" && return 0
   "$DOCKER" kill "$CONTAINER" >/dev/null 2>&1     # kill, never stop (DEC-0008)
   sleep 3                                          # S47: let the USB dongle release
   "$DOCKER" start "$CONTAINER" >/dev/null 2>&1
+}
+
+# ── preflight (S107) ──────────────────────────────────────────────────────────
+# Everything that must be TRUE before an autonomous overnight prod-config writer
+# is allowed to start, checked while a human is still watching.
+#
+# This exists because the host move produced four ways to run this script into
+# production and have it fail hours later, at night, unattended -- and three of
+# them fail SILENTLY (an empty reception read looks exactly like a healthy one).
+# Refusing loudly up front is the whole point; there is deliberately no --force.
+preflight() {
+  local rc=0 age now
+  now="$(date '+%s')"
+
+  case "$RESTART_MODE" in
+    docker)
+      [ -x "$DOCKER" ] || { echo "PREFLIGHT FAIL: no docker binary at $DOCKER (set RX_DOCKER)" >&2; rc=1; }
+      ;;
+    systemd)
+      command -v "${SYSTEMCTL%% *}" >/dev/null 2>&1 \
+        || { echo "PREFLIGHT FAIL: systemctl not found ($SYSTEMCTL)" >&2; rc=1; }
+      $SYSTEMCTL cat "$RESTART_UNIT" >/dev/null 2>&1 \
+        || { echo "PREFLIGHT FAIL: unit $RESTART_UNIT not known to systemd" >&2; rc=1; }
+      ;;
+    *)
+      echo "PREFLIGHT FAIL: RX_RESTART_MODE must be 'docker' or 'systemd', got '$RESTART_MODE'" >&2
+      rc=1
+      ;;
+  esac
+
+  [ -f "$CONF" ] || { echo "PREFLIGHT FAIL: no live config at $CONF (wrong RX_BASE?)" >&2; rc=1; }
+  [ -f "$WXLOG" ] || { echo "PREFLIGHT FAIL: no weewx log at $WXLOG -- health_ok() would never pass" >&2; rc=1; }
+
+  # The safety net the campaign cannot run without.
+  if [ ! -f "$MONLOG" ]; then
+    echo "PREFLIGHT FAIL: no monitor log at $MONLOG." >&2
+    echo "  The abort tripwire (ABORT_PCT=$ABORT_PCT) and the RF-dead pause guard both" >&2
+    echo "  read it. Without it every reception read is empty, the campaign never" >&2
+    echo "  aborts however bad reception gets, and it looks healthy throughout." >&2
+    echo "  Start weewx_monitor.py on this host first (ops/weewx-monitor.service)." >&2
+    rc=1
+  else
+    age=$(( now - $(date -r "$MONLOG" '+%s' 2>/dev/null || echo 0) ))
+    if [ "$age" -gt "$MONLOG_STALE_SECS" ]; then
+      echo "PREFLIGHT FAIL: $MONLOG is ${age}s stale (limit ${MONLOG_STALE_SECS}s)." >&2
+      echo "  A monitor that is running but not writing is the ops#233 failure: the" >&2
+      echo "  file exists, every read succeeds, and every answer is about a dead file." >&2
+      rc=1
+    fi
+  fi
+
+  # Stale artifacts from a previous campaign on this host. install already
+  # refuses while a snapshot exists; say plainly what to clear, because the
+  # snapshot here predates the host move and restoring it would be a regression.
+  if [ -f "$BASELINE_SNAP" ]; then
+    echo "PREFLIGHT NOTE: baseline snapshot already present: $BASELINE_SNAP" >&2
+    echo "  install will refuse until it is moved aside. Verify it against the LIVE" >&2
+    echo "  config before trusting it as a revert target -- a snapshot taken on a" >&2
+    echo "  previous host restores that host's config, which is a regression, not a" >&2
+    echo "  rollback. Moving it aside is correct: install re-snapshots from live." >&2
+  fi
+
+  [ "$rc" = "0" ] && echo "PREFLIGHT OK (restart mode: $RESTART_MODE, base: $BASE)"
+  return "$rc"
 }
 
 # Up is not healthy (DEC-0036 froze for 7h18m while reporting Up). Require a NEW
@@ -380,10 +597,56 @@ if os.path.exists(sys.argv[5]):
 PYEOF
 }
 
+# RF-dead pause recovery: has the monitor logged reception recovery since the
+# pause began? Independent of the 30-min mean (which is deliberately laggy) so
+# a genuine recovery is not held hostage by stale bad samples still sitting in
+# its window -- reuses weewx_monitor.py's own RECOVERY line instead of
+# inventing a second detector.
+#
+# A RECOVERY line only fires on an ALERT->RECOVERY *edge*, though -- found
+# 2026-08-14: three short dips tripped the PAUSE via the lagging 30-min mean at
+# 19:40, reception then read a healthy [OK] continuously from ~19:43 onward for
+# almost two hours with no fresh ALERT (so no fresh RECOVERY either), and the
+# pause rode the full 120-min ceiling into a needless hard ABORT despite the
+# station being demonstrably fine the whole time. So also check the monitor's
+# own periodic classification (`RECEPTION: NN% ...`, logged every ~5min
+# regardless of ALERT state) for its newest read since the pause started
+# -- a level check as the fallback to the edge check above, not a replacement:
+# the edge check can fire faster on a sharp recovery, the level check catches
+# a gradual one that never re-alerts.
+#
+# The level check resumes at ABORT_PCT -- the same floor that pauses -- NOT at
+# the monitor's [OK] tag (S82). [OK] means >=60% (WU_RF_MIN_PCT), so requiring
+# it made the resume condition stricter than the entry condition: reception
+# sitting anywhere in [ABORT_PCT, 60) would never have triggered a pause yet
+# could not end one, and rode the ceiling into the same needless abort one band
+# lower (the band is real: 52-58% periodic reads logged 08-13/14). Entry and
+# exit sharing one floor can flap near it; each flap is two log lines and no
+# config/container touch, and a genuinely dead receiver reads ~0% and never
+# flaps, so the ceiling escalation it exists for is unaffected.
+#
+# Both greps read the rotated file too: weewx_monitor.log rotates daily at
+# 00:05 -- the exact minute of the 00/06/12/18+:05 swap slots -- and a
+# single-file read goes blind on everything pre-rotation right then. harvest()
+# and soak_check.sh both already learned this; this function had not.
+recovered_since() {
+  local since="$1" last pct
+  last="$(grep -h -oE '^[0-9-]{10} [0-9:]{8} RECEPTION RECOVERY' "$MONLOG.1" "$MONLOG" 2>/dev/null \
+      | tail -1 | cut -d' ' -f1,2)"
+  [ -n "$last" ] && [[ "$last" > "$since" ]] && return 0
+  last="$(grep -h -oE '^[0-9-]{10} [0-9:]{8} RECEPTION: [0-9]+% avg over last [0-9]+ windows \[(OK|LOW)\]' \
+      "$MONLOG.1" "$MONLOG" 2>/dev/null | tail -1)"
+  [ -n "$last" ] || return 1
+  [[ "$(cut -d' ' -f1,2 <<< "$last")" > "$since" ]] || return 1
+  pct="$(grep -oE 'RECEPTION: [0-9]+' <<< "$last" | grep -oE '[0-9]+$')"
+  [ -n "$pct" ] && [ "$pct" -ge "$ABORT_PCT" ]
+}
+
 trip_abort() {
   local why="$1"
   log "ABORT: $why"
   say_dry "write STOP sentinel" || echo "$(date '+%F %T') $why" > "$STOP"
+  rm -f "$PAUSE"
   restore_baseline
   send_mail "ABORTED — campaign halted" \
 "The RX experiment aborted and prod was restored to the baseline config.
@@ -423,6 +686,14 @@ schedule)
 
 install)
   [ -f "$BASELINE_SNAP" ] && { echo "Baseline snapshot already exists: $BASELINE_SNAP"; exit 1; }
+  if ! schedule_has_rows; then
+    echo "REFUSING to install: no campaign scheduled." >&2
+    echo "The SCHEDULE= block is empty — the between-campaigns stand-down state" >&2
+    echo "(DEC-0096). Installing would snapshot a baseline and then tick forever" >&2
+    echo "doing nothing. Generate the next campaign's table first (recipe above" >&2
+    echo "the SCHEDULE= block), then install." >&2
+    exit 1
+  fi
   if schedule_started; then
     echo "REFUSING to install: the schedule has already started." >&2
     echo "  first row: $(echo "$SCHEDULE" | grep -v '^$' | head -1 | cut -d'|' -f1)" >&2
@@ -433,6 +704,13 @@ install)
     echo "Regenerate the SCHEDULE= block with future dates first (DEC-0066)." >&2
     exit 1
   fi
+  # S107: last gate before this becomes an autonomous prod-config writer. Placed
+  # AFTER the schedule checks on purpose -- a stand-down or an already-started
+  # schedule is the more specific complaint and should be the one reported.
+  if ! preflight; then
+    echo "REFUSING to install: preflight failed (see above)." >&2
+    exit 1
+  fi
   say_dry "snapshot $CONF -> $BASELINE_SNAP and write state" && exit 0
   cp "$CONF" "$BASELINE_SNAP" || exit 1
   echo "NONE|0|1970-01-01 00:00:00" > "$STATE"
@@ -440,11 +718,30 @@ install)
   ;;
 
 tick)
+  acquire_lock || { log "tick: another instance holds the lock, skipping this pass"; exit 0; }
+  trap release_lock EXIT
   [ -f "$STOP" ] && { log "tick: STOP sentinel present, refusing"; exit 1; }
   [ -f "$BASELINE_SNAP" ] || { log "tick: not installed (no baseline snapshot)"; exit 1; }
   want="$(due_arm)"; have="$(current_arm)"
   [ "$want" = "NONE" ] && { log "tick: campaign not started yet"; exit 0; }
   [ "$want" = "$have" ] && exit 0                       # idempotent no-op
+
+  # An active reception pause DEFERS a scheduled swap instead of being cleared
+  # by it (S82). The old "arm swap supersedes it" rule swapped INTO the live
+  # episode: health_ok waits on archive records, records stop during RF-dead
+  # episodes (DEC-0069/0077, measured), so the swap converted DEC-0087's soft
+  # pause straight back into the hard sticky abort it exists to avoid -- and
+  # the nightly episode cluster (ledger 08-11..14: 00:49-02:12) sits right on
+  # the 00:05/06:05 slots. due_arm() already self-heals a late swap by design;
+  # the block starts late instead of the campaign halting. The BASELINE
+  # self-terminator is exempt: ending on prod config must never wait on RF
+  # (safety property #5), and it runs no health check that an episode could
+  # fail anyway.
+  if [ -f "$PAUSE" ] && [ "$want" != "BASELINE" ]; then
+    log "tick: swap $have -> $want deferred (reception pause active)"
+    exit 0
+  fi
+  [ -f "$PAUSE" ] && { log "tick: clearing pause (BASELINE self-termination supersedes it)"; rm -f "$PAUSE"; }
 
   log "tick: swapping $have -> $want"
   [ "$have" != "NONE" ] && harvest "$have" "$(last_swap_human)"
@@ -474,24 +771,58 @@ tick)
   ;;
 
 guard)
+  acquire_lock || { log "guard: another instance holds the lock, skipping this pass"; exit 0; }
+  trap release_lock EXIT
   [ -f "$STOP" ] && exit 0                              # already halted; stay quiet
   [ -f "$STATE" ] || exit 0
   [ "$(current_arm)" = "NONE" ] && exit 0
+  # After the BASELINE self-terminator the campaign is OVER and the guard
+  # stands down (S82). It used to stay armed forever -- the scheduler entries
+  # deliberately persist between campaigns (runbook: "idempotent no-ops"), so
+  # the first 120-min unrecovered episode AFTER a clean campaign end would
+  # have paused, ridden the ceiling, restarted prod for nothing and emailed
+  # "campaign halted" about a campaign that no longer existed. Campaign A
+  # never exposed this only because it ended in an abort whose STOP sentinel
+  # short-circuits above.
+  [ "$(current_arm)" = "BASELINE" ] && exit 0
+
+  # Already paused for reception? Check for recovery or a ceiling breach --
+  # the 30-min mean is deliberately NOT re-evaluated here (see recovered_since);
+  # this branch only asks whether the pause is over, one way or the other.
+  if [ -f "$PAUSE" ]; then
+    p_epoch="$(cut -d'|' -f1 "$PAUSE")"; p_human="$(cut -d'|' -f2- "$PAUSE")"
+    if recovered_since "$p_human"; then
+      log "RESUME: reception recovered after $(( ($(date '+%s') - p_epoch) / 60 ))min (arm $(current_arm))"
+      rm -f "$PAUSE"
+      exit 0
+    fi
+    if [ $(( $(date '+%s') - p_epoch )) -ge "$PAUSE_CEILING_SECS" ]; then
+      rm -f "$PAUSE"
+      trip_abort "RF-dead pause exceeded $((PAUSE_CEILING_SECS/60))min without recovery (arm $(current_arm))"
+      exit 1
+    fi
+    exit 0                                               # still paused, waiting
+  fi
+
   # Don't judge during the restart transient.
   swept="$(last_swap_epoch)"
   if [ "$swept" != "0" ]; then
     age=$(( $(date '+%s') - swept ))
     [ "$age" -lt "$SETTLE_SECS" ] && exit 0
   fi
-  read -r n mean <<< "$(grep -oE 'RECEPTION: [0-9]+%' "$MONLOG" 2>/dev/null \
+  # Reads the rotated file too (S82): the monitor log rotates at 00:05, so a
+  # single-file read left the floor blind for the ~30 min after midnight it
+  # takes six fresh periodic lines to accumulate -- nightly, at the hour the
+  # episode cluster lives. Chronology holds: .1 is strictly older.
+  read -r n mean <<< "$(grep -h -oE 'RECEPTION: [0-9]+%' "$MONLOG.1" "$MONLOG" 2>/dev/null \
       | grep -oE '[0-9]+' | tail -n "$ABORT_SAMPLES" \
       | awk '{s+=$1; n++} END {print n+0, (n? int(s/n) : -1)}')"
   # Too few samples means the monitor is quiet, not that reception collapsed —
   # never abort on absence of evidence.
   [ "${n:-0}" -lt "$ABORT_SAMPLES" ] && exit 0
   if [ "${mean:-100}" -lt "$ABORT_PCT" ]; then
-    trip_abort "30-min mean reception ${mean}% < ${ABORT_PCT}% floor (arm $(current_arm))"
-    exit 1
+    say_dry "write PAUSE sentinel" || echo "$(date '+%s')|$(date '+%Y-%m-%d %H:%M:%S')" > "$PAUSE"
+    log "PAUSE: 30-min mean reception ${mean}% < ${ABORT_PCT}% floor (arm $(current_arm))"
   fi
   ;;
 
@@ -499,13 +830,31 @@ status)
   echo "arm:        $(current_arm)   (since $(last_swap_human))"
   echo "due now:    $(due_arm)"
   echo "stopped:    $([ -f "$STOP" ] && cat "$STOP" || echo no)"
+  echo "paused:     $([ -f "$PAUSE" ] && cut -d'|' -f2- "$PAUSE" || echo no)"
   echo "installed:  $([ -f "$BASELINE_SNAP" ] && echo yes || echo no)"
   echo "samples:    $([ -f "$DATALOG" ] && wc -l < "$DATALOG" || echo 0)"
   ;;
 
 abort)
+  # Manual emergency stop: takes the lock when free (serializing with a live
+  # tick/guard), but proceeds regardless -- a human reaching for the abort must
+  # never be silently skipped. Racing an in-flight tick is the pre-S82 status
+  # quo at worst, and the STOP written here halts every subsequent pass.
+  if acquire_lock; then
+    trap release_lock EXIT
+  else
+    log "abort: lock held by a live tick/guard; proceeding anyway (manual emergency path)"
+  fi
   trip_abort "manual abort requested"
   ;;
 
-*) echo "unknown mode: $mode (schedule|install|tick|guard|status|abort)"; exit 1 ;;
+preflight)
+  # Standalone, read-only, safe to run any time. Run it on a NEW host before
+  # anything else -- it is the cheapest way to find out that the restart
+  # mechanism or the reception safety net does not work here.
+  preflight
+  exit $?
+  ;;
+
+*) echo "unknown mode: $mode (schedule|install|preflight|tick|guard|status|abort)"; exit 1 ;;
 esac

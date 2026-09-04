@@ -4,6 +4,7 @@
 
 import time
 import smtplib
+import ssl
 import os
 import sys
 import re
@@ -67,6 +68,54 @@ USB_FORENSICS_SCRIPT = os.environ.get(
     'USB_FORENSICS_SCRIPT', '/volume1/docker/weewx-rtldavis/usb_forensics.sh')
 CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 
+# --- Which automatic remedy the watchdog is allowed to try (S107, ops#233) ---
+# The host moved to marvin (DEC-0118), where the Foundation-era USB path does not
+# just fail -- it is DANGEROUS. `usb_reset.sh` unbinds a driver at a hardcoded
+# Synology bus path (`/sys/bus/usb/devices/1-3`); marvin's USB topology is
+# different (MARVIN-DEC-0051 reassigned two controller roles), so the same call
+# there either no-ops or resets SOMEONE ELSE'S device on a box now hosting two
+# live tenants and a passed-through ASM3142 controller.
+#
+# So the mechanism is now selected, not assumed:
+#
+#   usb_reset     the Foundation/Synology body: sudo usb_reset.sh (driver
+#                 unbind/rebind). DEFAULT, because this is a published extension
+#                 and changing an existing install's behavior silently would be
+#                 its own defect. But read RESET_MAX_TRIES' comment before
+#                 trusting it: across ~17 forensically-captured events on our
+#                 hardware it never once demonstrably fixed a stall, and
+#                 ERR-0005 suspects reset #10 caused a strictly worse mode.
+#   restart_unit  marvin: `systemctl restart <REMEDY_UNIT>`. weewx.service is
+#                 `docker run --rm` with `ExecStartPre=docker rm -f`, so a
+#                 restart IS the full container recreate -- the remedy that
+#                 actually resolved ERR-0005, which the Foundation monitor could
+#                 only reconstruct via `docker inspect` and mail to a human.
+#   none          detect and escalate only; never act. The honest setting for
+#                 any host where no remedy has been shown to work.
+#
+# Every mode keeps the SAME escalation discipline (RESET_MAX_TRIES, the verify
+# window, one email per outage). Only the action in the middle changes.
+REMEDY_MODE = os.environ.get('REMEDY_MODE', 'usb_reset')
+REMEDY_UNIT = os.environ.get('REMEDY_UNIT', 'weewx.service')
+# How to invoke systemctl. marvin's tenant runs unprivileged, so this is the
+# seam where a deployment supplies whatever it is actually allowed to use
+# (a path-scoped sudo grant, or marvinctl's tier-2 own-unit verb).
+REMEDY_SYSTEMCTL = os.environ.get('REMEDY_SYSTEMCTL', 'sudo systemctl')
+
+# --- Campaign inhibit (S107) ---
+# An RX campaign restarts weewx deliberately, once per arm. Every one of those
+# restarts looks exactly like the fault this watchdog exists to remedy: a gap in
+# decodes, then a respawn. Left unguarded the monitor would fight the campaign
+# it is supposed to be observing -- and worse, a remedy restart landing mid-arm
+# corrupts the block, which is the measurement the whole campaign is for.
+#
+# While this file exists: alerting and logging continue unchanged (we still want
+# the record), but NO automatic remedy fires. Detection is never inhibited --
+# only action. Same spirit as void_pending_verdict(): when the situation cannot
+# be judged honestly, say so loudly rather than act on it.
+CAMPAIGN_INHIBIT = os.environ.get(
+    'CAMPAIGN_INHIBIT', f'{BASE_DIR}/logs/campaign.inhibit')
+
 # --- Episode ledger (S73) ---
 # One pipe-delimited row per reception episode (RECEPTION ALERT -> RECOVERY),
 # written at recovery so post-campaign analysis and the LNA verdict read ONE
@@ -76,6 +125,13 @@ CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 # 'startup process' lines; 'droughts' counts the driver's ws.5 'DATA DROUGHT'
 # self-classification lines (receiver alive, no decodes -> RF-quiet class).
 EPISODES_LOG = os.environ.get('EPISODES_LOG', f'{BASE_DIR}/logs/episodes.log')
+# S82b (#180): the open episode, mirrored to disk. EP is module memory, and a
+# monitor restart mid-episode (every deploy is one) used to silently lose the
+# open episode: no ledger row ever written -- the pre-registered LNA datum --
+# no RECOVERY line for rx_experiment.sh's fast resume path, and the ALERT
+# email never got its RECOVERY pair. The mirror is rewritten on every episode
+# mutation and removed at close; startup restores it (episode_load).
+EPISODE_STATE = os.environ.get('EPISODE_STATE', f'{BASE_DIR}/logs/monitor_episode.state')
 DOCKER_BIN = os.environ.get('DOCKER_BIN', '/usr/local/bin/docker')
 
 # Env names whose VALUES must never reach an email or a log (DEC-0062). The
@@ -103,9 +159,12 @@ THRESHOLDS = {
 # --- Reception tracking config ---
 # WU_RF_EXPECTED is the number of records the ISS *physically transmits* per 60s
 # window -- the correct denominator for a reception %. It is NOT a fixed 24. The
-# Davis ISS transmit period depends on the transmitter id (driver loop_times run
-# 2.5625s..3.0s); this station's ISS (Transmitter 4) transmits every ~2.8125s, so
-# 60 / 2.8125 = ~21.3 records/min. The old value 24 ("one per 2.5s") assumed the
+# Davis ISS transmit period depends on the transmitter id: (41 + id) / 16 s for
+# packet id 0..7, i.e. DIP-switch ID 1..8 = 2.5625s..3.0s. Davis's own VP2 spec sheet
+# (DS6152: every sensor's update interval is N x 2.5-3 s across the eight IDs) and
+# DeKay's protocol notes agree -- verified S119, #313. This station's ISS (packet
+# id 4 = DIP ID 5) transmits every 2.8125s, measured 2.8124s +/- 1 ms (S115 capture),
+# so 60 / 2.8125 = ~21.3 records/min. The old value 24 ("one per 2.5s") assumed the
 # fastest channel and under-reported reception by ~13%: a full-reception window
 # read 22/24 = 92% when it was really ~22/21 = ~100% (S29). Override per station
 # with the WU_RF_EXPECTED env var when re-pointing to a different transmitter id.
@@ -133,8 +192,11 @@ WU_RECORD_RE = re.compile(r'\((\d+)\)\s*$')
 ARCHIVE_DB = os.environ.get('WEEWX_ARCHIVE_DB', f'{BASE_DIR}/weewx-data/archive/weewx.sdb')
 # True physical ISS transmit rate (packets/min) for the dropped-packet estimate:
 # 60 / 2.8125s = 21.33. This is the UN-rounded WU_RF_EXPECTED; the driver itself
-# floor-divides the period, so rxCheckPercent runs ~1-2 pts optimistic (documented,
-# minor -- S31). Override per station (different transmitter id) via the env var.
+# floor-divides the period (60 s -> 21, 59 s -> 20), so a fully received minute
+# reads 101-105% -- ~3 pts, measured once DEC-0135 unmasked it (#313; S31 had
+# called it ~1-2 pts under the old ~73% ceiling). summarize_reception_rows() clamps
+# each record at 100 before multiplying it out. Override per station (different
+# transmitter id) via the env var.
 RF_TX_PER_MIN = float(os.environ.get('RF_TX_PER_MIN', 60.0 / 2.8125))
 # How often to email the reception summary. Default 6 h (00/06/12/18 local) so a
 # reception problem surfaces within ~6 h and can be acted on the same day, rather than
@@ -171,7 +233,14 @@ def send_email(subject, body):
         msg['Subject'] = subject
         msg['From'] = GMAIL_USER
         msg['To'] = ALERT_TO
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+        # S91: explicit verifying context -- smtplib's default (no context=)
+        # falls back to ssl._create_stdlib_context(), an alias for
+        # _create_unverified_context() (no cert chain check, no hostname
+        # check). Without this, an on-path attacker can intercept the
+        # handshake with any certificate and capture GMAIL_PASS. See
+        # influx.py's post_request() for the same pattern already in use
+        # elsewhere in this repo.
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ssl.create_default_context()) as s:
             s.login(GMAIL_USER, GMAIL_PASS)
             s.send_message(msg)
         log(f"EMAIL sent: {subject}")
@@ -179,6 +248,152 @@ def send_email(subject, body):
         log(f"EMAIL error: {e}")
 
 WEEWX_LOG_PATH = os.environ.get('WEEWX_LOG', f'{BASE_DIR}/logs/weewx.log')
+
+# --- Input staleness: THIS MONITOR'S OWN FAILURE MODE (S107, ops#233) ---
+# On 2026-08-29 this monitor sent ~14 hours of "STILL DOWN" alerts about six
+# uploaders that were all healthy. Nothing in it was broken. weewx had moved to
+# marvin (DEC-0118) and the log file it reads froze at 22:33:46 the night
+# before; every alert after that reported the age of a DEAD FILE, not the state
+# of the station. Live rxCheckPercent ran 74-77% the whole time it was calling
+# reception "below 60%".
+#
+# The defect is structural, not a wrong path: EVERY threshold in this file is of
+# the form "nothing has been seen for N seconds", and a stalled input satisfies
+# all of them at once, forever, while looking exactly like a total outage. The
+# monitor could not tell "the station is down" from "I am blind".
+#
+# So blindness is now its own state, checked BEFORE any threshold is evaluated,
+# and reported as its own alert class. Two independent signals, because they
+# fail differently:
+#
+#   mtime      cheap, catches the file not growing. Fooled by a touch, and by a
+#              writer that reopens the path without writing.
+#   last line  the timestamp parsed from the newest line we actually consumed.
+#              Catches content going stale even when something keeps the file's
+#              mtime fresh -- the "right path, wrong host" shape, which is
+#              precisely what the marvin cutover produced.
+#
+# Staleness is the WORSE of the two. weewx publishes every ~3 s and archives
+# every 60 s, so five minutes of silence is already far outside normal.
+INPUT_STALE_S   = int(os.environ.get('INPUT_STALE_S', 300))
+# Timestamp prefix weewx writes on every line: '2026-08-30 07:20:50,192 ...'.
+LOG_TS_RE = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
+
+# Blind state, module-global like WD/EP. 'since' is when we first went blind;
+# 'alerted_at' drives the REPEAT cadence, reusing the same clock as everything
+# else here so a blind episode reads like any other outage in the mail.
+BLIND = {
+    'active': False,
+    'since': 0.0,
+    'alerted_at': 0.0,
+    'last_line_ts': 0.0,   # epoch of the newest weewx.log line we have parsed
+}
+
+
+def parse_log_ts(line):
+    """Epoch of LINE's leading weewx timestamp, or None if it has none.
+
+    Deliberately anchored (`^`) and second-resolution: the millisecond suffix
+    and everything after it is noise for a staleness question, and a regex that
+    could match a timestamp appearing LATER in a line would happily read a
+    quoted one out of an error message and call the input fresh."""
+    m = LOG_TS_RE.match(line)
+    if not m:
+        return None
+    try:
+        return time.mktime(time.strptime(m.group(1), '%Y-%m-%d %H:%M:%S'))
+    except ValueError:
+        return None
+
+
+def log_mtime():
+    """mtime of the weewx log, or 0.0 if it cannot be stated (missing/denied).
+
+    0.0 is deliberately the WORST possible answer rather than an exception: a
+    log we cannot stat is a log we cannot trust, and input_staleness() turns
+    that into maximum staleness, which is the honest reading."""
+    try:
+        return os.path.getmtime(WEEWX_LOG_PATH)
+    except OSError:
+        return 0.0
+
+
+def input_staleness(now):
+    """Seconds since the input last showed evidence of life -- the WORSE of the
+    file's mtime age and the newest parsed line's age.
+
+    Returns a float. A never-seen line (last_line_ts 0.0) does not by itself
+    mean stale: at startup we have not read anything yet, so that signal is
+    skipped until it has a value and mtime carries the check alone."""
+    ages = [now - log_mtime()]
+    if BLIND['last_line_ts']:
+        ages.append(now - BLIND['last_line_ts'])
+    return max(ages)
+
+
+def send_blind_alert(stale_s, now, recovered=False):
+    """Alert on the monitor's own blindness -- a DIFFERENT class from '<svc> DOWN'.
+
+    Kept deliberately distinct in subject and body. Collapsing the two is the
+    original defect: 14 hours of mail said six uploaders were down when the
+    truth was that the monitor could not see. A reader must be able to tell
+    'your station stopped' from 'your monitoring stopped' at a glance, because
+    the actions are completely different."""
+    mtime = log_mtime()
+    seen = (datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+            if mtime else 'never (cannot stat the file)')
+    if recovered:
+        log(f"INPUT RECOVERED: {WEEWX_LOG_PATH} is being written again")
+        send_email(
+            f"{STATION_NAME}: monitoring input RECOVERED",
+            f"{WEEWX_LOG_PATH} is growing again as of {datetime.now()}.\n"
+            f"Uploader and reception checks have resumed.\n\n"
+            f"Alerts sent while blind said nothing about station health.")
+        return
+    log(f"INPUT STALE: {WEEWX_LOG_PATH} unchanged for {int(stale_s)}s -- "
+        f"checks suspended, NOT reporting station health")
+    send_email(
+        f"{STATION_NAME}: MONITORING BLIND - input stale, station state UNKNOWN",
+        f"This is NOT a station alert. The monitor cannot see.\n\n"
+        f"Input:      {WEEWX_LOG_PATH}\n"
+        f"Last write: {seen}\n"
+        f"Stale for:  {int(stale_s // 60)} min (threshold {INPUT_STALE_S // 60} min)\n"
+        f"As of:      {datetime.now()}\n\n"
+        f"Uploader and reception checks are SUSPENDED while this holds, so no\n"
+        f"'DOWN' mail will follow. The station may be perfectly healthy; this\n"
+        f"says only that the file this monitor reads has stopped changing.\n\n"
+        f"Most likely causes, in the order they have actually happened here:\n"
+        f"  - weewx moved host and this monitor still points at the old path\n"
+        f"    (2026-08-29, ops#233: 14 h of false alerts about healthy uploaders)\n"
+        f"  - the container is down, or stopped writing its log\n"
+        f"  - the path is a stale mount, or an export that no longer covers it\n\n"
+        f"Check the log path first, not the station.")
+
+
+def check_input_freshness(now):
+    """Update the blind latch. Returns True when the input is TRUSTWORTHY.
+
+    Called once per poll, before any threshold is evaluated. When this returns
+    False the caller must skip uploader and reception judgement entirely --
+    every threshold in this file would otherwise fire on the same stale input
+    and mail a confident, wrong answer."""
+    stale = input_staleness(now)
+    if stale > INPUT_STALE_S:
+        if not BLIND['active']:
+            BLIND['active'] = True
+            BLIND['since'] = now
+            BLIND['alerted_at'] = now
+            send_blind_alert(stale, now)
+        elif now - BLIND['alerted_at'] >= REPEAT:
+            BLIND['alerted_at'] = now
+            log(f"INPUT STALE: still blind after {int((now - BLIND['since'])//60)}min")
+            send_blind_alert(stale, now)
+        return False
+    if BLIND['active']:
+        BLIND['active'] = False
+        send_blind_alert(0.0, now, recovered=True)
+    return True
+
 
 def get_log_size():
     """Current size of the weewx log in bytes (0 if missing). The caller compares
@@ -319,7 +534,13 @@ def do_reset(notify=True):
             log(f"RESET error: {result.stderr}")
             send_email(f"{STATION_NAME}: RTL-SDR reset FAILED", f"{USB_RESET_SCRIPT} failed: {result.stderr}")
     except Exception as e:
+        # S82b (#180): this path used to log only, unlike the nonzero-exit
+        # branch above which emails -- it fired live 2026-08-14 01:56:30 as a
+        # 15 s sudo timeout and told nobody. A reset that never ran is at
+        # least as alarming as one that ran and failed.
         log(f"RESET error: {e}")
+        send_email(f"{STATION_NAME}: RTL-SDR reset FAILED",
+                   f"{USB_RESET_SCRIPT} raised: {e}")
 
 # Watchdog escalation state (S62). Kept in one dict rather than threaded through
 # main()'s locals: the reset path spans both the line scanner and the poll loop,
@@ -416,14 +637,94 @@ def send_unrecoverable_alert(reason, detail=''):
     send_email(f"{STATION_NAME}: RTL-SDR UNRECOVERABLE - manual intervention needed", body)
 
 
+def campaign_inhibited():
+    """True while an RX campaign has asked for no automatic action (S107).
+
+    Cheap existence check, re-read every time rather than cached: a campaign
+    starts and ends without restarting this monitor, so a value read once at
+    startup would be wrong for the entire run that mattered."""
+    return os.path.exists(CAMPAIGN_INHIBIT)
+
+
+def remedy_action():
+    """Human name of the action REMEDY_MODE will actually take.
+
+    Exists for the same reason USB_RESET_ACTION does (S67, DEC-0074): months of
+    logs named an operation that had stopped happening, and a reader reasoning
+    from them reasons about the wrong mechanism. Now that the action is
+    mode-selected, a single hardcoded string would be that defect by
+    construction."""
+    if REMEDY_MODE == 'restart_unit':
+        return f'{REMEDY_SYSTEMCTL} restart {REMEDY_UNIT}'
+    if REMEDY_MODE == 'usb_reset':
+        return f'{USB_RESET_ACTION} via {USB_RESET_SCRIPT}'
+    return 'no automatic remedy (REMEDY_MODE=none)'
+
+
+def do_restart_unit(notify=True):
+    """marvin's remedy: restart the systemd unit that owns the container.
+
+    This is not the timid option. `weewx.service` is `docker run --rm` with
+    `ExecStartPre=/usr/bin/docker rm -f`, so a restart is a FULL CONTAINER
+    RECREATE -- the exact remedy that resolved ERR-0005 and the one the
+    Foundation monitor could only rebuild via `docker inspect` and mail to a
+    human to run by hand. It costs ~2-3 minutes of data, which is why
+    RESET_MAX_TRIES bounds it to one attempt per outage, same as every other
+    remedy here."""
+    import subprocess
+    cmd = REMEDY_SYSTEMCTL.split() + ['restart', REMEDY_UNIT]
+    try:
+        log(f"REMEDY: running {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode == 0:
+            log(f"REMEDY: {REMEDY_UNIT} restart returned 0")
+            if notify:
+                send_email(f"{STATION_NAME}: weewx restarted",
+                           f"Restarted {REMEDY_UNIT} at {datetime.now()} after a "
+                           f"stall.\n\nThis is a full container recreate "
+                           f"(docker run --rm + ExecStartPre rm -f).\n"
+                           f"Expect a 2-3 minute gap in data around this time.")
+        else:
+            log(f"REMEDY error: rc={result.returncode} {result.stderr}")
+            send_email(f"{STATION_NAME}: weewx restart FAILED",
+                       f"{' '.join(cmd)} exited {result.returncode}:\n"
+                       f"{result.stderr}")
+    except Exception as e:
+        # Same lesson as do_reset()'s exception path (S82b, #180): a remedy that
+        # never ran is at least as alarming as one that ran and failed, and the
+        # 15 s sudo timeout that told nobody is why that branch emails.
+        log(f"REMEDY error: {e}")
+        send_email(f"{STATION_NAME}: weewx restart FAILED",
+                   f"{' '.join(cmd)} raised: {e}")
+
+
 def reset_dongle(last_reset, notify=True):
+    """Fire ONE automatic remedy, subject to cooldown and the campaign inhibit.
+
+    Name retained deliberately: `watchdog_stall()` and the S62 escalation tests
+    reach this by name, and renaming the single choke point through which every
+    automatic action passes is not worth the churn (DEC-0014). What it DOES is
+    now selected by REMEDY_MODE -- see that constant. Every log line here takes
+    its wording from remedy_action() so the record can never again describe an
+    operation that is not the one being performed (DEC-0074)."""
     now = time.time()
-    if now - last_reset < RESET_CD:
-        log(f"SKIP reset: cooldown ({int(now-last_reset)}s)")
+    if campaign_inhibited():
+        # Detection is never inhibited; only action. Loud on purpose -- a silent
+        # skip here would read, months later, exactly like a remedy that fired
+        # and worked.
+        log(f"SKIP remedy: campaign inhibit present ({CAMPAIGN_INHIBIT}); "
+            f"would have run {remedy_action()}")
         return last_reset
-    log(f"RESET: {USB_RESET_ACTION} via {USB_RESET_SCRIPT}")
+    if REMEDY_MODE == 'none':
+        log("SKIP remedy: REMEDY_MODE=none; detection and escalation only")
+        return last_reset
+    if now - last_reset < RESET_CD:
+        log(f"SKIP remedy: cooldown ({int(now-last_reset)}s)")
+        return last_reset
+    log(f"REMEDY: {remedy_action()}")
     import threading
-    t = threading.Thread(target=do_reset, kwargs={'notify': notify}, daemon=True)
+    target = do_restart_unit if REMEDY_MODE == 'restart_unit' else do_reset
+    t = threading.Thread(target=target, kwargs={'notify': notify}, daemon=True)
     t.start()
     return time.time()
 
@@ -476,6 +777,21 @@ def watchdog_not_running(wu_bad_windows):
         f"Consecutive bad reception windows: {wu_bad_windows}")
 
 
+def void_pending_verdict(reason):
+    """Void a pending reset verdict that cannot be honestly judged (S82b, #180).
+
+    The rotation-reset branch zeroes wu_bad_windows as OFFSET bookkeeping, not
+    because reception verified good -- letting watchdog_poll() judge a pending
+    reset by that zeroed counter logged 'verified effective' at midnight,
+    mislabeled the verify-effective forensics capture (the control evidence
+    DEC-0075/0081-class analysis depends on), and silently refreshed the
+    RESET_MAX_TRIES hedge budget mid-episode. Voided loudly instead;
+    tries/escalated stay exactly as they were."""
+    if WD['check_at']:
+        WD['check_at'] = 0.0
+        log(f"RESET verdict void: {reason}")
+
+
 def watchdog_poll(wu_bad_windows, now):
     """Judge whether the pending reset worked. Called once per poll."""
     if not WD['check_at'] or now < WD['check_at']:
@@ -517,20 +833,69 @@ EP = {
 }
 
 
+def episode_persist():
+    """Mirror the open episode to EPISODE_STATE (S82b, #180).
+
+    No open episode -> the mirror is removed. Telemetry must never take the
+    watchdog down (same rule as the ledger itself), so every failure here is
+    logged and swallowed."""
+    import json
+    try:
+        if not EP['onset']:
+            if os.path.exists(EPISODE_STATE):
+                os.remove(EPISODE_STATE)
+            return
+        tmp = EPISODE_STATE + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(EP, f)
+        os.replace(tmp, EPISODE_STATE)
+    except OSError as e:
+        log(f"EPISODE state persist failed: {e}")
+
+
+def episode_load():
+    """Restore an open episode left by a previous monitor process (startup).
+    Returns True when one was restored. Any defect in the file is logged and
+    ignored -- a corrupt mirror must not stop the monitor."""
+    import json
+    try:
+        if not os.path.exists(EPISODE_STATE):
+            return False
+        with open(EPISODE_STATE) as f:
+            saved = json.load(f)
+        if not saved.get('onset'):
+            return False
+        EP.update({k: saved[k] for k in EP if k in saved})
+        log("EPISODE restored from state file: open since %s "
+            "(monitor restarted mid-episode)" % datetime.fromtimestamp(
+                EP['onset']).strftime('%Y-%m-%d %H:%M:%S'))
+        return True
+    except Exception as e:
+        log(f"EPISODE state load failed (ignored): {e}")
+        return False
+
+
 def episode_open(avg, now):
     EP['onset'] = now
     EP['stalls'] = EP['resets'] = EP['respawns'] = EP['droughts'] = 0
     EP['worst_avg'] = avg
     EP['last_cmd'] = ''
+    episode_persist()
 
 
 def episode_note_avg(avg):
     if EP['onset'] and avg < EP['worst_avg']:
         EP['worst_avg'] = avg
+        episode_persist()
 
 
 def episode_close(now):
-    """Write the ledger row and clear. No-op if no episode is open."""
+    """Write the ledger row and clear. No-op if no episode is open.
+
+    Order is row-first, then clear-and-remove-the-mirror: a crash between the
+    two can at worst duplicate an adjacent ledger row on the next recovery,
+    never lose one -- the mirror exists precisely because losing rows was the
+    failure mode (S82b, #180)."""
     if not EP['onset']:
         return
     row = "%s|%s|%d|%d|%d|%d|%d|%.0f|%s\n" % (
@@ -545,6 +910,7 @@ def episode_close(now):
     except OSError as e:
         log(f"EPISODE ledger write failed: {e}")
     EP['onset'] = 0.0
+    episode_persist()
 
 
 def wu_pct(count):
@@ -585,9 +951,20 @@ def summarize_reception_rows(rows, tx_per_min):
     """Pure reception math over archive rows -> summary dict (no DB, unit-testable).
 
     ROWS: iterable of (dateTime_utc_epoch, interval_minutes, rxCheckPercent-or-None).
-    rxCheckPercent is the driver's honest metric: good CRC-decoded packets over the
-    theoretical max for that archive period. Per record the ISS transmits
-    interval*tx_per_min packets; received ~= expected * pct/100, dropped = the rest.
+    rxCheckPercent is the driver's metric: good CRC-decoded packets over
+    floor(period / loop period) for that archive period. Per record the ISS
+    transmits interval*tx_per_min packets; received ~= expected * pct/100, dropped =
+    the rest.
+
+    Each record's pct is CLAMPED at 100 before it is multiplied out (#313). The
+    driver floors its denominator (60 s // 2.8125 s = 21 against 21.33 real
+    transmissions, and a 59 s period floors to 20), so a fully received minute reads
+    101-105% -- ~103% mean, measured once DEC-0135 unmasked it. Unclamped,
+    'received' exceeds 'expected' and 'dropped' goes negative every good hour, and a
+    daily total silently nets real loss against the over-read. Clamped, 'dropped' is
+    a lower bound on real loss: it can under-count, never invent a negative. The
+    number of clamped records is returned as 'over100' so the over-read stays
+    visible rather than hidden.
     NULL-rxCheckPercent records (first record after a restart, or the pre-fix
     deadlock era) carry no reception info, so they are counted as 'gaps' and left
     out of the expected/received totals -- a conservative under-count of drops.
@@ -595,19 +972,26 @@ def summarize_reception_rows(rows, tx_per_min):
     hours = {}
     for dt, interval_min, pct in rows:
         hour = time.localtime(dt).tm_hour
-        h = hours.setdefault(hour, {'pcts': [], 'expected': 0.0, 'received': 0.0, 'gaps': 0})
+        h = hours.setdefault(hour, {'pcts': [], 'expected': 0.0, 'received': 0.0,
+                                    'gaps': 0, 'over100': 0})
         if pct is None:
             h['gaps'] += 1
             continue
         exp = (interval_min or 1) * tx_per_min
+        if pct > 100.0:
+            h['over100'] += 1
+            pct = 100.0
         h['pcts'].append(pct)
         h['expected'] += exp
-        h['received'] += exp * pct / 100.0
-    day = {'expected': 0.0, 'received': 0.0, 'gaps': 0, 'records': 0, 'hours': {}}
+        # exp * 100.0 / 100.0 is not always exp in floating point; a fully received
+        # record must contribute exactly its expected packets so 'dropped' is 0, not 1e-13.
+        h['received'] += exp if pct == 100.0 else exp * pct / 100.0
+    day = {'expected': 0.0, 'received': 0.0, 'gaps': 0, 'records': 0, 'over100': 0,
+           'hours': {}}
     for hour, h in hours.items():
         exp, rec, n = h['expected'], h['received'], len(h['pcts'])
         day['hours'][hour] = {
-            'records': n, 'gaps': h['gaps'],
+            'records': n, 'gaps': h['gaps'], 'over100': h['over100'],
             'mean_pct': (100.0 * rec / exp) if exp else None,
             'min_pct': min(h['pcts']) if h['pcts'] else None,
             'expected': exp, 'received': rec, 'dropped': exp - rec,
@@ -616,6 +1000,7 @@ def summarize_reception_rows(rows, tx_per_min):
         day['received'] += rec
         day['gaps'] += h['gaps']
         day['records'] += n
+        day['over100'] += h['over100']
     if not day['records'] and not day['gaps']:
         return None
     day['mean_pct'] = (100.0 * day['received'] / day['expected']) if day['expected'] else None
@@ -666,10 +1051,13 @@ def db_reception_summary(start_ts, end_ts, db_path=None):
 def format_reception_summary(summary, label):
     """Format the archive-sourced reception summary (S31) as a text table. Reports
     packets dropped -- not just windows above a threshold. LABEL names the reporting
-    window (e.g. '2026-07-08 00:00–12:00'); rows are the hours present in the window."""
+    window (e.g. '2026-07-08 00:00–12:00'); rows are the hours present in the window.
+    Per-record rxCheckPercent is clamped at 100% upstream (#313), so 'dropped' is a
+    lower bound on real loss; the count of clamped records is printed so the driver's
+    over-read stays visible."""
     lines = [
         f"{STATION_NAME} — RF Reception Summary — {label}",
-        "Source: driver rxCheckPercent (good decoded packets / transmitted, per record)",
+        "Source: driver rxCheckPercent per archive record, clamped at 100%",
         f"Physical TX rate: {RF_TX_PER_MIN:.1f} packets/min",
         "",
         f"{'Hour':<6} {'Recept.':>8} {'Min':>6} {'Dropped':>9} {'Recs':>6}",
@@ -684,16 +1072,23 @@ def format_reception_summary(summary, label):
             lines.append(f"{hour:02d}:00 {'--':>6}  {'--':>5} {'--':>9} {('gap x%d' % h['gaps']):>6}")
     lines.append("-" * 40)
     mean = summary['mean_pct']
-    lines.append(f"Mean reception:            {mean:.0f}%" if mean is not None else
-                 "Mean reception:            --")
-    lines.append(f"Packets transmitted (est): {summary['expected']:.0f}")
-    lines.append(f"Packets received (est):    {summary['received']:.0f}")
-    lines.append(f"Packets dropped (est):     {summary['dropped']:.0f}")
+    lines.append(f"{'Mean reception:':<36}{mean:.0f}%" if mean is not None else
+                 f"{'Mean reception:':<36}--")
+    lines.append(f"{'Packets transmitted (est):':<36}{summary['expected']:.0f}")
+    lines.append(f"{'Packets received (est):':<36}{summary['received']:.0f}")
+    lines.append(f"{'Packets dropped (est, lower bound):':<36}{summary['dropped']:.0f}")
     if summary['gaps']:
         lines.append(f"Records with no reception data (gaps/restarts): {summary['gaps']}")
+    if summary.get('over100'):
+        lines.append(f"Records reading over 100% (clamped): {summary['over100']} of "
+                     f"{summary['records']}")
     lines.append("")
-    lines.append("Note: estimate = per-record rxCheckPercent x physical TX rate; the driver "
-                 "floor-divides per period so it runs ~1-2 pts optimistic (S31, DEC-0024).")
+    lines.append("Note: received = per-record rxCheckPercent x physical TX rate, each record "
+                 "clamped at 100%. The driver floor-divides the archive period by the loop "
+                 f"period (60 s -> {int(RF_TX_PER_MIN)}, a 59 s period -> {int(RF_TX_PER_MIN) - 1}) "
+                 f"against {RF_TX_PER_MIN:.2f} real transmissions/min, so a fully received minute "
+                 "reads 101-105% (~103% mean, measured since DEC-0135; #313). The clamp keeps "
+                 "'dropped' a lower bound on real loss instead of netting good hours negative.")
     return "\n".join(lines)
 
 
@@ -794,7 +1189,17 @@ def main():
     wu_hourly_buckets = {}
     wu_report_start   = period_floor(time.time(), RF_REPORT_INTERVAL_HOURS)
 
+    # S82b (#180): pick up an episode a previous monitor process left open.
+    # wu_in_alert is re-derived from the restored onset (the two are the same
+    # fact: an alert IS an open episode); the repeat clock restarts now so a
+    # pre-restart REPEAT cannot double-send.
+    if episode_load():
+        wu_in_alert       = True
+        wu_alert_sent_at  = EP['onset']
+        wu_repeat_sent_at = time.time()
+
     log("Monitor started")
+    log(f"Remedy armed: {remedy_action()}")
     send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
 
     last_offset = get_log_size()
@@ -807,6 +1212,7 @@ def main():
         cur = get_log_size()
         if cur < last_offset:
             log(f"Log reset detected (was {last_offset} bytes, now {cur}) - container restarted")
+            void_pending_verdict("log rotated before the verification window closed")
             last_offset = 0
             for svc in last_seen:
                 last_seen[svc] = 0.0
@@ -824,6 +1230,12 @@ def main():
             if lines:
                 log(f"Poll: {len(lines)} new lines")
             for line in lines:
+                # Freshness signal first, and from EVERY line rather than the
+                # ones we happen to match below: the point is to know the input
+                # is alive, which is independent of whether it is interesting.
+                _ts = parse_log_ts(line)
+                if _ts:
+                    BLIND['last_line_ts'] = _ts
                 if 'rtldavis process stalled' in line:
                     log("STALL detected")
                     EP['stalls'] += 1
@@ -831,6 +1243,7 @@ def main():
                     watchdog_stall(wu_bad_windows)
                     if WD['last_reset'] != _reset_before:
                         EP['resets'] += 1
+                    episode_persist()
                 elif 'rtldavis process is not running' in line:
                     # A DIFFERENT fault from a stall -- the binary dies on
                     # startup. Never reset here (S62, ERR-0005).
@@ -843,10 +1256,12 @@ def main():
                     m = re.search(r"startup process '([^']*)'", line)
                     if m:
                         EP['last_cmd'] = m.group(1)
+                    episode_persist()
                 elif 'DATA DROUGHT' in line:
                     # Driver ws.5 self-classification: receiver emitting,
                     # nothing decoding -- the RF-quiet class (S73).
                     EP['droughts'] += 1
+                    episode_persist()
                 g = parse_rain_glitch(line)
                 if g and now - last_glitch_alert > RAIN_GLITCH_CD:
                     ts, detail, phantom_in = g
@@ -867,6 +1282,29 @@ def main():
                     wu_first_seen = True
             # last_offset already advanced by get_new_lines() above.
 
+        # --- Is the input worth judging at all? (S107, ops#233) ---
+        # Everything below this line is a "nothing seen for N seconds" test, and
+        # a frozen input satisfies every one of them simultaneously and forever.
+        # That is not a hypothetical: it is what shipped 14 hours of confident,
+        # false "STILL DOWN" mail about six healthy uploaders. Judge the input
+        # before judging the station.
+        _was_blind = BLIND['active']
+        if not check_input_freshness(now):
+            continue
+        if _was_blind:
+            # Recovered. The window/period clocks have been parked for however
+            # long the blindness lasted; carrying them forward would close a
+            # single "window" spanning hours and read it as catastrophic
+            # reception. Restart the accounting instead of reporting a number
+            # built out of the gap.
+            log("INPUT RECOVERED: restarting reception window accounting")
+            wu_window_start   = now
+            wu_window_epochs  = set()
+            wu_period_counts  = []
+            wu_period_start   = now
+            wu_bad_windows    = 0
+            wu_first_seen     = False
+            void_pending_verdict("input was stale across the verification window")
 
         # --- Reception: close window every 60s ---
         if wu_first_seen and (now - wu_window_start) >= WU_RF_WINDOW:
@@ -912,6 +1350,9 @@ def main():
             else:
                 body = None
             if body:
+                # Logged, not just emailed (ops#257 limb 3): the email-only path meant
+                # this summary was unreachable by any ad-hoc tenant read.
+                log(body)
                 send_email(f"{STATION_NAME}: RF Reception — {label}", body)
             wu_hourly_buckets = {}
             wu_report_start   = block

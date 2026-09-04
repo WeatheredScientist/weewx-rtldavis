@@ -7,7 +7,1940 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S114] — 2026-09-02 — Spectrum capture finds wideband RFI, not a clean 925.5–926.5 MHz interferer (DEC-0132); ops#253 fully closed; PR #305 merged
 
+- **Merged PR #305** (Foundation's stopped weewx container decommissioned).
+- **ops#253 closed, both stages.** Marvin's `exec_devices` grant (`0bda:2838` via a per-device
+  udev rule, owner-ratified S114) had only been smoke-tested with `rtl_test` before this session.
+  Ran the real thing: `weewx.service` stopped (~6 min outage, self-service), a 5-min `rtl_power`
+  sweep of 924.5–927.5 MHz through `marvinctl exec-ro`, prod restarted clean.
+- **DEC-0132: the capture's noise floor was flat and stable all 5 minutes** (no rolloff shape —
+  evidence against a static gain rolloff or fixed antenna null), **but 16 of 60 ten-second windows
+  carried transient bursts (5–34 dB above floor) spanning 925.15–927.48 MHz** — nearly the whole
+  capture band, not confined to DEC-0130's flagged 925.5–926.5 MHz channels 46–48 (only 7 of 16
+  fall there; the single largest, +34.5 dB, hit 927.34 MHz, well outside it). Reading: RFI
+  strengthens as the mechanism, but the exclusive tie to channels 46–48 weakens. Blocker 6 stays
+  open — free next step (cross the spike frequencies against DEC-0130's histogram) queued for
+  S115, explicitly on Fable per the owner's call, since it's open-ended analysis, not execution.
+
+---
+## [S113] — 2026-09-01 — Campaign D closes the gain axis at marvin: the curve is flat, no candidate shortlists (DEC-0128)
+
+- **Campaign D ran exactly as pre-registered and self-terminated clean** — six 45-min gain-only
+  blocks HIGH→LOW, 2026-08-31 21:01 → 09-01 01:30 ET, no aborts, prod restored 01:30:39.
+- **Readout: P496 74.65 · P449 73.79 · P402 74.98 · P372 74.97 (incumbent) · P328 73.29 ·
+  P207 68.17.** Gain 328–496 is one plateau — 1.70 pts of spread against a ~1.61-pt per-arm SE,
+  best delta **+0.01**, nothing near DEC-0059's 2.0-pt bar. **A shortlisting pilot that shortlists
+  nothing:** the multi-day confirmatory campaign held open under campaign C is withdrawn, not
+  deferred. 207 is the one real result (−6.80, t=−3.75) and matches the physics — campaign A's
+  near-parity for 207 was LNA-in, and DEC-0017's "207 optimal" is a with-preamp finding.
+- **Larger, undesigned finding — three axes are now flat.** Like-for-like full-diurnal campaigns,
+  LNA out both: 372 = Foundation 72.83 vs marvin 72.82; 496 = 74.83 vs 73.98. DEC-0118 moved the
+  receiver measurably closer with fewer walls and reception did **not** move. With `-ex` already a
+  wash (+0.45/−0.06), tuner gain, receive window and physical siting are all flat at ~73–75%: the
+  missing ~25% is not SNR-limited and not reachable by tuning. **ROADMAP P2 closed** on that basis
+  (its header still read "A COMPLETE, B LAUNCHED (S70)").
+- No config change — gain holds at 372. `SCHEDULE=` emptied to the DEC-0096 stand-down, which also
+  stops the TZ-corrected staleness tripwire failing every PR. Marvin's live copy still carries the
+  elapsed schedule but is **inert** (state `BASELINE`; `tick` no-ops on `want == have`, `guard`
+  exits at its `BASELINE` check) and its sha matches repo HEAD — the deploy rides the next real one.
+- **New BACKLOG item replacing the tuning axes: "Where is the ~25% ceiling?"** — cheapest-first,
+  starting with two free read-only checks (is `max_count`'s denominator honest given the 51-channel
+  hop; settle `ppm`/`fc` by measuring the live `FreqError` distribution rather than sweeping it).
+- Method gap recorded: `campaign_analyze.py`'s `fetch()` is still NAS-hardwired (pre-DEC-0118), so
+  this is the second campaign read through a hand-assembled `marvinctl exec-ro` transport. Port it
+  before a third.
+- **Then ran both of that item's free checks the same session (DEC-0129).** (a) **The denominator is
+  honest** — `loop_times` is exactly Davis's `(41+id)/16` s, so the missing ~25% is undecoded
+  packets, not a measurement artifact; hypothesis rejected. Incidentally `max_count` varies 19–23
+  where `iss_channel=1` implies a fixed 23, so the driver's `period` is not the archive interval
+  (unresolved — the `ARCHIVE_STATS` line is not currently emitted), and **per-minute variance is
+  entirely binomial** (predicted 9.2–9.9 sd at ~20–25 packets/min, measured 8.80 — no excess
+  variance, so the sd≈9 the campaigns fought was counting statistics, not RF weather).
+  (b) **`ppm`/`fc` is a dead axis and blocker 4 closes on measurement** — the offset is real and
+  one-sided (+2206 Hz = +2.41 ppm, zero negative samples, contradicting the standing "it'll be
+  centred" prior), but reception is flat across a 10× offset range (corr +0.075), so the AFC absorbs
+  it entirely. `-noafc` is contraindicated by the same result rather than merely untested.
+- **The ceiling is now characterized as deterministic, structural, and ours** — no excess variance,
+  unresponsive to gain, receive window, siting and frequency offset. **The owner's field observation
+  is the strongest input yet:** a real Davis console at comparable distance from the same ISS drops
+  only single digits, so the signal is there and the ~20-pt gap belongs to our receiver, not the
+  link. Leading untested hypothesis: 26 MHz / 51 channels versus an RTL-SDR's ~2.4 MHz means it must
+  retune per hop. Next step is bounded and needs no prod access — the deployed Go source is publicly
+  fetchable (`Dockerfile:46`) and has never been read directly.
+
+## [S112] — 2026-09-01 — Full-history rewrite: privacy scrub of infrastructure identifiers and personal emails (DEC-0127)
+
+- **The entire git history (661 commits, every branch and tag) was rewritten with `git-filter-repo`
+  and force-pushed** to remove private-infrastructure identifiers from historical file versions and
+  personal email addresses from early commit metadata. Owner-directed: privacy outranks history
+  immutability. All SHAs changed — existing clones must re-clone. Verified clean with
+  positive-controlled scans on every axis; zero forks existed; GitHub Support purge requested for
+  server-side cached objects. `SECURITY.md` carries the public re-clone notice. Full trail:
+  DEC-0127.
+- Triggered by the S112 public-accessibility audit (four parallel reviews: doc/version drift,
+  PII/secrets, code-comment quality, newcomer experience) — remaining findings are queued as
+  follow-up work (`BACKLOG.md` §Public-maturity push, `BOOT.md` jobs 3–5), this session shipped the
+  time-sensitive piece first.
+- **Stale-schedule CI tripwire fixed to compare in the SCHEDULE's own timezone** —
+  `test_current_schedule_is_not_fully_stale` used the runner's naive clock, so UTC CI runners fired
+  it 4–5 h before the ET terminator passed; first bit PR #298 mid-Campaign-D. Verified with
+  `TZ=UTC` before/after. Merged with the transparency PR (#298).
+- Phase 0 before the rewrite: NAS SSH port rotated (owner, DSM), UniFi port-forwarding verified
+  empty — the exposed values were never WAN-reachable. Ops session briefed cross-session for their
+  own nas.env/alias/DEC follow-through.
+
+## [S111] — 2026-08-31 — Campaign C's real verdict: 496 does not clear the adoption bar at marvin; 372 holds (DEC-0125)
+
+- **ops#235 fixed mid-session (ops-side): `marvinctl exec-ro`'s missing `-i` flag was closing
+  container stdin.** Verified end-to-end with the exact read DEC-0124 left blocked: a read-only
+  `sqlite3` query piped through `exec-ro` against the live, mode-`0500` archive DB returned 1333
+  clean rows, exit 0. Confirmed on ops#235.
+- **Ran DEC-0069's own `campaign_analyze.py` logic (unmodified) against the real per-minute data.**
+  Result: **A (372) 72.82% (n=368) vs B (496) 73.98% (n=350), B +1.16 pts — under DEC-0059's 2.0-pt
+  adoption bar**, smaller than DEC-0124's coarse 5-min proxy (+1.87 pts), not larger.
+- **Verdict logged as DEC-0125: 496 does not clear the bar at marvin's RF position — gain holds at
+  372, no config change.** Per `BACKLOG.md`'s S107 pre-commitment, this is a standalone finding
+  that Foundation's DEC-0115 answer doesn't transfer to marvin's site, not a reversal of DEC-0115.
+  Also verifies `BOOT.md` job 4 (archive DB opens `mode=ro` cleanly under `journal_mode=DELETE`).
+- **Reconciled:** `CONSTANTS.md`'s gain row/hardware-site prose/timeline, `docs/ROADMAP.md`'s
+  Campaign B/C item (now closed as a marvin result too), `BACKLOG.md`'s gain re-sweep item (closed).
+- **Fixed two stale claims `BOOT.md` was carrying from ops#233.** The restart-grant question is
+  resolved (MARVIN-DEC-0099: the grant already exists, corrected upstream mid-Campaign-C — this
+  file was still quoting the earlier "no grant exists" finding), and `usb_watchdog.sh`'s fate is
+  decided (retiring, MARVIN-DEC-0100), not still open.
+- **Campaign D pre-registered and shipped (DEC-0126): a marvin-site gain pilot, launching
+  2026-08-31T21:00 ET.** Six gain-only blocks HIGH→LOW — 496, 449, 402, 372, 328, 207 — reusing
+  Foundation's original pilot points plus 207 (dropped from campaign C on a Foundation-only
+  judgment DEC-0125 just showed doesn't transfer). Arm-selection input only, never adoption
+  evidence. `arm_cmd()` gains `P207`; `SCHEDULE=` populated; `campaign_analyze.py`'s `LEGENDS`
+  gains `"D"`; `tests/test_rx_experiment.py` gains `_require_campaign_d()` + 3 structural tests,
+  and `_require_campaign_b()`'s over-broad gate ("any P* row") is corrected to require the H hold
+  specifically — the old gate would have misfired campaign B's assertions against campaign D's
+  pilot-only shape. Full suite green (465 passed / 9 skipped).
+- **Campaign D deployed and armed live on marvin, same session.** `rx_experiment.sh` shipped and
+  hash-verified, Campaign C's stale baseline snapshot archived to `.campaignC` (was blocking
+  `install`), `install` succeeded (fresh baseline snapshotted, schedule armed), `logs/campaign.inhibit`
+  set, monitor confirmed healthy. No further action needed for the 21:00 ET launch. Also caught and
+  reverted a wrong turn: attempted wiring `marvinctl pull`-based deploy for weewx before finding
+  marvin's own MARVIN-DEC-0079, which already tried and rejected that design for this tenant (the
+  on-disk layout doesn't match this repo's structure — deploy stays flat/scp, deliberately).
+
+---
+
+## [S110] — 2026-08-31 — Campaign C completed clean; the 372-vs-496 verdict is blocked on ops#235 (DEC-0124), now flagged a priority
+
+- **Campaign C ran its full 10-row schedule clean, no aborts, self-terminated to `BASELINE` at
+  exactly 11:00:00 ET** — confirmed against the actual deployed script on marvin, not assumed from
+  the design doc. `weewx.service` healthy on gain 372 since the restore.
+- **The 372-vs-496 verdict is NOT decided (DEC-0124).** A coarse proxy (monitor's 5-min aggregate,
+  not the sanctioned metric) leans toward 496 (+1.87 pts, n=76/70) but sits under DEC-0059's
+  2.0-pt bar and is explicitly not the call — DEC-0069 exists because that coarse metric absorbs
+  freeze-contamination bias. The real per-minute readout needs marvin-side archive-DB access that
+  doesn't exist: `ops/campaign_analyze.py` is NAS-only, and `marvinctl` has no SQL verb
+  ([ops#235](https://github.com/WeatheredScientist/eaglehunt-ops/issues/235), filed weewx S107).
+- **`marvinctl exec-ro` tested as a workaround and confirmed non-functional**, with a positive
+  control: the stdin-pipe idiom forwards nothing, and the `-c` argv path rejects quotes/parens
+  even at zero literal whitespace, so no real code can be passed through it either way. Findings
+  added to ops#235 rather than filing a duplicate. **ops#235 is now flagged a priority** — it
+  blocks a live RF-gain decision, not a convenience read.
+- **`ops/rx_experiment.sh`'s `SCHEDULE=` stood down to the empty form (DEC-0096)** now that the
+  terminator has passed — the staleness guard test was correctly red until this landed. Full suite
+  green after: 457 passed / 14 skipped (structural schedule tests correctly self-skip against an
+  empty schedule).
+
+## [S108] — 2026-08-30 — Campaign C launches tonight instead of tomorrow (DEC-0122); a missing marvin scheduler found and fixed mid-campaign (DEC-0123)
+
+- **Campaign C launched 2026-08-30T20:00, a day earlier than DEC-0121's pre-registered 08-31**
+  (DEC-0122). The reason to wait — letting the freshly-deployed monitor prove itself across a
+  log-rotation boundary before trusting it as the abort tripwire — turned out to be moot: marvin has
+  no logrotate configured for `weewx.log` at all. Owner's call, with a fresh hands-off-the-guest
+  declaration for tonight's window (PR #290, MARVIN-DEC-0088). `SCHEDULE=` shifted by a pure −1
+  calendar day; blocks, clock times, and the `A B B A B A A B A B` order are all unchanged, so
+  DEC-0121's notch balance is untouched.
+- **Discovered live, mid-campaign: nothing was advancing the schedule or checking the abort
+  condition.** DEC-0118's move to marvin never carried over Foundation's DSM cron that drove
+  `ops/rx_experiment.sh tick`/`guard` every 5 min. Block 1 sat un-advanced after its manual launch,
+  and `guard` — the campaign's only abort-on-bad-reception check — never ran. New
+  `ops/weewx-rx-experiment.service`+`.timer` (root, marvin-pinned env, PR #292 — DEC-0123) shipped
+  and was installed on marvin the same night; confirmed firing since 22:18:16 ET, having self-healed
+  the overdue block 1→2 swap on its first pass.
+- **This session's own closeout ritual did not run** — landed via 3 merged PRs (#290/#291/#292) with
+  no `BOOT.md` rewrite, no CHANGELOG entry, no DEC rows. **Completed retroactively by S109**, which
+  also confirmed (via live marvin/ops sessions) that two risks flagged after the fact — the unrotated
+  `weewx.log`'s growth rate and marvin's new second tenant (`t-hlf`, ops#234) — are both clear for
+  tonight's run; only the unrelated Gmail SMTP failure (reception-summary alerting, needs the owner's
+  Google account access) remains open. No code changed in S109 — docs and decision records only.
+
+## [S107] — 2026-08-30 — Alerting rebuilt for marvin (DEC-0120): input staleness becomes its own state, the USB remedy stops being assumed; today's gain campaign refused on power grounds
+
+- **`weewx_monitor.py`'s 14 h of false alerts were a structural defect, not a wrong path (DEC-0120,
+  answers [ops#233]).** Every threshold in the file is "nothing seen for N seconds", and a frozen
+  input satisfies all of them at once — so it could not distinguish *the station is down* from *I am
+  blind*. Repointing the path would have fixed the instance and left the mechanism. Blindness is now
+  checked **before** any threshold, on the worse of the log's mtime and the newest parsed line's
+  timestamp, raised as a **distinct alert class**, and it suspends uploader/reception judgement while
+  it holds.
+- **ops#233's premise corrected: marvin's `logs/weewx.log` is alive, local and healthy** — growing
+  continuously, rotating daily. The "no path to the log" problem exists only when looking from
+  Foundation; on marvin the service-alerting and reception halves port on an environment variable.
+- **The USB unbind/rebind is no longer assumed — `REMEDY_MODE` selects it.** `usb_reset` stays the
+  DEFAULT (this is a published extension; our zero-efficacy evidence across ~17 events is from our
+  hardware), `restart_unit` is marvin's (a `weewx.service` restart IS a full container recreate —
+  `docker run --rm` + `ExecStartPre=docker rm -f` — the remedy that resolved ERR-0005), `none` is
+  detect-and-escalate. The Foundation body is deliberately **not** ported: it unbinds a hardcoded
+  Synology bus path, and marvin's controller roles differ (`MARVIN-DEC-0051`), so on a two-tenant box
+  it would no-op or reset someone else's device.
+- **Campaign inhibit added** — a campaign restarts weewx once per arm, and a remedy landing mid-arm
+  corrupts the block being measured. Action is suppressed; detection and alerting are not, and the
+  skip logs the action it *would* have taken.
+- **New `ops/weewx-monitor.service`**, shipping at `REMEDY_MODE=none`. **Nothing deployed this
+  session** — tonight's campaign restarts weewx per arm, so a monitor landing first would fight it.
+- **Today's requested 4-hour gain campaign was refused on the repo's own power math.** DEC-0059
+  measured 24 h/arm resolving 1.1 points; a 4 h window splits to ~2 h/arm, giving a minimum
+  detectable effect of **~3.8 points against a 2.0-point effect of interest** — ~3.6× too short, and
+  it would have returned "no difference" nearly regardless of truth. Confirmed two independent ways.
+  A properly-powered 2-arm run needs ~15 h. Owner's call: overnight instead.
+- **The replacement campaign is pre-registered before any data exists** (`BACKLOG.md`): 2 arms
+  (372 vs 496 — 207 dropped as known-worst and barely separable), 15 h, 90-min blocks, 5 per arm,
+  order `A B B A B A A B B A` balanced so the ~2-pt hour-07 notch lands on both arms, exit trap,
+  abort floor, and a pre-committed reading of both outcomes.
+- **Power re-checked against marvin's OWN measured noise rather than Foundation's inherited figure.**
+  ~15 h of post-bind gain-372 telemetry already in the archive gave 21 full 40-min blocks with
+  `NULL_COUNT` 0: **block sd 1.403 pts at 40 min → 0.936 at 90 min, 0.84× the sd implied by
+  DEC-0059** — marvin is quieter, so the 15 h design clears the 2.0-pt bar at **MDE ~1.66** rather
+  than scraping it.
+- **A prior recorded before the run, precisely so it cannot be back-fitted after:** marvin at gain
+  372 already measures **73.88%**, within ~0.95 pts of Foundation at 496 (74.83) and ~1.05 above
+  Foundation at 372 (72.83). Uncontrolled cross-environment comparison, so a prior and not a result
+  — but 496 repeating its 2.00-pt win at the new position is not the safe assumption.
+- **Incidental: zero gaps in ~15 h**, against the freeze blocker's NAS-era 1.31/day (~0.8 expected).
+  First post-migration data point on that blocker. Flagged, not concluded.
+- **Found, not fixed:** prod is running **gain 372 while DEC-0115 adopted 496** — the 08-29 migration
+  incident set it without a controlled comparison and the aborted campaign's exit trap codified it.
+  Owner's call: hold 372 until measured. Also, marvin's `weewx_monitor.py` is **stale against `dev`**
+  (the [ops#214] silent-drift family), and `BOOT.md`'s job 5 (`debug_rtld` 3→2) is stale — live
+  config is already at 1.
+
+- **The campaign apparatus learned marvin, and now refuses to run without its safety net (DEC-0121).**
+  `ops/rx_experiment.sh` rewrites the live config and restarts prod unattended overnight. Against the
+  new host four things were wrong and **three failed silently**: the docker path was hardcoded; the
+  restart mechanism would have taken **prod down** (`docker kill`+`start` against a `docker run --rm`
+  unit — the kill destroys the container and the start has nothing to start); the abort tripwire had
+  **no input** (it reads `weewx_monitor.log`, which nothing writes on marvin, so the campaign would
+  never abort however bad reception got); and a pre-migration baseline snapshot sits there latent.
+  New `preflight` mode gates `install`, demands a *fresh* monitor log, and has **no `--force`**.
+- **`RX_RESTART_MODE`** selects `docker` (NAS, unchanged default) or `systemd` (marvin, where a unit
+  restart is also a full container recreate). Existing NAS installs are untouched by the edit.
+- **The pre-registered block order was wrong, and laying it against a clock is what caught it.** The
+  morning notch is not one hour but **hours 07–09 at 2–3.5 pts down** — larger than the 2.0-pt effect
+  — and the first order put blocks 8 and 9 both on B, loading **1.67 of 2.0 notch block-equivalents
+  onto gain 496**, the arm expected to win. It would have manufactured a false negative. Balancing a
+  linear trend is not balancing a localized dip. The shipped order splits notch exposure **1.00/1.00**
+  with drift still 27/28 — both balances at once.
+- **Campaign C's schedule is live in `SCHEDULE=`** (2026-08-31T20:00 → 09-01T11:00, 10 × 90-min
+  blocks, self-terminating to BASELINE) and **machine-checked with a positive control** asserting the
+  old order still reads lopsided. Campaign B's structural tests are **guarded, not deleted** — the
+  block rotates between campaigns.
+- **Ordering corrected: the monitor deploys BEFORE the campaign**, not after. It *is* the abort
+  tripwire's input. The earlier "deploy after" reasoning (avoiding per-arm restart fights) is already
+  handled by the campaign inhibit.
+
+[ops#233]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/233
+[ops#214]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/214
+
+## [S106] — 2026-08-29 — ops#183's Influx outage remediated and fully backfilled (DEC-0119); weewx_monitor.py's alerter found blind since the marvin cutover
+
+- **weewx's InfluxDB uploads were down 00:14→12:08:27 ET (~11h54m).** Root cause was `eaglehunt-ops`
+  deleting an InfluxDB token it didn't know `influx.py` also wrote with — weewx's own `weewx.conf`
+  was never at fault, confirmed unchanged since 08-23. Fixed with a new dedicated, never-shared write
+  token, installed and verified by a marvin-side session (this repo has no path to edit that file
+  directly). Full narrative: DEC-0119, `eaglehunt-ops`#183/`OPS-DEC-0162`.
+- **The entire outage window is backfilled** — 712 archive records posted, 0 errors, via
+  `ops/backfill_influx.py`, run against the live production archive from inside the marvin container.
+- **`ops/backfill_influx.py` had two real bugs, found running it live for the first time** (PR #282):
+  a committed `INFLUX_ORG` placeholder that would have failed every POST, and a read-write
+  `sqlite3.connect()` that fails against a read-only export. Fixed, plus hardening:
+  `--server-url`/`--db-path` overrides and `$INFLUX_TOKEN`/`$INFLUX_ORG` env-var sourcing so a
+  credential never has to be a CLI literal.
+- **`weewx_monitor.py` sent ~14h of false "STILL DOWN" alerts** — it watches a hardcoded Foundation
+  log path the marvin NFS overlay doesn't cover (`weewx-data/` is live-mirrored, `logs/` is not), so
+  it froze at cutover and alerted on the age of a dead file, not station health. The false alerts'
+  outage-shaped noise is part of why the real Influx outage went unnoticed until mid-morning.
+  Disabled on Foundation; no marvin-side replacement exists yet. A second stale watcher
+  (`usb_watchdog.sh`) found in the same sweep, filed on `eaglehunt-ops`#233.
+- **All twelve publish legs verified independently healthy** (WU, PWSWeather, CWOP, AWEKAS, WOW,
+  WeatherCloud, OWM, Windy, Influx, Ogoxe) via the newly-live `marvin-weewx` `marvinctl` alias — this
+  repo's own session's first real use of that access.
+
+---
+## [S105] — 2026-08-28/29 — Production migrates from the NAS to marvin (DEC-0118); a live USB-controller incident root-caused and fixed mid-cutover
+
+- **The weewx-rtldavis container now runs on `marvin`, a new self-hosted Debian hypervisor, not the
+  NAS ("Foundation").** Moved up from a planned Saturday to Friday night on the owner's call, same
+  dark/calm/zero-solar reasoning. Coordinated live across four repos (weewx, marvin, eaglehunt-ops,
+  eaglehunt-weather-dashboard; hyperlocal-forecast looped in) via direct cross-session messaging.
+  Succeeded. Full narrative: DEC-0118.
+- **Transparent to consumers by design.** marvin's NFS export overlay-mounts directly over the NAS
+  path dashboard/HLF already use — no compose edits, just a container restart once the overlay
+  landed. Both verified live post-cutover.
+- **A ~90-minute live incident mid-cutover was the host's USB controller, not RF.** Chased through
+  gain (496→372, no change), `-fc`/`-ppm` (no historical sweep data exists to test — confirmed, not
+  assumed), and a process-freeze read via DEC-0067's own discriminator (self-corrected once the
+  watchdog started visibly cycling) before landing on the real cause: every USB port on the host's
+  B850 chipset controller breaks RTL-SDR hop-tracking under sustained streaming; the CPU-attached
+  controller is clean. Confirmed with `rtl_test` directly, not weewx.
+- **Bonus: real independent corroboration for DEC-0067/0081.** The 150s-stall-raise + ~60s-respawn
+  cycle those decisions predicted matched almost exactly during the incident, and fired *only* under
+  the bad controller — zero occurrences across the following hour of healthy operation. Supports
+  reading those freeze episodes as environmental/hardware, without closing the general question.
+- **A live SQLite backup gap was caught and closed same night, not left for the next scheduled run**:
+  marvin's `/srv` restic backup fires at 03:30 and `weewx.sdb` is now continuously written there. A
+  `.backup`-API dump timer (SQLite's Online Backup API, safe against a concurrent writer) deployed
+  and armed for 03:15, mirroring an existing sibling-tenant pattern on the same host.
+- **Gain is 372, not 496 — provisional, not a re-adoption.** The controller was the actual incident
+  cause, so DEC-0115's measured-best 496 never got a clean test at marvin's RF position. A proper
+  re-sweep is backlogged, not urgent.
+- **`CONSTANTS.md`'s infra section rewritten** for the new host — container location, project root
+  (real path on marvin + the NAS-side compat path, now a read-only NFS overlay), deploy-layer "wins
+  in prod" targets, release/rollback mechanics (image unchanged, transferred via `docker save`/`load`;
+  a new host-level rollback net alongside the existing image-tag one). Flagged, not silently assumed:
+  several rows (build-host capability, `weewx.conf.rx-baseline` presence, missing-tools list) are
+  open questions this session didn't have time to verify — `BOOT.md` job 8.
+- **`t-weewx`'s `marvinctl` self-service access is not live** — deploys to marvin from this repo still
+  need a marvin-side session for now. Tracked as `eaglehunt-ops`'s own follow-up.
+
+---
+
+## [S104] — 2026-08-26 — Every mounted file audited against `dev` (one 7.5-week-stale, harmless); a prod restart bounded by elimination; two DSM tasks found still firing after Campaign B closed
+
+- **Job 4 done: audited the whole mount list, not just the files a deploy happened to touch.** Worked
+  from `nasctl inspect` rather than the deploy-layers table, since the table was the thing under test.
+  `influx.py` and `loop_json_writer.py` are byte-identical to `dev`; the live config still carries all
+  six DEC-0070 deviations; `hotswap_control_file` is absent, so DEC-0117 is *verifiably* off in prod
+  rather than assumed off.
+- **`ogoxeUploader.py` was 7.5 weeks stale — byte-identical to `7e79d15`, its own S16 prod import.**
+  Two `dev` commits had never reached the NAS. Identified without reading the live file, by hashing
+  every historical revision of the repo copy until one matched. Content is harmless: an SPDX line,
+  the GPLv3 section 5(a) fork notice from DEC-0034, and one `log.debug()` that reported a key which is
+  never set and so always printed `None`. No data-path change; the Dockerfile never `COPY`s the file,
+  so the published image carries no compliance gap either. Deploy folded into the next image cut,
+  where the recreate makes a mounted file take effect for free. Same detection gap as DEC-0116 — no
+  new DEC, that row already names the class.
+- **The deploy-layers table itself was wrong, which is the durable part.** It grouped
+  `ogoxeUploader.py` and `sortedcontainers` as "same pattern" as the row above; neither held.
+  `ogoxeUploader.py`'s mount source is `weewx-data/bin/user/` — the exact directory the preceding row
+  calls a DECOY for `loop_json_writer.py`, so two adjacent rows asserted opposite truths. And
+  `sortedcontainers` is a vendored third-party *directory* bind with no repo copy at all, so "in sync
+  with `dev`" was never a meaningful question about it — a comparison that is undefined, not passing.
+  Both rows corrected and split ([#278](https://github.com/WeatheredScientist/weewx-rtldavis/pull/278)).
+- **Filed the generalization cross-repo as ops#214**, at ops's flag: deploy verification checks the
+  file it deployed and never the whole mount list, and every repo in the forum mounts config into
+  containers. Routing, not prescribing.
+- **The unexplained 2026-08-25 21:40 EDT prod restart: cause absent from every artifact this repo
+  keeps, but bounded tightly.** Ruled out on evidence — host/daemon event (every other container's
+  uptime spans it), weewx crash (zero `CRITICAL`), graceful stop (no shutdown markers, so SIGKILL),
+  the restart policy (`RestartCount: 0`, `Created` predates it — stopped-and-started, never
+  recreated), the monitor (it observed and emailed; zero action lines), the campaign harness, and a
+  USB reset. What remains is a deliberate external kill+start. Written up in `BACKLOG.md` so the
+  elimination is not re-walked. Prod healthy since: 70–78% reception, no alerts.
+- **Found while investigating it: Campaign B's two DSM scheduled tasks are still firing**, three days
+  after it closed — `tick`/`guard` passes every few minutes, churning lock contention. State is
+  `BASELINE`, so nothing is at risk, but "nothing further scheduled" was only ever true of the
+  campaign, never of the scheduler. Owner action; they are visible only in the DSM UI. Also the
+  leading hypothesis for the restart above.
+- **Backlogged, not built: off-site backup is a mirror, not versioned** (ops#209 — the DS918+ runs
+  Cloud Sync, so deletes and corruption propagate). The live config and the archive database have no
+  versioned copy anywhere, and the eight `.bak-*` archive copies share a volume with the thing they
+  guard. Owner's call: address it *after* the migration onto `marvin`, since the design should target
+  the destination host rather than the one being left.
+- Housekeeping: ops#203 closed with a comment (verified by GET); ops#213's marvin ssh changes checked
+  against this repo and confirmed a no-op — no runbook, no cockpit reference, no password-auth
+  assumption anywhere.
+
+---
+---
+*(S73–S103 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+
+## [S103] — 2026-08-26 — Gain / receive-window hot swap built (DEC-0117): a validated control file, plus the post-swap watchdog grace that keeps it from tearing the driver down
+
+- **Picked up the last open `BACKLOG.md` idea / [ops#179], filed at S89 and deliberately unstarted
+  until Campaign B closed.** S89's analysis held up on re-inspection: nothing prevented a hot swap
+  but the trigger. `gain` and `-ex` are startup-only CLI flags on the Go binary, `rtldavis.py` never
+  inspects them, `ProcManager.startup(cmd, …)` already takes the command as a parameter, and the
+  150 s watchdog exercises that kill→respawn cycle routinely.
+- **Built as a watched control file carrying bounds-checked integers only — never a command string.**
+  `hotswap_control_file` (unset = feature off, stock behavior). The driver polls it about every 10 s
+  at the top of `genLoopPackets` — no thread, no signal handler, since `get_stderr()` already budgets
+  10 s per pass — and on an mtime change validates, splices into the running command, and respawns.
+  Only `gain` (0–496) and `ex` (0–1000) are accepted: `cmd` reaches `shlex.split()` → `Popen`, so a
+  raw-command channel would be arbitrary code execution inside the container for anything able to
+  write that NAS path. Tests pin that rejection explicitly.
+- **The hazard S89's note missed, and the reason this needed design work:** `time_last_received` is a
+  **local** in `genLoopPackets` and is *not* reset by a child respawn, while a fresh child is
+  legitimately silent for the US 133 s radio init period. A naive `shutdown()`→`startup()` inherits a
+  stale timer, trips the 150 s stall watchdog mid-init and tears the driver down — reintroducing the
+  abort-on-unhealthy-swap failure class the feature exists to retire, on *every* swap. Every swap now
+  resets the four watchdog counters and widens the threshold to `HOTSWAP_GRACE_S = 240` until the
+  first packet (a flat 150 s left only 17 s of margin over that init period), reverting as soon as
+  anything is received.
+- **Also: rollback** to the last known-good command if the new one fails to start (a bad gain must
+  not cost us the receiver), **an atomic ack file** recording status and the measured respawn gap —
+  which self-measures ops#179's constraint 4, the never-measured RTL-SDR re-open time — and the
+  control file **honored at init before the first spawn**, so a container restart cannot silently
+  revert a swapped gain while the ack still advertises it (DEC-0116's exact shape).
+- **Green gate: 428 passed / 8 skipped** (26 new), ruff clean, mypy clean (65 files), secret gate
+  clean. The three loop-level tests are **mutation-verified** — removing the grace, the reset, or the
+  rollback each turns the suite red — with a positive control proving the same silence *without* a
+  swap still stalls at 150 s. One secret-scanner false positive fixed at source by renaming a local
+  (`key = …`) rather than widening the allow-list.
+- **Not in prod.** `rtldavis.py` is a **BAKED** file, so this ships only with an image rebuild, and
+  the feature is off until the config key is set. `ops/rx_experiment.sh` still swaps arms by
+  rewriting the mounted config and restarting — converting it is a separate change, and the one that
+  must not land mid-campaign.
+
+---
+
+## [S102] — 2026-08-25 — Ops-tracker verification sweep: #144/#172/#204 checked live (not memory), two didn't hold up; `loop_json_writer.py`'s stale mount found and fixed (DEC-0116)
+
+- **An `eaglehunt-ops` session asked to confirm four post-v2.0.14 items were live and close whichever
+  were done: ops#179, #144, #172, #204.** Checked each against the running container directly instead
+  of trusting the ship announcement. ops#179 matched ops's own description (still unstarted,
+  untouched). #144 held up and closed clean: `fetch_interval=300` confirmed live via `readconf --nas`,
+  the triple-field null fix baked into the running image, owner's item-1 decision already final.
+- **#172 and #204 did NOT hold up — DEC-0116.** Both features live in `loop_json_writer.py`, a
+  **mounted** file per `CONSTANTS.md`'s deploy-layers table. The deployed copy was still the
+  2026-07-27 version: hash mismatched `dev`, missing both `current_interval` and
+  `barometer_fetch_epoch` entirely, confirmed by a live `current.json` read with the field absent and
+  `current.json`/`loop-data.txt` sharing an identical mtime (per-packet writes, not throttled). Same
+  deploy-layer trap DEC-0114 caught for `influx.py` three days earlier, just outside that event's own
+  verification scope — `dev` and prod were **not** actually in sync as `BOOT.md`'s S101 close claimed,
+  for this one file.
+- **Fixed live, with the owner's explicit go-ahead:** deployed current `dev`'s `loop_json_writer.py`
+  to its NAS mount source, hash-verified the match, `docker kill` + `docker start` (DEC-0008). Confirmed
+  post-restart: `barometer_fetch_epoch` appeared on the first WeatherLink poll, and `current.json`'s
+  60s throttle is now measurably active (mtimes diverge from `loop-data.txt`'s per-packet writes).
+  #172/#204 closed with the live evidence in the closing comments. Ops looped throughout via direct
+  session-to-session messages, including the correction on the two claims that didn't hold up.
+- **Lesson for next time (DEC-0116):** an image bump proves the baked layer moved; it says nothing
+  about any mounted file not specifically re-verified that session. The deploy-layers table's other
+  mounted files (`ogoxeUploader.py`, `sortedcontainers`, `weewx.conf`) remain independently unverified.
+- **Gates:** 402/402 (8 skipped, unchanged — no code touched this session), ruff clean, mypy clean
+  (64 files, `.mypy_cache` cleared first), secret gate clean.
+
+---
+## [S101] — 2026-08-23 — v2.0.14 ships (weewx 5.5, NAS-LEASE adoption); Campaign B closes, gain 496 adopted
+
+- **Merged S100's closeout PR (#273), then ran the ~08-23 v2.0.14 build event.** Campaign B
+  self-terminated on schedule (`BASELINE`, 2026-08-23T00:05); built natively on the NAS from
+  `origin/dev`@`efeeebd` under `ops/nas_build.py`'s NAS-LEASE holder wrapper. Ships DEC-0110
+  (reception-quality wind guard), DEC-0111 (`influx.py` NAS-LEASE courtesy yield), #233, #224, and
+  weewx 5.4.0 → 5.5.0 (pinned since S88, `ca3c024` — this is the first release to actually carry
+  it, since `dev` has been running ahead of prod).
+- **Three real problems found and fixed live during the deploy, not glossed over:**
+  1. `docker` wasn't on the non-interactive SSH PATH — first build attempt crashed instantly
+     (`FileNotFoundError: docker`); fixed by passing the full `/usr/local/bin/docker` path.
+  2. A retried build genuinely hung 70+ minutes at 0:00 accumulated CPU on a `weectl`
+     syslog-handler crash mid-Step 7/30 (verified via `ps aux`, not inferred from log silence) —
+     killed on owner instruction, stale lease cleared, log rotated, retried clean in ~360s.
+  3. `influx.py`'s DEC-0111 code never reached the running container despite a fresh image —
+     it's a MOUNTED file, so the image rebuild didn't touch the NAS-side mount source, which still
+     held the old `ws.1` code. Caught by checking the live version banner post-deploy (not assumed
+     from a clean-looking recreate); fixed via a separate `scp` + restart, checksum-verified.
+- **DEC-0114: NAS-LEASE adoption locks** (the §5 event DEC-0104/DEC-0107 deferred).
+  `RENEWAL_FLOOR_S` re-pinned 600 → 420 against tonight's real measured build duration; `TTL_S`
+  held deliberately generous at 3600 given the hour-plus hang above was a real, non-capacity
+  failure mode. Also added `LEASE_DIR` mount (`-v /volume1/docker/nas-lease:/nas-lease:ro`) and
+  `weewx.conf`'s `[[Influx]] lease_dir = /nas-lease`.
+- **Live NAS-LEASE contention with `hyperlocal-forecast` resolved via direct session-to-session
+  coordination** — a new standing SOP this session (message the other repo's live Claude session
+  directly for time-sensitive shared-resource questions, always loop `eaglehunt-ops` too, not just
+  on decisions needing sign-off). HLF found and killed a concurrent lease-unaware manual job of
+  their own, then their own stuck `daily-maintenance` run, after an owner priority call
+  (`OPS-DEC-0136`). Verified independently at each step, not taken on report.
+- **DEC-0113 applied live**: `[DavisPressure] fetch_interval` 3600 → 300, verified.
+- **DEC-0115: Campaign B closes, gain 496 (arm B) adopted as the new RF baseline.** Clean 32/32-block
+  final square (2026-08-15 → 08-23, after excluding 6 pooled aborted/restarted attempts the
+  analysis tool's own default run would otherwise have mixed in): **A (372/ex0, incumbent) 72.83% ·
+  B (496/ex0) 74.83% (+2.00) · C (372/ex50) 73.28% (+0.45) · D (496/ex50) 74.77% (+1.94)**. Gain
+  axis clearly favors 496; extraction axis a wash. The margin is exactly at DEC-0059's 2.0-point
+  adoption bar, not comfortably above it — adopted anyway given the consistent direction across
+  both the interim and final readouts. A narrower follow-up sweep near 496 considered and declined
+  for now (pilot data suggests a flat curve there). Deployed to both live `weewx.conf` and
+  `weewx.conf.rx-baseline` (a live-only edit would be silently wiped by the next campaign's own
+  restore path). `ops/rx_experiment.sh`'s `SCHEDULE=` block emptied per its own stand-down
+  convention (DEC-0096) now that the campaign is complete.
+- Post-deploy verification: driver banner unchanged at `0.20+ws.5`, `influx.py` now `0.20+ws.2`,
+  no new CRITICAL/ERROR since restart, `weewxd` on 5.5.0.
+- **`CONSTANTS.md`, `docs/DECISIONS.md`/`DECISIONS-FULL.md`, `docs/ROADMAP.md` updated same
+  session** — release/rollback table, live-config-deviations table (3 new/updated rows), hardware
+  timeline, reception baseline figure (73.3%/gain-372 → 74.83%/gain-496), Campaign B roadmap item
+  closed.
+
+---
+## [S100] — 2026-08-22 — Verification-only session: clean pickup confirmed, Campaign B on track, new GOTCHAS entry for `rx_experiment.sh`'s local-run trap
+
+- **No code shipped this session** — a status-check pickup, not a coding session. Clean-pickup gate
+  ran clean: `dev` up to date with origin, working tree clean, 410/410 (unchanged from S99, no
+  regressions).
+- **Daily square watch (BOOT job 2, deferred at S99) run for real.** `ops/soak_check.sh`: 17 pass /
+  2 warn / 0 fail, same two known warns (chatty stdout #253, USB hedge during RF-dead) — matches
+  S98's last-known figure exactly, no drift.
+- **Caught `ops/rx_experiment.sh status` giving a false-empty read when run from a local checkout**
+  (`arm: NONE` since epoch, `installed: no`, `samples: 0` — looks exactly like "campaign
+  self-terminated," which would have wrongly cleared job 1's precondition). The script has no `ssh`
+  calls of its own and only resolves real state when it's actually running on the NAS. Verified the
+  real state directly with `nasctl cat` on `rx_experiment.state`: Campaign B is genuinely still
+  live, **arm D**, last swap **2026-08-22 00:07:25** — on schedule for its **08-23T00:05**
+  self-termination. Documented the trap in `docs/GOTCHAS.md` §3 so the next session (or anyone else
+  running this script) doesn't have to rediscover it.
+- **Owner asked whether `eaglehunt-ops#180` needed an update.** Verified live via `gh issue view`:
+  already closed at S99 with an accurate closing comment (remediation code-complete, only the
+  v2.0.14 deploy gate remains, already tracked here) — nothing had changed since, so no new comment
+  was needed.
+- **Gates:** ruff clean, **410/410** (unchanged — no code touched), mypy clean (64 files,
+  `.mypy_cache` cleared first), secret gate clean.
+- Model tier: ran on Sonnet 5 throughout, confirmed directly rather than inferred — no restore owed.
+
+---
+## [S99] — 2026-08-22 — Ops-tracker close-out sweep: 5 issues closed, #233/#252 fixed and shipped, #144 resolved (DEC-0113)
+
+- **Opened on a stale handoff and closed it first.** `BOOT.md`'s resume header still read "S98 →
+  S99" and its footer "S98 close" despite two PRs (#269, #270) already merged under S99 branch
+  names — an earlier S99 instance had deliberately held off on its own closeout after
+  `eaglehunt-ops#195` flagged a possibly-concurrent session. Confirmed no other weewx session was
+  active (this session's own `ListAgents`) and both loose ends that issue named — a stray remote
+  branch, a stale detached-HEAD worktree — were already gone. Closed `eaglehunt-ops#195` with that
+  confirmation.
+- **`eaglehunt-ops#180` (the S91 audit heads-up) closed: all 8 remediation issues (#219–226) are
+  confirmed closed**, `#227`'s sequencing plan fully executed. Only the deploy gate (the ~08-23
+  v2.0.14 image) remains, already tracked here.
+- **`#233` fixed: `ProcManager.shutdown()` now kills its own Popen handle directly**, belt-and-braces
+  alongside the existing `pidof` name-match sweep, which had no fallback if it ever missed a
+  still-live child. Regression test reproduces the exact gap (pidof matches nothing, child genuinely
+  still alive) with a positive control. Baked file — ships to prod with the v2.0.14 image.
+- **`#252` fixed: `ops/soak_check.sh`'s window computation and restart-loop detector now share one
+  `$LY+$L` read** (yesterday's rotated log + today's), replacing the window cut's silent
+  `ln=1`-widens-to-the-whole-file fallback when a container start predates midnight — the exact
+  false-WARN shape the issue reported (driver-identity canary silently unverified, among others).
+  Two new tests extract and run the real deployed bash block against synthetic logs, since the
+  existing suite stubs `ssh` entirely and never exercised this layer. Not baked — a repo script, live
+  the moment it's on `dev`. Both landed together in PR #271 (merged, `071f684`).
+- **`#144` fully resolved (DEC-0113).** Item 2 (triple-field bug) was already fixed pre-session
+  (S82b). Item 3 (hourly `fetch_interval`): checked WeatherLink v2's actual documented ceiling
+  (1,000 calls/hour + 10/s) rather than the original guess ("what I thought the free tier allowed");
+  300s uses ~1.2% of it and cuts the archived barometer from a 60-min staircase to a 5-min one.
+  Queued as a live `weewx.conf` edit (confirmed via `nasctl conf` as the winning MOUNTED layer),
+  held to the same v2.0.14 restart as everything else behind Campaign B's comparability discipline —
+  new rows in `CONSTANTS.md`'s deviations table and this file's job list. Item 1 (the ~0.03 inHg
+  console-vs-METAR offset): put to the owner directly, who confirmed the console's elevation-based
+  correction is working as designed for the surveyed 550 ft (the DEC-0086 mechanism, not in
+  question); closed with no change, the residual already absorbed downstream by HLF's per-source
+  correction. Issue stays open pending the v2.0.14 deploy, same pattern as `#172`/`#204`/`#253`.
+- **The ~08-23 v2.0.14 build is now a seven-purpose event**: `#224`, DEC-0110, DEC-0111, `#233`
+  (all baked), plus DEC-0113's live `fetch_interval` edit — `#252` needs no deploy step at all.
+- **Also closed: `#239`**, a stale, fully-contained InfluxDB-gap courtesy notice with nothing
+  pending.
+- **Gates:** 410/410 full suite (was 397, +13, 0 regressions), ruff clean, mypy clean (64 files,
+  `.mypy_cache` cleared first), secret gate clean, positive-controlled throughout. PR #271 merged;
+  branch cleaned up (local + remote), steady state verified after.
+
+---
+
+## [S98] — 2026-08-20 — Phantom 37 mph gust diagnosed and corrected (ERR-0006); reception-quality wind guard ships (DEC-0110); P0.5's last follow-on retired (DEC-0109)
+
+- **Owner-reported phantom 37 mph gust at 11:12 EDT, diagnosed to source and corrected (ERR-0006).**
+  Same class as `ERR-0004` (2026-07-27), recurring independently: `rxCheckPercent` for that one
+  archive minute collapsed to 9.2% (vs. 60–90%+ every surrounding minute), a genuine RF-dead
+  episode (weewx.log silent 11:11:35→11:15:22, confirmed not a restart). One of the few packets
+  that passed CRC that minute carried a corrupted wind byte; every other field in the row read
+  normally, so nothing tripped DEC-0054's frame co-rejection. Investigated and ruled out `#225`
+  item 2 (rain-rate co-rejection gap, fixed same day in PR #260 but not yet deployed) as the
+  mechanism here — rainRate was clean. Archive row nulled + daily summary rebuilt (day-max now 19
+  mph, genuine); InfluxDB point deleted and rewritten minus the 7 wind-derived fields, with
+  `windGust_qc=1`/`windSpeed_qc=1` flags (24 fields verified, matching `ERR-0004`'s own precedent
+  exactly) — the dashboard's read-only proxy token can't write/delete (confirmed 403), so the
+  correction used `weewx.conf`'s own uploader token instead. Wunderground/CWOP/PWSWeather/OWM/etc.
+  already have the bad value; that's permanent, same as `ERR-0004`. Cross-verified independently by
+  an eaglehunt-weather-dashboard session (InfluxDB via its own query path) and an eaglehunt-ops
+  session (raised `#225` item 2 and a container-restart confound as candidate mechanisms; both
+  checked directly and ruled out for this incident) — good example of the coordination working.
+- **Reception-quality wind guard ships, closing the ERR-0004/ERR-0006 blind spot (DEC-0110).**
+  Neither the bounds check nor the 75 mph delta cap can distinguish this corruption from a genuine
+  squall gust of similar magnitude — `ERR-0004`'s own writeup already established that tightening
+  either risks false-rejecting real weather. Measured first, before designing anything (93 days,
+  129,607 records): genuine high wind and severe reception collapse have never co-occurred at this
+  station (lowest `rxCheckPercent` among 220 records with `windGust>=10mph`: 54.5%; 87 of 89
+  `rxCheckPercent<20%` records stayed calm at 0–4 mph) — so a guard combining both signals can't
+  false-null a real gust, with wide margins on both sides. `dewpoint_service.py`'s `DewpointCacher`
+  gains a `NEW_ARCHIVE_RECORD` binding (`rxCheckPercent<20%` AND `windGust>10mph` → null the wind
+  triple + derived fields), confirmed via `weewx.conf`'s own `[Engine][Services]` order to run
+  before `StdArchive`'s write and every RESTful uploader. Explicitly does not reach Wunderground's
+  RapidFire feed (publishes pre-archive-close — a live ticker, not an archive of record). 11 new
+  tests including both incidents replayed verbatim as positive controls. Ships with the ~08-23
+  v2.0.14 build (baked into the image), same gate as `#225`.
+- **ROADMAP.md's P0.5 fully closed (DEC-0109).** Its last follow-on ("Keep-a-Changelog headings +
+  DECISIONS entry-skeleton convergence," proposed S25, ~72 sessions unclaimed) is retired, not
+  picked up: the original rationale is unrecoverable (no surviving transcript), no sibling repo
+  adopted anything to converge toward (checked all three), and `DECISIONS-FULL.md` already grew
+  its own working skeleton independently of `CHANGELOG.md` — nothing left to reconcile. Judgment
+  call, not just absence of evidence: this repo's entries are dense, cross-referencing narratives
+  that an external single-facet schema would likely fragment rather than clarify.
+- **A `ROADMAP.md` overclaim caught while closing the loop on the above.** Its P1 arc credited
+  DEC-0054 with "closing ERR-0004" outright — true only for the co-occurring-bounds-failure
+  mechanism, not the whole class, which `ERR-0006` just proved recurs independently. Corrected in
+  place rather than left standing.
+- **Cross-repo, same session:** fixed a `secret-read-guard.sh` false-positive gotcha in
+  eaglehunt-ops (`command` escape-hatch anchoring + a co-occurrence false-positive class), found
+  and flagged via `spawn_task` while doing unrelated ops work; landed there as OPS-DEC-0115, tested
+  and deployed.
+- **Gates:** 397/397 full suite (was 386, +11 new, 0 regressions), ruff clean, mypy clean (63
+  files, `.mypy_cache` cleared first), secret gate clean. PR #265 merged to `dev`.
+
+---
+
+## [S97] — 2026-08-20 — S91 audit fully closed (#225/#226); NAS-LEASE holder client built + verified (DEC-0108); INTERFACES.md's two DEC-0053 gaps actually documented
+
+- **The S91 audit's 8-issue sequence (#219–226) is now fully closed.** #225 (5 QC-completeness
+  findings, all dormant on this station's single-ISS config) and #226 (4 public-facing CLI/config
+  bugs) were the last two, both shipped this session (PRs #258, #260); #219–224 had already landed
+  in prior sessions. Tracking issue #227 closed with the full sequence noted. #226 item 1 is the
+  standout for impact beyond this station: the shipped config template carried a literal,
+  unsubstituted `[options]` token that any new user following the documented setup shipped straight
+  into `weewx.conf`, silently discarding the auto-appended `-tf`/`-tr` flags and falling back to
+  868MHz EU instead of 915MHz US with zero error. 23 new regression tests across the two PRs.
+- **`ops/nas_build.py` — weewx's NAS-LEASE holder client — built, tested, and verified against the
+  real NAS, ahead of the ~08-23 build (DEC-0108).** A generic lease-wrapper (`--job <name> --
+  <command>`): `O_CREAT|O_EXCL` acquire, explicit `fchmod 0644` (the exact umask near-miss
+  `NAS-LEASE.md` v1.4 documents and DEC-0107 found on the box), `flock` held for the wrapped
+  command's run, stale-break only when flock is free **and** `expires_at` has passed, release with a
+  truthful outcome (`clean`/`build-failed`/`crashed`) wrapped in `try/finally`. Generic over any
+  command so it covers both of weewx's named holder cases (image build, manual bulk analysis) from
+  one script. **Scope decision, recorded in DEC-0108:** the observer/downshift side is deliberately
+  not built — weewx has no live downshift lever to act on a "held" verdict yet, so a courtesy read
+  with nothing to act on has unclear benefit today; revisit once the InfluxDB `post_interval` lever
+  ships. 14 tests against a real `flock()` on a `tmp_path` dir, not mocked. **Later in the session,
+  ran it for real** against the actual shared `LEASE_DIR` (a clearly-labeled dry-run job, TTL 60s) —
+  clean `acquired`/`released` pair logged, directory left exactly as found, no stray lease file.
+  Floor/TTL ship as §5's provisional 600s/3600s, to be re-pinned against the real ~08-23 build's
+  measured duration; the adopting DEC itself still waits for that event on purpose.
+- **`INTERFACES.md` actually documents both of DEC-0053's open findings now — ROADMAP had been
+  overclaiming this since S48.** Tracing ROADMAP's P3 line (which asserted DEC-0053's
+  station-identity finding was "documented there") against the actual file found that only Finding 1
+  (bound the loop-JSON cache) had made it in. Finding 2 — InfluxDB carries no station-identity tag,
+  and adding one later forks a parallel series instead of annotating it — is now written into §2,
+  along with a one-line pointer to Finding 3 (the SQLite archive's own missing correction flag,
+  deliberately left in `DATA_ERRATA.md` where DEC-0053 always said it belonged). ROADMAP's P3 line
+  corrected in the same pass, with the guardrail's own "targeted pass writes both places" rule
+  followed this time. PRs #261, #262.
+- **Session-start concurrency, resolved cleanly.** A live peer session (`weewx-rtldavis-e4`, S96)
+  was still finishing as this session started; coordinated directly rather than duplicating work.
+  The peer's handoff corrected an early misreading on this session's part — ops#169's current
+  title/body read as an unresolved coffee-radar heads-up, but the actual unresolved thread had
+  already closed as DEC-0104/DEC-0107, verified independently against `DECISIONS.md` rather than
+  taken on the peer's word alone. Mid-session, coffee-radar (`coffeeradar-28`) cross-checked the
+  ~08-23 timeline directly; confirmed, and told them the holder client was now built and verified,
+  not just designed.
+- **Interim Campaign B readout, informational only — square left running untouched per owner
+  instruction.** Using `ops/campaign_analyze.py --since <the live attempt's epoch>` (the raw log
+  pools 6 aborted attempts back to 08-11; the tool's own pooling warning caught it): at 22 of 32
+  blocks, arm B (gain 496, ex 0) leads arm A (372, anchor) by +2.25 pts, and D leads C by +1.16 pts
+  at ex 50 — gain wins both head-to-heads; the ex axis itself reads as a wash (+0.93 pts one way,
+  −0.16 the other). Already exceeds campaign A's entire 4-arm spread (0.94 pts). Explicitly not a
+  verdict — the runbook's own rule is not to read partial results, and DEC-0102's overnight iowait
+  confound is still open.
+- **Two secret-read-guard false positives found and worked around, worth a note to ops.** The guard
+  blocked a plain `scp` upload of this repo's own already-secret-gated script (never touches
+  `weewx.conf`), and separately a `tail` on the NAS-LEASE attribution log (plain JSONL, no
+  credentials) — both keyed on the command verb/NAS-host pattern rather than which file is actually
+  touched. The documented `command` escape hatch resolved both, but only once `command` was the
+  **literal first word** of the whole invocation — `cmd; command scp ...` still triggered it,
+  `command bash -c '...scp...'` did not. Flagged via `spawn_task` for ops to fold into the guard's
+  own documentation rather than left as a per-session rediscovery.
+- **Green gate at close:** ruff clean, **386/386**, mypy clean (62 files), secret gate clean and
+  positive-controlled mid-session (planted a fake key, confirmed the catch, restored from a
+  pre-mutation backup rather than `git checkout` since the index held the payload). Soak at close:
+  17 pass / 2 warn / 0 fail — same two known warns (chatty stdout #253, USB hedge during RF-dead).
+- Model tier: ran on Sonnet 5 throughout, confirmed directly rather than inferred — no restore owed.
+- Five PRs merged this session: #258 (#226), #259 (DEC-0108), #260 (#225), #261 (INTERFACES.md
+  Finding 2), #262 (INTERFACES.md Finding 3). Steady state verified `dev` + `main` only after each.
+
+---
+## [S96] — 2026-08-20 — ops#169 closed end-to-end (DEC-0107); #224 unit systems fixed; ROADMAP tripwire fired
+
+- **ops#169 / NAS-LEASE: every open item closed in one session, and all three box-level fixes rest on
+  direct observation rather than report.** The round was run session-to-session with coffee-radar
+  (their S205) at the owner's direction, with eaglehunt-ops informed throughout. Landed: `chmod 666`
+  on `heavy-io.log`, `chmod 0777` on `LEASE_DIR` (sticky dropped), `chattr +a` on the log,
+  `NAS-LEASE.md` **v1.4 / OPS-DEC-0110**, and HLF's create-mode patch (their PR #388, `066bbf9f`).
+- **The finding that moved it: both weewx lease roles run non-root, and neither is what the other
+  tenants assumed.** coffee-radar reasoned the uid gaps were moot for us because our client would run
+  as root "like your `rx_experiment` tasks" — those *are* DSM root tasks, but neither is the lease
+  client. The observer is `weewx-monitor` (uid 1031, DEC-0009 least-privilege) and the holder is a
+  separate non-root account, established from the ownership of every `build-v2.0.*` directory rather
+  than inferred. **weewx is the first tenant the gaps actually bite** — HLF and coffee-radar are both
+  uid 0, which is exactly why three nights of clean production never surfaced them. Widening the
+  monitor's sudo grant to dodge a file mode was considered and **rejected**: it trades a documented
+  security decision for a `chmod` someone else can make.
+- **`chattr +a` was deliberately not closed on its no-error exit.** That is its normal success
+  signature and coffee-radar's reading was reasonable — but **this box is the origin of our
+  accepts-and-silently-ignores precedent** (DEC-0036: Synology's `db` driver takes `max-size` and
+  discards it, 7 h of prod lost to a cap that was never real). One owner-run `lsattr` returned
+  `-----a------------` and converted inference to observation. A write-based probe was explicitly
+  refused — it would confirm the attribute by attacking the attribution record.
+- **We priced the cost of our own recommendation in writing.** Dropping sticky widens §11's already-
+  accepted wrong-lease-deletion race from same-owner to any-tenant: a buggy unlink of a *valid* lease
+  leaves the holder renewing into an unlinked inode while every observer reads the slot free. Still
+  the right trade against option (b)'s *guaranteed* silent stranding of the least-privileged tenant,
+  but recorded rather than discovered later. Break-by-takeover-in-place was considered and
+  **discarded with the reason**, checked against HLF's real acquire/release code, so it stays dead.
+- **Two findings came from the other tenants looking at our situation, and both changed what
+  shipped.** coffee-radar noticed sticky was *incidentally* the only thing protecting the log from
+  unlink — unpriced because it had only ever been weighed against §3's break clause — and flagged
+  that the holder's literal account name was heading into a persisted record. That name is the
+  owner's personal login, absent from all tracked files, and our adopting DEC lands in a **public,
+  permanent** repo: the hazard was ahead, not behind. HLF, patching the line we reported, found **a
+  second create we had not flagged** (the steal-then-acquire retry) — the branch that only runs after
+  a crash, i.e. when the lease matters most.
+- **DEC-0107 is deliberately NOT the adopting DEC.** Landing one locks §5's constants for every
+  tenant (HLF's DEC-0177 was the first), so it must lock a *corrected* spec. Adoption now waits on
+  nobody but us and lands with the client at the **~08-23 v2.0.14 build**, which §8 designates as the
+  protocol's first cross-tenant holder exercise. Declared floor 600 s / TTL 3600 s, flagged as dated
+  data to be re-pinned against that build's real duration.
+- **#224 shipped: `dewpoint_service.py` now branches on `usUnits`** (PR #255). The file had no
+  `usUnits` check anywhere — `dewpointF`/`heatindexF` unconditionally, plus two wind thresholds
+  documented in mph compared against packet values that are km/h or m/s under
+  `target_unit=METRIC`/`METRICWX`, both documented options in our own `weewx.conf.example`. Masked in
+  prod only by the shipped US default. **Fixed the way WeeWX's own `wxxtypes.py` does, NOT via the
+  issue's proposed `weewx.units.to_US()`** — `loop_json_writer.py` uses to_US legitimately because it
+  *emits* US-suffixed fields, but this service writes into the live packet, so a to_US fix without
+  the return trip would put degF into a metric packet: the same bug one layer along.
+- **The wind half failed in both directions, each silently** — as m/s the 200 mph ceiling is ~447 mph
+  and the guard was **inert**; as km/h it is ~124 mph and the guard **nulled real weather**. Readings
+  are now normalised to mph at each comparison, keeping one documented threshold set instead of three
+  to keep in sync. Pre-fix logs printed km/h values labelled `mph`; they now carry the reading's own
+  unit. Suite **339 → 349**.
+- **Two process findings from doing it.** The mutation check corrected our own documentation: 7 of 10
+  new tests fail against the pre-fix file, not the 8 the docstring claimed. And the new tests **passed
+  in isolation while asserting nothing in the full suite** — the weewx stubs live in `sys.modules` and
+  are shared, so `dewpoint_service.weewx` is whichever stub won the import race; fixed by patching
+  through the module under test and restoring after.
+- **ROADMAP scheduled reconciliation ran — tripwire fired on time, three stale items fixed** (PR
+  #256, bumped to S106). The most interesting: **the "Last updated" banner had itself gone stale.**
+  S89 and S92 recorded targeted passes in the guardrail section without promoting them into the top
+  block, so the banner read S86 while content was current through S92 — the freshness signal aged
+  while the file did not. Also: P2 asserted the Campaign A arm-winner seal held, which DEC-0069 broke
+  as a side effect **30 sessions ago**; and P3's INTERFACES citation list was three DECs out of date
+  (verified against `git log -- docs/INTERFACES.md`, not inferred).
+
+---
+
+## [S95] — 2026-08-20 — The reported crash-loop was scheduled swaps (DEC-0106); `soak_check.sh` gains a restart-loop detector
+
+- **#245 / ops#184 (tier:frontier) refuted on measurement, and closed.** The report — `RestartCount: 0`
+  while stdout showed RTL-SDR re-detection cycling inside a 30-line tail — was read as a crash loop.
+  It was not. **Aug 15–19: exactly 4 weewxd startups a day, every one at HH:05 ±30 s**, which is
+  precisely Campaign B's four scheduled arm swaps, 6 h apart, with **zero off-schedule restarts in
+  five days**. The contrast case is in our own history: 2026-08-06's `journal_mode` crash-loop ran
+  **7 starts in 7 minutes** (43–90 s apart). The healthy and pathological signatures differ by three
+  orders of magnitude — the evidence was never ambiguous, nothing had ever put the two side by side.
+- **Why it looked exactly like a loop — three things compounding, none of them careless.** Container
+  stdout carries no timestamps; **`docker restart` never increments `RestartCount`**, so the reported
+  zero was truthful *and* uninformative about the process; and the container object was 8 days old and
+  *restarted* rather than recreated, so its stdout accumulated every restart into one stream. ~32
+  routine restarts stack consecutively, and a 30-line tail catches ~4 of them that are in fact six
+  hours apart. Corroborated by count: all three restart markers read **exactly 27** in a `--tail 200`
+  window — itself truncation at ~7 lines/start, so the true figure is ~32 = 8 days × 4/day.
+- **The owner's "a lot more crashes lately, it used to be super stable" is correct, and the cause is
+  benign.** Measured across a month of rotated daily logs: **0/day between campaigns** (Jul 20–24,
+  Aug 3–14), **4/day during them** (Aug 15–19). Every elevated non-campaign day has a known cause —
+  Aug 6 = 7 (the WAL loop), Aug 11 = 10 (the v2.0.13 deploy), Aug 10 = 3 (v2.0.12). The zeros were
+  **positive-controlled** (DEC-0045), not assumed: Aug 3's log runs full of data through 23:59 with
+  zero `weewxd` events. So the rate genuinely rose; every one of the new restarts is deliberate.
+- **HLF's staleness is not ours — redirected, not absorbed.** Through their reported window
+  (19:45–20:07Z) weewx was adding archive records **and** publishing to InfluxDB every minute,
+  successfully, no errors. The day's four driver stalls sat at 02:55–05:29 EDT (DEC-0097's overnight
+  cluster), hours away. ops#184 deliberately **left open** — its HLF redirect is still an open action
+  item for another repo, and closing it would bury that.
+- **The monitoring gap this exposed, fixed (DEC-0106).** `soak_check.sh` counted startup banners with
+  `grep -c` then tested only non-zero — 1 and 50 read identically green, which is what the S94 soaks
+  ran through twice while #245 was live. **Raising it to a count would not have worked:**
+  `entrypoint.sh` `exec`s weewxd, so weewxd is pid 1, its death takes the container with it, and
+  every container lifetime holds **exactly one** banner. A loop is structurally invisible inside a
+  per-container window. The detector therefore reads a **fixed 6 h window** and fails when consecutive
+  starts are **<1800 s apart** — swaps are 21,600 s, loops are 43–90 s, so the threshold sits in a gap
+  two orders of magnitude wide. **Positive-controlled over 7 cases** against the real Aug-6
+  timestamps, including both sides of the boundary (1799 s fires, 1800 s does not) and a loop hidden
+  beside a legitimate swap.
+- **A rotation trap, caught in verification and proven in production.** The first draft grepped only
+  the current `weewx.log` — which **rotates daily**, so a 6 h window run after midnight spans two
+  files. The first live run (00:0x EDT) found the window's only start in the **rotated** file, so the
+  unfixed version would have returned **0 — a false green**, at exactly the hour DEC-0097's stalls
+  cluster. Now reads yesterday's rotated file first. Same trap the `mon_resets` check already
+  documented for `weewx_monitor.log`; `docs/GOTCHAS.md` §1 gains both.
+- **Found, filed, deliberately not fixed here** (DEC-0014, keep the change small): the soak's
+  *pre-existing* window computation has the same rotation blindness — after midnight it collapses to
+  the new day's log, which is why four window-scoped checks currently WARN as artifacts rather than
+  findings. And the long-standing `stdout is chatty — 162 lines` WARN is now **explained**: accumulated
+  restart output on a long-lived container, permanent until the next recreate, not "freeze fuel" —
+  it has been read as expected noise for weeks.
+- **Nothing deployed.** `ops/soak_check.sh` is a laptop-side diagnostic; prod remains **v2.0.13** /
+  driver ws.5, untouched. Campaign B checked during the session, healthy. Gates: ruff clean,
+  **339/339**, mypy clean (57 files), secret gate clean **and positive-controlled** (all three planted
+  payload shapes caught, exit 1).
+
+---
+
+## [S94] — 2026-08-19 — #223 shipped (DEC-0103); ops#169 unblocked by correcting our own DEC-0099 (DEC-0104); BOOT.md diet, under cap (DEC-0105)
+
+- **#223 (`dewpoint_service.py` wind-plausibility filter, frontier) fixed, tested, PR #241.** Its
+  four defects were one design gap, exactly as the issue argued: `_filter_wind` never adopted the
+  resync-on-reject and co-null behavior `rtldavis.py`'s `SensorQC` already established in this repo.
+  **The fix is one distinction, applied consistently** (DEC-0103): a **bounds** reject — an
+  impossible reading, or a gust below its own speed — is positive proof of corruption, so the
+  baseline is left untouched; a **delta** reject may be a genuine gust front, so the baseline
+  **always resyncs, even when rejecting**. (1) That resync closes the deadlock: previously a
+  rejected step froze `last_wind_speed` permanently and every later reading was nulled against a
+  baseline the weather had left behind, until the weewx process restarted — a 300 s TTL
+  (= `QC_RESEED_SECONDS`) adds a second, independent escape. (2) `windDir` is now co-nulled in every
+  reject branch; a bare heading with no speed previously reached loop-JSON, InfluxDB and every
+  uploader, and this matches the driver's own two precedents while staying narrower than DEC-0054's
+  frame-level co-rejection, which delta correctly still never triggers. (3) Cold-start warmup samples
+  are bounds-checked before they can seed a wrong baseline and trigger (1). (4) `windGust` is
+  bounds-checked independently of `windSpeed`'s presence — unreachable with today's driver, included
+  because the driver-agnostic goal is the same one that decided (below) not to import from the driver.
+  10 new tests (`tests/test_dewpoint_wind_filter_223.py`). 339/339 full suite (329 baseline + 10 new),
+  ruff/mypy clean (57 files), secret scan positive-controlled clean.
+- **The port-vs-import call, decided and recorded (DEC-0103).** Importing `SensorQC` from
+  `rtldavis.py` is the cheaper move and was rejected: `dewpoint_service.py` has zero driver imports
+  today, and `docs/INTERFACES.md` commits it to being re-pointable at non-Davis WeeWX. Coupling a
+  driver-agnostic LOOP-packet service to a vendored fork carrying USB and subprocess concerns, to
+  reuse ~20 lines of pure logic for a single field, costs more than the duplication. Recorded
+  because the reasoning is invisible from the code — a later reader should know the second filter is
+  a considered port, not drift.
+- **The first pre-fix proof was worthless and looked convincing.** All 10 new tests "failed" against
+  the stashed pre-fix file — every one with `TypeError: unexpected keyword argument 'now'`, i.e. the
+  signature change, not the defects. Re-run through a shim giving the old `_filter_wind` the new
+  signature so only behavior was under test: **6 of 8 behavioral checks fail pre-fix with the exact
+  predicted symptom, 0 after**, and the 2 convention locks pass on both sides by design. The
+  generalizable form of DEC-0045's rule, from the other side: *a failing test is no more evidence
+  than a passing one if it fails for the wrong reason.*
+- **`dewpoint_service.py` confirmed BAKED, not mounted** — established with `nasctl inspect` and
+  positive-controlled against a known-mounted file, not assumed from its sibling `pressure_service.py`.
+  `CONSTANTS.md`'s deploy-layer table did not list the file at all (the same omission S85 found for
+  `loop_json_writer.py`, which would let a change "ship" with an image cut and silently do nothing —
+  DEC-0046's exact failure); it gains the row. **Nothing deployed this session**: the fix ships on an
+  image rebuild, gated behind v2.0.14.
+- **[ops#169] promoted to job 2 on owner instruction — and researching it overturned our own
+  DEC-0099, logged as DEC-0104.** The owner raised its priority ("next few sessions for sure") and
+  then corrected the approach: *"ask the repo… you have coded all of this, so you should be able to
+  find answers."* Re-reading `eaglehunt-ops/NAS-LEASE.md` against our own record found three things.
+  (1) **DEC-0099's gating premise was wrong.** It deferred adoption to the v2.0.14 container recreate
+  because `influx.py` cannot see `LEASE_DIR` from inside the container — true for that one lever,
+  over-generalized into a gate on the whole client (and an earlier commit this session amplified it
+  into `BOOT.md` as a hard deadline). §9 had already settled it the other way: weewx's client's
+  *"natural home is host-side"*, chosen precisely to avoid a release-class recreate. **Holder** (wrap
+  the NAS image build) runs on the host; **observer** (read lease, append `heavy-io.log`) is
+  `weewx_monitor.py`, already resident with a 30 s poll — neither needs a container change. Only the
+  InfluxDB `post_interval` **yield** lever does. (2) **The "two strands" are one:** coffee-radar's
+  disk-contention handshake IS this lease — their DEC-0181 Stage 2 landed *as* OPS-DEC-0107. The
+  question we nearly posted to ops#169 was already answered in coffee-radar's own `BACKLOG.md`, one
+  grep away. (3) **★ weewx's adoption LOCKS §5's constants for every tenant** (unlocked "until the
+  second adopting DEC"; HLF's DEC-0177 was first) — a governance act arriving disguised as merge
+  order, flagged to ops so other tenants can amend first. Pre-flight verified rather than assumed
+  (DEC-0074): `LEASE_DIR` exists at `/volume1/docker/nas-lease/` mode 1777 (owner step already done),
+  `heavy-io.log` live with HLF renewing in production (~8.7 h held 08-19, released
+  `outcome: step-failures`). **DEC-0099's index row gains a correction pointer rather than being
+  edited** — a decision is superseded, never rewritten in place. Position posted to ops#169.
+- **Three of this session's six PRs were corrections of its own errors, each caught by re-reading
+  rather than by getting it right first.** #242: `BOOT.md` was written before the merge landed, so it
+  shipped telling S95 to delete a branch already gone and close an issue already closed. #243: the
+  model-tier line asserted "a restore is owed" from OPS-DEC-0010's rule while a read already showed
+  `sonnet` — **the identical mistake S89 made and was corrected on by ops**; all five scopes verified
+  intact, nothing owed. #246: the DEC-0099 correction above. The generalizable lesson, now in
+  `BOOT.md`: for anything whose truth depends on a merge landing, the handoff is written *after* it,
+  even though the closeout ritual lists BOOT at step 2 and push at step 7.
+- Daily square watch, checked twice. Start: **arm C**, 16 pass / 2 expected-WARN, reception 71%/62%.
+  Close: **arm D as of 08-19T18:08:23 EDT** — a scheduled swap mid-session, confirmed against the
+  state file *and* container uptime (19 min) rather than inferred from the fresh counters; 16 pass /
+  2 expected-WARN, reception 72%/86%. No STOP/PAUSE/lock either time. Untouched by this session's work.
+- ROADMAP checked: neither DEC-0103 nor DEC-0104 ships/closes/reprioritizes a P0–P3 line (#227's
+  remediation is tracked on the issue tracker, and ops#169 appears on ROADMAP only inside DEC-0102's
+  narrative record, not as a line item) — nothing to reconcile, tripwire unchanged, still due by S96.
+- Model tier: escalated to Opus for #223's frontier design work. **Floor verified intact across all
+  five scopes at close — nothing to restore** (see #243 above for why that is checked, not inferred).
+- **`BOOT.md` diet done on owner instruction — 4,866 → 2,406 tok, under the 2,500 cap for the first
+  time since before S83 (DEC-0105, ops#173).** Done days ahead of the ~08-23 plan. The starting point
+  was worse than ops#173 last recorded (4,427 at S86) because this session added ~1,000 of its own.
+  **Four prior rule-1 trimming passes at S84 had moved the file ~50 tok net** — deleting resolved
+  items cannot keep pace with a file that absorbs a session's state every close, so the remaining
+  bulk was diagnosed as *misfiled rather than stale*: the gotchas block was **41% of the file** and
+  nothing in it expires at a session close. Moved to **`docs/GOTCHAS.md`**, four sections deep, with
+  a `MANIFEST.md` row whose "load when" names a trigger rather than a topic — an index entry saying
+  "read this sometimes" is unread, not lazily loaded. Then What's-settled and job 2 compressed to
+  conclusions now that DEC-0103/DEC-0104 hold the detail (the ops#169 briefing alone was ~700 tok
+  restating DEC-0104). **Rejected:** distributing the entries into `CONVENTIONS.md`/`ARCHITECTURE.md`
+  by topic — each would land in a defensible home but the class would stop existing, and the class is
+  the point. **A rule-5 trap caught mid-task:** the first draft of the new file also copied in the
+  gate commands, the baked-vs-mounted deploy table and the pyc cache from the canonical docs; it read
+  as completeness and is precisely STANDARD rule 5's defect (a second copy is what drifts). Eight
+  entries removed, exclusion stated inline. **Cost taken deliberately:** `MANIFEST.md` 1,096 → 1,226,
+  including correcting its own stale "~1.1K" self-figure — 130 tok there bought ~1,700 out of the
+  always-load tier. **ops#173 left open on purpose**, result posted to the thread: `MANIFEST.md` is
+  still over its own cap, and the automated sweep — not this repo — should be what calls it green.
+- **A second follow-up PR (#249) fixed two stale references the diet itself created** — job 6 still
+  read "diet at the square's close, still deferred on purpose", and the gotchas pointer cited a §5
+  that no longer existed after the rule-5 removals merged it into §4. Same shape as #242: a doc
+  describing a state that changed while it was being written. Caught by re-reading the finished file
+  rather than trusting the edits.
+
+---
+
+## [S93] — 2026-08-19 — Channel-gating fixed (#222), #227's sequence now 4 of 8 shipped; #223 scoped
+
+- **#227's sequenced plan: #222 (channel-gating consistency, mid) fixed, tested, merged.** Three
+  instances of the same root cause — channel routing not consistently enforced across sibling
+  decode/config paths. (1) Wind bytes decoded unconditionally from any of 4 configured channel
+  roles instead of gating on the already-computed `wind_channel` — fixed by wrapping the decode
+  block in the missing gate, sibling to the message_type dispatch that follows it. (2) `rain_count`
+  (message_type 0xE) had no channel check, unlike its sibling `rain_rate` a few lines earlier —
+  fixed by copying that existing gate. (3) `ch_to_xmit()` accumulated transmitter bits with no
+  check the 5 configured channel numbers are pairwise distinct, so a duplicate silently corrupted
+  the `-tr` bitmask into a different channel than either role was configured for — fixed with an
+  explicit `ValueError` in `__init__`, matching the sibling frequency-validation two lines above it.
+  9 new tests (`tests/test_channel_gating.py`), all 4 bug-repro cases confirmed to fail pre-fix via
+  `git stash`. Wiring `wind_channel` into `parse_raw()` broke 13 pre-existing tests across 4 files
+  whose minimal fake-driver fixtures predated the change and had no `wind_channel` key — fixed by
+  adding it to each, not a behavior change. **PR #238, merged** (`f31438d`). 329/329 full suite
+  (320 baseline + 9 new), ruff/mypy clean (56 files), secret scan positive-controlled clean.
+- **#219/#220/#221 closed on GitHub** — merged in S92 but never explicitly closed (this repo's
+  `Closes #N` doesn't auto-fire since `dev`, not `main`, is where PRs land). Each closed with a
+  comment cross-referencing its PR and merge commit, per `CONVENTIONS.md`'s explicit rule. #227's
+  sequence now correctly reads 4 of 8 shipped on GitHub, not just in `BOOT.md`'s own tally.
+- **#223 (`dewpoint_service.py` wind-filter redesign, frontier) scoped, not implemented** — read
+  and grounded all 4 sub-bugs against current code (deadlock from missing resync-on-reject with no
+  TTL; `windDir` surviving a rejected `windSpeed`/`windGust`, confirmed by the two existing tests
+  that seed a `windDir` value and assert nothing about it; the unfiltered warmup buffer that seeds
+  bug 1; `windGust` unguarded when `windSpeed` is `None`, confirmed unreachable by this repo's own
+  driver today). Identified the fix pattern to port (`SensorQC.check()`'s always-resync-the-baseline
+  + TTL-gated reseed) and flagged one open design call for the actual session: porting the pattern
+  locally vs. importing `SensorQC` from `rtldavis.py`, which would break `dewpoint_service.py`'s
+  current zero-coupling to the driver. Deliberately held for its own dedicated session per #227's
+  own note and the frontier tag — no code written.
+- **Session survived a mid-session crash cleanly** — verified on resume that nothing drifted (git
+  state, PR #238's CI/mergeability all exactly as left) before continuing, rather than assuming the
+  transcript was still ground truth.
+- Daily square watch (once, session start): 16 pass / 2 expected-WARN (chatty stdout + ineffective
+  USB hedge, both already-known), reception 75% 5-window avg / 62% last window, arm B unchanged
+  since 08-19T06:06:26, no STOP/PAUSE/lock. Model tier confirmed Sonnet at session start (fresh
+  session, nothing elevated to restore from S92's #219 escalation).
+- **None of #222 deploys yet** — `rtldavis.py` is baked into the image, holds for the v2.0.14 cut
+  (~08-23) same as the rest of #227's plan.
+- ROADMAP checked: nothing this session ships/closes/reprioritizes a P0–P3 line — no DEC logged
+  (routine audit-remediation fixes don't generate their own DEC, same as #219/#220/#221 in S92).
+  Tripwire unchanged, still due by S96.
+
+---
+
+## [S92] — 2026-08-19 — Overnight-probe finding shipped (DEC-0102); 3 of 8 code-audit fixes merged (#219/#220/#221)
+
+- **Job 2 closes: DEC-0098's probe ran, and DEC-0102 records what it found.** Resolved the
+  probe's unrecorded-timezone question by process evidence, not computation — `proc_probe_nas.sh`
+  stopped cleanly on schedule at 05:00 EDT. Ingesting its data exposed and fixed a real bug in
+  `proc_probe.py --analyze`: a second named window's data was silently absorbed into "control" the
+  first time both existed in the same CSV, inverting the evening-window ratio. Headline result:
+  overnight (00:00–05:00) iowait is **11.80x** a clean daytime baseline — the first hard number on
+  the confound DEC-0092/DEC-0097 already flagged — but confounded itself by a concurrent ops#169
+  coffee-radar event, and a minute-level cross-check against that night's actual stall timestamps
+  came back mixed, not confirmatory. **Root cause of blocker 2 stays open**; a single clean re-run
+  won't settle it, since DEC-0092's confound recurs every night. ROADMAP's P0 freeze line updated;
+  ops#169 notified. **PR #231, merged.**
+- **Job 7 (S91 audit remediation, #227's sequenced plan): 3 of 8 items fixed, tested, and merged.**
+  **#219** (ProcManager subprocess-lifecycle, frontier — Opus, explicit user-approved escalation):
+  `shutdown()`'s unguarded `get_pid()` call skipped the S73/DEC-0081 zombie-reap fix on exactly the
+  case it's most needed; `AsyncReader`'s EOF-sentinel bug (`''` vs binary `b''`) busy-spun a reader
+  thread on every child exit and — worse than filed — left abandoned `ProcManager` instances' reader
+  threads with no termination path at all; `get_stderr()` could block ~2x its documented 10s cap.
+  Design validated with a Plan-agent pass before implementation; 4 new tests, each confirmed to fail
+  against git-stashed pre-fix code. **PR #232, merged.** **#220** (`DATAPacket.IDENTIFIER` silently
+  dropped every battery-low frame — not just battery status, but wind/temp/humidity/rain too, mid):
+  one-line regex fix, dispatch-ambiguity rigorously verified against the only other packet type
+  first; 3 new tests. **PR #234, merged.** **#221** (4 unguarded divide-by-zero/negative-shift
+  crashes — thermistor, both rain-rate branches, `iss_channel=0`, an unhandled CRC `ValueError`
+  confirmed to exit the daemon entirely, mid): guard-and-degrade, matching the pattern already
+  established elsewhere in the file; 8 new tests. **PR #235, merged.** Follow-up issue **#233**
+  filed (`shutdown()` has no direct kill/terminate, tier:mid, not urgent) — found pressure-testing
+  #219, kept out of its scope.
+- **All 5 PRs merged same session** (the four above plus this session's own closeout, #236), each
+  verified via `gh pr view --json state,mergedAt` rather than `gh pr merge`'s own untrustworthy
+  output; four hit the expected branch-behind-base gotcha once an earlier one landed, fixed with
+  `update-branch` + wait-for-CI each time. Re-verified on the real merged `dev`: **320/320 tests**,
+  ruff/mypy clean. All 5 feature branches deleted, steady state restored to exactly `dev` + `main`.
+- NAS cleanup: `proc_probe_nas.sh` + its two logs removed from the NAS on owner instruction,
+  verified gone via read-only `nasctl ls`.
+- **None of this deploys yet** — `rtldavis.py`/`proc_probe.py` changes hold for the v2.0.14 image
+  cut (~08-23) per DEC-0064; merging to `dev` doesn't touch the live station. Campaign B checked
+  twice this session (start and close), healthy both times, untouched throughout.
+
+---
+
+## [S91] — 2026-08-19 — Full code audit (BOOT job 7): security fixes shipped (DEC-0101), 26 correctness findings filed as a sequenced plan (#219–227)
+
+- **The owner's planned focus for the session, decided at S90 close.** Two independent halves, run
+  as separate multi-agent passes rather than one combined effort.
+- **Security pass**: 4 DEC-primed finder agents (one per file: `rtldavis.py`,
+  `pressure_service.py`/`dewpoint_service.py`, `weewx_monitor.py`, `ops/rx_experiment.sh`) + an
+  Opus-tier adversarial verification pass over everything they surfaced. **DEC-0101**: SMTP
+  connections skipped TLS certificate verification at both alert-mail call sites
+  (`weewx_monitor.py`'s continuously-running production monitor, `ops/rx_experiment.sh`'s campaign
+  abort-notification path) — `smtplib`'s default with no `context=` is unverified, exposing
+  `GMAIL_PASS` to an on-path attacker; `influx.py` already does this correctly elsewhere in the
+  repo, this was a regression against an established in-house pattern, not a novel ask. Second
+  finding: the WeatherLink API key could leak into `weewx.log` via exception text on any connection
+  failure (reproduced empirically) — a new gap, not a DEC-0062 regression, since the credential
+  only exists at runtime inside the exception's `__str__()`, invisible to DEC-0062's AST-based
+  regression test. Both fixed, both guarded by new/extended tests with positive controls. **PR
+  #229, merged.**
+- **Bundled into the same PR**: a `docs/DECISIONS.md` structural fix — DEC-0093 through DEC-0101
+  had been sitting under `## Open / deferred` despite every one being `Accepted` (found by the
+  ultrareview cloud pass, which also caught the S91 session's own DEC-0101 addition landing in the
+  same wrong spot). Fixed via a scripted, assertion-guarded reorder rather than a hand-retyped edit
+  — the block was too large to safely retype by hand.
+- **Also merged this session, unrelated to security but surfaced by the same ultrareview pass**: a
+  pre-3.12 Python `SyntaxError` in `ops/proc_probe.py` (a conditional inside an f-string's `{}`
+  spanning two lines needs PEP 701) — would have broken every entrypoint of the tool BOOT job 2
+  depends on, on any pre-3.12 interpreter. All locally-available interpreters here are 3.12+, so
+  this session's own probe harvest was never at risk, but it's a real bug in a public repo. **PR
+  #228, merged.**
+- **Correctness pass**: 10 independent finder angles (5 correctness + 3 cleanup + altitude +
+  conventions, per the local `/code-review` skill's own methodology, adapted for a path-target
+  full-file audit rather than a diff) against `rtldavis.py` + `dewpoint_service.py`, followed by
+  Opus-tier adversarial verification of all 21 surviving candidates (batched by theme into 4
+  verification passes) and a sweep pass that found 6 more. **26 distinct findings survived** (20
+  confirmed, 6 plausible); 2 further candidates were independently **REFUTED** — a suspected
+  packet-duplicate-detector aliasing bug turned out inert, because the Go binary already dedups
+  byte-identical frames upstream and every packet carries monotonic counters that make the
+  equality-based dedup check always-true regardless. **Filed as GitHub issues, not fixed this
+  session** — the volume made same-session fixes impractical, and several (the ProcManager
+  subprocess-lifecycle bugs, the dewpoint wind-filter redesign) are explicitly judgment-tier design
+  work better done as their own deliberate sessions. Grouped into 8 issues (#219–226) by shared root
+  cause rather than filed 1:1; sequenced with model tiers and deploy gating in tracking issue
+  **#227**, the map for the next several sessions of this work.
+- **Standout findings** (full detail in #219–226, not re-narrated here): an uncaught exception on
+  CRC mismatch that can crash the whole weewxd daemon (found independently by 5 of the 5
+  correctness-angle finders); `ProcManager.shutdown()`'s zombie-reap skip on an unguarded
+  `pidof` call (also 5x-corroborated — the repo's own existing test monkeypatches around it with a
+  comment admitting the gap); a regex bug that silently drops an entire transmitter's data whenever
+  its battery goes low, leaving 5 status fields permanently dead; the shipped config-generator
+  template shipping a literal unreplaced `[options]` token that would break any new user's first
+  install; and wind data leaking in from the wrong sensor channel on any station with a separate
+  Anemometer Transport Kit.
+- **Cross-repo heads-up posted**: eaglehunt-ops#180 (informational — the audit methodology may be
+  worth reusing on HLF/dashboard, not a request, no reply expected).
+- **Deploy gate, applies to all of #219–226**: `rtldavis.py` (and likely `dewpoint_service.py`) are
+  baked into the Docker image, so none of it can deploy before Campaign B closes (~08-23) — design
+  and merge to `dev` freely, hold the image cut for v2.0.14 (or v2.0.15+ for the two lowest-priority
+  issues).
+- Green gate at close, on merged `dev`: ruff clean, **305 passed**, mypy clean/52 files.
+- Campaign B checked twice (session start and close), both times healthy and completely off this
+  session's critical path — block 16→17 of 32, a scheduled 00:05 swap into arm A landed clean
+  between the two checks. No code from this session touches the running station.
+- ROADMAP checked: nothing here ships/closes/reprioritizes an existing P0–P3 line (the audit's
+  findings are new work, not a resolution of a tracked item) — nothing to reconcile, tripwire still
+  S96.
+
+---
+## [S90] — 2026-08-18 — NAS-LEASE adoption deferred to v2.0.14 (DEC-0099); the InfluxDB rollup answered as dashboard's build (DEC-0100)
+
+- **Off-cycle start, by design.** BOOT's resume pointer had no date-gate reached yet (probe harvest
+  waits on the 08-19 05:00 stop; the daily watch is cheap and unblocking). Session instead swept
+  ops + dashboard + HLF for cross-repo messages — the routine `repo:weewx` check, run further than
+  usual because the sweep surfaced a live thread nobody had caught yet.
+- **DEC-0099 — OPS-DEC-0107 (NAS-LEASE) landed 2026-08-15 and HLF adopted (their DEC-0177, live
+  since 08-16) while `BOOT.md` sat completely stale on both.** weewx has zero live levers today —
+  the one committed-unbuilt lever (InfluxDB `post_interval` deferral, safe to ~30 min per DEC-0092)
+  needs `influx.py` inside the container to see `LEASE_DIR`, which isn't mounted and can't be
+  without a release-class recreate. **Deferred, not declined: v2.0.14 already recreates the
+  container**, so that's the no-extra-cost moment to add the mount — bundled plan now in BOOT's
+  v2.0.14 queue (mount `LEASE_DIR`; `influx.py` checks it and raises `post_interval` while held; the
+  NAS image build becomes weewx's first HOLDER via acquire→flock→release; renewal in-place only,
+  **never** `loop_json_writer.py`'s tmp+`os.replace` idiom, which the spec names as the exact way to
+  strand a flock on an unlinked inode). Posted to ops#169, left open against weewx until the window
+  lands the client.
+- **Free correlation, no adoption needed:** read the live world-readable `heavy-io.log` this
+  session — one real lease-held window exists so far (HLF's `daily-maintenance`, 2026-08-18
+  00:10–06:10 EDT), containing both one RF-dead episode (02:41, 26.3 min) and one freeze
+  (03:15–03:22, 420 s). n=1, far too small to test anything — logged as a lead in BACKLOG's standing
+  watches, explicitly **not** revising DEC-0094's P=0.29 or the RF-stall P=0.32.
+- **DEC-0100 — ops#175's mutual wait (weewx: "dashboard's call"; dashboard: "waiting on weewx to
+  propose a shape") broke on an ops strawman; weewx answered.** Accept-and-monitor for InfluxDB
+  agreed. On who builds the permanent daily rollup dashboard's all-time-record queries need: weewx
+  declines, recommends dashboard build it as a native InfluxDB 2.x Task — `docs/INTERFACES.md`
+  already draws the boundary ("our responsibility ends at writing the documented schema"), dashboard
+  already runs Flux against this bucket and `influx.py` never has, and a Task changes neither write
+  path. Posted to ops#175.
+- **PR #215 merged (`b5c1be5`)** — both DECs, BACKLOG/BOOT synced to current reality, steady state
+  restored. Green gate at close: ruff clean, 299 passed, mypy clean/51 files.
+- **Campaign B watch, at close: block 16 of 32, arm C** (swapped 18:05:02, settled 84s — confirmed
+  directly via `rx_experiment.state` + log, not derived). Soak run earlier the same session: 16
+  pass / 2 expected-WARN (chatty stdout + ineffective USB hedge, both already-known), reception 75%
+  5-window avg / 71% last window, 0 stalls, no STOP/lock. This was the session's only contact with
+  the running square — the originally-planned S90 job list (probe harvest, closer campaign
+  tracking) is untouched and carries to S91.
+- ROADMAP checked: neither DEC touches a P0–P3 line item (both live in BACKLOG, not ROADMAP) —
+  nothing to reconcile. Tripwire unchanged, still due by S96.
+
+---
+
+## [S89] — 2026-08-18 — The overnight "reception dip" was never reception (DEC-0097); the mechanism probe moves to the NAS (DEC-0098)
+
+- **DEC-0097 — the reception-floor dip is RF-dead episodes, and BOOT's own record of it was
+  wrong.** A watch carried four sessions ("n=4, window drifting later, needs the proper
+  statistical test") fails on three premises. **The record:** PAUSE/RESUME lines pair one-to-one,
+  so 08-18 was onset **02:55, five cycles**, not the logged "03:30, two" — corrected onsets
+  02:15/02:15/03:25/**02:55** are not monotonic, and the drift was the stated reason for rejecting
+  a fixed-clock artifact. The four nights are arms **A, B, C, D** — every gain × receive-window
+  cell, so not an arm effect. **The measurement:** on per-minute `rxCheckPercent` (DEC-0069/S31 —
+  *not* the monitor's 30-min mean; different instruments, the 50% floor does not transfer), tested
+  on **31 pre-campaign nights the hypothesis was not derived from**, contrasting the window
+  against its flanks *within one arm block* so gain/window/arm are constant: mean d = **−0.01 pts**
+  (Wilcoxon p=0.60, permutation p=0.47). Deepest 30-min mean on campaign nights **68.4%** against
+  DEC-0059's 73.3% baseline; **0 of 35 nights** under 50% while the monitor reported 20–45%.
+  **The mechanism:** every episode reads one pathological value (3–22%), then minutes **absent**,
+  then NULL, then normal 65–90% — `campaign_analyze.py`'s documented truncated-accumulation
+  artifact, which cannot self-identify because `interval` stays 1. Those artifacts feed the laggy
+  30-min mean and trip the floor. The null held-out result *is* the mechanism's confirmation:
+  `partition()` already excludes them. **And night 1 was already classified** — DEC-0094 recorded
+  08-15 02:00–02:22 as RF-dead three sessions before the watch was flagged untested.
+  **What survives, on the right unit** (ledger rows re-clustered per DEC-0083's unit lesson):
+  RF-dead episodes concentrate **00:00–04:00 — 8/19 vs 3.17 expected, P=0.0079**, stable at
+  30/45/60-min clustering; stall-bearing rows only **7/9 vs 1.50, P=0.00009**, and **0/9** in
+  DEC-0094's evening freeze window — different clocks, independent support for the two being
+  separate phenomena. **7 of 7 ledger dates**, including three that **predate the square**.
+  Stated against itself: ledger is 6.5 d, left-censored at ws.5; omnibus does **not** reject
+  uniformity (X²=27.7, df=23, crit 35.2); DEC-0092's tenant maintenance (00:10→~03:00–05:10)
+  overlaps and is not discriminated against. **No code changes** — DEC-0087 scoped the PAUSE to
+  RF-dead episodes and that is exactly what fires it. Job 2 closes; blocker 2 gains a timing
+  signature.
+- **DEC-0098 — the mechanism probe runs on the NAS, because a laptop-side overnight probe is not a
+  limitation but an infeasible design.** `ops/proc_probe.py` was built to BOOT job 6's "read-only
+  from the laptop, no NAS write" scope and hardened inside it (per-batch ssh, a supervisor that
+  relaunches on process death — verified by SIGKILL, rc=137 → auto-resume — idempotent `--resume`,
+  gap-guarded deltas). None of that addresses the real failure mode: it required the owner's laptop
+  awake **12+ hours**, and DEC-0097's second window (00:00–04:00) a laptop-side probe can never
+  sample at all. `ops/proc_probe_nas.sh` now runs under `nohup` on the NAS (pid 28699, ends
+  08-19 05:00) emitting the **same pipe-delimited stream** `proc_probe.py` parses; `--ingest`
+  reuses `parse_line()`, and merging is idempotent. Footprint went **down** — ~2,700 ssh
+  round-trips replaced by `/proc` reads plus an append. Costs recorded: a Class C write approved in
+  chat, a bounded resident process on prod, and **cleanup owed**.
+- **The probe measures cumulative counters, not instantaneous state** — the reason two prior
+  attempts could not settle DEC-0068. `block_max` already showed a **4041 ms** uninterruptible
+  block in a 4 h span containing no evening, so "main thread `S`, never `D`" was sampling coverage,
+  not evidence. Measured before building, not assumed: no PSI (kernel 4.4.302+), `wchan` reads `0`,
+  `/proc/<pid>/io` denied as non-root. A smoke test caught three real bugs pre-flight (a
+  two-column row shift, both md2 fields collapsing to one value, `/wait_sum/` also matching
+  `iowait_sum`).
+- **New trap:** `nasctl cat /proc/<pid>/cmdline` returns **empty for a live process** — caught only
+  by positive-controlling the method against weewxd's own known-live pid. Third instance of *a zero
+  from a look-alike tool is a claim, not a result*.
+- **Gain / receive-window hot-swap filed, not started (PR #212, [ops#179]).** Owner asked what
+  prevents hot-swapping a gain instead of restarting the container every arm swap. **Only the
+  feature.** Gain is a CLI flag on the Go binary carried in the `cmd` string, and `rtldavis.py` has
+  **no concept of it at all** — `grep -i gain` returns five hits, four of which are the word
+  "a*gain*st". The swap path already exists: `ProcManager.startup(cmd, …)` takes the command as a
+  parameter, `shutdown()` kills and reaps, and the 150 s watchdog exercises that respawn cycle
+  routinely (DEC-0081). The gap is only the trigger — config is read once in `__init__`. `-ex`
+  rides the same string, so both axes of the square could swap with no container touch, retiring
+  the 600 s settle window (~2.8% of campaign data) and the abort-on-unhealthy-swap failure class
+  (DEC-0082, DEC-0087). Filed with its constraints attached: **not during campaign B**, the binary
+  sets gain only at startup, it widens the vendored fork, and device re-open time after a
+  deliberate SIGKILL is unmeasured.
+- Campaign B watch: block 14 verified healthy at ~10:00 EDT (soak 16 pass / 2 expected-WARN);
+  block 15 starting at close. Square through `08-23T00:05`, ~4.5 d left, no swap deferred.
+
+[ops#179]: https://github.com/WeatheredScientist/eaglehunt-ops/issues/179
+
+## [S88] — 2026-08-18 — weewx 5.5.0 staged for v2.0.14; the schedule gains a stand-down state (DEC-0096)
+
+- **weewx 5.4.0 → 5.5.0 merged to dev (PR #208)** — the deliberate bump behind dependabot #158,
+  per the issue-#78 flow (the dependabot PR is the notification; #158 closed with a pointer).
+  Rides the v2.0.14 image cut. Upstream 5.5.0 notably adds retry-on-database-locked — the
+  DEC-0070 failure class. Corrected en route: #158's red `tests` check was an artifact of its
+  only CI run predating the S73 test correction on `main` (the pre-S73 first-row assertion
+  against a schedule that had legitimately launched), not a 5.5.0 problem — current `main` would
+  pass it today.
+- **DEC-0096 (PR #209): an empty SCHEDULE block is now the explicit between-campaigns stand-down
+  state.** Campaign B's terminator (08-23T00:05) is the v2.0.14 window's opening moment, and
+  `tests` is a required check on both branches — without this, every PR of the cut would have
+  queued behind a red staleness guard, with nothing honest to regenerate the table to. `install`
+  refuses the empty block loudly; six structural tests skip on emptiness; the staleness guard's
+  classification moved to `_schedule_state()` with its stale branch positively controlled
+  (DEC-0045) so a fully-elapsed real schedule still fails exactly as before. The live schedule is
+  untouched; the post-square emptying PR must land FIRST in the window. 299/299.
+- Watches: 08-18 swaps `B→D` 00:05:02 (settle ~196 s) and `D→A` 06:05:02 (~144 s) both healthy,
+  block 14 of 32 in progress; reception-floor dip recurred 03:30–03:45 ×2 on arm D — watch n=4,
+  window still drifting later (02:15 → 03:25 → 03:30). Soak 16 pass / 2 expected-WARN.
+- Docs: CONSTANTS' release row corrected — `prod-baseline-20260811` (`main` = `1cc9605`) landed
+  at S73, the "promotion pending" note was stale. ROADMAP checked: no v2.0.14 line to reconcile,
+  scheduled pass S96.
+
+---
+
+## [S87] — 2026-08-17 — The soak was lying about a healthy station; retention settled as accept-and-monitor (DEC-0095)
+
+- **`ops/soak_check.sh` measured every age against a clock captured before its own remote body —
+  PR #206.** `now` was taken at the top of the ssh block, then ages were computed against it at the
+  bottom, after `docker logs`, a full `weewx.log` window read and a `docker exec` sqlite loop. Every
+  age was understated by exactly the block's runtime. That runtime was ~2 s historically (every
+  recorded value 1–29 s, all inside the monitor's 30 s poll) and 15–100 s under load by 08-17, so
+  the monitor's log mtime always landed *after* `now`, the age went negative, and the `-ge 0` guard
+  reported a perfectly healthy watchdog as **`MONITOR LOG STALE … wedged`** — for ten days, on every
+  run. The watchdog was in fact polling on the dot: 19:10:17 → :47 → 19:11:18 → :48 → 19:12:18, no
+  gaps. **The quieter half mattered more:** the same stale clock fed `record_age_s`, the DEC-0036
+  freeze detector, whose 180 s threshold silently became 180+runtime (measured 195–280 s) — least
+  sensitive exactly when the box is loaded, which is when freezes happen (DEC-0088: median 240 s).
+  Both ages now read the clock at the point of measurement, the runtime is reported rather than
+  hidden, and the monitor verdict splits into its four real outcomes (dead / no log / clock skew /
+  wedged). Also retires the reception check's hardcoded 80% floor, which read **one** 60 s window of
+  21 packets — sd ~9.7 pts at this station's measured 73.3% baseline (DEC-0059) — and so warned on
+  most healthy runs, 20 pts tighter than the monitor's own `WU_RF_MIN_PCT=60`; the soak now reports
+  the monitor's five-window average and its `[OK]/[LOW]` verdict instead of keeping a second
+  threshold beside it. New `tests/test_soak_check.py` drives the real script with `ssh` stubbed;
+  every "no longer cries wolf" assertion is paired with a positive control that the check still
+  fires, verified by running the suite against the pre-fix script (7 fail, all three teeth-controls
+  pass).
+- **DEC-0095 — retention is accept-and-monitor, not archive-then-prune, and the monitor executes.**
+  Answers the weewx half of ops#175. Measured read-only 08-17: archive **33.61 MB = 0.89% of
+  MemTotal 3.69 GiB**, 5.1 TB free disk, **1,392 rows/day at 275 B = 0.37 MB/day, ~7.3 yr to 1 GB**,
+  InfluxDB engine 14 MB; `dbstat` puts 32.94 of 33.61 MB in the single `archive` table. HLF's
+  DEC-0156/0174 **method** transfers and its **conclusion** does not — DEC-0174 justified retention
+  on the working set at ~8.0 M hot rows against *this same 3.69 GiB box*, and we have 66× fewer
+  rows. Three further grounds: the `archive` table is the deliverable rather than a regenerable
+  diagnostic (a passively intercepted station cannot backfill); upstream already bounds long reads
+  by aggregation (114 `archive_day_*` tables, ~0.1 MB); and the one cost this DB's history documents
+  is CoW fragmentation, for which retention is the wrong lever (`chattr +C` queued, DEC-0092,
+  confirmed unapplied). Because accept-and-monitor is worthless as prose (DEC-0040), the reversal
+  condition ships as code: the soak reports the archive against **10% of MemTotal** (~386 MB, ~2.6 yr
+  out) and crossing it reopens the DEC. The **InfluxDB half is deliberately left open against the
+  dashboard** (DEC-0010) — weewx proposes no horizon for a shared bucket.
+- **Campaign B watch: block 12 of 32**, `A→B` swap on time at 18:05:02, settle 136 s (n=7, still not
+  a trend). STOP/lock absent, arm `B` live, square through `08-23T00:05`.
+- **Recorded as a lead, not a finding:** at 19:16 EDT — inside DEC-0094's significant 18:00–21:00
+  band — NAS loadavg was **9.05/11.39/8.75** on 4 cores, driven by ~220% CPU of `chrome-headless`
+  (coffee-radar) plus ~14 MB/s sustained writes on `md2`. No process was in `D` state and weewxd's
+  threads were all `S`, so tenant load is established but *blocking* is not — which is precisely
+  blocker 1's open question. One instant is not a probe; sampling across a window is the next step.
+
+## [S86] — 2026-08-17 — Watch-checkpoint discipline, LNA hardware history documented, scheduled ROADMAP reconciliation
+
+- **Three daily-watch checkpoints through campaign B block 11, plus a dated hardware timeline in
+  `CONSTANTS.md` — PR #203, merged.** `BOOT.md` now carries the night-3 finding: the reception-floor
+  PAUSE pattern that hit ~02:15–02:45 on nights 1–2 shifted to ~03:25–04:20 on night 3 (4 cycles,
+  not 2–3) — still n=3, still needs a proper test, but the shift argues against a pure tick-grid
+  artifact. `CONSTANTS.md`'s Hardware/site section gained a dated timeline (station live 05-01,
+  antenna 05-16, LNA ordered 05-27/activated ~06-01, anemometer replaced 06-16/17, LNA removed
+  08-02) and dropped the stale "+ inline LNA" claim — the LNA has been out since 08-02, not
+  present as the line previously implied. Prompted by an owner question re-examining whether the
+  current elevated RF-dead episode rate is caused by the LNA removal: it isn't, directly — DEC-0083's
+  onset (08-10 23:56) is 8 days after removal, and the intervening week was the quietest stretch in
+  the whole 30-day record. Attribution among campaign B's high-gain arms / v2.0.12 / weather stays
+  open, unchanged from DEC-0083.
+- **ops#157 (VPN heads-up) closed** — the owner confirmed being back home off VPN, and NAS access
+  was verified clean throughout the session (nasctl, ssh-backed calls, soak checks, no timeouts).
+- **weewx-rtldavis#74 and #44 retroactively communicated** — both had been closed with zero
+  comments (S52 and S43 respectively). Traced each to its actual fixing commit (`0b1ef85` for #74's
+  calm-windDir log-level fix, `973235b` for #44's windchill/cloudbase fields, the latter's own
+  commit message citing #44 directly) and added a comment naming it, rather than leaving the
+  closure unexplained. Prompted by an owner ask to audit "any other issues we've closed" for the
+  same gap, not just the one named.
+- **`docs/ROADMAP.md`'s scheduled S86 reconciliation ran on time (tripwire: "by S86").** One stale
+  item found and fixed: the freeze P0 item still stopped at DEC-0088's S80 rate correction and
+  never picked up **DEC-0094 (S85)** — the hour-of-day split that refutes the nightly-maintenance
+  hypothesis but finds the evening 18:00–21:00 window significant instead (P=0.0027). Everything
+  else on ROADMAP verified current against DECISIONS.md/CHANGELOG.md/BOOT.md. Next tripwire: S96.
+- **Board review confirmed nothing else is currently actionable for weewx** — checked the
+  cross-project "Claude Code work" board (192 items, 9 not Done) directly rather than relying on
+  `BOOT.md`'s own list. Everything weewx-relevant is either finished-and-queued for the v2.0.14
+  deploy window (#144, #172, #158), explicitly not-owed (ops#169), or deliberately deferred
+  (ops#173). **ops#175 (archive/InfluxDB retention policy) is the one real open item** — scoped
+  for S87 on Opus (see `BOOT.md`'s job list for the reasoning).
+
+## [S85] — 2026-08-16 — DEC-0093's gated half shipped (and its deploy plan was wrong); the NAS-LEASE spec reviewed; a new 02:15 watch
+
+- **`current.json` cadence implemented — the dashboard answered dash#430 with 60 s and asked us to
+  ship it.** `[LoopJsonWriter] current_interval` (default 60 s) throttles `current.json` only;
+  `loop-data.txt` stays per-packet behind its hard 30 s liveness gate. First packet of a run always
+  writes the snapshot; a failed write does not advance the timestamp; a backwards clock step forces
+  one; `0` restores the S43–S84 behavior. **Measured by simulating a full day at 2.5625 s/packet:
+  33,717 → 1,405 snapshot writes, 67,434 → 35,122 renames/day, 47.9% removed.** 8 new tests
+  (**279** suite). Three existing tests were reading `current.json` to assert cache/TTL semantics
+  and now read the live feed — which is what they always meant.
+- **The deploy plan in DEC-0093 and BOOT was wrong, and checking caught it: `loop_json_writer.py`
+  is MOUNTED, not baked.** `nasctl inspect` shows `<project root>/loop_json_writer.py` bind-mounted
+  `ro` over the venv copy, and **the Dockerfile never `COPY`s it** — so "ships with the v2.0.14
+  image cut" would have been **a silent no-op with a green checkmark** (DEC-0046's exact failure).
+  Deploy is a file copy to the **project root** plus a restart; the copy in `weewx-data/bin/user/`
+  is a **decoy**. `CONSTANTS.md`'s deploy-layer table did not list this file at all — now fixed,
+  with `nasctl inspect` named as the authoritative per-file check.
+- **Reviewed coffee-radar's NAS-LEASE spec (ops#169, for OPS-DEC-0107).** Seven findings, all
+  adopted. The consequential one: the draft had Campaign B ending **08-22** and recorded a
+  coffee-radar sweep as "HELD past 08-22" — the square actually runs to **08-23T00:05**, so acting
+  on it would have dropped the box's heaviest foreign job into block 31/32, in the same evening
+  window their own §8 ranks as most implicated. **That same bare date was also in coffee-radar's
+  own `BOOT.md`/`BACKLOG.md`**; reviewing a document caught a live hazard in a neighbour's handoff.
+  Also: `rx_experiment.lock` is ours, not HLF's; and §1's "CoW churn is unreachable by any
+  tenant-side lever" was corrected to "unreachable by any *scheduling* lever — reducible by
+  emitting fewer metadata operations," since our own cut is the counter-example.
+- **Answered a question HLF's phase timeline made askable: is weewx a victim of their nightly
+  window? Not detectably.** RF-stall episodes 4/15 in-window vs 2.9 expected (P=0.32), n=15 over
+  31 days — the **second** independent failure mode to return a negative for that window after
+  DEC-0094's freezes. Power caveat stated. Also flagged the limitation that bounds our value as a
+  witness: **DEC-0067's gap taxonomy cannot distinguish "RF quiet" from "demodulator starved"**, so
+  a weewx "no harm detected" is weak evidence the protocol must not over-trust.
+- ⚠️ **NEW WATCH — the ~02:15–02:45 reception dip repeated on night two, on a different arm.**
+  08-15: PAUSE 02:15/02:30/02:40 (arm A). 08-16: PAUSE 02:15/02:30 (arm B). All five auto-resumed.
+  **A third metric nobody has tested by hour** — DEC-0094 tested freezes and S85 tested stall
+  episodes, both negative; these are *reception-floor dips*. Recorded as a watch, not a finding:
+  `02:15` is partly a 5-minute-tick artifact and two nights is two nights.
+- **Campaign B clean through block 6** (`A`/`B`/`C`/`D` on 08-15, `D→B` and `B→C` on 08-16), every
+  swap on time, none deferred. Settle series now n=6 — 82/139/198/137/197/79 s — confirming the
+  S84 "not a trend" call: all fit `~20 s + k×60 s`, k = 1,2,3,2,3,1.
+- **Cross-repo, all acknowledged:** ops#169 (footprint corrected, the hard 30 s floor declared for
+  the spec, the nightly-window lead retracted, coffee-radar's ~19:00 job reported with limits),
+  **ops#175 filed against us** (archive + InfluxDB retention — acknowledged with measured growth
+  ~0.41 MB/day / ~6.4 yr to 1 GB, **design deferred to `BACKLOG.md`**), ops#173 (BOOT cap, updated
+  figure), **ops#176 filed by us** (a `push-nas-guard` false positive whose printed remedy is to
+  mint a Class C token for a local docs edit), ops#157 (VPN heads-up, ack'd).
+- Docs/process: BOOT job 3 stopped quoting a cap figure that went stale on every edit and gives the
+  measurement command instead; a guard-misfire rung 0 recorded (re-spell before minting); BACKLOG
+  gained the NAS-LEASE adoption prerequisites, including that **our house `tmp`+`os.replace` idiom
+  is forbidden for a lease file** (it strands the holder's `flock` on an unlinked inode).
+- Gates at close: ruff clean, **279/279** pytest, mypy clean over 49 files, secret gate clean with
+  its positive control at 54/54.
+
+## [S84] — 2026-08-15 — The dataless-write proposal was already fixed in S43; the real amplification is `current.json`, which nothing reads (DEC-0093)
+
+- **Asked (out of ops#169) whether `loop_json_writer.py` should skip dataless LOOP packets — it
+  already does, one level up.** DEC-0024 Layer B (S43) stashes freq-hop packets and `continue`s
+  (`rtldavis.py:1507-1517`), so `new_loop()` cannot fire on one; `PacketFactory.create()` does still
+  *yield* them, which is what the reading saw, but `genLoopPackets` filters them first. The `~40%`
+  figure was `66/166` — DEC-0024's own **pre-fix** 1.66×. **Verified live rather than from source**
+  (DEC-0074): the monitor reads `WINDOW: 12–18/21 (57–86%)`, `RECEPTION: 72–74%` — the post-Layer-B
+  signature; the inflation's signature is this metric pinning near 100%.
+- **Measured what DEC-0092 estimated:** ~22,500 loop packets/day → **~45,000 renames/day**, refining
+  its `50–85k` (whose upper bound was the pre-Layer-B rate). DEC-0092's last post-square queue item
+  is answered and retired in place, in the house `Update (Sxx)` pattern.
+- **`current.json` has no consumer anywhere.** The eh-proxy's only `/weewx-data` read is
+  `loop-data.txt`; no runtime reference exists in the dashboard, in hyperlocal-forecast, or in this
+  repo outside the writer and its tests; the dashboard's roadmap still carries Cold-load Fix B's
+  consumer half **open at P0**. So half of all writes go to a file nothing reads — the whole 40% the
+  proposal chased, but real. **Direction: decouple its cadence to 30–60 s (~47% of renames removed),
+  gated on the dashboard confirming.** Not shipped; **no code changed** (PRINCIPLES §8, DEC-0014).
+- **Recorded why content-based suppression is rejected, so it is not re-proposed.** The eh-proxy
+  503s at `now - dateTime > 30` and the dashboard reads that 503 as its one proof the station is
+  down, while `wind_speed` is set unconditionally including `0.0` when calm — a calm night would
+  report a **healthy station as offline**. The "suppression is more honest" argument inverts
+  DEC-0006/0053's two independent freshness axes (per-field TTL vs feed liveness).
+- **Doc contradiction corrected:** INTERFACES §1 and the writer's docstring had claimed since S43
+  that the dashboard fetches `current.json` at boot; it never did. INTERFACES §1 now also records
+  the **30 s liveness gate** — DEC-0092 called loop-JSON "contractually fixed" without the number
+  that makes it so. **Cross-repo reconciliation still owed** (weewx documented the whole feature as
+  done; the dashboard holds the accurate half).
+- **Link declined:** DEC-0068 measured the main thread `S`, never `D`, during a load-12 freeze, so
+  less writer I/O is **not** evidence toward the freeze blocker (DEC-0067/0068).
+- Docs only, plus a docstring in `loop_json_writer.py` (no behavior change).
+- **Amended same day (S84b) — the NAS came back in reach and the square was verified after all.**
+  `H -> A` at `00:05:01` (`arm A live and healthy` `00:06:23`), `A -> B` at `06:05:01` (healthy
+  `06:07:20`); on arm **B**, no STOP, no PAUSE. **DEC-0087/0089 got their first live exercise and
+  held:** one ~20-min blackout (02:00–02:22, reception `30→2→16→1→0%`) produced **three**
+  pause/resume cycles as the 30-min mean lagged the recovery, and **pre-DEC-0087 the first trip
+  would have been a sticky STOP that killed the block unattended.** Resumes 2 and 3 came from
+  `recovered_since()`'s second path (`RECEPTION: 73% [OK]` at 02:31:43 / 02:41:44) — **DEC-0089's
+  fix is what carried them**, since only one `RECEPTION RECOVERY` edge line exists. Whether the
+  blackout was RF or a process freeze is **not established** (DEC-0067: both read identically on
+  this metric) and it sits inside DEC-0092's nightly heavy-I/O window — logged as blocker 1's lead,
+  not scored as an RF result. S84's "NAS unroutable" note was true when written and is now stale.
+- **Later the same day (S84d, DEC-0094) — the hour-of-day freeze split ran, at zero prod cost, and
+  refuted the lead it was meant to test.** DEC-0092 deferred it post-square as "a heavy sweep";
+  that priced a *fresh* `freeze_baseline.py` run, but the script prints every individual event by
+  design and those listings survive in session transcripts, so the split was arithmetic over
+  already-collected data — no ssh, no archive query, no load on the square. **Nightly maintenance
+  window (00:10–04:30): 9 of 40 freezes vs 7.2 expected, P=0.29 — it explains nothing.** The
+  evening does: **18:00–21:00 = 12 vs 5.0 (P=0.0027)**, coffee-radar's ~19:00 window 7 vs 2.5
+  (P=0.011), over 10 distinct dates — turning DEC-0068's "n=1, not a base rate" into **30% of
+  freezes in 12.5% of the day**. Stated with its limits: found post hoc, and the omnibus X²=30.8
+  (df=23, crit 35.2) does **not** reject uniformity, so it corroborates DEC-0068 rather than
+  proving it. Used the **DEC-0088-corrected run only**, verified by a positive control (the
+  documented 08-12 19:55 restart is absent from it, present in the pre-fix runs) and by parsed
+  count matching claimed count. **Side result: the 08-15 02:00–02:22 blackout was RF-dead, not a
+  freeze** — three `rtldavis process stalled` lines sit inside it, which is DEC-0067's own rule;
+  S84b's open question closed by one grep. Blocker 1 stays open — mechanism still unproven.
+- **Cross-repo brought current at close (S84e).** **ops#169** updated with both DECs: our 08-14
+  footprint figure corrected (`~45k`, not `50–85k` — the upper bound was a pre-fix rate), **~47%
+  declared removable unilaterally with no lease at all**, `loop-data.txt` declared a **hard 30 s
+  floor** for the lease spec (a deferral past it is a consumer-visible outage, not a preference),
+  the nightly-window freeze lead **retracted** from our side of that thread, and coffee-radar's
+  ~19:00 job reported as correlating with 30% of our freezes — limits stated, no schedule change
+  requested. **ops#173** (BOOT over cap) acknowledged with the measurement and the post-square plan,
+  plus the general point that a repo running a live time-boxed experiment exceeds a static cap
+  structurally, which is a different condition from neglect. **ops#157** (owner on VPN through
+  ~08-16) acknowledged — it explains this session's NAS gap, and weewx re-derived that condition
+  instead of reading the heads-up that already said it. **dash#430** filed, awaiting their answer.
+- **S85: dash#430 answered 60 s, so DEC-0093's gated change is IMPLEMENTED (not yet deployed).**
+  `[LoopJsonWriter] current_interval` (default **60 s**) throttles `current.json` only;
+  `loop-data.txt` stays per-packet because its `dateTime` sits behind the 30 s proxy liveness gate.
+  First packet of a run always writes the snapshot (a restart republishes immediately), a failed
+  write does not advance the timestamp (one transient failure can't suppress it for an extra
+  interval), a backwards clock step forces a write, and `current_interval = 0` restores the
+  S43–S84 behavior. **Measured by simulating a full day at 2.5625 s/packet: 33,717 → 1,405
+  snapshot writes, 67,434 → 35,122 renames/day, 47.9% removed** — matching DEC-0093's projection.
+  8 new tests (23 in the file, **279** suite); three existing tests were reading `current.json` to
+  assert cache/TTL semantics and now read the live feed, which is what they always meant.
+- **The deploy plan was wrong and the check caught it: `loop_json_writer.py` is MOUNTED, not
+  baked.** `nasctl inspect` shows `<project root>/loop_json_writer.py` bind-mounted `ro` over the
+  venv copy, and **the Dockerfile never `COPY`s it** — so "ships with the v2.0.14 image cut", which
+  both DEC-0093 and BOOT had said, **would have been a silent no-op with a green checkmark**
+  (DEC-0046's exact failure). Deploy is a file copy to the **project root** plus a restart; the
+  copy in `weewx-data/bin/user/` is a **decoy**. `CONSTANTS.md`'s deploy-layer table did not list
+  this file at all — now fixed, with `nasctl inspect` named as the authoritative per-file check and
+  the two other mounted modules added.
+- Gates at close: ruff clean, **271/271** pytest (**279/279** after S85's tests), mypy clean over
+  49 files, secret gate clean with
+  its positive control at 54/54. Campaign B verified live at 10:39 EDT (arm B, reception 69–77%
+  [OK], no STOP/PAUSE/lock). PR #158 deliberately still held for the v2.0.14 post-campaign cut.
+
+---
+
+## [S83] — 2026-08-14 — ops#169 answered: our yield is a near-no-op, the box has a nightly heavy window, and the filesystem was wrong (DEC-0092)
+
+- **Answered coffee-radar's shared-NAS I/O lease proposal (ops#169), measured rather than
+  estimated.** `binding` defaults to `archive`, so InfluxDB gets **1 record/60 s**; total weewx
+  write bandwidth is order **tens of MB/day**. Our shape is metadata-heavy (~50–85k renames/day
+  via `loop_json_writer.py`), not bandwidth-heavy — so downshifting frees almost nothing, and the
+  counterpart accepted a near-no-op courtesy side as the honest answer rather than a refusal.
+- **Drew the data-integrity line ops#169 asked us for.** InfluxDB deferral is safe — the *live*
+  config was checked, not the shipped defaults: `[[Influx]]` sets only connection keys, so prod
+  runs `stale=None` / `max_backlog=1e6` and a 30-min defer queues ~30 records against a million.
+  The **SQLite archive write is the red line** (engine waits a hardcoded 120 s then restarts;
+  `timeout=30` exists because a *reader* holding the lock 6 s once cost 5–10 min of prod), and
+  loop-JSON is contractually fixed by INTERFACES §1.
+- **Corrected a mechanism both sessions had adopted: `/volume1` and all 25 mounts under it are
+  btrfs — only DSM's `/` is ext4.** There is no `jbd2` in either tenant's data path. Caught by
+  reading `/proc/mounts` instead of inheriting the claim, *after* it was already in our draft.
+  The strategic conclusion survives (`btrfs-transaction` is equally outside ioprio); write
+  amplification is higher than the ext4 model predicts, and the mount is `relatime`, not
+  `noatime`. Attribution independently confirmed impossible — `blkio/` holds only `reset_stats`,
+  and cgroup v2's `io.*` postdates this 4.4.302+ kernel.
+- **Found the box's real schedule, which outranks the protocol.** A sibling tenant's nightly
+  maintenance runs **00:10 → ~03:00–05:10 every night** (6 nights verified, median ~4h20m), so
+  **~72% of every 00:05 campaign block** sits under a heavy-I/O window nobody knew about; two more
+  jobs fire at 00:05 itself, one of them our own `weewx-monitor` logrotate — the same minute as
+  the swap's `harvest()`, which reads that log and its rotation. Task-id → owner mapping recorded
+  in the gitignored local-infra doc; BOOT's copy is genericized (public repo).
+- **Comparability is safe, and said so explicitly:** the square is a 4×4 Latin square run twice,
+  so each arm takes the midnight slot exactly twice and a slot-level confound is absorbed by
+  construction. The exposure is midnight *swap reliability* and *variance*, both uniform across
+  arms. Job 1 gains a check-the-cluster-before-blaming-the-S82-state-machine caveat.
+- **Blocker 1 gains a testable lead** (DEC-0067/0068): split freeze timestamps by hour-of-day
+  against that nightly window. No prior analysis controlled for it because nobody knew it ran, and
+  it is testable against rotated logs we already hold. Deferred post-square — `freeze_baseline.py`
+  is itself a heavy sweep and would add load to the measurement it is explaining.
+- **Coordination landed before any protocol constant was locked, via schedule disclosure rather
+  than throttling:** the counterpart held its 12–20 h sweep past 08-22 and moved its 6-hourly job
+  off :00 to :30 before block 1. Both verified here by process evidence, not relayed — the id=11
+  output directory stamped 18:31 proves the new schedule *executed*, DEC-0074's principle applied
+  to a neighbour.
+- **Recorded but deliberately not acted on:** SQLite-on-CoW favors WAL, but the ~300% figure is
+  single-writer and ours is the multi-process shape that bit us — **DEC-0071 stays closed**.
+  `chattr +C` on the archive DB queued instead, with `noatime`, moving our logrotate off 00:05,
+  and the freeze split. Also flagged for a design pass of its own — dataless freq-hop loop packets
+  (DEC-0024) republish byte-identical loop-JSON under a refreshed timestamp.
+- Gates: pre-commit ran ruff/mypy (no code files), tests, and the secret gate — plus a **positive
+  control on `check_secrets.sh`**, which first appeared to show a seventh hole in the `_apppw`
+  rule and did not: the payload used a key name outside `_key`. With the real `GMAIL_PASS` shape
+  both quoted and unquoted forms tripped, confirming the DEC-0084 fix works. A *failing* positive
+  control needs the same scrutiny as a passing one.
+
+---
+
+## [S82b] — 2026-08-14 — Owner's reframe used: #180 deployed pre-square, #172/#144 merged for v2.0.14 (DEC-0091)
+
+- **"We haven't started our campaign yet"** — the owner's reframe of the S82 close: block 1 was
+  still hours out, so pre-block-1 is the RIGHT window for instrument changes, not a violation of
+  mid-campaign discipline. All three backlog items knocked out same day.
+- **PR #182 — the #180 monitor trio, merged AND deployed before the square** (scp 12:24 EDT,
+  respawned pid 7625, `Monitor started` 12:25:21 — startup line after file mtime, DEC-0074): the
+  open episode now mirrors to `logs/monitor_episode.state` and restores at startup (a restart
+  mid-episode used to silently lose the ledger row + RECOVERY edge); log rotation voids a pending
+  reset verdict instead of faking "verified effective" off the zeroed counter; `do_reset`'s
+  exception path emails (it fired live at 01:56:30 that morning as a silent 15 s timeout).
+  #180 closed. The whole square now runs on one monitor version.
+- **PR #183 — #172 + #144, merged to `dev`, deploys with v2.0.14 post-campaign**:
+  `barometer_fetch_epoch` (last *successful* WeatherLink fetch, published outside the TTL
+  machinery — a staleness signal must never be omitted for being old) and honest-null
+  `pressure`/`altimeter` (they carried sea-level values mislabeled as station pressure — the
+  archive columns go NULL from v2.0.14; hlf#302 heads-up posted on #144). INTERFACES §1 updated;
+  both issues commented and left open until the deploy.
+- **v2.0.14 queue set**: weewx 5.5.0 (#158) + #172 + #144 + the `:latest` move once the square
+  proves v2.0.13. Remaining #144 sliver: the +0.03 inHg offset quantification (method in the
+  issue, read-only, campaign-safe).
+- Mechanical: #183 branched before #182 merged → branch protection refused the merge until
+  `gh api .../pulls/183/update-branch` + CI rerun (now a BOOT gotcha). ROADMAP's "lockfile is
+  post-campaign work" corrected (DEC-0090 shipped it pre-square).
+- **weewx 5.5.0 pre-adoption review: GREEN** (same day, post-close) — source-diffed all 11
+  runtime-chain files between v5.4.0/v5.5.0 rather than trusting the changelog: 7 byte-identical
+  (incl. `accum.py` — the campaign metric's write path — `restx.py`, `units.py`, the logger);
+  weedb's `timeout` read + pragmas-as-mapping **verbatim** (DEC-0070/0071 behaviors survive);
+  `manager.py`'s new locked-DB retry layers benignly atop our 30 s timeout. Verdict + v2.0.14 cut
+  checklist on PR #158 — the bump is now execution-only.
+- **#144's offset third quantified: station-side, ~+0.04 inHg high** — 8 days of archive
+  barometer vs four METAR references (+0.038…+0.049, conversion validated against reported-SLP
+  anchors), agreeing with hlf#302's seven forecast models; stable daily, ±0.015 diurnal wobble.
+  Knob identified: the WeatherLink console's configured elevation (~37 ft equivalent) — owner
+  check filed as ops#168; hlf#302 answered in full. One authorized read-only archive query
+  (mint path), no repo changes.
+- **ops#167 filed**: lead-time heads-up to HLF that archive `pressure`/`altimeter` go NULL at
+  the v2.0.14 deploy (it reads those columns; hlf#302 adjacent).
+- 20 new tests across the two PRs; **271/271** on the merged tip; all gates green throughout.
+
+
+## [S82] — 2026-08-14 — The state-machine audit: five apparatus fixes shipped (DEC-0090), monitor package filed
+
+- **The audit BOOT ordered ran (user's Fable 5 pick)** over `ops/rx_experiment.sh`'s
+  guard/tick/abort/pause/resume machine and `weewx_monitor.py`'s alerting/reset logic, hunting
+  the DEC-0088/0089 edge-vs-level class. Every finding verified against live logs and the
+  episode ledger before any fix was proposed; two clean checks recorded so they aren't re-derived.
+- **Five `rx_experiment.sh` defects fixed (PR #179, merged + deployed 10:38, sha `4438a2a3…`):**
+  resume aligned to the pause floor (the occupied [50,60) band could enter a pause it could never
+  exit → needless ceiling abort); `recovered_since()` + the guard's floor mean read the rotated
+  monitor log (rotates 00:05 — the exact swap minute); a due swap defers during an active pause
+  instead of swapping into the episode's health-check abort (BASELINE exempt — property #5);
+  the guard stands down after the BASELINE self-terminator (was armed forever between campaigns);
+  tick/guard/abort serialize behind a lock (the 08-11 02:05:03 guard/tick interleave was on
+  record, and a full-budget health_ok outlives the 5-min cron period).
+- **`soak_check.sh`'s reset counter was dead since S67** — it grepped `RESET: triggering`,
+  retired by DEC-0074's rename; the impossible "1 ineffective of 0 fired" on this morning's soak
+  was the tell. Now counts `RESET: running`.
+- **Monitor-side trio specced and deferred to #180 (tier:mid):** memory-only episode state (a
+  restart mid-episode loses the ledger row + RECOVERY edge), midnight rotation zeroing
+  `wu_bad_windows` and falsifying pending reset verdicts, and `do_reset`'s email-less exception
+  path (timed out live at 01:56:30 this morning).
+- **Ops lane:** #163 closed (MANIFEST carry settled — OPS-DEC-0101/ops#158 precedent), ops#165
+  filed (tier-sweep needs an exemption for decision-blessed carries), MANIFEST's self-measurement
+  de-drifted to ~1.1K.
+- **Morning square watch:** overnight STOP refusals were S81's already-resolved blockade tail;
+  both 01:55/01:59 stalls diagnosed RF-class (known DEC-0081/0083 phenomenon); reception 71%
+  within 1 sd of baseline. Holding on H all session; arm A due `08-15T00:05` on the new code —
+  its first live exercise.
+- 9 new tests (one renamed to the new semantics); 39/39 `test_rx_experiment.py`, 251/251 full
+  suite; ruff/mypy/secret gate clean, positive control caught both planted payloads.
+
+
+## [S81] — 2026-08-14 — DEC-0087's first live pause/resume exercise found a bug in itself, fixed as DEC-0089
+
+- **Arm A never swapped in overnight.** Session start (~08:15) found `current_arm()` still `H`
+  and a STOP sentinel blocking every tick since `21:45:01` the night before — arm A's `00:05`
+  slot never happened.
+- **Reconstructed against the actual logs, not assumed.** Three short reception dips
+  (2026-08-13 19:14–19:38) tripped DEC-0087's `PAUSE` at `19:40:05` — its first-ever live firing.
+  Reception then read healthy continuously (`[OK]`, 65–81%) from `19:43` for almost two hours,
+  but `recovered_since()` only checks for a `RECEPTION RECOVERY` log line — an ALERT→RECOVERY
+  *edge* — and none fired again because reception never dropped low enough to re-trigger a fresh
+  ALERT. The pause rode the full 120-minute ceiling into `ABORT: RF-dead pause exceeded 120min
+  without recovery` at `21:45:01`.
+- **DEC-0089 — the fix**: `recovered_since()` now also checks the monitor's ordinary periodic
+  `RECEPTION: NN% ... [OK]`/`[LOW]` line (logged every ~5min regardless of ALERT state) as an
+  additive level-signal fallback to the edge check — same lesson as DEC-0088, one session later:
+  a just-shipped correction carried its own undiscovered blind spot. 4 new tests, including the
+  exact incident fixture with its assertion flipped (the regression test). 30/30
+  `test_rx_experiment.py`, 242/242 full suite.
+- **Recovery**: schedule shifted +24h a third time (DEC-0082's unchanged mechanism) — arm A now
+  due `2026-08-15T00:05`, square `08-15 → 08-23T00:05`. Fix + shift deployed together to the NAS
+  (sha-verified) before clearing STOP, so no tick could land between a fixed-but-unshifted or
+  shifted-but-unfixed state.
+- **Post-clear log silence traced and confirmed as expected**, not a second incident: `due_arm()`
+  returns the pilot block's trailing `H` row (never a literal `NONE`) until the square's first
+  row arrives, matching `current_arm()`, so `tick`'s silent no-op runs for as long as nothing is
+  due. New `BOOT.md` gotcha.
+- Shipped as PR #177, merged to `dev` (`6079053`).
+- **Next session scoped**: a dedicated audit of `rx_experiment.sh`'s full guard/pause/abort/resume
+  state machine + `weewx_monitor.py`'s alerting/reset logic, hunting for other edge-vs-level
+  signal mismatches — two sessions running with one each (DEC-0088, DEC-0089) is a pattern worth
+  a deliberate pass. User's explicit choice: run it on **Claude Fable 5** (judgment/investigative
+  work per AGENT-ECONOMY.md).
+
+---
+## [S80] — 2026-08-13 — freeze_baseline.py's ad hoc-restart blind spot found and fixed (DEC-0088)
+
+- **Freeze-rate corroboration (job 3) surfaced a tool bug, not a trend.** The 48h window S79
+  flagged had cooled to unremarkable on re-run, but 24h/36h had newly gone elevated (95.9th/94.0th
+  pct) — until the freshest event (2026-08-13 10:24–10:27) turned out to line up almost exactly
+  with this session's own tick log (`10:25:01 tick: swapping A -> H`), the S79 abort's self-heal
+  restart, not a freeze.
+- **Root cause**: `classify()`'s swap detection only recognized the fixed 0/6/12/18 schedule — no
+  way to see a restart `rx_experiment.sh` triggers off it (an abort's baseline restore, a
+  DEC-0087 pause escalation, a tick self-heal). Verified directly against the log, not just
+  inferred: the 2026-08-12 "19:55 freeze" already on record **is** the `19:55:35 ABORT` →
+  `19:55:36 RESTORING baseline snapshot` restart's own footprint.
+- **Fix**: `classify()` now also cross-references every logged `tick: swapping`/`RESTORING
+  baseline snapshot` line as ground truth, padded 3min back / 12min forward. RF-dead precedence
+  unchanged and re-tested against the new path.
+- **Corrected reading**: 7 of 47 previously-counted "freezes" reclassified as swap — rate
+  1.54/day → 1.31/day, all four rolling windows (24h/36h/48h/72h) flip from elevated/85–95th pct
+  to unremarkable (49–67th pct). Not a one-off: DEC-0087 guarantees more ad hoc restarts going
+  forward, so the bug's main damage was still ahead of it.
+- 5 new tests (ad hoc detection, pad boundaries, RF-dead precedence over the new path, a positive
+  control encoding the exact 10:24 event that found this). 17/17 `test_freeze_baseline.py`,
+  238/238 full suite, ruff clean, mypy clean.
+- Shipped as PR #175, merged to `dev` (`8104c30`). BACKLOG.md's S79 freeze-rate watch item closed
+  out with the correction (append-only, per convention). Campaign B untouched — no NAS/container
+  write this session.
+
+---
+
+## [S79] — 2026-08-13 — Arm-A abort reconstructed and recovered; DEC-0087 pause/resume ships
+
+- **Arm-A swap verified** (`00:05:02 swapping H -> A`, `00:08:24 arm A live and healthy`) — S78's
+  open item. Ran clean 1h20m at 66–79% reception before aborting.
+- **Stall burst (DEC-0083) plateau CONFIRMED** — fourth flat reading: 48h/72h still exactly
+  record-max 6/6, 24h back to 1 (68th pct), no new episode since 08-12 01:36. Freeze rate's 48h
+  window read elevated for the first time (92.5th pct) — one window, not yet a confirmed trend.
+- **Arm-A aborted at 01:55:02** (`30-min mean reception 43% < 50% floor`), fully reconstructed: a
+  clean ~11-min RF-dead episode (01:40–01:51, `RECEPTION ALERT` → `rtldavis process stalled` →
+  `RECEPTION RECOVERY: 62% avg after 9min`), the lagging 30-min mean tripping 4 minutes after
+  recovery. `rx_experiment.STOP` then sat uncleared 7.5+ hours, spanning the 06:05 slot.
+- **PR #171 — schedule shifted +1 day** (DEC-0082's exact recovery mechanism, applied again):
+  33 square rows, verbatim arm sequence, arm A's block 1 now at `2026-08-14T00:05`. 17/17
+  `test_rx_experiment.py` unmodified.
+- **DEC-0087 (PR #173) — RF-dead reception dips now PAUSE instead of hard-aborting.** Scoped to
+  the guard's reception-floor check only (not freezes, not tick's own write/health-check aborts).
+  A floor trip writes a non-sticky `PAUSE` marker — no config/container touched — and every guard
+  tick checks for `weewx_monitor.py`'s own `RECEPTION RECOVERY` line (-> auto-resume) or a
+  120-min ceiling with no recovery (-> escalate to the unchanged `trip_abort()`). Schedule slots
+  stay fixed either way — a paused arm just gets fewer live minutes that block, not a moved clock
+  boundary. 9 new tests. 224 → 233 tests.
+- **PR #170 — BOOT/BACKLOG write-up merged.** All three PRs (#170, #171, #173) merged to `dev`
+  same session; #171/#173 touch disjoint regions of `ops/rx_experiment.sh` and merged independently.
+- **Deployed and verified**: `ops/rx_experiment.sh` scp'd to the NAS (sha-matched), `STOP` cleared
+  (Class C, owner-approved). The very next tick self-healed `swapping A -> H` (the shifted schedule
+  correctly overrode the stale live-state A), `arm H live and healthy` at 10:27:19. `soak_check.sh`:
+  15 pass / 2 warn / 0 fail post-deploy, both warnings known/expected shapes.
+- Green gate: ruff clean, 233 tests, mypy clean on 48 files. `BACKLOG.md` gets a new standing
+  watch for the pause/resume incident-tracking half of the original ask, deliberately deferred
+  until the mechanism has real data.
+
+---
+
+## [S78] — 2026-08-12 — Guard abort reconstructed and cleared: first freeze pair to gate the campaign
+
+- **`rx_experiment.STOP` fired at 19:55 local** (`30-min mean reception 47% < 50% floor, arm H`).
+  Reconstructed via `ops/freeze_baseline.py`: two back-to-back FREEZE events (19:46→19:50 240s,
+  19:55→20:02 420s) — no stall line, correctly absent from `stall_baseline.py`'s episode list.
+  **First known freeze pair severe enough to trip the campaign's own abort floor** (freezes were
+  characterized as "gates nothing", DEC-0081/0083). Reception recovered to 67–84% within 10 min,
+  healthy since.
+- **STOP cleared** (owner-approved in chat, Class C), well ahead of the `2026-08-13T00:05` arm-A
+  due time — no schedule shift needed this time, unlike DEC-0082. Landed in PR #168. Treated as a
+  `BOOT.md`/`BACKLOG.md` finding, not a new DEC — refines an already-decided characterization
+  rather than making a new design call.
+- **Stall burst (DEC-0083): third flat reading (S76/S77/S78)** — 48h/72h still record-max 6/6 with
+  no further growth, starting to lean plateau per S77's own threshold. 24h dropped to 1 episode
+  (68th pct); acute rate quiet ~19h at check time.
+- `ops/soak_check.sh`: 16 pass / 1 expected warn / 0 fail. Green gate: ruff clean, 224 tests, mypy
+  clean on 46 files — no code touched this session, docs only.
+- **Swap verification still open**: arm-A due `2026-08-13T00:05` had not yet occurred at session
+  close — carried to S79.
+
+---
+
+## [S77] — 2026-08-12 — Freeze rate gets its own tool (DEC-0085); barometer's WeatherLink-passthrough provenance documented (DEC-0086)
+
+- **DEC-0085 — `ops/freeze_baseline.py` ships**, completing DEC-0083's explicitly-flagged
+  follow-up (BOOT/BACKLOG both warned the freeze number would decay without it). Reuses
+  `stall_baseline`'s stall data and `campaign_analyze`'s DB constants rather than re-deriving
+  either; `window_start()` extracted out of `stall_baseline.py` (+2 tests) so both tools share the
+  same left-censoring boundary. Live run reproduces DEC-0083 almost exactly (21 RF-dead/12
+  arm-swap/45 freeze exact, median 240s exact, rate 1.48 vs. 1.49/day). New: a rolling-window
+  placement for the freeze side the original one-off never had — unremarkable across 24h–72h,
+  moving independently of the same-day record-max stall reading. 210 → 224 tests (+12 in the new
+  file, +2 for `window_start()`).
+- **DEC-0086 — `barometer_inHg` is an unflagged, already-corrected WeatherLink passthrough.** The
+  VP2+ ISS never transmits pressure over RF; `pressure_service.py` polls WeatherLink's cloud API
+  and relays its already sea-level-corrected `bar_sea_level` as-is, with no `_qc` flag distinguishing
+  it from RF-derived fields. Documented in `docs/INTERFACES.md` §1; cross-posted as a heads-up to
+  `eaglehunt-weather-dashboard#377` and `eaglehunt-ops#162`.
+- **eaglehunt-ops housekeeping:** #158 closed (duplicate of already-settled #153/#155 under
+  OPS-DEC-0101), #160 closed (scope complete — see DEC-0085 above, plus the standing-watches sweep
+  was already done per BACKLOG.md), #159 commented (weewx's open bullet answered by DEC-0083/0085).
+- **`docs/CONVENTIONS.md`:** stopped hardcoding a model name in the commit-trailer convention
+  (caught stale — said `Opus 4.8` while the session ran Sonnet 5).
+- **Housekeeping:** 10 stale, already-merged feature branches deleted (local + remote,
+  `s73`–`s76`-prefixed) — none touched `origin/dependabot/pip/weewx-5.5.0`, still deliberately open.
+
+---
+
+## [S76] — 2026-08-12 — Stall rate measured, not eyeballed (DEC-0083); secret gate's sixth hole closed (DEC-0084)
+
+- **DEC-0083 — S75's "trending hot" survives measurement, but its evidence did not.** Over 30.5 d
+  and 31 rotations the 48 h and 72 h windows ending now hold **6 episodes each, the record
+  maximum** (98th pct); 24 h is 96th pct but off its peak of 5, so the burst may be easing.
+  **The unit had to be fixed first**: a stall *line* is not an event — the 150 s watchdog re-raises
+  every ~3 m 40 s, so 08-02 is **21 lines and one episode**. Clustering gives 15 episodes, stable
+  at 30/45/60 min, and **reproduces DEC-0081's independently-derived boundaries** for the 08-10/11
+  night exactly.
+- **Three corrections to how S75 reached it.** Onset is **08-10 23:56**, not ws.5 — the v2.0.13
+  container started 18:05 local on 08-11, so **5 of the 6 burst episodes predate it**; the ledger's
+  19-hour field of view was mistaken for the phenomenon's onset. Not a simple LNA effect either:
+  LNA-in 0.40/day → LNA-out 08-02→08-10 **0.13/day, the quietest stretch in the record** →
+  08-10→now **2.43/day**. And "2→4 ledger rows" **compared two instruments** — row 3 is
+  drought-only and `DATA DROUGHT` appears zero times in every pre-ws.5 log.
+- **DEC-0081 amended: its LNA dates are wrong.** "08-02 and 08-06 were LNA-in" — the LNA came out
+  **mid-ERR-0005, early 08-02** (S61: none existed yet; S62: "first honest no-LNA telemetry
+  accruing"; S70: "out since 08-02"). **08-06 was LNA-OUT**; 08-02 only straddles. The clause's
+  point survives on 08-02 alone.
+- **New sanctioned readout `ops/stall_baseline.py`** (+7 tests, 203 → 210) — states its
+  left-censored window and threshold sensitivity every run. Building it exposed a bias in its own
+  first cut: anchoring "current" on the last stall guarantees the window contains it, so the check
+  would read hot right after every episode. Fixed to anchor on now.
+- **Secondary sweep (ops#160 job 3): freeze rate measured at 1.49/day, median 240 s** against the
+  inherited "~once/day, ~3.5 min" — right order of magnitude, **~40 % understated**, refines rather
+  than overturns. **A 60 % confounder was removed first**: the S37 backfill's `interval=15` rows
+  read as 28 phantom 900 s freezes, caught only because individual events were printed rather than
+  the summary rate. **Co-rejection watch re-verified 0 through 08-12 and positive-controlled**
+  (stale at "through 08-01"); phantom-rainRate already instrumented in `soak_check.sh`.
+- **DEC-0084 — secret gate hole class 6, found free by the routine pre-commit positive control.**
+  `_assign` needs 8+ *consecutive* value chars and a Google app password breaks that run every 4;
+  `_apppw` required **quotes**. So an **unquoted** app password was missed in every spelling —
+  and unquoted is the **native form of `weewx.conf` (ConfigObj) and `monitor.env`**, the two files
+  that must never be committed. Gitignored, so nothing leaked. **It survived S68 because that fix
+  planted the quoted literal, went green, and never asked the neighbouring spelling.** Fix is
+  key-anchored (an unanchored shape match would flag ordinary English prose); **one allow-list
+  widening refused** — five of the six historical holes were allow-list defects, so
+  `monitor.env.example`'s placeholder moved to `YOUR_GMAIL_APP_PASSWORD` instead. Harness holes
+  27–29, **54 passed / 0 failed**. **The new detector then went red on the DEC entry documenting
+  it** — the first draft wrote the literal shape into `DECISIONS-FULL.md`, and the gate caught it,
+  exactly as `check_secrets.sh`'s own comment predicts. A decision log earns no exemption
+  (DEC-0045); both spellings are now described rather than written.
+- **ops#147 closed out from this repo's side** — weewx's §11 adoption named (DEC-0072 for item 1,
+  DEC-0074-as-corrected for item 3); it was the one thing the thread was still waiting on here.
+- Green gate: ruff clean, **210 tests**, mypy clean on 44 files. *A first mypy run reported
+  "Success" on 42 files while silently skipping both new ones — `git ls-files` lists tracked files
+  only. Staged first, then re-ran: 5 real errors.*
+
+---
+
+## [S75] — 2026-08-12 — Campaign B square recovered from an overnight stall; DEC-0080 verified clean
+
+- **Discovered mid-session-start: the square never swapped to arm A.** A third same-day RF-dead
+  episode (18:05, 08-11) tripped the sticky STOP six minutes after S74 verified the day's second
+  episode "without re-tripping" — the STOP sat unnoticed through the entire scheduled 00:05
+  A-arm swap, blocking every 5-minute tick for ~15h until this session's start.
+- **Recovered via DEC-0082**: shifted the entire remaining square schedule +24h (not a
+  partial-day restart, which `test_schedule_is_a_balanced_latin_square` rules out) — full 8/8
+  per-arm balance preserved, 17/17 tests pass unmodified. Deployed to the NAS, sha-verified, STOP
+  cleared. Arm A now due `2026-08-13T00:05`; square runs through `08-21T00:05`.
+- **DEC-0080 dark-hours radiation verification: clean.** 495 archive rows across the 08-11→12
+  dark window (21:00–05:30), zero non-zero radiation readings.
+- **Stall rate: 2 → 4 episodes** in `episodes.log` since the ws.5 deploy (two new overnight,
+  01:34–01:45 the longest yet at 647s) — eyeballed as "trending hot," which is itself the trigger
+  for a properly baseline-measured follow-up (ops#160, S76).
+- **`soak_check.sh`: 14 pass / 3 warn / 0 fail** — reception 67%, no-banner (cosmetic),
+  USB-reset-ineffective (expected DEC-0081 signature).
+- **Guard/classifier friction on the schedule deploy**: `scp` hit three independent layers before
+  landing — the expected Class C confirm, `secret-read-guard.sh` re-blocking even with its own
+  documented `command`-prefix escape hatch already applied (looks like a bug), and a bare
+  classifier denial on an `rsync` substitution with no mint path. Owner ran the final `scp` by
+  hand.
+- **ops#160 filed**: S76 scoped to apply the "baseline-measured, not eyeballed" pattern (ops#159)
+  to this repo's own standing watches, stall rate first.
+
+---
+## [S74] — 2026-08-11 — Day's second guard abort root-caused and cleared; square proceeds on schedule
+
+- **09:55 guard abort root-caused**: reconstructed the exact 6-sample mean from `weewx_monitor.log`
+  (70/30/70/71/20/16 → 46), matching `30-min mean reception 46% < 50% floor (arm H)` exactly. Traced
+  to an RF-dead episode 09:33–10:04 (pre-ws.5): USB reset attempted and logged **ineffective**,
+  recovery uncorrelated with the reset — the DEC-0081 signature, not a new failure mode. STOP
+  cleared (owner-confirmed in chat, Class C mint); verified stable through a second live episode
+  (17:52–17:59, also self-recovered, also non-mute) without re-tripping. Square proceeds on
+  schedule, 08-12T00:05.
+- **Monitor respawn and `dev`→`main` promotion confirmed** (both landed before this session's
+  investigation, likely the concurrent session): pid 22206 (was 8810), `Monitor started` 15:29:02;
+  PR #161 merged, `prod-baseline-20260811` tagged.
+- **`ops/soak_check.sh` run: 14 pass / 2 warn / 1 FAIL** — repeated rtldavis stalls (2, both
+  post-ws.5, both non-mute RF-class, both self-recovered <7 min). Frequency is a new, unexplained
+  data point for DEC-0081's still-open characterization, not itself a regression.
+- **Condensation floated as a fourth DEC-0081 candidate cause** (interference / no-LNA margin /
+  site / condensation) — plausible for the one overnight episode, doesn't explain the two daytime
+  ones. Unconfirmed either way.
+- **Dependabot PR #158 (weewx 5.4.0→5.5.0) reconfirmed deliberately deferred** post-campaign; its
+  `tests` check is also currently failing regardless of timing.
+- DEC-0080 dark-hours (radiation=0) verification **still pending** — S74 found the correction live
+  but dark hours hadn't happened yet at check time; carried to S75.
+
+---
+## [S73] — 2026-08-11 — GATE 2 passed; the stall mechanism captured (zombie child); DEC-0080 applied; `:latest` → v2.0.12
+
+- **Pilot night: 2 of 5 arms, then a stall-abort — and the abort is the session's biggest win.**
+  P496 ran clean (75.56 %, n=33), P449 ran (72.65 %, n=15) until a **USB-stall killed it**: the
+  01:52 forensics pre-capture shows `rtldavis` a **zombie** (`Z`, `wchan=do_exit`, zero fds, no
+  replacement) — the child died mid-block and the driver neither reaped nor respawned it, so both
+  USB resets were structurally futile (a device reset cannot resurrect a dead consumer). That is a
+  **third mechanism**, neither of DEC-0075's two hypotheses. Three capture sets banked incl. an
+  *effective* 23:56 reset (during the HLF/coffee-radar load spike, loadavg ~25) for contrast;
+  reset #2 also hit a new **15 s sudo timeout** failure mode. Guard abort at 02:05 (30-min mean
+  39 % — dead air, not reception; per-minute archive stayed ~72 %), tick raced it at the same
+  second (no lock — minor apparatus defect, post-campaign fix), sticky STOP converged it safely.
+- **GATE 2 (owner, Fable-escalated): arms {372, 496} confirmed** — 496 ≥ 449 answers the only
+  question the pilot had to answer (curve not peaking below 449); missing low arms feed no
+  decision the square doesn't make itself. **STOP cleared 08:55, H hold resumed, square runs
+  08-12T00:05 → 08-20T00:05 unchanged.**
+- **DEC-0080 APPLIED** — the exact-code radiation zero into the live `weewx.conf` **and**
+  `weewx.conf.rx-baseline`, activated by the H-swap's own restart (zero extra downtime). The
+  both-files requirement was a hazard found at apply: `restore_baseline` copies the snapshot over
+  the live conf at every abort/campaign-end, so a live-only apply would have been silently wiped
+  — BOOT's original apply steps missed it. Third `CONSTANTS.md` deviations row added. Dark-hours
+  = 0 verification due tonight (S74). Ops note filed: dashboard `eh-ui.js` floor filter now
+  vestigial.
+- **`:latest` moved to v2.0.12 on Docker Hub** (GATE 2 decision): config digest `9db5c1…`
+  verified byte-identical across both tags via the registry API; manifest digests differ
+  (S70c save→load push vs S73 daemon push — compression, not content).
+- **A second budget bug found and fixed the same morning (S57's lesson, one term deeper):** the
+  08:55 H re-swap was aborted at 08:58:14 as "no records" while the driver was alive and
+  publishing — `health_ok`'s 180 s budget never modeled **RF acquisition** (measured ~127 s on
+  this boot vs ~0 s on P449's). First archive record was due ~08:58:15; the budget missed a
+  healthy swap by seconds, and would have coin-flipped every square swap. `HEALTH_TRIES` 36 → 60
+  (~300 s vs the corrected ~245 s worst case: boot 25 + rf-acquire 130 + interval 60 + lag 30);
+  the regression test now asserts the four-term arithmetic. The 02:11 P402 abort likely shared
+  this mechanism beneath the guard race (S74 confirms). Third abort email of the day is this one.
+  Also fixed in passing: `test_current_schedule_is_installable_today` went red the morning the
+  campaign legitimately launched (first row in the past ≠ stale) — renamed
+  `…is_not_fully_stale`, asserting the **self-terminator** hasn't passed instead.
+- **The stall deep-read ran the same afternoon (owner pulled it forward) and re-diagnosed the
+  class — DEC-0081.** Three read-only subagents (capture collation / night timeline / HLF +
+  coffee-radar cross-correlation) + main-thread differential against the driver source: the
+  device never re-enumerates, the driver's watchdog and respawns work, and the stalls are
+  **RF-dead episodes** — resets are theater (~17 attempts, 0 fixes), ERR-0005's recreate-fix
+  reads as episode-end coincidence, DEC-0065 vindicated. The first-draft remedy
+  (auto-kill+start) was **rejected by its own differential** — restarts show the same
+  evidence pattern as resets — and replaced with: reset demotion (`RESET_MAX_TRIES` 3→1),
+  driver child-reaping (three stacked zombies captured; the one real process bug),
+  `STALL DIAGNOSIS` / `DATA DROUGHT` self-classification, and the `episodes.log` ledger as
+  the pre-registered LNA-verdict datum (owner reports for ~50–70 m/trees/walls sites).
+- **v2.0.13 / ws.5 shipped same day, mid-H-hold, before the square's first block** (PR #159,
+  merged tip `1530971`): NAS build `BUILD-EXIT=0`, container swap with identical
+  mounts/devices/env + `BIAS_TEE=0`, ws.5 banner + DEC-0031 canary verified live, records in
+  35 s, soak 15/2/0 after the ineffective-reset criterion reframe (FAIL→WARN — a criterion
+  failing on now-expected behavior is the ops#147 item-6 anti-pattern). `:v2.0.13` on Hub;
+  `:latest` holds at v2.0.12 until proven. Monitor deployed + sha-verified; respawn pends the
+  owner's path-scoped-sudo kill (uid-1031 process — the day's one genuinely owner-run step).
+  Tests 185 → 203 (+18: reap, diagnosis/drought, ledger; escalation test re-pinned to the
+  single-hedge policy). CHANGES-FROM-UPSTREAM rows 12–13 (both upstreamable). Dependabot
+  PR #158 (weewx 5.4.0→5.5.0) deliberately left open — no base-platform bump mid-campaign.
+  ROADMAP campaign-B/v2.0.12/USB-reset rows reconciled (DEC-0057, same session).
+
+---
+
+
+## [S72] — 2026-08-10 — DEC-0080: the diode-floor fix is decided — StdCalibrate exact-code zero, config layer
+
+- **DEC-0080 — solar radiation diode-floor correction: option A** (escalated session, per the S71
+  handoff's ask). One exact-window `StdCalibrate` line (`0 if 1.75 < radiation < 1.77`,
+  None-guarded) zeroes the `sr_raw=1` dark-current code; added to `weewx.conf.example` as the
+  versioned, public artifact — the anti-regression mechanism the June dashboard-only fix never
+  had. Option B (almanac elevation-gated service) declined: it also needs a `process_services`
+  live-config edit so it escapes no config fragility, it would bake one station's calibration into
+  the public image, and its dawn/dusk benefit is below the sensor's own resolution — design
+  preserved in the handoff, can ride the #144 rebuild if ever wanted.
+- **NAS apply deliberately deferred to post-GATE 2** (unattended pilot tonight, no dongle
+  recovery, config-typo crash-loop precedent) — apply steps + verification (incl. the `sr_raw=2`
+  check) in `BOOT.md`.
+- **PR #155 merged** (S71 close). **ops#148 closed on the tracker** — S71's commit subject said
+  closed, but the explicit `gh issue close` was missed (CONVENTIONS' `Closes #N` lesson, adjacent
+  form); closed with a pointer at S72 open.
+- S69 + S68c–d rolled to `CHANGELOG-ARCHIVE.md` verbatim (~3-session window). `MANIFEST.md`
+  handoffs row de-counted (a literal "three" had gone stale). Green gates clean on pickup (ruff,
+  185 tests, mypy 39 files).
+
+*(S71, S70 rolled to `CHANGELOG-ARCHIVE.md` verbatim — the ~3-session window.)*
+
+## [S71] — 2026-08-10 — ops#148/#7 closed; ERR-0005 backfilled; solar diode-floor traced and designed
+
+- **ops#148 closed.** `MANIFEST.md`'s `CHANGES-FROM-UPSTREAM.md` row widened to name all 9
+  uncovered files — it already documents each one's provenance (4 vendored forks, 5 original), so
+  this was a one-line widen, not a new row. Verified against the sweep's own bare-filename matching.
+- **DEC-0079 — opted into `.claude/transient-state` (ops#113).** Tracked file created (force-added
+  past the local `.git/info/exclude`, same precedent as `settings.json`), convention documented in
+  `CONVENTIONS.md`. Left empty — no current state meets the motivating shape that isn't already
+  prominent in `BOOT.md`.
+- **`BOOT.md` ordered backlog resequenced:** `#144` (console pressure / `pressure_service.py` field
+  collision) then `ops#141` (HLF archive-directory mount) queued for after GATE 2, each flagged with
+  why it's design work rather than mechanical execution.
+- **ERR-0005 backfilled.** 7 records at `interval=15` inserted into the archive (backed up first:
+  `weewx.sdb.bak-S71-preBackfill-20260810-124656`), daily summary rebuilt, matching InfluxDB points
+  written flagged `backfill=1.0`. **Both machine history APIs failed first** — WU's `v2/pws/history/all`
+  401'd, WeatherLink v2's `v2/historic/{id}` (same credentials `pressure_service.py` uses hourly)
+  returned an empty `{}` with a 200 — neither carries historical-read entitlement on this account.
+  Sourced from a manual WeatherLink/WU website read instead; recorded in `DATA_ERRATA.md` so a future
+  backfill skips straight to that.
+- **Solar radiation diode-floor bias — diagnosed, fix designed, not yet applied.** Owner recalled a
+  prior fix; traced via the owner's own claude.ai search (this repo's git history and archive both
+  start 2026-05-19, so nothing here predates it) to a June 2026 dashboard-only presentation-layer
+  filter. Verified against the *current* dashboard: still correct for live numeric displays, but the
+  24h chart panel (`eh-charts.js`) queries InfluxDB raw with no filter — regressed during the
+  dashboard's July supercard refactor, the second time a per-path filter has been dropped on
+  refactor. Decision: fix at the source here instead of patching the dashboard a third time. Two
+  designs drafted and compared (`StdCalibrate` magnitude-match vs. a `weewx.almanac`-based
+  elevation-gated service); full brief for the next session in
+  [`docs/handoffs/S71-radiation-floor-design.md`](docs/handoffs/S71-radiation-floor-design.md).
+- Green gate re-run clean throughout (185 tests).
+
+---
+## [S70] — 2026-08-10 — v2.0.12 promoted and built; campaign B GO, first launch night scrubbed on a dead VPN
+
+- **Campaign B: GO.** Assessed against DEC-0066's hold: both gates closed on measurement
+  (DEC-0069/0070), campaign A uncontaminated (DEC-0077) — the "instrument trusted" condition is
+  met. The swap-night constraint is moot: the LNA has been out since 08-02, so the launch is a
+  container swap + install, all remote.
+- **Release v2.0.12 promoted** (PR #151): dev → main, `main` = `7b6fd42`. Image delta vs v2.0.11
+  is four baked files (BIAS_TEE env, DEC-0062 redaction, driver stderr drain + ws.4 bump) —
+  observability only, pre-registered as the one-image-for-B plan (DEC-0064).
+- **The arm64 laptop can no longer build this image** — `docker build --platform linux/amd64`
+  dies in tar with `Function not implemented` (ENOSYS under emulation), and the failure hid
+  behind a `| tail` pipeline exit 0 until the log was read (the green-checkmark trap, again).
+  Built **natively on the NAS** instead (v2.0.3 precedent): `9db5c1ddaac3`, verified by an
+  explicit `BUILD-EXIT=0` marker. Hub push deferred (docker save → laptop → push from a home
+  network); `:latest` waits for prod proof.
+- **The 08-09 launch night was scrubbed at 00:58** — the VPN dropped end-to-end (ppp0 gone,
+  route fell back to the foreign LAN's gateway) with the 00:35 first pilot row already passed.
+  The runbook's postpone-24h contingency, exercised as designed: prod untouched, campaign A's
+  script + STOP sentinel still in place, nothing half-deployed. Schedule regenerated +1 day
+  (39 rows, S62's constant-offset method): **pilot 08-11T00:35, square 08-12 → 08-20T00:05**.
+- No stall overnight (blocker 4 still waiting); prod healthy through the NAS build (v2.0.11,
+  Up 4 days).
+- **Deploy executed 08-10 morning, campaign B ARMED.** Campaign A archived (five artifacts →
+  `.campaignA`, including the root-owned STOP sentinel the runbook's list omitted — a tick
+  refuses while it exists); B's `rx_experiment.sh` deployed from merged tip `b7a07e1` and
+  sha-verified (`6a99c949`); container swapped in one nohup'd batch (VPN-drop-safe after the
+  previous night's lesson), `SWAP-EXIT=0`. Verified in the running system per DEC-0046: ws.4
+  banner, `Bias-tee disabled (BIAS_TEE=0)` line, DEC-0062 redaction line, loop-JSON advancing,
+  reception 70% → 57/59% through the swap dip → **70% [OK]** recovered. `install` clean at
+  09:40: baseline snapshotted, **pilot 08-11T00:35, square 08-12 → 08-20T00:05**. Soak with the
+  new expectations: **16 pass / 1 warn (settling reception) / 0 fail**.
+- **DEC-0078 — image builds move to the NAS.** The laptop failure above is deterministic, so the
+  NAS-native path is now the release mechanic, with Hub publication decoupled (`save` → laptop →
+  `push`, only after prod proof — Hub lags prod until pushed, documented in CONSTANTS). CI
+  builds noted as the structural fix, backlogged. `EXPECT_*` flipped to v2.0.12/ws.4 in the same
+  deploy; ROADMAP P2 reconciled (DEC-0057): release item closed, campaign B item now LAUNCHED.
+- **`:v2.0.12` pushed to Docker Hub at S70 close, digest-verified end to end:** the Hub
+  manifest's config digest is the NAS build id (`9db5c1…`) — what the public pulls is provably
+  what prod runs. One recorded blemish: the save→load→push path re-pushed the layers
+  near-uncompressed (283 MB vs ~120 MB typical; same 8 layers, each ~2.2×) — content-identical,
+  harmless, tightening deferred to DEC-0078's CI-build follow-up. `:latest` deliberately still
+  v2.0.11 until the station proves the release (GATE 2). ops#152 closed on the measured green
+  sweep.
+
+---
 ## [S69] — 2026-08-09 — Tier files back under cap (ops#152)
 
 - **BOOT.md 10,617 → 7,557 chars (cap 10,000); MANIFEST.md 4,055 → 3,936 (cap 4,000)** — the

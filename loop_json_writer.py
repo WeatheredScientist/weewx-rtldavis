@@ -3,10 +3,34 @@
 loop_json_writer.py
 Eagle Hunt PWS — expanded LOOP packet JSON writer.
 Writes all real-time fields to /opt/weewx-data/loop-data.txt on every
-LOOP packet (~2.5s for Davis VP2+), and atomically to a second path
-(current.json) that the dashboard fetches first at boot so a first-time
-visitor doesn't see em-dashes (Cold-load Fix B). Both writes carry identical
-content; only the destination path differs. Atomic write via tmp+rename.
+LOOP packet (~2.5s for Davis VP2+), and the same payload to a second path
+(current.json) at a SLOWER, independent cadence. Atomic write via
+tmp+rename on both.
+
+THE TWO PATHS ARE NOT THE SAME KIND OF THING (DEC-0093, S84):
+
+  loop-data.txt is a LIVE FEED. Its dateTime is a liveness signal behind a
+  hard 30 s consumer gate -- the eh-proxy 503s past that and the dashboard
+  reads the 503 as proof the station is down. Never throttle it, and never
+  add "skip the write when nothing changed": on a calm night consecutive
+  payloads are genuinely identical (wind_speed is set unconditionally, 0.0
+  when calm), so suppression reports a healthy station as offline.
+
+  current.json is a COLD-LOAD SNAPSHOT, read once at boot by a first-time
+  visitor and replaced by the polling loop within one tick. Writing it per
+  packet spent ~22,500 renames/day (half this service's total) refreshing a
+  file nobody re-reads. Throttled to current_interval, default 60 s,
+  confirmed by the consumer side in eaglehunt-weather-dashboard#430.
+
+Set [LoopJsonWriter] current_interval = 0 to restore the old
+write-on-every-packet behavior.
+
+DEPLOY (this file is MOUNTED, not baked -- verified S84, DEC-0093):
+  /volume1/docker/weewx-rtldavis/loop_json_writer.py is bind-mounted over
+  the venv copy, and the Dockerfile does NOT COPY this file at all. So an
+  image rebuild is a SILENT NO-OP here; shipping a change means scp'ing
+  this file to the NAS project root and restarting the container. Note the
+  copy in weewx-data/bin/user/ is a decoy -- it is not the mount source.
 
 Fields written (None → omitted, last known value used for sparse fields):
   windSpeed_mph, windGust_mph, windDir
@@ -14,6 +38,7 @@ Fields written (None → omitted, last known value used for sparse fields):
   barometer_inHg, rainRate_inch_per_hour
   radiation_Wpm2, UV, cloudbase_foot
   dateTime
+  barometer_fetch_epoch (#172 — passthrough, NOT cached/TTL'd; see new_loop)
 
 NOTE: Packet is explicitly normalized to US (imperial) units before extraction
 so that output key names (outTemp_F, barometer_inHg, etc.) always reflect
@@ -55,6 +80,20 @@ _BAROMETER_KEY = 'barometer_inHg'
 _BAROMETER_TTL_FACTOR = 2
 _BAROMETER_FETCH_DEFAULT = 3600
 
+# How often current.json is refreshed, INDEPENDENT of loop-data.txt (DEC-0093).
+# current.json is a COLD-LOAD SNAPSHOT: the dashboard fetches it once at boot and
+# the ~2.5 s /loopdata polling loop replaces it within one tick, so a first-time
+# visitor's worst case is a first paint this many seconds stale. Writing it on
+# every packet spent ~22,500 renames/day refreshing a file nobody re-reads.
+# 60 s confirmed by the consumer side (eaglehunt-weather-dashboard#430).
+#
+# loop-data.txt is deliberately NOT throttled. Its dateTime is a LIVENESS signal
+# sitting behind a hard 30 s consumer gate -- the eh-proxy 503s past that and the
+# dashboard reads the 503 as proof the station is down -- so any delay there
+# reports a healthy station as offline (INTERFACES §1). Do not reuse this knob
+# for that path.
+_CURRENT_INTERVAL_DEFAULT = 60
+
 # Fields to capture from each LOOP packet.
 # Tuple: (packet_key, output_key)
 # Packet is converted to US units first, so these mappings are always correct.
@@ -85,6 +124,11 @@ class LoopJsonWriter(StdService):
         fetch_interval = int(config_dict.get('DavisPressure', {}).get(
             'fetch_interval', _BAROMETER_FETCH_DEFAULT))
         self.ttls = {_BAROMETER_KEY: _BAROMETER_TTL_FACTOR * fetch_interval}
+        # current.json cadence (DEC-0093). 0 (or negative) restores the old
+        # write-on-every-packet behavior, which is what shipped S43-S84.
+        self.current_interval = int(cfg.get('current_interval',
+                                            _CURRENT_INTERVAL_DEFAULT))
+        self._current_last = None  # timestamp of last current.json write
         # Cache of last known good values — VP2+ rotates fields across packets
         # so not every field appears in every packet. We keep the most recent
         # non-None value for each field, with the time we saw it, and include it
@@ -96,9 +140,13 @@ class LoopJsonWriter(StdService):
         # be DEBUG too or the noise just moves down a level
         self._expired_calm = set()
         self.bind(weewx.NEW_LOOP_PACKET, self.new_loop)
-        log.info('LoopJsonWriter: writing to %s and %s (cache TTL %d s, %s %d s)'
-                 % (self.path, self.current_path, self.ttl_default,
-                    _BAROMETER_KEY, self.ttls[_BAROMETER_KEY]))
+        log.info('LoopJsonWriter: writing to %s every packet and %s every %s '
+                 '(cache TTL %d s, %s %d s)'
+                 % (self.path, self.current_path,
+                    ('%d s' % self.current_interval)
+                    if self.current_interval > 0 else 'packet',
+                    self.ttl_default, _BAROMETER_KEY,
+                    self.ttls[_BAROMETER_KEY]))
 
     def _ttl(self, out_key):
         """Seconds a cached value for out_key may still be served."""
@@ -170,13 +218,48 @@ class LoopJsonWriter(StdService):
                                 'omitting rather than serving a stale value under a '
                                 'live timestamp; sensor may be failing or rejected'
                                 % (out_key, age, self._ttl(out_key)))
+        # barometer_fetch_epoch (#172) bypasses the cache/TTL machinery on
+        # purpose: barometer_inHg is a WeatherLink-API relay (INTERFACES §1),
+        # and this is the epoch of the last fetch that actually succeeded --
+        # its entire job is to REVEAL staleness, so omitting it for being old
+        # would recreate the exact gap it exists to close. pressure_service
+        # stamps it into every packet once one fetch has succeeded; absent
+        # before then (consumers already treat every field as possibly-missing).
+        fe = pkt.get('barometer_fetch_epoch')
+        if fe is not None:
+            data['barometer_fetch_epoch'] = fe
         data['dateTime'] = pkt.get('dateTime')
 
-        for path in (self.path, self.current_path):
+        # loop-data.txt on EVERY packet -- it carries the liveness signal.
+        # current.json only when its interval has elapsed (DEC-0093). The first
+        # packet of a run always writes it, so a restart has a snapshot
+        # immediately rather than serving whatever the previous run left behind.
+        paths = [self.path]
+        if self._current_due(now):
+            paths.append(self.current_path)
+
+        for path in paths:
             tmp = path + '.tmp'
             try:
                 with open(tmp, 'w') as f:
                     json.dump(data, f)
                 os.replace(tmp, path)
+                if path == self.current_path:
+                    # only on success -- a failed write retries next packet
+                    self._current_last = now
             except Exception as e:
                 log.error('LoopJsonWriter: failed to write %s: %s' % (path, e))
+
+    def _current_due(self, now):
+        """True when current.json should be refreshed this packet.
+
+        Writes when never written this run, when throttling is disabled, or
+        when the interval has elapsed. A NEGATIVE elapsed also writes: packet
+        clocks can step backwards (a corrected station clock, or the wall-clock
+        fallback in new_loop), and treating that as 'not yet due' would stall
+        the snapshot until real time caught up.
+        """
+        if self.current_interval <= 0 or self._current_last is None:
+            return True
+        elapsed = now - self._current_last
+        return not (0 <= elapsed < self.current_interval)

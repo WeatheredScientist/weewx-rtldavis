@@ -35,7 +35,15 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: end-of-file-fixer
+        # patch/ holds unified diffs of THIRD-PARTY source. A diff's context
+        # lines reproduce the original byte-for-byte -- upstream's own trailing
+        # whitespace included -- and blank context lines are a single space, not
+        # an empty line. Both hooks rewrite exactly those bytes, and a rewritten
+        # patch stops applying: measured S116, 1 of 5 hunks failed after one
+        # commit attempt (DEC-0135).
+        exclude: '^patch/'
       - id: trailing-whitespace
+        exclude: '^patch/'
 
   # --- Secret / secret-adjacent scan (the public-repo gate, DEC-0012) ---
   - repo: local

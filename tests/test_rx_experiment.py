@@ -18,12 +18,17 @@ dispatch, so what is under test is the deployed file, not a copy of its logic.
 
 Run:  python -m pytest tests/test_rx_experiment.py
 """
+import datetime
 import hashlib
 import os
 import re
 import subprocess
 import textwrap
+import time
+import zoneinfo
 from pathlib import Path
+
+import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 SCRIPT = REPO / "ops" / "rx_experiment.sh"
@@ -116,10 +121,59 @@ def test_refuses_when_duplicate_cmd_lines(tmp_path):
 
 # --- the pre-registration itself is testable ---------------------------------
 
-def _schedule_rows():
-    src = SCRIPT.read_text()
+def _schedule_rows(src: str | None = None):
+    src = SCRIPT.read_text() if src is None else src
     block = re.search(r'^SCHEDULE="\n(.*?)^"', src, re.S | re.M).group(1)
-    return [tuple(row.split("|")) for row in block.strip().split("\n")]
+    return [tuple(row.split("|")) for row in block.strip().split("\n") if row]
+
+
+def _schedule_state(rows, now: str) -> str:
+    """The shipped block's three states (DEC-0096): 'stand-down' (empty — no
+    campaign scheduled, the valid between-campaigns form), 'live' (terminator
+    still ahead), 'stale' (fully elapsed — regenerate before the next launch)."""
+    if not rows:
+        return "stand-down"
+    last_time, last_arm = rows[-1]
+    assert last_arm == "BASELINE", "schedule must end with the self-terminator"
+    return "live" if last_time > now else "stale"
+
+
+def _require_campaign():
+    """Structural tests assert the shape of a SCHEDULED campaign; in the
+    stand-down state there is nothing to assert (and install refuses — tested
+    in the stand-down section below)."""
+    if not _schedule_rows():
+        pytest.skip("stand-down: no campaign scheduled (DEC-0096)")
+
+
+def _arms_in_schedule():
+    return {arm for _, arm in _schedule_rows()}
+
+
+def _require_campaign_b():
+    """Campaign B's shape: a P* pilot, an H hold, and a 4-arm 6h Latin square.
+
+    S107: the SCHEDULE block rotates between campaigns, so these assertions are
+    guarded on the loaded campaign rather than deleted when another one is in.
+    Deleting them would mean the next B-shaped campaign ships with no structural
+    check at all — and the balance they verify IS the control for diurnal drift,
+    which nothing at runtime would notice the loss of.
+
+    S111: gated on "H" alone, not "has any P* row" — campaign D is a pilot-only
+    schedule (P* rows, no hold, no square) and would otherwise misfire these
+    B-shape assertions (wrong pilot-row count, no hold to find, no square to
+    balance). A true campaign-B-shape always carries the hold; a pilot-only
+    campaign never does."""
+    _require_campaign()
+    if "H" not in _arms_in_schedule():
+        pytest.skip("loaded schedule is not campaign-B-shaped (no hold row)")
+
+
+def _require_campaign_c():
+    """Campaign C's shape: two arms, 90-minute blocks, one night."""
+    _require_campaign()
+    if _arms_in_schedule() != {"A", "B", "BASELINE"}:
+        pytest.skip("loaded schedule is not campaign-C-shaped (arms != {A, B})")
 
 
 def test_schedule_is_a_balanced_latin_square():
@@ -129,6 +183,7 @@ def test_schedule_is_a_balanced_latin_square():
     runtime would notice. Pilot (P*) and hold (H) rows are campaign B's
     calibration prefix, not square blocks — they are excluded here and asserted
     by their own tests below."""
+    _require_campaign_b()
     rows = [r for r in _schedule_rows() if r[1] in {"A", "B", "C", "D"}]
     assert len(rows) == 32, f"expected 32 blocks, got {len(rows)}"
 
@@ -149,6 +204,7 @@ def test_schedule_is_a_balanced_latin_square():
 def test_schedule_self_terminates_to_baseline():
     """If everyone forgets this is running it must end on prod config, not an
     experimental arm."""
+    _require_campaign()
     assert _schedule_rows()[-1][1] == "BASELINE"
 
 
@@ -169,6 +225,7 @@ def test_pilot_runs_high_to_low_before_the_morning_notch():
     45-min cadence; and (c) finish before 06:00, clear of the site's hour-07
     reception notch (BACKLOG §Durable RF findings) — pilot numbers are bounding
     input and must not be depressed by a known site artifact."""
+    _require_campaign_b()
     rows = _schedule_rows()
     pilot = [r for r in rows if r[1].startswith("P")]
     assert len(pilot) == 5, f"expected 5 pilot rows, got {len(pilot)}"
@@ -198,6 +255,7 @@ def test_hold_follows_pilot_and_matches_control_settings():
     under its own tag and can never contaminate arm A's square samples, and
     (c) hand over to the square's first block at the NEXT day's 00:05 (the S57
     clean-day-boundary lesson)."""
+    _require_campaign_b()
     rows = _schedule_rows()
     holds = [(i, r) for i, r in enumerate(rows) if r[1] == "H"]
     assert len(holds) == 1, f"expected exactly one hold row, got {holds}"
@@ -327,6 +385,7 @@ def _first_row_time() -> str:
 
 def test_schedule_not_started_when_first_row_is_future():
     """The normal case: a schedule whose first row is ahead of now installs."""
+    _require_campaign()
     first = _first_row_time()
     before = first[:-1] + str(int(first[-1]) - 1) if first[-1] != "0" else "2000-01-01T00:00"
     assert _call_schedule_started(before).returncode == 1
@@ -334,6 +393,7 @@ def test_schedule_not_started_when_first_row_is_future():
 
 def test_schedule_started_when_first_row_has_passed():
     """The trap: first row in the past means we would join mid-flight."""
+    _require_campaign()
     assert _call_schedule_started("2099-01-01T00:00").returncode == 0
 
 
@@ -361,15 +421,773 @@ def test_current_schedule_is_not_fully_stale():
     all 9 days of it — conflating "campaign in flight" with "schedule stale."
     In flight (first row past, terminator future) is exactly the state the
     DEC-0066 refusal exists to protect; only a fully-elapsed window is stale.
+
+    S88 (DEC-0096): an EMPTY block is the deliberate between-campaigns
+    stand-down state and passes; the classification lives in _schedule_state
+    so the stale branch stays positively controlled in the section below.
     """
-    import datetime
-    now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M")
-    src = SCRIPT.read_text()
-    body = re.search(r'SCHEDULE="\n(.*?)"', src, re.S).group(1)
-    rows = [ln for ln in body.strip().split("\n") if ln]
-    last_time, last_arm = rows[-1].split("|")
-    assert last_arm == "BASELINE", "schedule must end with the self-terminator"
-    assert last_time > now, (
-        f"shipped SCHEDULE is fully elapsed (terminator {last_time} < now {now}) "
-        f"-- regenerate it before the next launch"
+    rows = _schedule_rows()
+    # S112: the SCHEDULE contract is prod-host local time (ET), and the script
+    # compares against the prod host's own clock -- but this test used the
+    # RUNNER's naive clock, so on CI's UTC runners it fired 4-5 h before the
+    # terminator actually passed (first bit PR #298, mid-Campaign-D). Compare
+    # in the schedule's own timezone, not whoever happens to run the test.
+    tz = zoneinfo.ZoneInfo("America/New_York")
+    now = datetime.datetime.now(tz).strftime("%Y-%m-%dT%H:%M")
+    state = _schedule_state(rows, now)
+    assert state != "stale", (
+        f"shipped SCHEDULE is fully elapsed (terminator {rows[-1][0]} < now {now}) "
+        f"-- empty it (stand-down, DEC-0096) or regenerate it for the next launch"
     )
+
+
+# ── Stand-down: the between-campaigns state (S88, DEC-0096) ──────────────────
+# Once a campaign's terminator passes, the staleness guard above goes red on
+# EVERY pull request (tests is a required check on dev and main) until the
+# block is regenerated -- and between campaigns there is nothing honest to
+# regenerate it to. The stand-down state is an EMPTY block: not-started to
+# schedule_started(), NONE to due_arm(), refused by install, skipped by the
+# structural tests, green to the staleness guard. A stale NON-empty schedule
+# still fails exactly as before -- _schedule_state's stale branch is the
+# positive control (DEC-0045).
+
+def test_schedule_state_classifies_all_three_states():
+    assert _schedule_state([], "2026-01-01T00:00") == "stand-down"
+    live = [("2026-01-01T00:05", "A"), ("2026-01-02T00:05", "BASELINE")]
+    assert _schedule_state(live, "2026-01-01T12:00") == "live"
+    # positive control: fully elapsed must read STALE, never stand-down --
+    # the gate keys on emptiness alone, so age can never slip through it.
+    stale = [("2020-01-01T00:05", "A"), ("2020-01-02T00:05", "BASELINE")]
+    assert _schedule_state(stale, "2026-01-01T00:00") == "stale"
+
+
+def _empty_schedule_script(tmp_path) -> Path:
+    """The real script with its SCHEDULE block emptied -- byte-for-byte the
+    state a post-campaign stand-down commit ships."""
+    src = SCRIPT.read_text()
+    src, n = re.subn(r'^SCHEDULE="\n.*?^"', 'SCHEDULE="\n"', src,
+                     flags=re.S | re.M)
+    assert n == 1, "could not find the SCHEDULE block to empty"
+    script = tmp_path / "rx_experiment.sh"
+    script.write_text(src)
+    script.chmod(0o755)
+    return script
+
+
+def test_empty_schedule_rows_parse_as_empty(tmp_path):
+    """The real parser on the stand-down form is [] -- not [('',)] -- so every
+    emptiness gate keys on the same parse the structural tests use."""
+    script = _empty_schedule_script(tmp_path)
+    assert _schedule_rows(script.read_text()) == []
+
+
+def test_stand_down_reads_as_not_started_even_in_2099(tmp_path):
+    script = _empty_schedule_script(tmp_path)
+    prog = (f'source <(sed "/^# ── Modes/,\\$d" {script}); '
+            f'schedule_started "2099-01-01T00:00"')
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+    assert r.returncode == 1
+
+
+def test_stand_down_due_arm_is_none(tmp_path):
+    script = _empty_schedule_script(tmp_path)
+    prog = f'source <(sed "/^# ── Modes/,\\$d" {script}); due_arm'
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+    assert r.stdout.strip() == "NONE"
+
+
+def test_install_refuses_when_no_campaign_scheduled(tmp_path):
+    """End-to-end on the real script text: stand-down must refuse install
+    loudly, never snapshot a baseline for a campaign that would never tick."""
+    script = _empty_schedule_script(tmp_path)
+    prog = f'BASE_DIR={tmp_path} bash {script} install'
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+    assert r.returncode == 1
+    out = r.stdout + r.stderr
+    assert "REFUSING to install" in out
+    assert "no campaign scheduled" in out
+
+
+# ── RF-dead pause/resume (S79) ────────────────────────────────────────────────
+# The guard's 30-min-mean reception floor used to go straight to trip_abort()
+# (sticky STOP, revert to baseline, email) for every cause. That is still
+# correct for a bad config write or an unhealthy post-swap check (tick's own
+# abort calls, untested end-to-end here same as before this change -- they need
+# a real docker + a real health_ok timing loop, out of scope for a fast unit
+# suite). RF-dead reception dips now PAUSE instead: no config/container touch,
+# auto-clears on weewx_monitor.py's own RECOVERY line, escalates to the
+# unchanged trip_abort() only past a ceiling with no recovery.
+
+BASELINE_FIXTURE = FIXTURE.replace("-gain 372", "-gain 207")
+assert BASELINE_FIXTURE != FIXTURE, "fixture must actually differ from the live config"
+
+
+def _rx_base(tmp_path):
+    """A minimal installed campaign: baseline snapshotted, arm A live for an
+    hour (clear of SETTLE_SECS), ready for `guard` to evaluate reception."""
+    conf = tmp_path / "weewx-data" / "weewx.conf"
+    conf.parent.mkdir(parents=True)
+    conf.write_text(FIXTURE)
+    baseline = tmp_path / "weewx.conf.rx-baseline"
+    baseline.write_text(BASELINE_FIXTURE)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    state = tmp_path / "rx_experiment.state"
+    state.write_text(f"A|{int(time.time()) - 3600}|2026-01-01 00:00:00\n")
+    return conf, baseline, logs
+
+
+def _call_guard(tmp_path):
+    env = dict(os.environ, RX_BASE=str(tmp_path))
+    return subprocess.run(["bash", str(SCRIPT), "guard"], capture_output=True, text=True, env=env)
+
+
+def _reception_lines(pct: int, n: int = 6) -> str:
+    now = datetime.datetime.now()
+    return "\n".join(
+        f"{(now - datetime.timedelta(minutes=5 * (n - i))).strftime('%Y-%m-%d %H:%M:%S')} "
+        f"RECEPTION: {pct}% avg over last 5 windows [LOW] (bad windows: {i})"
+        for i in range(n)
+    ) + "\n"
+
+
+def test_guard_pauses_instead_of_aborting_on_reception_floor(tmp_path):
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30))
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), "should pause, not silently do nothing"
+    assert not (tmp_path / "rx_experiment.STOP").exists(), "must not hard-abort on first trip"
+    assert conf.read_text() == FIXTURE, "a pause must not touch the live config"
+    xlog = (logs / "rx_experiment.log").read_text()
+    assert "PAUSE:" in xlog and "arm A" in xlog
+
+
+def test_guard_does_nothing_when_reception_is_healthy(tmp_path):
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log").write_text(_reception_lines(75))
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists()
+    assert not (tmp_path / "rx_experiment.STOP").exists()
+    assert conf.read_text() == FIXTURE
+
+
+def test_guard_resumes_when_monitor_logs_recovery(tmp_path):
+    conf, baseline, logs = _rx_base(tmp_path)
+    pause_started = datetime.datetime.now() - datetime.timedelta(minutes=5)
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(pause_started.timestamp())}|{pause_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    recovery_time = datetime.datetime.now() - datetime.timedelta(minutes=1)
+    (logs / "weewx_monitor.log").write_text(
+        f"{recovery_time.strftime('%Y-%m-%d %H:%M:%S')} RECEPTION RECOVERY: 62% avg after 9min\n"
+    )
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), "recovery must clear the pause"
+    assert not (tmp_path / "rx_experiment.STOP").exists()
+    assert conf.read_text() == FIXTURE, "resume must not touch config either"
+    assert "RESUME:" in (logs / "rx_experiment.log").read_text()
+
+
+def test_guard_does_not_resume_on_a_recovery_line_before_the_pause_started(tmp_path):
+    """The recovery must be NEWER than the pause, or a stale RECOVERY line from
+    a previous, already-handled episode could clear a pause that never actually
+    recovered."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    pause_started = datetime.datetime.now() - datetime.timedelta(minutes=5)
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(pause_started.timestamp())}|{pause_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    stale_recovery = pause_started - datetime.timedelta(minutes=30)
+    (logs / "weewx_monitor.log").write_text(
+        f"{stale_recovery.strftime('%Y-%m-%d %H:%M:%S')} RECEPTION RECOVERY: 62% avg after 9min\n"
+    )
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), "a stale recovery must not clear a live pause"
+
+
+def test_guard_resumes_from_a_periodic_ok_line_even_without_a_recovery_line(tmp_path):
+    """End-to-end version of the 2026-08-14 incident fix: reception reads
+    healthy on the monitor's ordinary periodic line, no ALERT/RECOVERY pair
+    ever fires, and the guard must still auto-resume rather than sit paused
+    until the 120-min ceiling escalates to a needless hard abort."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    pause_started = datetime.datetime.now() - datetime.timedelta(minutes=30)
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(pause_started.timestamp())}|{pause_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    ok_time = datetime.datetime.now() - datetime.timedelta(minutes=1)
+    (logs / "weewx_monitor.log").write_text(
+        f"{ok_time.strftime('%Y-%m-%d %H:%M:%S')} RECEPTION: 71% avg over last 5 windows [OK] "
+        "(bad windows: 0)\n"
+    )
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), "a healthy periodic read must resume"
+    assert not (tmp_path / "rx_experiment.STOP").exists()
+    assert "RESUME:" in (logs / "rx_experiment.log").read_text()
+
+
+def test_guard_escalates_to_full_abort_past_the_ceiling(tmp_path):
+    conf, baseline, logs = _rx_base(tmp_path)
+    pause_started = datetime.datetime.now() - datetime.timedelta(seconds=7300)  # > 7200s ceiling
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(pause_started.timestamp())}|{pause_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    (logs / "weewx_monitor.log").write_text("")  # no recovery ever logged
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 1
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), "escalation must clear the pause marker"
+    stop = tmp_path / "rx_experiment.STOP"
+    assert stop.exists(), "must fall through to the real sticky abort"
+    assert "exceeded" in stop.read_text() and "120min" in stop.read_text()
+    assert conf.read_text() == baseline.read_text(), "escalation restores baseline like any other abort"
+
+
+def test_guard_ignores_pause_when_stop_is_already_present(tmp_path):
+    """STOP still short-circuits before any pause logic runs -- a manual/escalated
+    halt is never silently reinterpreted as an ordinary pause."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (tmp_path / "rx_experiment.STOP").write_text("2026-01-01 00:00:00 some earlier abort\n")
+    (tmp_path / "rx_experiment.PAUSE").write_text(f"{int(time.time())}|2026-01-01 00:00:00\n")
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), "STOP exits before the pause branch is reached"
+
+
+# --- recovered_since() in isolation -------------------------------------------
+
+def _call_recovered_since(monlog: Path, since: str):
+    prog = (
+        f'source <(sed "/^# ── Modes/,\\$d" {SCRIPT}); '
+        f'MONLOG={monlog}; recovered_since "{since}"'
+    )
+    return subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+
+
+def test_recovered_since_true_when_recovery_line_is_after_pause_start(tmp_path):
+    mon = tmp_path / "mon.log"
+    mon.write_text("2026-08-13 01:51:33 RECEPTION RECOVERY: 62% avg after 9min\n")
+    assert _call_recovered_since(mon, "2026-08-13 01:40:00").returncode == 0
+
+
+def test_recovered_since_false_when_recovery_line_is_before_pause_start(tmp_path):
+    mon = tmp_path / "mon.log"
+    mon.write_text("2026-08-13 01:51:33 RECEPTION RECOVERY: 62% avg after 9min\n")
+    assert _call_recovered_since(mon, "2026-08-13 02:00:00").returncode != 0
+
+
+def test_recovered_since_true_from_a_periodic_ok_line_even_without_a_recovery_line(tmp_path):
+    """The actual 2026-08-14 incident, reproduced: a healthy periodic [OK] read
+    with no RECOVERY line at all (because reception never dropped low enough
+    again to re-trigger a fresh ALERT) must still count as recovered -- this
+    exact fixture used to assert the opposite, which is why the pause rode the
+    full 120-min ceiling into a needless hard abort that night.
+    """
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 01:51:33 RECEPTION: 62% avg over last 5 windows [OK] (bad windows: 0)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode == 0
+
+
+def test_recovered_since_false_when_periodic_line_is_below_the_pause_floor(tmp_path):
+    """40% is below ABORT_PCT (50) — still paused. (S82 renamed this from
+    'low_not_ok': the resume criterion is now the pause floor itself, not the
+    monitor's [OK] tag, so what keeps this red is 40 < 50, not the [LOW] tag.)"""
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 01:51:33 RECEPTION: 40% avg over last 5 windows [LOW] (bad windows: 3)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
+
+
+def test_recovered_since_false_when_only_ok_line_is_stale_before_pause(tmp_path):
+    """An [OK] read that predates the pause is exactly as stale as a predating
+    RECOVERY line (already covered above) -- it must not clear a pause that
+    started after the station was already fine and has said nothing since."""
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 00:30:00 RECEPTION: 70% avg over last 5 windows [OK] (bad windows: 0)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
+
+
+def test_recovered_since_false_when_monlog_has_neither_line_type(tmp_path):
+    mon = tmp_path / "mon.log"
+    mon.write_text("")
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
+
+
+# ── S82 state-machine audit fixes ─────────────────────────────────────────────
+# Five defects from the S82 audit of this script's guard/tick/abort/pause/resume
+# machine, each with its regression test: (1) the resume criterion was stricter
+# than the pause floor (a [50,60) trap band that rode the ceiling into a
+# needless abort); (2) recovered_since() and the guard's floor mean read only
+# the live monitor log, which rotates at 00:05 -- the exact swap minute;
+# (3) a scheduled swap force-cleared an active pause and swapped INTO the
+# episode, converting the soft pause back into the hard abort; (4) the guard
+# never stood down after the BASELINE self-terminator; (5) tick/guard had no
+# mutual exclusion although a full-budget health_ok outlives the 5-min cron
+# period (both interleavings are in the 2026-08-11 02:05:03 log).
+
+
+def test_recovered_since_true_at_the_pause_floor_even_when_tagged_low(tmp_path):
+    """The S82 flip: 55% is >= ABORT_PCT (50), so a pause must end -- even
+    though the monitor tags anything under 60% [LOW]. Under the old
+    [OK]-required rule this exact fixture stayed paused and would have ridden
+    the 120-min ceiling into a needless abort, the DEC-0089 failure one band
+    lower. Reception genuinely sat in this band on 08-13/14 (52-58% reads)."""
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 01:51:33 RECEPTION: 55% avg over last 5 windows [LOW] (bad windows: 2)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode == 0
+
+
+def test_recovered_since_false_just_below_the_pause_floor(tmp_path):
+    """Boundary: 49 < 50 stays paused. Entry and exit share ABORT_PCT exactly."""
+    mon = tmp_path / "mon.log"
+    mon.write_text(
+        "2026-08-13 01:51:33 RECEPTION: 49% avg over last 5 windows [LOW] (bad windows: 2)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode != 0
+
+
+def test_recovered_since_reads_the_rotated_monitor_log(tmp_path):
+    """weewx_monitor.log rotates daily at 00:05 -- the exact minute of every
+    swap slot. A recovery that landed just before rotation lives in .log.1;
+    the single-file read went blind on it (harvest() and soak_check.sh both
+    already read the pair; recovered_since() had not)."""
+    mon = tmp_path / "mon.log"
+    mon.write_text("")  # fresh post-rotation file, nothing in it yet
+    (tmp_path / "mon.log.1").write_text(
+        "2026-08-13 01:51:33 RECEPTION: 71% avg over last 5 windows [OK] (bad windows: 0)\n"
+    )
+    assert _call_recovered_since(mon, "2026-08-13 01:00:00").returncode == 0
+
+
+def test_guard_floor_reads_the_rotated_monitor_log(tmp_path):
+    """The pause floor needs ABORT_SAMPLES periodic lines; after rotation the
+    live log holds fewer than six for ~30 minutes -- nightly, at the hour the
+    episode cluster lives. Three lines either side of the rotation must still
+    add up to a quorum (pre-S82 this fixture produced no pause: n=3 < 6)."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log.1").write_text(_reception_lines(30, n=3))
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30, n=3))
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), \
+        "six low lines split across the rotation must still trip the floor"
+
+
+def _fake_date(tmp_path, env, now: str):
+    """Prepend a PATH shim so date(1) always answers NOW (the install-test
+    trick, reused). Only for paths that never reach acquire_lock's arithmetic."""
+    fake = tmp_path / "bin"
+    fake.mkdir(exist_ok=True)
+    (fake / "date").write_text(f'#!/bin/sh\necho "{now}"\n')
+    (fake / "date").chmod(0o755)
+    env["PATH"] = f"{fake}:{env['PATH']}"
+    return env
+
+
+def _call_tick(tmp_path, fake_now=None):
+    env = dict(os.environ, RX_BASE=str(tmp_path))
+    if fake_now:
+        env = _fake_date(tmp_path, env, fake_now)
+    return subprocess.run(["bash", str(SCRIPT), "tick"],
+                          capture_output=True, text=True, env=env)
+
+
+def test_tick_defers_swap_while_paused(tmp_path):
+    """A due swap must WAIT out an active reception pause, not clear it and
+    swap into the episode: health_ok waits on archive records, records stop
+    during RF-dead episodes (DEC-0069/0077), so the old supersede rule
+    converted DEC-0087's soft pause straight back into the hard sticky abort.
+    Schedule-agnostic: pins now to the last real arm row, whatever the
+    regenerated dates say."""
+    _require_campaign()
+    conf, baseline, logs = _rx_base(tmp_path)
+    when, arm = _schedule_rows()[-2]          # last non-BASELINE row
+    assert arm != "BASELINE"
+    have = "H" if arm != "H" else "A"
+    (tmp_path / "rx_experiment.state").write_text(
+        f"{have}|{int(time.time()) - 3600}|2026-01-01 00:00:00\n")
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(time.time()) - 300}|2026-01-01 00:00:00\n")
+    sha_before = _sha(conf)
+
+    r = _call_tick(tmp_path, fake_now=when)
+    assert r.returncode == 0
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), "the pause must survive the tick"
+    assert _sha(conf) == sha_before, "a deferred swap must not touch the config"
+    state = (tmp_path / "rx_experiment.state").read_text()
+    assert state.startswith(f"{have}|"), "a deferred swap must not advance the state"
+    xlog = (logs / "rx_experiment.log").read_text()
+    assert "deferred" in xlog and f"-> {arm}" in xlog
+
+
+def test_tick_baseline_supersedes_pause(tmp_path):
+    """The self-terminator is exempt from deferral: ending on prod config must
+    never wait on RF (safety property #5), and it runs no health check an
+    episode could fail. A pause present at campaign end is cleared, baseline
+    restored, completion recorded."""
+    _require_campaign()
+    conf, baseline, logs = _rx_base(tmp_path)
+    (tmp_path / "rx_experiment.PAUSE").write_text(
+        f"{int(time.time()) - 300}|2026-01-01 00:00:00\n")
+
+    r = _call_tick(tmp_path, fake_now="2099-01-01T00:00")
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), \
+        "BASELINE must clear the pause, not defer to it"
+    assert conf.read_text() == baseline.read_text(), "prod must end on the baseline config"
+    assert (tmp_path / "rx_experiment.state").read_text().startswith("BASELINE|")
+    xlog = (logs / "rx_experiment.log").read_text()
+    assert "CAMPAIGN COMPLETE" in xlog
+
+
+def test_guard_stands_down_after_baseline_self_termination(tmp_path):
+    """After the campaign self-terminates the guard must go quiet. It used to
+    stay armed forever (the scheduler entries deliberately persist between
+    campaigns), so the first long episode after a clean campaign end would
+    pause, ride the ceiling, restart prod for nothing and email 'campaign
+    halted' about a campaign that no longer existed."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (tmp_path / "rx_experiment.state").write_text(
+        f"BASELINE|{int(time.time()) - 3600}|2026-01-01 00:00:00\n")
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30))  # would pause if armed
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), \
+        "no pause after self-termination -- the campaign is over"
+    assert not (tmp_path / "rx_experiment.STOP").exists()
+
+
+def test_second_instance_skips_while_lock_is_held_by_a_live_process(tmp_path):
+    """Mutual exclusion: while a live holder works, the next pass skips --
+    and must NOT dismantle the holder's lock on its way out."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30))  # would pause if it ran
+    lock = tmp_path / "rx_experiment.lock"
+    lock.mkdir()
+    (lock / "pid").write_text(str(os.getpid()))  # this test process: alive
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    assert not (tmp_path / "rx_experiment.PAUSE").exists(), "a skipped pass must do nothing"
+    assert lock.exists(), "a live holder's lock must survive the skipped pass"
+    assert "holds the lock" in (logs / "rx_experiment.log").read_text()
+
+
+def test_stale_lock_from_a_dead_holder_is_broken(tmp_path):
+    """A crashed holder must not wedge the campaign: a lock whose pid is dead
+    is broken loudly and the pass proceeds (a silently-skipped tick forever
+    would be the due_arm() no-op trap wearing a new hat)."""
+    conf, baseline, logs = _rx_base(tmp_path)
+    (logs / "weewx_monitor.log").write_text(_reception_lines(30))
+    proc = subprocess.Popen(["true"])
+    proc.wait()                                # reaped: pid is dead
+    lock = tmp_path / "rx_experiment.lock"
+    lock.mkdir()
+    (lock / "pid").write_text(str(proc.pid))
+
+    r = _call_guard(tmp_path)
+    assert r.returncode == 0
+    xlog = (logs / "rx_experiment.log").read_text()
+    assert "breaking stale lock" in xlog
+    assert (tmp_path / "rx_experiment.PAUSE").exists(), \
+        "after breaking the stale lock the pass must actually run"
+    assert not lock.exists(), "the pass must release the lock it took over"
+
+
+# ── preflight and the marvin host profile (S107) ──────────────────────────────
+# The host move (DEC-0118) gave this script two genuinely different ways to
+# restart weewx, and three ways to run into production and fail SILENTLY hours
+# later, unattended, at night. preflight is the gate that turns each of those
+# into a refusal while a human is still watching.
+
+
+def _preflight_base(tmp_path, monlog_age_s=0, with_monlog=True):
+    """A host that would pass preflight, so each test can break exactly one thing."""
+    conf = tmp_path / "weewx-data" / "weewx.conf"
+    conf.parent.mkdir(parents=True)
+    conf.write_text(FIXTURE)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "weewx.log").write_text("2026-08-30 07:20:50 Added record\n")
+    if with_monlog:
+        mon = logs / "weewx_monitor.log"
+        mon.write_text(_reception_lines(75))
+        if monlog_age_s:
+            old = time.time() - monlog_age_s
+            os.utime(mon, (old, old))
+    return conf, logs
+
+
+def _call_preflight(tmp_path, **env_extra):
+    env = dict(os.environ, RX_BASE=str(tmp_path), **env_extra)
+    return subprocess.run(["bash", str(SCRIPT), "preflight"],
+                          capture_output=True, text=True, env=env)
+
+
+def test_preflight_passes_on_a_sane_systemd_host(tmp_path):
+    _preflight_base(tmp_path)
+    r = _call_preflight(tmp_path, RX_RESTART_MODE="systemd", RX_RESTART_UNIT="cron.service")
+    # cron.service may or may not exist in CI; the assertion is that a systemd
+    # host with a live monitor gets past the mode/monitor checks specifically.
+    assert "PREFLIGHT FAIL: RX_RESTART_MODE" not in r.stderr
+    assert "no monitor log" not in r.stderr
+    assert "stale" not in r.stderr
+
+
+def test_preflight_refuses_a_missing_monitor_log(tmp_path):
+    """The abort tripwire and the pause guard BOTH read MONLOG. Without it every
+    reception read is empty, so the campaign never aborts however bad reception
+    gets -- and looks healthy the whole time. That is ops#233's shape."""
+    _preflight_base(tmp_path, with_monlog=False)
+    r = _call_preflight(tmp_path)
+    assert r.returncode != 0
+    assert "no monitor log" in r.stderr
+    assert "aborts however bad reception gets" in r.stderr
+
+
+def test_preflight_refuses_a_stale_monitor_log(tmp_path):
+    """A monitor that is running but not writing is the exact ops#233 failure:
+    the file exists, every read succeeds, every answer is about a dead file."""
+    _preflight_base(tmp_path, monlog_age_s=4000)
+    r = _call_preflight(tmp_path)
+    assert r.returncode != 0
+    assert "stale" in r.stderr
+
+
+def test_preflight_accepts_a_fresh_monitor_log(tmp_path):
+    _preflight_base(tmp_path, monlog_age_s=60)
+    r = _call_preflight(tmp_path)
+    assert "stale" not in r.stderr
+
+
+def test_preflight_rejects_an_unknown_restart_mode(tmp_path):
+    _preflight_base(tmp_path)
+    r = _call_preflight(tmp_path, RX_RESTART_MODE="reboot-the-nas")
+    assert r.returncode != 0
+    assert "RX_RESTART_MODE must be" in r.stderr
+
+
+def test_preflight_notes_a_pre_existing_baseline_snapshot(tmp_path):
+    """A snapshot taken on a PREVIOUS host restores that host's config. That is a
+    regression, not a rollback, and marvin is carrying exactly such a file."""
+    _preflight_base(tmp_path)
+    (tmp_path / "weewx.conf.rx-baseline").write_text(BASELINE_FIXTURE)
+    r = _call_preflight(tmp_path)
+    assert "baseline snapshot already present" in r.stderr
+    assert "regression" in r.stderr
+
+
+def test_systemd_mode_restarts_the_unit_not_the_container(tmp_path):
+    """The bug this prevents takes production DOWN. On marvin the unit runs
+    `docker run --rm`, so `docker kill` DESTROYS the container and the paired
+    `docker start` has nothing to start. Asserted via DRY_RUN so no restart of
+    any kind actually happens."""
+    _preflight_base(tmp_path)
+    env = dict(os.environ, RX_BASE=str(tmp_path), DRY_RUN="1",
+               RX_RESTART_MODE="systemd", RX_RESTART_UNIT="weewx.service")
+    r = subprocess.run(
+        ["bash", "-c",
+         f'source {SCRIPT} 2>/dev/null; restart_container'],
+        capture_output=True, text=True, env=env)
+    out = r.stdout + r.stderr
+    assert "systemctl restart weewx.service" in out
+    assert "docker kill" not in out, "must not use the NAS kill/start pair on marvin"
+
+
+def test_docker_mode_remains_the_default_for_existing_nas_installs(tmp_path):
+    """This edit must not change what an existing NAS install does."""
+    _preflight_base(tmp_path)
+    env = dict(os.environ, RX_BASE=str(tmp_path), DRY_RUN="1")
+    r = subprocess.run(
+        ["bash", "-c", f'source {SCRIPT} 2>/dev/null; restart_container'],
+        capture_output=True, text=True, env=env)
+    out = r.stdout + r.stderr
+    assert "docker kill" in out and "start" in out
+    assert "systemctl" not in out
+
+
+# ── campaign C structural checks (S107) ───────────────────────────────────────
+# Campaign C is gain 372 (A) vs 496 (B) at marvin's RF position: one night, two
+# arms, 90-minute blocks. Its balance is not a Latin square, so it needs its own
+# machine check — the same reason campaign B has one. The order must balance TWO
+# things at once, and the second is the one that nearly went wrong.
+
+NOTCH_HOURS = {7, 8, 9, 19}   # BACKLOG §Durable RF findings (S58); 07-09 deepens
+                              # to 2-3.5 pts down during a campaign — LARGER than
+                              # the 2.0-pt effect campaign C is trying to resolve.
+BLOCK_MIN = 90
+
+
+def _c_blocks():
+    rows = [r for r in _schedule_rows() if r[1] in {"A", "B"}]
+    return [(datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M"), arm) for t, arm in rows]
+
+
+def _notch_exposure(blocks):
+    """Block-equivalents of notch-hour exposure carried by each arm.
+
+    Sampled at 15-minute resolution because a block straddles hours; whole-hour
+    attribution would call block 8 either fully notched or not at all."""
+    out = {"A": 0.0, "B": 0.0}
+    step, n = 15, BLOCK_MIN // 15
+    for start, arm in blocks:
+        hit = sum(1 for i in range(n)
+                  if (start + datetime.timedelta(minutes=i * step)).hour in NOTCH_HOURS)
+        out[arm] += hit / n
+    return out
+
+
+def test_campaign_c_has_two_arms_and_a_terminator():
+    _require_campaign_c()
+    blocks = _c_blocks()
+    assert len(blocks) == 10, f"expected 10 blocks, got {len(blocks)}"
+    arms = [a for _, a in blocks]
+    assert arms.count("A") == 5 and arms.count("B") == 5
+    assert _schedule_rows()[-1][1] == "BASELINE", "must self-terminate to prod"
+
+
+def test_campaign_c_blocks_are_90_minutes_and_chronological():
+    _require_campaign_c()
+    times = [t for t, _ in _c_blocks()]
+    assert times == sorted(times), "schedule rows must be chronological"
+    gaps = {int((b - a).total_seconds() // 60) for a, b in zip(times, times[1:])}
+    assert gaps == {BLOCK_MIN}, f"expected uniform {BLOCK_MIN}-min blocks, got {gaps}"
+
+
+def test_campaign_c_balances_the_morning_notch_between_arms():
+    """THE ONE THAT MATTERS. The site's morning notch (hours 07-09, 2-3.5 pts
+    down) is larger than the effect being measured, so if it lands mostly on one
+    arm the campaign measures the notch and reports it as gain.
+
+    The first pre-registered order balanced linear drift and was still wrong this
+    way — see the positive control below."""
+    _require_campaign_c()
+    exp = _notch_exposure(_c_blocks())
+    assert abs(exp["A"] - exp["B"]) < 0.15, (
+        f"notch exposure is lopsided: A={exp['A']:.2f} B={exp['B']:.2f} "
+        f"block-equivalents. The arm carrying more of it is penalised by "
+        f"2-3.5 pts against a 2.0-pt effect."
+    )
+
+
+def test_campaign_c_balances_linear_drift():
+    """Block-index sums must be near-equal so a monotonic overnight trend
+    (cooling, dew, propagation) cannot masquerade as an arm difference."""
+    _require_campaign_c()
+    blocks = _c_blocks()
+    sums = {"A": 0, "B": 0}
+    for i, (_, arm) in enumerate(blocks, start=1):
+        sums[arm] += i
+    assert abs(sums["A"] - sums["B"]) <= 2, f"drift imbalance: {sums}"
+
+
+def test_campaign_c_has_no_long_single_arm_run():
+    """A run of three would hand one arm a contiguous third of the night."""
+    _require_campaign_c()
+    arms = "".join(a for _, a in _c_blocks())
+    longest = max(len(r) for r in re.findall(r"A+|B+", arms))
+    assert longest <= 2, f"longest single-arm run is {longest}: {arms}"
+
+
+def test_notch_balance_check_has_teeth():
+    """POSITIVE CONTROL, in this file's own tradition (see
+    test_old_global_regex_is_destructive).
+
+    The order FIRST pre-registered for campaign C — A B B A B A A B B A — is
+    balanced against linear drift and looks fine. Against the real clock it put
+    blocks 8 and 9 BOTH on B, dropping the entire deep notch on gain 496, the arm
+    expected to win. If this control ever passes, the notch test above has stopped
+    proving anything and the shipped order is no longer being checked."""
+    _require_campaign_c()
+    start = _c_blocks()[0][0]
+    bad = [(start + datetime.timedelta(minutes=BLOCK_MIN * i), arm)
+           for i, arm in enumerate("ABBABAABBA")]
+    exp = _notch_exposure(bad)
+    assert abs(exp["A"] - exp["B"]) >= 0.15, (
+        "the originally pre-registered order no longer looks lopsided — either the "
+        "start time moved or NOTCH_HOURS changed, and the shipped order needs "
+        "re-deriving rather than trusting"
+    )
+
+
+# ── campaign D structural checks (S111) ────────────────────────────────────────
+# Campaign D is a pilot-only re-sweep at marvin's RF position, triggered by
+# campaign C (DEC-0125) showing Foundation's arm-selection doesn't transfer:
+# 496 lost to 372 at marvin after winning at Foundation, so the {372, 496}
+# shortlist itself was never actually validated for this site. Six gain-only
+# blocks, HIGH -> LOW, no hold, no square — arm-selection input only
+# (PRINCIPLES §3), never adoption evidence.
+
+def _require_campaign_d():
+    """Campaign D's shape: pilot-only — P* rows, no hold, no square."""
+    _require_campaign()
+    arms = _arms_in_schedule()
+    if not (any(a.startswith("P") for a in arms)
+            and "H" not in arms and not (arms & {"A", "B", "C", "D"})):
+        pytest.skip("loaded schedule is not campaign-D-shaped (pilot-only)")
+
+
+def _d_pilot_blocks():
+    rows = [r for r in _schedule_rows() if r[1].startswith("P")]
+    return [(datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M"), arm) for t, arm in rows]
+
+
+def test_campaign_d_pilot_runs_high_to_low_across_six_arms():
+    """Six gain-only blocks, strictly HIGH -> LOW (496, 449, 402, 372, 328, 207)
+    so an abort on a weak low arm still leaves the higher/likely-useful arms
+    harvested — the same safety property Foundation's own pilot used, extended
+    with 207: campaign C dropped it as Foundation's known-worst, a judgment its
+    own result shows cannot be trusted to transfer, and it has zero data at
+    marvin. 45-min cadence matches Foundation's pilot precedent (pilot-grade
+    duration, not adoption-grade)."""
+    _require_campaign_d()
+    blocks = _d_pilot_blocks()
+    assert len(blocks) == 6, f"expected 6 pilot rows (incl. 207), got {len(blocks)}"
+    assert _schedule_rows()[:6] == [(t.strftime("%Y-%m-%dT%H:%M"), a) for t, a in blocks], \
+        "pilot rows must open the schedule"
+
+    gains = [_arm_gain(arm) for _, arm in blocks]
+    assert gains == [496, 449, 402, 372, 328, 207], f"unexpected gain set/order: {gains}"
+
+    gaps = {int((b[0] - a[0]).total_seconds() // 60) for a, b in zip(blocks, blocks[1:])}
+    assert gaps == {45}, f"pilot cadence must be 45 min: {gaps}"
+
+
+def test_campaign_d_clears_the_sites_notch_hours():
+    """Unlike campaign C's adoption-grade square, a pilot doesn't need
+    Latin-square-grade notch BALANCING — but it still must not sit IN a notch
+    hour, or a pilot arm's number is depressed by a known site artifact rather
+    than reflecting the gain itself."""
+    _require_campaign_d()
+    for when, arm in _d_pilot_blocks():
+        assert when.hour not in NOTCH_HOURS, \
+            f"{arm} block at {when} sits in a notch hour {sorted(NOTCH_HOURS)}"
+
+
+def test_campaign_d_self_terminates_and_has_no_hold_or_square():
+    _require_campaign_d()
+    rows = _schedule_rows()
+    assert rows[-1][1] == "BASELINE", "must self-terminate to prod"
+    arms = _arms_in_schedule()
+    assert "H" not in arms and not (arms & {"A", "B", "C", "D"}), \
+        f"campaign D is pilot-only: unexpected non-pilot arm present in {arms}"

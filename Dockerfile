@@ -1,5 +1,5 @@
 #--------------------------------------------
-# weewx-rtldavis v2.0.12
+# weewx-rtldavis v2.0.14
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y \
     libusb-1.0-0-dev \
     libusb-dev \
     make \
+    patch \
     python3-pip \
     python3-venv \
     rtl-sdr \
@@ -43,6 +44,8 @@ RUN mkdir -p /etc/modprobe.d && \
 # Build librtlsdr and rtldavis Go binary from src.tgz
 # librtlsdr is bundled in src.tgz — no git clone needed
 #--------------------------------------------
+COPY patch/rtldavis-dupgate.patch /tmp/rtldavis-dupgate.patch
+
 RUN curl -L -o /tmp/src.tgz \
     https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz && \
     cd /tmp && tar zxf src.tgz && \
@@ -52,6 +55,9 @@ RUN curl -L -o /tmp/src.tgz \
     make -j2 && make install && ldconfig && \
     cd /tmp/src/rtldavis/src/lheijst/rtldavis && \
     echo "receiveWindow (upstream default, unpatched — rw350 is an unproven experiment; 24h sweep backlogged, see ROADMAP/ARCHITECTURE §6):" && grep -R "receiveWindow" . && \
+    patch -p1 --batch --forward < /tmp/rtldavis-dupgate.patch && \
+    echo "dupgate (DEC-0135): the duplicate filter is time-gated; -dupwindow must appear twice below:" && \
+    test "$(grep -c dupwindow main.go)" = "2" && \
     GOBIN=/usr/local/bin go install -buildvcs=false -v .
 
 #--------------------------------------------

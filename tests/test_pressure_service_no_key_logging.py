@@ -72,3 +72,72 @@ def test_the_detector_actually_catches_the_original_bug():
         for arg in call.args if _mentions_secret(arg)
     ]
     assert flagged, "detector no longer catches the original bug; it has lost its teeth"
+
+
+def _except_bound_names(tree):
+    """Names bound by `except ... as <name>:` anywhere in the module."""
+    return {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ExceptHandler) and node.name
+    }
+
+
+def _mentions_raw_exception(node, exc_names):
+    """S91: True if `node` is the bare exception object, or a bare str() of
+    it, passed directly -- NOT wrapped in any other call such as a redactor.
+    That is the shape that leaks: for a requests/urllib3 connection failure,
+    str(e) embeds the full request URL, which is exactly where
+    fetch_pressure() puts api-key/api-signature. So the exception object is
+    credential-shaped even though it is not an api_key/api_secret attribute,
+    and the check above cannot see it.
+    """
+    if isinstance(node, ast.Name) and node.id in exc_names:
+        return True
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "str"
+        and len(node.args) == 1
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id in exc_names
+    ):
+        return True
+    return False
+
+
+def test_no_log_call_passes_a_raw_exception_object():
+    """S91: a raw exception (or str() of one) reaching a log call is
+    credential-shaped here, even though it never mentions api_key/api_secret
+    by name -- see _mentions_raw_exception. The fix wraps it in
+    _redact_secrets(); this asserts nothing bypasses that wrapper.
+    """
+    tree = ast.parse(SERVICE.read_text())
+    exc_names = _except_bound_names(tree)
+    offenders = []
+    for call in _log_calls(tree):
+        for arg in call.args + [kw.value for kw in call.keywords]:
+            if _mentions_raw_exception(arg, exc_names):
+                offenders.append(f"line {call.lineno}: {ast.unparse(arg)}")
+    assert not offenders, (
+        "a raw exception object (or str() of one) reached a log call -- for "
+        "a requests/urllib3 failure this embeds the full request URL, "
+        "credential and all:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_the_raw_exception_detector_actually_catches_the_original_bug():
+    """POSITIVE CONTROL (DEC-0045), same discipline as the test above it."""
+    original = (
+        "try:\n"
+        "    pass\n"
+        "except Exception as e:\n"
+        '    log.error("DavisPressureFetcher: error fetching pressure: %s", e)\n'
+    )
+    tree = ast.parse(original)
+    exc_names = _except_bound_names(tree)
+    flagged = [
+        arg for call in _log_calls(tree)
+        for arg in call.args if _mentions_raw_exception(arg, exc_names)
+    ]
+    assert flagged, "detector no longer catches a raw exception passed to a log call"

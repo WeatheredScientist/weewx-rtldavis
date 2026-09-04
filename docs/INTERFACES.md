@@ -1,7 +1,7 @@
 # Interfaces — weewx-rtldavis
 
 **Status:** Source of truth (the contract consumers depend on)
-**Last updated:** 2026-07-04 (S17)
+**Last updated:** 2026-08-20 (S97)
 
 This repo's real product is **data**, not weewx internals. Two published surfaces make up the
 contract; changing either can break downstream consumers (currently: the Eagle Hunt dashboard, dev
@@ -20,10 +20,35 @@ Written by `loop_json_writer.py` (a WeeWX `data_service`, DEC-0005) to
 `/opt/weewx-data/loop-data.txt` **and** `/opt/weewx-data/current.json` on **every LOOP packet
 (~2.5 s** for the VP2+), via atomic tmp-write + `os.replace`. Both files carry identical content —
 only the path differs. `loop-data.txt` is served to the dashboard's ongoing polling at `/loopdata`
-by the eh-proxy (which lives in the dashboard's deployment, not this repo); `current.json` is what
-the dashboard fetches **first at boot**, so a first-time visitor doesn't see em-dashes before the
-polling loop's first response lands (Cold-load Fix B). Serving `current.json` with the right cache
-headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's.
+by the eh-proxy (which lives in the dashboard's deployment, not this repo).
+
+**`current.json` is a cold-load SNAPSHOT on its own slower cadence, not a second live feed
+(DEC-0093, S85).** It exists for a boot fetch — so a first-time visitor doesn't see em-dashes before
+the polling loop's first response lands (Cold-load Fix B, DEC-0051) — and is rewritten **at most
+once per `[LoopJsonWriter] current_interval`, default 60 s**, plus always on the first packet of a
+run so a restart republishes immediately. `current_interval = 0` restores the pre-S85
+write-on-every-packet behavior.
+
+Content is identical to `loop-data.txt` **when written**; between writes its `dateTime` is simply
+older. A consumer must therefore **not** use `current.json` for liveness — see the gate below.
+Cadence confirmed by the consumer side in `eaglehunt-weather-dashboard#430`; nothing read the file
+at all between S43 and S85, which is why the cadence could be changed with nothing to break.
+Serving it with the right cache headers (`no-store`) is the dashboard/eh-proxy's responsibility,
+not this repo's.
+
+> *This doc asserted from S43 to S84 that the dashboard fetched `current.json` at boot. That was
+> never true — the consumer half was still unbuilt. Corrected S84 (DEC-0093).*
+
+> **Liveness gate — a consumer expectation this doc did not record until S84.** The eh-proxy
+> returns **503 when `Date.now()/1000 - dateTime > 30`**, and the dashboard treats that 503 as its
+> single authoritative proof the station is down (dash DEC-0154). So `dateTime` must keep advancing
+> at least every 30 s on `loop-data.txt`: it is a **liveness** signal, not a change signal, and it
+> is independent of the per-field TTL machinery below. Anything that would suppress or delay a
+> `loop-data.txt` write past that bound produces a false "station offline" on a healthy station.
+> **The gate applies to `/loopdata` only** — `current.json` is deliberately *not* behind it, which
+> is exactly why that path can be throttled and this one cannot. A consumer must not compute
+> staleness from `current.json`'s `dateTime`: by design it can be up to `current_interval` old on a
+> perfectly healthy station.
 
 **Contract:**
 - **Units are US/imperial**, encoded in the key names. The packet is `to_US()`-normalized before
@@ -38,6 +63,27 @@ headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's
   - **2 × `[DavisPressure] fetch_interval`** (7200 s at the shipped hourly setting) for
     `barometer_inHg`, which comes from the WeatherLink API fetch, *not* the ISS rotation. Derived
     from that service's own config so the two cannot drift apart.
+- **`barometer_inHg` is a corrected-upstream passthrough, not an ISS decode (S77).** The VP2+ ISS
+  never transmits pressure over 915 MHz. `pressure_service.py`'s `DavisPressureFetcher` polls
+  `api.weatherlink.com/v2/current/<station_id>` directly and prefers `bar_sea_level` — **already
+  sea-level-corrected by WeatherLink's own cloud side**. This repo applies no correction of its own;
+  it relays that value as-is. Unlike `rain`/`rainRate`, **no `_qc` flag marks this** (§2's mechanism
+  covers only those two fields today), so a consumer cannot tell from the packet alone that
+  `barometer_inHg`'s correction happened entirely upstream, unlike every RF-derived field beside it.
+- **`barometer_fetch_epoch` — the relay's own freshness (S82b, #172; lands in prod with v2.0.14).**
+  The Unix epoch of the last WeatherLink fetch that actually *succeeded* (a failed or empty poll
+  does not advance it). It bypasses the TTL machinery on purpose — its job is to *reveal*
+  staleness, so it is published verbatim however old it is, and omitted only when no fetch has
+  ever succeeded this run. Consumers wanting a staleness gate compare it to `dateTime` (both are
+  epoch seconds); `barometer_inHg` itself still expires from the feed at 2 × `fetch_interval` as
+  above.
+- **`pressure` and `altimeter` are honest nulls, not backfilled (S82b, #144; lands with v2.0.14).**
+  The fetched sea-level value used to also backfill the internal `pressure` (station) and
+  `altimeter` loop-packet keys — different quantities, so the archive's station-pressure column
+  carried sea-level numbers at this site's elevation (hlf#302). Per DEC-0006 they now stay null
+  (the ISS never transmits them), and the **archive columns go NULL from the v2.0.14 deploy
+  onward**. Neither key was ever part of this published loop-JSON contract; archive readers
+  (hyperlocal-forecast) get honest absence instead of a mislabeled value.
 
   Past its TTL a field is **omitted rather than frozen**, and the writer logs a `WARNING` naming the
   field. Before S48 the cache was unbounded, so a dead or SensorQC-rejected sensor emitted its last
@@ -64,6 +110,7 @@ headers (`no-store`) is the dashboard/eh-proxy's responsibility, not this repo's
 | `UV` | UV | index |
 | `cloudbase_foot` | cloudbase | ft |
 | `dateTime` | dateTime | Unix epoch (s) |
+| `barometer_fetch_epoch` | (pressure_service, S82b) | Unix epoch (s) — optional; no TTL |
 
 **Live example** (a sparse packet — gust/dewpoint/barometer/cloudbase served from cache, omitted here
 only because not yet seen this run):
@@ -99,6 +146,23 @@ fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.
   absent field costs nothing and normal queries never see it. **Consumers must treat `*_qc` as optional**: its absence is
   the common case and means "not corrected". It is a *pointer* to the errata log, not a substitute for
   it — the flag says *that* a point was corrected, DATA_ERRATA says *what, why, and how far it spread*.
+  **The SQLite archive itself carries no equivalent flag** (DEC-0053 Finding 3) — a correction lands
+  in InfluxDB's `*_qc` field and in `docs/DATA_ERRATA.md`; the archive row it corrects is left
+  unchanged and indistinguishable from one that was never corrected. A reader treating the archive as
+  ground truth should know the provenance lives downstream of it, not in it. Deliberate, not an
+  oversight — a schema change here isn't currently justified, and SQLite isn't one of this doc's two
+  published surfaces to begin with.
+
+- **No station identity in the series key (DEC-0053 Finding 2 — decided S48, never actually written
+  here until now).** `influx.py` supports `tags = station=...`, but the live config sets none — the
+  only tag is `binding=archive`, so every point in this infinite-retention bucket is anonymous.
+  **Adding one later is a trap, not a config tweak:** a point's series key is measurement *plus its
+  full tag set*, so adding a tag **forks a parallel series** rather than annotating the existing
+  one — splitting historical continuity and orphaning every Flux query written against the untagged
+  series, the same hazard §2's series-key rule above already states for corrections/backfills.
+  Harmless today with one producer, one station. **A second producer writing to this bucket needs a
+  coordinated interface change here first**, not a unilateral tag addition on either side — the
+  presence or absence of a station tag is part of what makes this a contract.
 
 > The dashboard reads InfluxDB only through its own `eh-proxy` (token injected server-side there);
 > this repo never sees the dashboard's read path. Our responsibility ends at writing the documented

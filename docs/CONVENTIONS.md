@@ -47,8 +47,11 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 - **Start of session:** `git fetch && git status`. **End:** `git status` shows *up to date*.
 - **Pause for approval before every commit and before any push.** Show `git status` + a diff summary
   first; show `git log --oneline --all` before any push.
-- Commit messages: imperative subject, session tag where useful; end with
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- Commit messages: imperative subject, session tag where useful; end with a
+  `Co-Authored-By: Claude <model> <noreply@anthropic.com>` trailer naming whichever model is
+  actually running the session. **Never hardcode a specific model name here** — found stale at S77
+  (this line still said `Opus 4.8` while the session running was Sonnet 5), the same
+  bump-in-anticipation-not-at-the-event trap as `soak_check.sh`'s `EXPECT_IMAGE` (ops#147 item 6).
 - Remote note: origin is the lowercase URL; GitHub redirects to canonical `WeatheredScientist/`
   (backlogged to fix).
 - **⚠️ `Closes #N` / `Fixes #N` DO NOT WORK on this repo's normal flow.** GitHub auto-closes only on
@@ -120,6 +123,14 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
   in `tests/test_reception_pct.py` that CI's cache-free run caught immediately). Before trusting a
   local "0 errors" result — especially right before opening/merging a PR — `rm -rf .mypy_cache`
   first.
+- **`git ls-files` lists TRACKED files only, so the mypy gate silently skips anything new until
+  you `git add` it.** Measured S76: the gate printed `Success: no issues found in 42 source files`
+  while checking **neither** of the session's two new files; staging them first turned the same
+  command into `44 source files` and **5 real errors**. The failure is silent in the worst way —
+  the count is the only tell, and nobody reads the count. **`git add` first, then run the gate**
+  (the same ordering the secret gate already requires, and for the same reason). A green gate that
+  skipped the file you just wrote is the S67 failure class in one line: a signal resting on
+  evidence about something other than what you were asking (DEC-0083, ops#147).
 - Follow the WeeWX `RESTThread` pattern for uploaders (DEC-0007); honest nulls on rejection,
   never stale substitution (DEC-0006).
 
