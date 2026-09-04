@@ -45,9 +45,17 @@ under [Pre-S16].
   Completes the DEC-0135 → 0136 → 0137 → 0138 → 0139 verification chain.
 - **`v2.0.16` promoted to `main` (PR #324), tag `prod-baseline-20260904`.** 267 commits (S75 → S122)
   of accumulated `dev` work promoted in one merge — the duplicate-decode fix (DEC-0134/0135/0136)
-  and the slot-count denominator fix (DEC-0137/0138/0139). Docker Hub push still pending: the
-  save/scp/load/push mechanism (DEC-0078) predates the marvin host move and has no mapped
-  equivalent yet — filed as [ops#265](https://github.com/WeatheredScientist/eaglehunt-ops/issues/265).
+  and the slot-count denominator fix (DEC-0137/0138/0139).
+- **`:v2.0.16` pushed to Docker Hub, 11:30 ET** *(backfilled by S123 from S122's transcript, marvin's
+  S25 record and ops#266 — S122 wrote none of it down, and its BOOT pointer still said Hub was at
+  `:v2.0.13`)*. Route: DEC-0078's own save/load/push, run once as a stopgap — owner `docker save`
+  as root on marvin (`ssh marvin-sudo`; a raw `sudo -v` over ssh hung first, which became
+  [ops#266](https://github.com/WeatheredScientist/eaglehunt-ops/issues/266)'s "no prompt means fail"
+  SOP) → tarball to the laptop → `docker load` → `docker push` from the laptop. Digest verified by
+  S122 via `manifest inspect` (`1a9daeb6…`) and re-verified by S123 against marvin's running
+  container. `:latest` not moved. The durable self-service path is
+  [ops#265](https://github.com/WeatheredScientist/eaglehunt-ops/issues/265) — filed the same
+  morning, for the *next* release; ops' client half (OPS-DEC-0190) landed by 11:44 ET.
 - **Public-release readiness audit ahead of the promotion** turned up two more findings, both
   filed rather than fixed inline: README.md had drifted three releases stale at `v2.0.12` (fixed
   same session, PR #325 — the version banner, driver tag, base-image weewx version, and
