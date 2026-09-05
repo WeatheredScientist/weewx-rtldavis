@@ -3,7 +3,12 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-03 (S117 — targeted line update per DEC-0057, not a full pass; tripwire
+**Last updated:** 2026-09-04 (S124 — targeted line update per DEC-0057, not a full pass; tripwire
+still S126. DEC-0141 opens the InfluxDB Foundation→marvin move — the first roadmap line the
+Foundation decoupling (ops#260 / OPS-DEC-0188) has had here: S105/S106 classed DEC-0118/0119 as
+incident response, and that was right for them, but this is planned work with a runbook, so it gets
+a P1.8 line below rather than living only in `BOOT.md`.)
+Prior: 2026-09-03 (S117 — targeted line update per DEC-0057, not a full pass; tripwire
 now S126. DEC-0136 deployed DEC-0135's fix and confirmed it on production data, so P2's "re-baseline
 by observation" plan moved from *proposed* to *live*; three corrections landed with it — the
 monitor's thresholds do **not** go stale, "~99%" and the slot arithmetic answer different questions
@@ -277,6 +282,23 @@ S59**, closed on five consecutive clean days with a positive control.
 
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
 bound and done via reversible live hot-swap with an instant rollback path.
+
+## P1.8 — Foundation decoupling: InfluxDB host move (ops#260 step 3, OPS-DEC-0188) — 🔶 IN PROGRESS (S124)
+
+The last weather workload on Foundation is this repo's `influxdb` container; HLF and the
+dashboard cut over 2026-09-04, so the decoupling — and the Foundation-dark drill that closes
+ops#260 — now waits on weewx.
+
+- [x] **Design + runbook (S124, DEC-0141):** `docs/INFLUXDB-MIGRATION.md` (measured state, three
+      stages, cutover table, rollback) + `ops/weewx-influxdb.service`. Stopped-server raw tree copy
+      of the v2.7.12 store (16.4 MB); container/unit inside the weewx manifest globs; consumers
+      change one URL each.
+- [ ] **Stage 0–1:** marvin vendors and installs the unit, pulls the pinned image; dark-parallel from a
+      snapshot proves unit, uid and bolt store; wiped again.
+- [ ] **Stage 2 cutover** in one attended window; archive gap backfilled from SQLite.
+- [ ] **Stage 3:** docs across weewx/ops/dashboard; `weewx-influxdb-backup` pre-dump timer (the store's
+      first backup ever); `BACKLOG.md`'s NAS-LEASE cross-host item closes as moot; weewx's section of
+      the ops#260 drill.
 
 ---
 
