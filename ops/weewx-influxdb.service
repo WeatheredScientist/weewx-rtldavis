@@ -47,6 +47,14 @@
 #   the move as its own change (runbook §5), the weewx-db-dump pattern.
 # - `docker stop -t 60`: a clean influxd shutdown flushes the WAL. DEC-0008's
 #   "kill, never stop" is a Synology-daemon hazard; every marvin unit stops.
+# - `SuccessExitStatus=2`: influxd exits 2 on SIGTERM (measured twice on
+#   2026-09-04 -- the marvin dark-instance stop and Foundation's `kill -s TERM`
+#   both ended `Exited (2)`), so without this a clean `systemctl stop` leaves the
+#   unit in `failed` and the next start looks like a recovery in the journal.
+#
+# AS-RUN 2026-09-04 (S124): installed by marvin (MARVIN-DEC-0121), dark-parallel
+# from a live snapshot 22:07-22:08 ET, live from the stopped-server copy at
+# 22:35:02 ET; Foundation stopped 22:13:35. docs/INFLUXDB-MIGRATION.md has the record.
 [Unit]
 Description=weewx-influxdb (InfluxDB 2.7.12 -- weewx archive store; eh_rollup + eh-daily-rollup Task inside)
 Requires=docker.service
@@ -58,6 +66,7 @@ Slice=weather.slice
 Restart=always
 RestartSec=10
 TimeoutStopSec=90
+SuccessExitStatus=2
 ExecStartPre=-/usr/bin/docker rm -f weewx-influxdb
 ExecStart=/usr/bin/docker run --rm --name weewx-influxdb --pull=never \
     --user 996:986 \
