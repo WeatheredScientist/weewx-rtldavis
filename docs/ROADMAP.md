@@ -3,7 +3,12 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-03 (S117 — targeted line update per DEC-0057, not a full pass; tripwire
+**Last updated:** 2026-09-04 (S124 — targeted line update per DEC-0057, not a full pass; tripwire
+still S126. DEC-0141 opens the InfluxDB Foundation→marvin move — the first roadmap line the
+Foundation decoupling (ops#260 / OPS-DEC-0188) has had here: S105/S106 classed DEC-0118/0119 as
+incident response, and that was right for them, but this is planned work with a runbook, so it gets
+a P1.8 line below rather than living only in `BOOT.md`.)
+Prior: 2026-09-03 (S117 — targeted line update per DEC-0057, not a full pass; tripwire
 now S126. DEC-0136 deployed DEC-0135's fix and confirmed it on production data, so P2's "re-baseline
 by observation" plan moved from *proposed* to *live*; three corrections landed with it — the
 monitor's thresholds do **not** go stale, "~99%" and the slot arithmetic answer different questions
@@ -278,6 +283,26 @@ S59**, closed on five consecutive clean days with a positive control.
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
 bound and done via reversible live hot-swap with an instant rollback path.
 
+## P1.8 — Foundation decoupling: InfluxDB host move (ops#260 step 3, OPS-DEC-0188) — 🔶 IN PROGRESS (S124)
+
+The last weather workload on Foundation is this repo's `influxdb` container; HLF and the
+dashboard cut over 2026-09-04, so the decoupling — and the Foundation-dark drill that closes
+ops#260 — now waits on weewx.
+
+- [x] **Design + runbook (S124, DEC-0141):** `docs/INFLUXDB-MIGRATION.md` (measured state, three
+      stages, cutover table, rollback) + `ops/weewx-influxdb.service`. Stopped-server raw tree copy
+      of the v2.7.12 store (16.4 MB); container/unit inside the weewx manifest globs; consumers
+      change one URL each.
+- [x] **Stage 0–1 (S124, same night):** marvin installed the unit + pulled the image (MARVIN-DEC-0121);
+      dark-parallel from a live snapshot passed 22:07 ET.
+- [x] **Stage 2 cutover (S124, 22:13–22:43 ET, DEC-0142):** Foundation stopped 22:13:35, marvin
+      store live 22:35:02, weewx publishing 22:43:16. **29-record gap (22:14–22:42) still to
+      backfill** — S125.
+- [ ] **Stage 3:** backfill; `SuccessExitStatus=2` unit re-install (marvin); `weewx-influxdb-backup`
+      pre-dump timer (the store's first backup ever); docs in ops/dashboard; delete the final tars from
+      the share; `BACKLOG.md`'s NAS-LEASE cross-host item closes as moot; weewx's section of the
+      ops#260 drill; Foundation's stopped instance retires at ops#260 step 4.
+
 ---
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
@@ -487,6 +512,16 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       and should not be quoted interchangeably.
       **(c)** A `repeat` falls through to the normal path and emits a `msg.ID=` line, so "decoded"
       **includes** repeats: 274 accepted, **195 unique**.
+      **S122 reconciliation (DEC-0137→0138→0139) — a second, independent `rxCheckPercent`
+      artifact found and closed: the metric's denominator, not its repeat-dedup.** `#317`:
+      `max_count = period // 2.8125` floored a full minute to 21 slots instead of ~21.33, making
+      `count <= max_count` fail by construction and reading 101–105% on fully-received minutes
+      (197/360 records, 55%, over 100% in the 12:00–18:00 pre-fix window). Fixed by denominating
+      on the ISS's own inter-arrival clock (`round((last − prev) / loop_time)`), shipped as
+      `v2.0.16` (31 s cutover, DEC-0138), confirmed on the first fully-post-cutover window
+      (0/360 over 100%, DEC-0139) — `#317` closed. `docs/DATA_ERRATA.md`'s `DISC-0001` carries
+      this as a second boundary. `v2.0.16` promoted to `main` the same session (`prod-baseline-
+      20260904`); Docker Hub push still pending (`ops#265`).
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,

@@ -9138,3 +9138,296 @@ drift that could be confused with normal RF variance.
 - `BOOT.md` job 3 (Docker Hub promotion, `main` tag) and job 5 (campaign-residue retirement) remain
   open — this DEC closes the metric question only, not the release-promotion or cleanup jobs still
   on the S122 list.
+
+## DEC-0140 — `campaign_analyze.py`'s `rx > 100` backstop stays exactly as it is — not raised, not removed (#314 closed as overtaken by #317)
+
+**Status:** Accepted (decision, no code change) · **Date:** 2026-09-04 (S123) · **closes** #314 ·
+**depends on** DEC-0137 (the slot-count denominator) and DEC-0139 (its production confirmation)
+
+### Context
+
+#314 was filed at 2026-09-03 12:41 ET, split out of #313. At that moment prod ran `v2.0.15`:
+DEC-0135's repeat-packet fix had pushed the numerator to ~100% against the driver's old floored
+denominator (`period // 2.8125` → 20 or 21 slots for 21.33 real transmissions/min), so a fully
+received minute read 101–105%, and `ops/campaign_analyze.py`'s `partition()` excluded it as
+"nonphysical". The issue's own text said any readout over data after 07:17:53 ET was low by
+construction — true when written.
+
+Eight hours later, at 20:29:06 ET, #317's fix (`v2.0.16`, DEC-0137/0138) replaced that denominator
+with `round((last_pkt_ts − prev_pkt_ts) / loop_time)` per transmitter (`rtldavis.py:1684-1691`).
+
+### What that changes
+
+The new denominator scales with *real elapsed time between received packets*, which has two
+consequences the issue could not have anticipated:
+
+1. `count <= max_count` holds by construction, so `rx <= 100` on every good minute — confirmed on
+   the first fully-post-cutover window, 0/360 over (DEC-0139).
+2. The DEC-0067 absorption artifact — a record stamped `interval=1` that absorbed two minutes and
+   read 200% — cannot recur either: both `count` and `max_count` grow with the span, so such a
+   record reads ~100.
+
+So across the three driver regimes:
+
+| Data span | Good minutes | The `rx > 100` rule |
+|---|---|---|
+| Pre-v2.0.15 — every campaign A–D row | ~73%, never >100 | Correct: fires only on the genuine 2026-07-29 03:10 absorption record |
+| v2.0.15, 09-03 07:17:53 → 20:29:06 ET (~13 h) | 101–105% | Over-excludes — the **only** affected span; no campaign ran in it |
+| Post-v2.0.16 | ≤100 by construction | Dormant: cannot fire on good minutes or on absorption records |
+
+### Options weighed (on Fable, owner's call)
+
+- **A — docstring only.** Record the three-regime analysis in `partition()`'s module docstring;
+  close #314. No logic, no test change. **Chosen.**
+- **B — raise the threshold to 150 and clamp survivors at 100.** The Sonnet-tier first pass
+  recommended this. It is future-proofing against a denominator regression nothing predicts, the
+  clamp half is a no-op today (nothing reads >100), and it rewrites two passing tests.
+- **C — drop the magnitude rule.** Removes a dormant rule and its tests (churn) and would re-admit
+  the 2026-07-29 record into any Campaign A re-read unless `gap_adjacent()` independently catches
+  it — likely, but not proven, and not worth proving for a tool whose campaigns are not re-run
+  (DEC-0135).
+
+### Why the record matters
+
+The first-pass recommendation was wrong for a reason worth keeping: it evaluated the fix options
+without first checking whether the premise still held. The escalation to Fable was requested by
+the owner *before* implementation, and the re-read is what found that #317 had already moved the
+ceiling. "Moot once #317 ships" was in `BOOT.md`'s own job list; it was not acted on until read
+against the driver source. Lands with PR #328; docstring text in `ops/campaign_analyze.py`.
+
+
+## DEC-0141 — InfluxDB leaves Foundation for marvin as a stopped-server raw tree copy into a weewx-owned `weewx-influxdb.service`; consumers change one URL each
+
+**Status:** Accepted (design; runbook + unit written, nothing executed) · **Date:** 2026-09-04
+(S124) · **implements** ops#260 step 3 under OPS-DEC-0188 · **depends on** MARVIN-DEC-0110/0111
+(tenant manifest shape), DEC-0100 (the `eh_rollup` Task is dashboard's, inside our container),
+DEC-0008 (`docker kill`, never `stop`, on the NAS), DEC-0119 (`ops/backfill_influx.py` fixes) ·
+**runbook** `docs/INFLUXDB-MIGRATION.md` · **unit** `ops/weewx-influxdb.service`
+
+### Context
+
+The owner's direction of 2026-09-03 (OPS-DEC-0188) narrows Foundation (the DS918+) to backup duty:
+every weather workload moves to marvin, and a Foundation outage must not touch a weather service.
+ops#260 inventoried Foundation and sequenced the moves — HLF, then the dashboard's tunnel/proxy, then
+**InfluxDB last** ("most stateful; weewx executes as compose owner, marvin hosts, consumers repoint
+`INFLUX_URL` once; split into its own ops issue when weewx picks it up"). HLF cut over 2026-09-04
+12:26 ET and EHWD ~19:35 ET; ops then posted the owner's ask for weewx's plan and schedule. This
+DEC is weewx picking it up.
+
+Measured 2026-09-04 ~21:30 ET, not recalled: Foundation runs `influxdb:2.7` (engine **v2.7.12**,
+up since 06-19) from weewx's NAS compose, bind mounts `/volume1/docker/influxdb/{data,config}`,
+8086 published on the host; **16.4 MB across 64 shards** (`/metrics`, unauthenticated) — `weewx`
+16.1 MB, `eh_rollup` 0.2 MB. All three consumers already run on marvin and reach it by Foundation's
+LAN IP: weewx's `influx.py` (`server_url` in `weewx.conf` **and** `weewx.conf.rx-baseline`),
+eh-proxy (`secrets/proxy.env`), dashboard's hourly `event-detect` (`secrets/event-detect.env`). HLF
+has no runtime Influx use. Marvin's weewx tenant manifest is `units = weewx*.service weewx*.timer`,
+`containers = *weewx*`, `paths = /srv/docker/weewx`, uid:gid **996:986**.
+
+Two measurement traps met on the way, both recorded in the runbook: `nasctl ls` of the data dir
+returns an **empty listing** because the dir is `0700 uid 1000` and the read-only key is neither — a
+permission false-zero (GOTCHAS §1), not an empty store; and the compose file's own comment says
+InfluxDB has "NO host port mapping" while `inspect` shows `8086 → 0.0.0.0:8086` — the comment is
+stale, the port is what the marvin-side consumers have been using since DEC-0118.
+
+### Decision
+
+1. **Raw copy of `data/` + `config/`, not `influx backup`/`restore`.** Same engine version both
+   sides, so the bolt/sqlite metadata and TSM/WAL trees carry the org, both buckets, **every
+   token**, the `eh-daily-rollup` Task and the CLI operator config byte-for-byte. That is the
+   like-for-like move ops#260's hygiene rule asks for: each consumer changes exactly one thing (the
+   URL), nothing is re-minted, nothing is re-created, and a regression can only be the host.
+   `restore --full` reaches the same end through a second mechanism with its own semantics to
+   verify — no benefit at this size.
+2. **The cutover copy is taken from a STOPPED server; a live snapshot is used only for the
+   dark-parallel test.** COMPUTE-NODE.md §3's "live pre-rsync then delta" exists to bound the
+   outage on a large store; at 16 MB the outage is the owner's gesture time. The pre-copy's real
+   value is proving the unit, the uid mapping and the bolt store *before* anything is at stake —
+   so stage 1 does exactly that from a live tarball (torn bolt = influxd refuses to start = the
+   test working), stopped, and wiped again before stage 2 lays down the real tree.
+3. **Name and placement: container and unit `weewx-influxdb`, paths under
+   `/srv/docker/weewx/influxdb/`, `weather.slice`.** Both names fall inside the existing weewx
+   manifest globs, so `t-weewx` gets start/stop/restart/logs/inspect/journal through `marvinctl`
+   with **no manifest change and no new grant**; the store stays weewx-owned as ops#260 arbitrated;
+   dashboard's `eh_rollup` bucket and Task live inside it unchanged (DEC-0100). Its own tenant was
+   considered (it is "everyone's store") and rejected: it would add a fifth manifest, a fifth key,
+   a fifth slice and an arbitration round for a 16 MB service whose only writer is weewx.
+4. **`influxdb:2.7.12` pinned, `--pull=never`.** Dashboard's Flux Task was verified against this
+   engine's boundary semantics (their `influx/README.md` §1 refuses to install on a changed
+   engine); a floating `:2.7` could bump it silently at the first pull on a new host. The owner pulls
+   once at install; a missing tag fails loudly (the eh-proxy shape, MARVIN-DEC-0111).
+5. **`--user 996:986` (`t-weewx`), copied tree chowned to it.** Foundation's tree is uid 1000
+   only because the official image gosu-drops to `influxdb` when started as root; on marvin uid 1000
+   is a human account. Started non-root the image skips init/gosu and runs influxd directly —
+   upstream-supported, and the only defensible ownership on a multi-tenant box. This is the one
+   deliberate divergence from like-for-like, and it is a host-mapping change, not a database
+   behaviour change.
+6. **No `DOCKER_INFLUXDB_INIT_*` in the unit.** The bolt store is initialised, so they are ignored
+   — and they are the admin password and operator token; a unit never carries a secret
+   (ACCESS-AUDIT-S7 A6).
+7. **`-p 8086:8086`, like-for-like.** eh-proxy is on the default bridge and reaches the host's LAN
+   IP; loopback would not be reachable from it. Tightening the bind is a post-move change.
+8. **Foundation's instance is stopped with `docker kill -s TERM` (clean WAL flush without
+   `docker stop`'s hang, DEC-0008), then `docker update --restart=no`, and RETAINED** — container,
+   image, trees — until ops#260 step 4 retires Container Manager after the drill. Explicit
+   `--restart=no` because a NAS reboot must not be able to bring a stale second store back on the
+   LAN, whatever `unless-stopped`'s treatment of a killed container turns out to be.
+9. **The archive-write gap is backfilled from SQLite**, the source of truth, with the DEC-0119-fixed
+   `ops/backfill_influx.py` — the copy on marvin is the 2026-06-19 pre-fix version and must be
+   transported first. Loop-packet posts lost in the window are lost by design.
+10. **Nothing rides along.** Bind tightening, a memory cap, retention, dropping `lease_dir`, the
+    consistent-dump timer — each lands before or after as its own change, never inside the cutover
+    (ops#260 hygiene; TENANT-MIGRATION-LESSONS §2).
+
+### Consequences
+
+- **Order of operations is load-bearing** (runbook §4): pause the event-detect timer → kill Foundation
+  → copy → start marvin → repoint weewx (both conf files, then `restart weewx.service`, ~31 s) →
+  repoint dashboard's two files → resume the timer → backfill → confirm Foundation's 8086 refuses.
+  The window avoids 01:00–01:30 ET (the Task) and 03:10–03:40 ET (dumps + restic).
+- **First backup the weather history has ever had.** Foundation's store was inside no backup
+  (Hyper Backup never set up, ops#209). On marvin it sits in restic's nightly `/srv` set; a
+  `weewx-influxdb-backup` pre-dump timer (`influx backup`, the `weewx-db-dump` slot) follows as
+  stage 3 — a file-level copy of a live TSM/bolt tree is not a backup.
+- **`influx.py`'s NAS-LEASE courtesy yield (DEC-0111) becomes moot**, not broken: after the move
+  weewx has zero NAS I/O to yield. `lease_dir` stays set (a harmless no-op against the empty dir,
+  MARVIN-DEC-0063); `BACKLOG.md`'s cross-host lease wiring item closes as overtaken once the move
+  ships; a config-only cleanup may drop the key later.
+- **`weewx.conf.rx-baseline` must be edited alongside `weewx.conf`** or the next campaign's
+  `restore_baseline` silently points the writer back at a dead host — CONSTANTS.md's DEC-0080 shape.
+- **Docs that move with it** (stage 3): `CONSTANTS.md` Infra/deploy-layer rows that still say the NAS
+  hosts InfluxDB, `docs/ARCHITECTURE.md`, `docs/INTERFACES.md` §2's "over the Docker `weather-net`
+  network" wording; ops `NAS-RUNTIME.md` and `CONSTANTS.md` §5; dashboard `MARVIN-MIGRATION.md`.
+- **Rollback** needs no reverse copy: repoint back and `docker start influxdb` on Foundation; the
+  `weewx` bucket is regenerable from SQLite, `eh_rollup` from dashboard's Task backfill procedure.
+- **What does not change:** the data contract (`docs/INTERFACES.md` §2), every token, the org, the
+  buckets, the Task, the engine version, the write cadence, the dashboard's queries.
+
+
+## DEC-0142 — DEC-0141 executed the same night: InfluxDB serves from marvin since 2026-09-04 22:35:02 ET; Foundation hosts no weather workload; a 29-record gap is the one open item
+
+**Status:** Accepted (executed, verified live) · **Date:** 2026-09-04 (S124) · **executes** DEC-0141
+· **closes** the weewx half of ops#270 stage 2 · **leaves open** step 9 (backfill) and stage 3 ·
+**as-run record** `docs/INFLUXDB-MIGRATION.md` §8
+
+
+## DEC-0143 — Closeout skeleton gets a step 0: `BOOT.md`/`CHANGELOG.md`/DEC entries ride the merge or promotion PR itself, never a deferred post-merge pass (OPS-DEC-0195)
+
+**Status:** Accepted (process, no code) · **Date:** 2026-09-05 (S125) · **adopts** OPS-DEC-0195
+(eaglehunt-ops `CLOSEOUT-TEMPLATE.md`) · **closes** weewx's half of ops#218 (HLF answers
+separately) · **amends** DEC-0052's closeout skeleton (`CLAUDE.md`) · **generalizes** the pattern
+DEC-0138→DEC-0139 already used once
+
+### Context
+
+ops#218 opened on an EHWD incident (their S261): a session shipped and merged a PR, kept running to
+do legitimate post-merge work (deploy, live verification), and — auto-archived on the PR merge
+event, or close to it — dropped out of a peer session's `ListAgents`/session-start visibility before
+its own repo's closeout ritual (`BOOT.md` pointer rewrite, `CHANGELOG.md` line, DEC row) ever ran. A
+second EHWD session had to notice the stale pointer, ask before touching shared docs itself, and wait
+for a manual repair. ops filed it, dashboard and HLF (S297) hit the same shape independently, and
+ops#218 asks each affected repo to adopt the fix or decline with a reason.
+
+weewx checked its own history rather than taking the pattern on trust: **S120 and S122 are the same
+shape**, just non-fatal so far. S120 merged PR #319 (DEC-0137, the `rxCheckPercent` denominator fix)
+and left `#317` open pending deploy rather than writing the closeout inline; S122 promoted `v2.0.16`
+to prod (DEC-0138) the same way. Both were repaired only because S121 and S123 happened to run next
+and caught the debt via the existing "debt hook" — nothing in the ritual itself prevented the gap
+from opening. Three independent repos hitting the identical shape is a pattern, not a coincidence.
+
+### Decision
+
+Add step 0 to the closeout skeleton (`CLAUDE.md`, before DEC-0052's step 1, cited there as
+"OPS-DEC-0195, ops#218 — adopted S125"): when a session's own work **is** a merge or a prod
+promotion, the `BOOT.md` pointer, the `CHANGELOG.md` line, and the DEC row ride that same PR or land
+before the merge — never queued for a closeout pass that runs after. Nothing in the 8-step skeleton's
+*content* changes; what changes is *sequencing* relative to the merge/promotion event, because that
+event is exactly the trigger an auto-archive race fires on.
+
+Folded into the same step, because it's the same underlying discipline (don't let a foregone
+conclusion wait on an external clock to be written down): a session that has already verified its own
+work does not idle-wait for a live recheck window (a 6-hourly monitor email, a ping, a scheduled
+re-check) to reconfirm before closing. It writes the pending re-verify into `BOOT.md`'s job list as a
+named next-session action and closes clean — the shape DEC-0138 (deploy-verified, S121) → DEC-0139
+(metric-confirmed against the next live window, S122) already used once for the `v2.0.16` cutover,
+now generalized as the default rather than a one-off judgment call.
+
+### Why adopt rather than decline
+
+- The failure mode is real here, not just imported: S120/S122 are direct instances, only masked by
+  luck of session ordering (S121/S123 ran before the gap could bite in the form ops#218 describes —
+  a peer session or the owner discovering a stale pointer with no session left to fix it).
+- The fix is sequencing discipline, not new mechanism — no tooling, no new file, no schema change to
+  `BOOT.md`/`CHANGELOG.md`/`DECISIONS.md`. Cost is near zero; it asks a session to write three things
+  it already writes, just not after walking away from the PR that made them true.
+- It composes with existing rules rather than conflicting: DEC-0052's skeleton, the branch-per-change
+  rule (never commit directly to `dev`), and the "pause for approval before push" rule are all
+  unaffected — step 0 governs *when within the session* steps 2–4 happen, not *whether* a human
+  approves the commit/push.
+
+### What does not change
+
+The rest of the closeout skeleton (steps 1–8), `docs/CONVENTIONS.md`'s green-gate commands, the
+branch/PR requirement, and the pause-for-approval rule are all untouched. This is scoped to sessions
+whose own work includes a merge or a prod promotion — a pure research/investigation session with
+nothing merging is unaffected.
+
+### Context
+
+DEC-0141 was written and merged (PR #334) at ~21:38 ET with "daytime" as the proposed cutover
+window. The owner, via the ops session, asked whether daytime was load-bearing. It was not — a
+default assumption, not a requirement — and the runbook's real preconditions (marvin's stage 0,
+the dark-parallel test, dashboard's confirmations) could all be met within the hour. The owner said
+go at ~21:50 ET; the move ran 22:08–22:43 ET with the owner attending in the weewx and ops chats.
+
+### What was decided during execution (each a deviation from the written plan, recorded so the
+runbook reads true)
+
+1. **Copy route: `docker cp <container>:<path> -` streamed into tar files on the marvin-data share**,
+   not `sudo tar` on the NAS. `nas-admin` has no non-interactive sudo, and the store's data dir is
+   `0700 uid 1000`; the docker daemon reads it as root and `docker cp` works on a stopped container,
+   which is exactly what the final copy needs. One Class C mint per NAS step (two in all).
+2. **The two copies were kept, the delta was not.** Snapshot for stage 1 (live, torn-bolt risk
+   accepted — it started clean), final copy from the stopped server for stage 2; the dark copy was
+   wiped before the final one landed. Equality test = the two user buckets' shard counts and bytes,
+   not the raw 64-shard total: the system buckets `_monitoring`/`_tasks` lose their expired empty
+   shards on first start (16 → 6 and 3), which is the retention enforcer working, not data loss.
+3. **Stage 0 landed before stage 1 with one side effect owned by marvin (MARVIN-DEC-0121/0122):**
+   `install-tenant-units.sh weewx` also installed `weewx.service`'s committed `:marvin-live` re-pin
+   (ops#257 limb 2). Marvin tagged `v2.0.16` → `:marvin-live` the same turn, so weewx's step-7
+   restart started from that alias — same bytes, banner `0.20+ws.5` confirmed live. ops#257 limb
+   2's "tag" step is therefore done, by marvin's hand rather than weewx's `marvinctl tag`.
+4. **`weewx.conf.rx-baseline` lives at the tenant root, not under `weewx-data/`.** The runbook had
+   the wrong path; the owner's four-file `sed` errored on it and exited 2, which made the
+   `&&`-chained "new address" grep skip — the zeros the owner then saw were the *old*-address grep
+   and were correct. Verified by redacted read that `weewx.conf` had flipped; the `.rx-baseline`
+   edit was re-issued as its own line. Lesson: never `&&` a verification grep after a multi-file
+   `sed`; and CONSTANTS.md now carries both paths.
+5. **influxd exits 2 on SIGTERM** — measured on both hosts. `SuccessExitStatus=2` added to the unit
+   (stage 3 re-install by marvin); Foundation's `Exited (2)` was a clean stop, not a crash.
+6. **Step 9 (backfill) deferred to S125.** 29 archive records (22:14–22:42 ET) are in SQLite and
+   not in the `weewx` bucket. Running the DEC-0119-fixed tool needs the write token in a root shell
+   on marvin; doing that at 22:45 with a token paste buys nothing that tomorrow does not.
+
+### Verified (timestamps ET)
+
+- 22:35:02 `weewx-influxdb.service` active + enabled in `/weather.slice`; `/health` pass v2.7.12;
+  `weewx` 16 shards / 16.87 MB, `eh_rollup` 16 shards / 212,744 B (= Foundation's last state
+  including the 22:00 event-detect write); no `lvl=warn|error`.
+- 22:40:43 `user.influx INFO Data will be uploaded to http://<MARVIN_IP>:8086`; 22:43:16 `Influx:
+  Published record 2026-09-04 22:43:00` — first write to the marvin store; publishing every minute
+  since.
+- 22:44 Foundation `:8086` refuses; `influxdb` container stopped, `--restart=no`, trees intact —
+  the rollback artifact until ops#260 step 4.
+- Dashboard's step 8 (eh-proxy restart, timer re-enable, `verify_archive_fresh.py`) is their report
+  on ops#270; weewx's own end-to-end probe through the public proxy is in `docs/INFLUXDB-MIGRATION.md` §8.
+
+### Consequences
+
+- **Foundation hosts no weather workload.** OPS-DEC-0188's weather half is true in fact from
+  22:43 ET; the drill (ops#260) can be scheduled once ops#270 stage 3 closes.
+- **Two Class C NAS gestures and three owner-hands marvin gestures** was the whole cost — the
+  16 MB estimate was right about the outage shape (gesture time), wrong by 9× on bytes (152 MB tar:
+  bolt/sqlite/WAL are not in `storage_shard_disk_size`).
+- **Open, S125:** backfill 22:14–22:42; `SuccessExitStatus=2` re-install; `weewx-influxdb-backup`
+  pre-dump timer; delete the two final tars from the share; ops/dashboard doc rows; weewx's drill
+  section; `BACKLOG.md` NAS-LEASE item closes as moot.

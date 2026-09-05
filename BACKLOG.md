@@ -611,12 +611,12 @@ failed resets currently produce no further action.
   behind it; **it does not** → the interesting finding is that marvin's position changed the answer,
   which earns a real multi-day campaign rather than a config change.~~ **It did not clear
   (DEC-0125, S111)** — see the ✅ entry above.
-- **NAS-LEASE cross-host wiring for marvin (S105).** `influx.py`'s courtesy-yield mount (`/nas-lease`)
-  points at a deliberately empty local directory on marvin (`MARVIN-DEC-0063`) rather than a live
-  share of the NAS's real lease file — a permanent, silent no-op by design until someone builds the
-  cross-host path. Low priority: the mechanism fails open (never blocks/delays anything if absent),
-  and marvin currently has no other heavy-I/O tenant competing with weewx for shared storage anyway.
-  Worth closing once that changes.
+- ~~**NAS-LEASE cross-host wiring for marvin (S105).**~~ **CLOSED as overtaken, S125 (DEC-0141/0142,
+  docs/INFLUXDB-MIGRATION.md §5.3).** The InfluxDB move means weewx now has zero NAS I/O left to
+  yield — the courtesy-yield mount had one purpose (protect NAS-hosted InfluxDB writes from a
+  concurrent NAS reader) and that store no longer lives there. `lease_dir` stays set (harmless no-op
+  against the empty dir, `MARVIN-DEC-0063`); a later config-only cleanup may drop the key, but the
+  cross-host wiring this item asked for will never be built.
 - ~~**Hot-swap gain / receive-window without restarting the container (owner question, S89).**~~
   **BUILT S103, [DEC-0117](docs/DECISIONS.md).** Watched control file carrying bounds-checked
   `gain`/`ex` integers only (never a command string — `cmd` reaches `shlex.split()` → `Popen`);

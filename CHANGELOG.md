@@ -6,6 +6,129 @@ under [Pre-S16].
 
 ---
 
+## [S125] — 2026-09-05 — InfluxDB backfill + first-ever backup timer (PR #336); closeout ritual gets a step 0 (DEC-0143)
+
+- **ops#270 stage 3, job 1a:** ran the transported `backfill_influx.py` for the 2026-09-04 22:13–22:43
+  ET gap — 28 records posted (not the assumed 29; 22:40–22:42 don't exist in SQLite either, weewx's
+  own restart for the cutover fell across those intervals). Filed ERR-0007, corrected
+  `docs/INFLUXDB-MIGRATION.md`'s as-run record. Verified independently via `influx query` (28, exact).
+- **`weewx-influxdb-backup.service`/`.timer`** drafted — a consistent `influx backup` pre-dump at
+  03:15 (the `weewx-db-dump` slot), mirroring HLF's `hlf-db-dump.timer`. Not yet installed on marvin
+  (needs a root gesture; no self-service "install new unit" verb).
+- NAS-LEASE `BACKLOG.md` cross-host item closed as moot — zero NAS I/O left to yield since the
+  InfluxDB move (PR #336).
+- Live-verified `SuccessExitStatus=2` and ops#257 limb 2's `:marvin-live` self-service tag are both
+  already in production, ahead of BOOT.md's own stale notes on both.
+- **DEC-0143 — adopted OPS-DEC-0195** (ops#218): the closeout ritual gets a step 0 — `BOOT.md`,
+  `CHANGELOG.md`, and DEC rows ride the merge/promotion PR itself, never a deferred post-merge pass.
+  Prompted by finding this exact gap in weewx's own history (S120, S122) while answering ops#218.
+
+## [S124] — 2026-09-04 — DEC-0141 designed AND DEC-0142 executed the same night: InfluxDB serves from marvin since 22:35 ET; Foundation hosts no weather workload
+
+- **Cutover (owner's call to go tonight, 22:08–22:43 ET):** stage 0 by marvin (MARVIN-DEC-0121);
+  stage 1 dark-parallel from a live snapshot passed 22:07; Foundation `influxdb` TERM-stopped 22:13:35
+  (`--restart=no`, retained as rollback); final stopped-server copy via `docker cp … -` to the
+  marvin-data share; `weewx-influxdb.service` live 22:35:02; owner's four-file `sed` repoint; weewx
+  restarted 22:40:42, first publish to marvin 22:43:16; dashboard repointed + `verify_archive_fresh.py`
+  GO 22:46. Two Class C NAS mints, three owner-hands marvin lines. As-run record: runbook §8.
+- **Open (S125 job 1):** 29-record `weewx`-bucket gap 22:14–22:42 (all in SQLite) — backfill deferred;
+  `SuccessExitStatus=2` unit re-install; delete the two final tars from the share; pre-dump backup
+  timer; ops/dashboard doc rows; drill section.
+- **Deviations recorded (DEC-0142):** `docker cp` route instead of NAS `sudo tar`; `.rx-baseline` is at
+  the tenant ROOT (runbook path was wrong — a `&&`-chained grep hid the fact the `sed` had worked);
+  influxd exits 2 on SIGTERM; system buckets drop expired empty shards on first start; the 16 MB
+  estimate was 9× low on bytes (152 MB tar) and right about the outage shape.
+- `CONSTANTS.md` Infra + live-config rows rewritten for the new host (`server_url` row added, NAS rows
+  say "nothing weewx runs"); `docs/INTERFACES.md` §2 drops the `weather-net` wording; ROADMAP P1.8
+  stages 0–2 checked.
+
+### Earlier the same session — the design (PR #334, merged 21:38 ET)
+
+- **Why this session:** ops#260's sequencing put InfluxDB last; HLF (12:26 ET) and EHWD (~19:35 ET)
+  both cut over today, ops posted the owner's ask for weewx's plan, and the owner opened this session
+  on exactly that. Escalated Sonnet → Fable for the design.
+- **`docs/INFLUXDB-MIGRATION.md`** (new): measured state (Foundation `influxdb:2.7` = engine
+  v2.7.12, **16.4 MB / 64 shards** via the unauthenticated `/metrics`, 8086 LAN-published, data dir
+  `0700 uid 1000`), the consumer table (all three already on marvin; HLF none), three stages, a
+  ten-step cutover table with who-runs-what and what each step proves, rollback, what doesn't change.
+- **`ops/weewx-influxdb.service`** (new): `weewx-influxdb` inside the weewx manifest globs,
+  `influxdb:2.7.12` `--pull=never`, `--user 996:986`, `-p 8086:8086`, `weather.slice`, no secrets.
+- **DEC-0141** — ten design points and their rejected alternatives (`backup`/`restore`, own tenant,
+  uid 1000, floating tag, live pre-rsync, riders). Foundation's instance is retained stopped
+  `--restart=no`; the store gets its first backup ever on marvin; the NAS-LEASE courtesy yield
+  becomes moot on ship.
+- **Two measurement traps recorded:** `nasctl ls` of the `0700 uid 1000` data dir returns an EMPTY
+  listing (permission false-zero, GOTCHAS §1); the Foundation compose comment says "no host port" while
+  `inspect` shows `8086 → 0.0.0.0`.
+- `docs/ROADMAP.md` gains P1.8 (the decoupling's first roadmap line; tripwire still S126);
+  `MANIFEST.md` ops/runbook row widened by one filename; `BOOT.md` rewritten S124 → S125 (job 1 = the
+  move; ops#265 recorded as wired per the ops session's FYI).
+- Cross-repo: [ops#270](https://github.com/WeatheredScientist/eaglehunt-ops/issues/270) filed as the
+  move's ledger; ops#260's owner ask answered; marvin + dashboard sessions
+  told directly (SOP).
+
+## [S123] — 2026-09-04 — S122's closeout repaired; #320 fixed, #314 closed as overtaken (DEC-0140), #327 filed; BOOT.md back under cap
+
+- **Closeout debt repaired first** (ops#218, third recurrence after S120): the `[S122]` entry
+  below, `BOOT.md`'s pointer S122 → S123, and `docs/ROADMAP.md`'s P2 reconciliation line for
+  DEC-0137→0139 (PR #326, `90797d1`). S122 gets no done-marker.
+- **#320 fixed.** `CHANGES-FROM-UPSTREAM.md`'s Provenance row for the Go decoder said "unmodified"
+  while the Dockerfile has applied `patch/rtldavis-dupgate.patch` since DEC-0135 — now "patched by
+  us" with pointers (the `## rtldavis (the Go demodulator)` section already existed; the table row
+  had drifted). `rtldavis.py` delta recounted per the file's own recipe: **+1204 / −166** (1422 →
+  2460 lines), up from S97's +815 / −149; base tarball unchanged at 1422. Last-updated bumped from
+  S54. The issue's "worth checking" question answered: the patched `main.go` carries **no GPLv3
+  §5(a) notice** of its own — **#327** filed (Go source change, needs a build+deploy pass).
+- **#314 closed as overtaken by #317 — DEC-0140, docstring-only.** The Sonnet first pass
+  recommended raising the backstop to 150 + clamp; the owner escalated to Fable before
+  implementation, and the re-read against `rtldavis.py:1684-1691` found #317's denominator already
+  makes `rx <= 100` hold by construction *and* makes an absorbed multi-minute record read ~100, not
+  200 — so the rule is correct on every campaign row, dormant post-v2.0.16, and over-excludes only
+  in v2.0.15's ~13 h, where no campaign ran. Left as-is on purpose; `ops/campaign_analyze.py`'s
+  docstring says why. (PR #328, `33fd982`.)
+- **ops#264 remedied:** `BOOT.md` rewritten under STANDARD rule 1 — 2664 → **≈1993 tok** (chars/4
+  under a UTF-8 locale, ops' `boot-cap-check` method), 80% of the 2,500 cap. Closes on the next
+  green sweep; not closed by hand.
+- ROADMAP: no line touched by DEC-0140 (`campaign_analyze.py` is not a P0–P3 item); tripwire at
+  S126, not due.
+- Gates, every commit: ruff clean · 475 passed / 17 skipped · mypy clean, 68 files · secret gate 0.
+  Merges verified by `gh pr view --json state,mergedAt`, not by `gh pr merge`'s (silent) output.
+
+## [S122] — 2026-09-04 — DEC-0139: #317 closed on production data; `v2.0.16` promoted to `main` (`prod-baseline-20260904`); README banner refreshed
+
+- **#317 closed (PR #323, DEC-0139).** Read the 6-hourly `RECEPTION SUMMARY` log across the three
+  windows spanning the `v2.0.16` cutover (20:29:06 EDT, 2026-09-03): 12:00–18:00 (fully pre-fix)
+  197/360 (55%) over 100%, matching `BOOT.md`'s S121 figure exactly; 18:00–00:00 (spans the
+  cutover) 86/358, already dropping; 00:00–06:00 (fully post-fix) **0 of 360** — every hour exactly
+  100%, `dropped (est, lower bound)` 4 of 7,680. One clean window sufficed because
+  `round((last − prev) / loop_time)` makes `count <= max_count` hold by construction — the fix is
+  structural, not statistical. `docs/DATA_ERRATA.md`'s `DISC-0001` gets a second boundary.
+  Completes the DEC-0135 → 0136 → 0137 → 0138 → 0139 verification chain.
+- **`v2.0.16` promoted to `main` (PR #324), tag `prod-baseline-20260904`.** 267 commits (S75 → S122)
+  of accumulated `dev` work promoted in one merge — the duplicate-decode fix (DEC-0134/0135/0136)
+  and the slot-count denominator fix (DEC-0137/0138/0139).
+- **`:v2.0.16` pushed to Docker Hub, 11:30 ET** *(backfilled by S123 from S122's transcript, marvin's
+  S25 record and ops#266 — S122 wrote none of it down, and its BOOT pointer still said Hub was at
+  `:v2.0.13`)*. Route: DEC-0078's own save/load/push, run once as a stopgap — owner `docker save`
+  as root on marvin (`ssh marvin-sudo`; a raw `sudo -v` over ssh hung first, which became
+  [ops#266](https://github.com/WeatheredScientist/eaglehunt-ops/issues/266)'s "no prompt means fail"
+  SOP) → tarball to the laptop → `docker load` → `docker push` from the laptop. Digest verified by
+  S122 via `manifest inspect` (`1a9daeb6…`) and re-verified by S123 against marvin's running
+  container. `:latest` not moved. The durable self-service path is
+  [ops#265](https://github.com/WeatheredScientist/eaglehunt-ops/issues/265) — filed the same
+  morning, for the *next* release; ops' client half (OPS-DEC-0190) landed by 11:44 ET.
+- **Public-release readiness audit ahead of the promotion** turned up two more findings, both
+  filed rather than fixed inline: README.md had drifted three releases stale at `v2.0.12` (fixed
+  same session, PR #325 — the version banner, driver tag, base-image weewx version, and
+  changelog bullets for v2.0.13–v2.0.16, since `.github/workflows/dockerhub-description.yml`
+  pushes this file to Docker Hub's public listing on every `main` push) and `BOOT.md` measured
+  over its 2,500-token cap ([ops#264](https://github.com/WeatheredScientist/eaglehunt-ops/issues/264)).
+- **Session never ran its own closeout** (ops#218 recurring pattern) — no CHANGELOG entry, stale
+  `BOOT.md` pointer, no session title. Repaired retroactively by S123 (this entry); S122 gets no
+  done-marker.
+- Gate state not independently re-verified by S123 — S122's own PRs report clean gates (ruff,
+  pytest, mypy, secret scan) at merge time; take that on the PR record, not re-run here.
+
 ## [S121] — 2026-09-03 — DEC-0138: `v2.0.16` built and deployed (31 s cutover); #317 stays open pending the metric-level proof
 
 - **Closeout debt repaired** (ops#218): wrote DEC-0137, the `[S120]` CHANGELOG entry below, and moved
