@@ -1,0 +1,26 @@
+# Pre-backup consistent dump of the InfluxDB store (docs/INFLUXDB-MIGRATION.md §5 item 2 / DEC-0141
+# — restic snapshots /srv at 03:30, and a file-level copy of a live TSM/bolt tree is not a backup,
+# COMPUTE-NODE.md §3; the cutover itself only got away with a raw tree copy because it copied from a
+# STOPPED server, §1). Uses influxd's own `influx backup`, which takes a consistent snapshot of the
+# running engine. Destination is inside the existing data bind mount
+# (/srv/docker/weewx/influxdb/data on the host), so it rides the same restic set with no new host
+# path. Repeated daily runs to the same directory are influx's own supported incremental-backup mode
+# (new shard files appended, manifest updated) — not cleared between runs.
+#
+# Needs a valid CLI operator config inside the container (the S237 orphaning trap: anything that
+# touches the store can silently invalidate it) — verify with `docker exec weewx-influxdb influx
+# bucket list --org eaglehunt` before enabling this unit, don't assume it still works.
+#
+# Runs at 03:15, the weewx-db-dump slot: independent stores' dumps don't conflict (same precedent as
+# weewx-db-dump.service coexisting with coffee-radar's). Root because docker exec into a container
+# started `--user 996:986` needs it. Name matches the weewx*.service manifest glob so t-weewx can
+# watch it via marvinctl.
+[Unit]
+Description=weewx-influxdb consistent pre-backup dump (influx backup)
+Requires=weewx-influxdb.service
+After=weewx-influxdb.service
+
+[Service]
+Type=oneshot
+Slice=weather.slice
+ExecStart=/usr/bin/docker exec weewx-influxdb influx backup /var/lib/influxdb2/backup/latest
