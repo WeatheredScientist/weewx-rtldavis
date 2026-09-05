@@ -40,18 +40,16 @@ confirmations (`docs/GOTCHAS.md` §3); #320/#314 closed S123 (DEC-0140); #327 fi
 
 ### ▶▶ S125 JOB LIST
 
-1. **InfluxDB stage 3 (ops#270) — Sonnet, mechanical.** (a) **Backfill the 29-record gap
-   22:14–22:42 ET 2026-09-04** into the `weewx` bucket: transport the DEC-0119-fixed
-   `ops/backfill_influx.py` to marvin (the copy there is the 2026-06-19 buggy one; local sha
-   `61599d22…`), owner runs it in a root shell with the write token, `--server-url
-   http://127.0.0.1:8086 --org eaglehunt --db-path /srv/docker/weewx/weewx-data/archive/weewx.sdb
-   --start 2026-09-04T22:13:00 --end 2026-09-04T22:43:00`, `--dry-run` first — expect 29, 0 errors.
-   (b) Marvin re-installs the unit with `SuccessExitStatus=2` (already on `dev`). (c) Owner deletes
-   `influxdb-final-20260904-{data,config}.tar` from the marvin-data share (token store inside).
-   (d) `weewx-influxdb-backup.service/.timer` at 03:15 — `influx backup` pre-dump for restic, the
-   store's first backup ever; verify the CLI operator config works first. (e) ops/dashboard doc rows
-   (ops `NAS-RUNTIME.md`, `CONSTANTS.md` §5; dashboard `MARVIN-MIGRATION.md`) — theirs, nudge. (f) Close
-   `BACKLOG.md`'s NAS-LEASE cross-host item as moot. (g) weewx's section of the ops#260 drill.
+1. **InfluxDB stage 3 (ops#270) — Sonnet, mechanical.** **Backfill done, S125: 28 posted (not 29—
+   22:40–22:42 don't exist in SQLite either, `weewx.service`'s own restart; [ERR-0007](docs/DATA_ERRATA.md),
+   `docs/INFLUXDB-MIGRATION.md` §8), verified independently via `influx query`.** NAS-LEASE
+   `BACKLOG.md` item closed (PR #336). Remaining: (b) marvin re-installs the unit with
+   `SuccessExitStatus=2` (already on `dev` — confirmed live unit still lacks it). (c) owner deletes
+   `influxdb-final-20260904-{data,config}.tar` from the marvin-data share (token store inside). (d)
+   `weewx-influxdb-backup.service/.timer` drafted (PR #336, mirrors `weewx-db-dump`), needs
+   installing on marvin — verify the CLI operator config first. (e) ops/dashboard doc rows (ops
+   `NAS-RUNTIME.md`, `CONSTANTS.md` §5; dashboard `MARVIN-MIGRATION.md`) — theirs, nudge. (g) weewx's
+   section of the ops#260 drill.
 2. **#331 — GitHub Releases backfill** v2.0.12–16 + write the step into CONVENTIONS/closeout. Owner
    go per step (public).
 3. **#327 — GPLv3 §5(a) notice in the dupgate `main.go`** — ride the next image cut.
@@ -73,7 +71,7 @@ tripwire **S126**.
 | Thing | State |
 |---|---|
 | Prod | marvin, `weewx.service` in `/weather.slice`; **`v2.0.16`** as `:marvin-live`, weewx 5.5.0, gain 372, restarted 09-04 22:40:42 ET for the Influx repoint |
-| InfluxDB | **marvin**, `weewx-influxdb.service` since 09-04 22:35:02 ET, v2.7.12; `weewx` 16 shards, `eh_rollup` 16 shards; **29-record hole 22:14–22:42** pending job 1a |
+| InfluxDB | **marvin**, `weewx-influxdb.service` since 09-04 22:35:02 ET, v2.7.12; `weewx` 16 shards, `eh_rollup` 16 shards; backfilled S125 (28 records) — **22:40–22:42 permanently absent** (ERR-0007), not a hole to fill |
 | Foundation | no weather workload; stopped `influxdb` (rollback) + dashboard's idle `eh-proxy`; read-only `weewx-data` overlay |
 | `main` | `prod-baseline-20260904`; `dev` ahead by doc PRs only |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · self-service `push` LIVE (ops#265) |
