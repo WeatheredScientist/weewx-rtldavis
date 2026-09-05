@@ -6,6 +6,31 @@ under [Pre-S16].
 
 ---
 
+## [S124] — 2026-09-04 — DEC-0141: the InfluxDB Foundation→marvin move is designed and written up (runbook + unit); nothing executed
+
+- **Why this session:** ops#260's sequencing put InfluxDB last; HLF (12:26 ET) and EHWD (~19:35 ET)
+  both cut over today, ops posted the owner's ask for weewx's plan, and the owner opened this session
+  on exactly that. Escalated Sonnet → Fable for the design.
+- **`docs/INFLUXDB-MIGRATION.md`** (new): measured state (Foundation `influxdb:2.7` = engine
+  v2.7.12, **16.4 MB / 64 shards** via the unauthenticated `/metrics`, 8086 LAN-published, data dir
+  `0700 uid 1000`), the consumer table (all three already on marvin; HLF none), three stages, a
+  ten-step cutover table with who-runs-what and what each step proves, rollback, what doesn't change.
+- **`ops/weewx-influxdb.service`** (new): `weewx-influxdb` inside the weewx manifest globs,
+  `influxdb:2.7.12` `--pull=never`, `--user 996:986`, `-p 8086:8086`, `weather.slice`, no secrets.
+- **DEC-0141** — ten design points and their rejected alternatives (`backup`/`restore`, own tenant,
+  uid 1000, floating tag, live pre-rsync, riders). Foundation's instance is retained stopped
+  `--restart=no`; the store gets its first backup ever on marvin; the NAS-LEASE courtesy yield
+  becomes moot on ship.
+- **Two measurement traps recorded:** `nasctl ls` of the `0700 uid 1000` data dir returns an EMPTY
+  listing (permission false-zero, GOTCHAS §1); the Foundation compose comment says "no host port" while
+  `inspect` shows `8086 → 0.0.0.0`.
+- `docs/ROADMAP.md` gains P1.8 (the decoupling's first roadmap line; tripwire still S126);
+  `MANIFEST.md` ops/runbook row widened by one filename; `BOOT.md` rewritten S124 → S125 (job 1 = the
+  move; ops#265 recorded as wired per the ops session's FYI).
+- Cross-repo: [ops#270](https://github.com/WeatheredScientist/eaglehunt-ops/issues/270) filed as the
+  move's ledger; ops#260's owner ask answered; marvin + dashboard sessions
+  told directly (SOP).
+
 ## [S123] — 2026-09-04 — S122's closeout repaired; #320 fixed, #314 closed as overtaken (DEC-0140), #327 filed; BOOT.md back under cap
 
 - **Closeout debt repaired first** (ops#218, third recurrence after S120): the `[S122]` entry

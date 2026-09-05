@@ -9194,3 +9194,110 @@ without first checking whether the premise still held. The escalation to Fable w
 the owner *before* implementation, and the re-read is what found that #317 had already moved the
 ceiling. "Moot once #317 ships" was in `BOOT.md`'s own job list; it was not acted on until read
 against the driver source. Lands with PR #328; docstring text in `ops/campaign_analyze.py`.
+
+
+## DEC-0141 — InfluxDB leaves Foundation for marvin as a stopped-server raw tree copy into a weewx-owned `weewx-influxdb.service`; consumers change one URL each
+
+**Status:** Accepted (design; runbook + unit written, nothing executed) · **Date:** 2026-09-04
+(S124) · **implements** ops#260 step 3 under OPS-DEC-0188 · **depends on** MARVIN-DEC-0110/0111
+(tenant manifest shape), DEC-0100 (the `eh_rollup` Task is dashboard's, inside our container),
+DEC-0008 (`docker kill`, never `stop`, on the NAS), DEC-0119 (`ops/backfill_influx.py` fixes) ·
+**runbook** `docs/INFLUXDB-MIGRATION.md` · **unit** `ops/weewx-influxdb.service`
+
+### Context
+
+The owner's direction of 2026-09-03 (OPS-DEC-0188) narrows Foundation (the DS918+) to backup duty:
+every weather workload moves to marvin, and a Foundation outage must not touch a weather service.
+ops#260 inventoried Foundation and sequenced the moves — HLF, then the dashboard's tunnel/proxy, then
+**InfluxDB last** ("most stateful; weewx executes as compose owner, marvin hosts, consumers repoint
+`INFLUX_URL` once; split into its own ops issue when weewx picks it up"). HLF cut over 2026-09-04
+12:26 ET and EHWD ~19:35 ET; ops then posted the owner's ask for weewx's plan and schedule. This
+DEC is weewx picking it up.
+
+Measured 2026-09-04 ~21:30 ET, not recalled: Foundation runs `influxdb:2.7` (engine **v2.7.12**,
+up since 06-19) from weewx's NAS compose, bind mounts `/volume1/docker/influxdb/{data,config}`,
+8086 published on the host; **16.4 MB across 64 shards** (`/metrics`, unauthenticated) — `weewx`
+16.1 MB, `eh_rollup` 0.2 MB. All three consumers already run on marvin and reach it by Foundation's
+LAN IP: weewx's `influx.py` (`server_url` in `weewx.conf` **and** `weewx.conf.rx-baseline`),
+eh-proxy (`secrets/proxy.env`), dashboard's hourly `event-detect` (`secrets/event-detect.env`). HLF
+has no runtime Influx use. Marvin's weewx tenant manifest is `units = weewx*.service weewx*.timer`,
+`containers = *weewx*`, `paths = /srv/docker/weewx`, uid:gid **996:986**.
+
+Two measurement traps met on the way, both recorded in the runbook: `nasctl ls` of the data dir
+returns an **empty listing** because the dir is `0700 uid 1000` and the read-only key is neither — a
+permission false-zero (GOTCHAS §1), not an empty store; and the compose file's own comment says
+InfluxDB has "NO host port mapping" while `inspect` shows `8086 → 0.0.0.0:8086` — the comment is
+stale, the port is what the marvin-side consumers have been using since DEC-0118.
+
+### Decision
+
+1. **Raw copy of `data/` + `config/`, not `influx backup`/`restore`.** Same engine version both
+   sides, so the bolt/sqlite metadata and TSM/WAL trees carry the org, both buckets, **every
+   token**, the `eh-daily-rollup` Task and the CLI operator config byte-for-byte. That is the
+   like-for-like move ops#260's hygiene rule asks for: each consumer changes exactly one thing (the
+   URL), nothing is re-minted, nothing is re-created, and a regression can only be the host.
+   `restore --full` reaches the same end through a second mechanism with its own semantics to
+   verify — no benefit at this size.
+2. **The cutover copy is taken from a STOPPED server; a live snapshot is used only for the
+   dark-parallel test.** COMPUTE-NODE.md §3's "live pre-rsync then delta" exists to bound the
+   outage on a large store; at 16 MB the outage is the owner's gesture time. The pre-copy's real
+   value is proving the unit, the uid mapping and the bolt store *before* anything is at stake —
+   so stage 1 does exactly that from a live tarball (torn bolt = influxd refuses to start = the
+   test working), stopped, and wiped again before stage 2 lays down the real tree.
+3. **Name and placement: container and unit `weewx-influxdb`, paths under
+   `/srv/docker/weewx/influxdb/`, `weather.slice`.** Both names fall inside the existing weewx
+   manifest globs, so `t-weewx` gets start/stop/restart/logs/inspect/journal through `marvinctl`
+   with **no manifest change and no new grant**; the store stays weewx-owned as ops#260 arbitrated;
+   dashboard's `eh_rollup` bucket and Task live inside it unchanged (DEC-0100). Its own tenant was
+   considered (it is "everyone's store") and rejected: it would add a fifth manifest, a fifth key,
+   a fifth slice and an arbitration round for a 16 MB service whose only writer is weewx.
+4. **`influxdb:2.7.12` pinned, `--pull=never`.** Dashboard's Flux Task was verified against this
+   engine's boundary semantics (their `influx/README.md` §1 refuses to install on a changed
+   engine); a floating `:2.7` could bump it silently at the first pull on a new host. The owner pulls
+   once at install; a missing tag fails loudly (the eh-proxy shape, MARVIN-DEC-0111).
+5. **`--user 996:986` (`t-weewx`), copied tree chowned to it.** Foundation's tree is uid 1000
+   only because the official image gosu-drops to `influxdb` when started as root; on marvin uid 1000
+   is a human account. Started non-root the image skips init/gosu and runs influxd directly —
+   upstream-supported, and the only defensible ownership on a multi-tenant box. This is the one
+   deliberate divergence from like-for-like, and it is a host-mapping change, not a database
+   behaviour change.
+6. **No `DOCKER_INFLUXDB_INIT_*` in the unit.** The bolt store is initialised, so they are ignored
+   — and they are the admin password and operator token; a unit never carries a secret
+   (ACCESS-AUDIT-S7 A6).
+7. **`-p 8086:8086`, like-for-like.** eh-proxy is on the default bridge and reaches the host's LAN
+   IP; loopback would not be reachable from it. Tightening the bind is a post-move change.
+8. **Foundation's instance is stopped with `docker kill -s TERM` (clean WAL flush without
+   `docker stop`'s hang, DEC-0008), then `docker update --restart=no`, and RETAINED** — container,
+   image, trees — until ops#260 step 4 retires Container Manager after the drill. Explicit
+   `--restart=no` because a NAS reboot must not be able to bring a stale second store back on the
+   LAN, whatever `unless-stopped`'s treatment of a killed container turns out to be.
+9. **The archive-write gap is backfilled from SQLite**, the source of truth, with the DEC-0119-fixed
+   `ops/backfill_influx.py` — the copy on marvin is the 2026-06-19 pre-fix version and must be
+   transported first. Loop-packet posts lost in the window are lost by design.
+10. **Nothing rides along.** Bind tightening, a memory cap, retention, dropping `lease_dir`, the
+    consistent-dump timer — each lands before or after as its own change, never inside the cutover
+    (ops#260 hygiene; TENANT-MIGRATION-LESSONS §2).
+
+### Consequences
+
+- **Order of operations is load-bearing** (runbook §4): pause the event-detect timer → kill Foundation
+  → copy → start marvin → repoint weewx (both conf files, then `restart weewx.service`, ~31 s) →
+  repoint dashboard's two files → resume the timer → backfill → confirm Foundation's 8086 refuses.
+  The window avoids 01:00–01:30 ET (the Task) and 03:10–03:40 ET (dumps + restic).
+- **First backup the weather history has ever had.** Foundation's store was inside no backup
+  (Hyper Backup never set up, ops#209). On marvin it sits in restic's nightly `/srv` set; a
+  `weewx-influxdb-backup` pre-dump timer (`influx backup`, the `weewx-db-dump` slot) follows as
+  stage 3 — a file-level copy of a live TSM/bolt tree is not a backup.
+- **`influx.py`'s NAS-LEASE courtesy yield (DEC-0111) becomes moot**, not broken: after the move
+  weewx has zero NAS I/O to yield. `lease_dir` stays set (a harmless no-op against the empty dir,
+  MARVIN-DEC-0063); `BACKLOG.md`'s cross-host lease wiring item closes as overtaken once the move
+  ships; a config-only cleanup may drop the key later.
+- **`weewx.conf.rx-baseline` must be edited alongside `weewx.conf`** or the next campaign's
+  `restore_baseline` silently points the writer back at a dead host — CONSTANTS.md's DEC-0080 shape.
+- **Docs that move with it** (stage 3): `CONSTANTS.md` Infra/deploy-layer rows that still say the NAS
+  hosts InfluxDB, `docs/ARCHITECTURE.md`, `docs/INTERFACES.md` §2's "over the Docker `weather-net`
+  network" wording; ops `NAS-RUNTIME.md` and `CONSTANTS.md` §5; dashboard `MARVIN-MIGRATION.md`.
+- **Rollback** needs no reverse copy: repoint back and `docker start influxdb` on Foundation; the
+  `weewx` bucket is regenerable from SQLite, `eh_rollup` from dashboard's Task backfill procedure.
+- **What does not change:** the data contract (`docs/INTERFACES.md` §2), every token, the org, the
+  buckets, the Task, the engine version, the write cadence, the dashboard's queries.
