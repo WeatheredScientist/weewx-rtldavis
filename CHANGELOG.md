@@ -6,7 +6,7 @@ under [Pre-S16].
 
 ---
 
-## [S125] — 2026-09-05 — InfluxDB backfill + first-ever backup timer (PR #336); closeout ritual gets a step 0 (DEC-0143)
+## [S125] — 2026-09-05 — InfluxDB stage 3 closed out, closeout ritual gets a step 0 (DEC-0143), secret gate hardened against LAN literals (DEC-0144), Foundation-dark drill run clean
 
 - **ops#270 stage 3, job 1a:** ran the transported `backfill_influx.py` for the 2026-09-04 22:13–22:43
   ET gap — 28 records posted (not the assumed 29; 22:40–22:42 don't exist in SQLite either, weewx's
@@ -38,8 +38,22 @@ under [Pre-S16].
   IP written as bare prose sailed through — proven blind before the fix, and proven live twice in one
   evening (this session separately posted a raw marvin IP to a GitHub comment on ops#270, caught by a
   peer session, not by any local mechanism). New pattern-based detector, hole class 7, 63/63 tests
-  passing. The `gh` comment-body gap (no git hook reaches it) is filed as its own cross-repo issue,
-  not patched here.
+  passing. The `gh` comment-body gap (no git hook reaches it) is filed as its own cross-repo issue
+  (eaglehunt-ops#279), not patched here. PR #338/#339's stale-local-checkout problem repeated for
+  this branch too (found by checking real mergeability, not the PR's own report) — both PRs rebuilt
+  clean on the correctly-synced `dev`; #339 merged first, #340 rebuilt again on top once #339's
+  squash-merge moved `dev` again, then merged.
+- **ops#275 closed** — owner accepts the DEC-0144 residual (non-routable, no credential), same
+  reasoning as ops#248. **ops#278 part 1 closed** — marvin's `weewx-rx-experiment.timer` was still
+  enabled and firing every 10 min, stale residue from the retired campaigns (BOOT job 5); disabled
+  self-service. Parts 2/3 (NAS-side vs marvin-side campaign state comparison, doc retirement) carried
+  to next session.
+- **ops#260 Foundation-dark drill, weewx's slice: run and closed clean.** T0 11:26 AM ET (a first
+  attempt at 11:31 was voided — marvin could still reach Foundation through a partial UniFi block;
+  restarted at a true T0 of 11:52 with the cable physically out). Three rounds of §5.6 probes
+  (~12:02, ~12:17, post-restore ~12:24) — Influx health 200, unit active throughout with no restart,
+  archive cadence unbroken at 1-minute records straight through the outage and the restore, zero NAS
+  reference in `weewx.conf`. Zero dependency on Foundation observed at any point.
 
 ## [S124] — 2026-09-04 — DEC-0141 designed AND DEC-0142 executed the same night: InfluxDB serves from marvin since 22:35 ET; Foundation hosts no weather workload
 

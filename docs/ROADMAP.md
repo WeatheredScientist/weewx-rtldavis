@@ -3,7 +3,12 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-04 (S124 — targeted line update per DEC-0057, not a full pass; tripwire
+**Last updated:** 2026-09-05 (S125 — targeted line update per DEC-0057, not a full pass; tripwire
+now S126, due next session. P1.8's stage 3 mostly closes out: backfill, `SuccessExitStatus=2`,
+backup timer, and the Foundation-dark drill all landed S125; only the owner's tar deletion and
+ops/dashboard's own doc rows remain. DEC-0143/DEC-0144 are process/tooling decisions, not P0–P3
+roadmap items, matching DEC-0140's precedent — no line touched by either.)
+Prior: 2026-09-04 (S124 — targeted line update per DEC-0057, not a full pass; tripwire
 still S126. DEC-0141 opens the InfluxDB Foundation→marvin move — the first roadmap line the
 Foundation decoupling (ops#260 / OPS-DEC-0188) has had here: S105/S106 classed DEC-0118/0119 as
 incident response, and that was right for them, but this is planned work with a runbook, so it gets
@@ -283,11 +288,12 @@ S59**, closed on five consecutive clean days with a positive control.
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
 bound and done via reversible live hot-swap with an instant rollback path.
 
-## P1.8 — Foundation decoupling: InfluxDB host move (ops#260 step 3, OPS-DEC-0188) — 🔶 IN PROGRESS (S124)
+## P1.8 — Foundation decoupling: InfluxDB host move (ops#260 step 3, OPS-DEC-0188) — 🔶 IN PROGRESS (S125)
 
 The last weather workload on Foundation is this repo's `influxdb` container; HLF and the
-dashboard cut over 2026-09-04, so the decoupling — and the Foundation-dark drill that closes
-ops#260 — now waits on weewx.
+dashboard cut over 2026-09-04. weewx's slice of the Foundation-dark drill (ops#260 item E) ran
+and closed clean S125 — Foundation dark 11:26 AM–12:24 PM ET, three rounds of §5.6 probes, zero
+NAS dependency observed, zero stall through the restore.
 
 - [x] **Design + runbook (S124, DEC-0141):** `docs/INFLUXDB-MIGRATION.md` (measured state, three
       stages, cutover table, rollback) + `ops/weewx-influxdb.service`. Stopped-server raw tree copy
@@ -296,12 +302,14 @@ ops#260 — now waits on weewx.
 - [x] **Stage 0–1 (S124, same night):** marvin installed the unit + pulled the image (MARVIN-DEC-0121);
       dark-parallel from a live snapshot passed 22:07 ET.
 - [x] **Stage 2 cutover (S124, 22:13–22:43 ET, DEC-0142):** Foundation stopped 22:13:35, marvin
-      store live 22:35:02, weewx publishing 22:43:16. **29-record gap (22:14–22:42) still to
-      backfill** — S125.
-- [ ] **Stage 3:** backfill; `SuccessExitStatus=2` unit re-install (marvin); `weewx-influxdb-backup`
-      pre-dump timer (the store's first backup ever); docs in ops/dashboard; delete the final tars from
-      the share; `BACKLOG.md`'s NAS-LEASE cross-host item closes as moot; weewx's section of the
-      ops#260 drill; Foundation's stopped instance retires at ops#260 step 4.
+      store live 22:35:02, weewx publishing 22:43:16.
+- [x] **Stage 3, weewx's share (S125):** backfill done (28 records, not 29 — ERR-0007);
+      `SuccessExitStatus=2` confirmed live; `weewx-influxdb-backup` pre-dump timer installed +
+      armed (first fire 2026-09-06 03:15 EDT); `BACKLOG.md`'s NAS-LEASE item closed as moot (PR
+      #336); weewx's section of the ops#260 drill run and posted.
+- [ ] **Stage 3, remaining:** owner deletes the two token-bearing tars from the marvin-data share;
+      ops/dashboard doc rows (`NAS-RUNTIME.md`, `CONSTANTS.md` §5, dashboard `MARVIN-MIGRATION.md`
+      — theirs); Foundation's stopped instance retires at ops#260 step 4.
 
 ---
 

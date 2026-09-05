@@ -71,6 +71,17 @@ alone did not catch.
   `e3b0c442…` — the sha256 of EMPTY input — so the table looked healthy and every row was wrong
   (S119). Brace it: `${c}:path`. Any `e3b0c442…` in a hash list means you hashed nothing.
 
+- **`nasctl ls` of a `0700 uid 1000` directory returns an EMPTY listing, not a permission error**
+  (S124, ops#270). Reads as "the store is empty" when it's a normal permission wall for the read-only
+  key — check with a different verb (a container's own `/metrics` or `du` from inside) before
+  concluding a data dir is empty.
+- **`&&` after a multi-file `sed` hides the verification grep** (S124). A four-file repoint chained
+  `sed ... && grep <new address>` — the `sed` on one path errored out (wrong path, exited non-zero),
+  short-circuiting the `&&` before the verification grep ever ran. The zeros the operator then saw
+  were the *old*-address grep never replaced by the intended check, not proof the repoint failed.
+  Never chain a verification read after a mutation with `&&`; run it as its own separate step so it
+  executes regardless of the mutation's exit code, and read ITS output, not the absence of an error.
+
 ## §2 Git, PRs, and the handoff
 
 - **`gh pr merge`'s output is never trustworthy either way** — silent/empty stdout can mean success,
@@ -181,3 +192,14 @@ alone did not catch.
   ignoring: c` only in the unit's journal — five days of warnings that no `unit` status read showed
   (#316). Quote any value with a space, and after any unit change read the startup line that prints
   the parsed value, not the file.
+- **`influxd` exits 2 on SIGTERM — a clean stop, not a crash** (S124, measured on two hosts: the
+  marvin dark-parallel test stop and Foundation's `docker kill -s TERM`). Without
+  `SuccessExitStatus=2` in the unit, a routine `systemctl stop` leaves it in `failed`, and the next
+  start then reads in the journal as a recovery from a crash that never happened. Check a unit's
+  `SuccessExitStatus` before reading a nonzero exit as trouble.
+- **`marvinctl enable <unit> --now` and `disable <unit> --now` both need the unit's `[Install]`
+  section to actually do anything** (S124/S125) — a unit installed but never enabled has no
+  `timers.target.wants` symlink for `disable` to remove, and `enable --now` is what creates it AND
+  starts the first run in one step (no separate `start` needed, and running one first is redundant).
+  Confirm the effect with `marvinctl timers` (next trigger) or `unit <name>` (`Loaded:`/`Active:`),
+  not by assuming the verb ran.
