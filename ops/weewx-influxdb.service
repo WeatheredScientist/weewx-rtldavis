@@ -1,0 +1,72 @@
+# weewx-influxdb.service -- InfluxDB 2.x on marvin, the weewx tenant's store (S124, DEC-0141)
+#
+# WHAT THIS REPLACES
+# ------------------
+# The `influxdb` service of Foundation's (the DS918+) `docker-compose.yml`, project
+# `weewx-rtldavis`: image `influxdb:2.7` (resolved to v2.7.12 on 2026-06-19),
+# bind mounts `/volume1/docker/influxdb/{data,config}`, port 8086 published to
+# the LAN, restart `unless-stopped`, DSM `db` log driver. It is the last weather
+# workload left on Foundation (ops#260 step 3 / OPS-DEC-0188); its three
+# consumers -- weewx's `influx.py` uploader, eh-proxy `/query`, dashboard's
+# hourly `event-detect` -- all already run on marvin and reach it by Foundation's
+# LAN IP. docs/INFLUXDB-MIGRATION.md is the runbook this unit is one piece of.
+#
+# WHY IT IS NAMED, PLACED AND RUN THIS WAY
+# ---------------------------------------
+# - `weewx-influxdb` (unit AND container) sits inside the weewx tenant manifest's
+#   globs (`units = weewx*.service`, `containers = *weewx*`), so `t-weewx` gets
+#   start/stop/restart/logs/inspect/journal through `marvinctl` with NO manifest
+#   change and no new grant. InfluxDB stays weewx-owned, as ops#260 arbitrated
+#   (weewx executes, marvin hosts); dashboard's `eh_rollup` bucket and its
+#   `eh-daily-rollup` Task live inside it unchanged (dashboard DEC-0266 / weewx
+#   DEC-0100).
+# - `influxdb:2.7.12`, not `:2.7`, and `--pull=never`: the exact engine version
+#   Foundation runs. Dashboard's Flux task was verified against THIS engine's
+#   boundary semantics (their influx/README.md §1 refuses to install on a changed
+#   engine) -- a floating tag could silently bump it at the first pull. The
+#   owner pulls the image once at install; a missing tag then fails loudly.
+# - `--user 996:986` is `t-weewx`. Foundation's data dir is owned by uid 1000
+#   because the official image gosu-drops to `influxdb` (1000) when started as
+#   root; on marvin uid 1000 is a human account, so the tenant uid is used and
+#   the copied tree is chowned to it (docs/INFLUXDB-MIGRATION.md §3). Started as
+#   non-root the image skips its init/gosu path and runs influxd directly --
+#   supported upstream, and the right shape on a multi-tenant box.
+# - No `DOCKER_INFLUXDB_INIT_*` variables: the copied bolt store is already
+#   initialised, so they would be ignored -- and a unit never carries a secret
+#   (marvin ACCESS-AUDIT-S7 A6). Tokens, org, buckets, the Task and the CLI's
+#   operator config travel INSIDE the copied data/config trees, byte for byte.
+# - `-p 8086:8086`: like-for-like with Foundation (LAN-published, never
+#   internet-facing). eh-proxy runs on the default bridge and reaches the host's
+#   LAN IP; loopback would not be reachable from it. Tightening the bind is a
+#   post-move change, not a cutover rider (ops#260 migration hygiene).
+# - `weather.slice`, like weewx.service: the dashboard's live surface reads this
+#   store on every page load, and weewx blocks its RESTThread on it.
+# - Paths under `/srv/docker/weewx/influxdb/` -- tenant tree, local NVMe
+#   (COMPUTE-NODE.md §3: databases never on network storage), inside restic's
+#   nightly `/srv` set. A consistent `influx backup` pre-dump timer follows AFTER
+#   the move as its own change (runbook §5), the weewx-db-dump pattern.
+# - `docker stop -t 60`: a clean influxd shutdown flushes the WAL. DEC-0008's
+#   "kill, never stop" is a Synology-daemon hazard; every marvin unit stops.
+[Unit]
+Description=weewx-influxdb (InfluxDB 2.7.12 -- weewx archive store; eh_rollup + eh-daily-rollup Task inside)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Slice=weather.slice
+Restart=always
+RestartSec=10
+TimeoutStopSec=90
+ExecStartPre=-/usr/bin/docker rm -f weewx-influxdb
+ExecStart=/usr/bin/docker run --rm --name weewx-influxdb --pull=never \
+    --user 996:986 \
+    -p 8086:8086 \
+    -e TZ=America/New_York \
+    -v /srv/docker/weewx/influxdb/data:/var/lib/influxdb2 \
+    -v /srv/docker/weewx/influxdb/config:/etc/influxdb2 \
+    influxdb:2.7.12
+ExecStop=/usr/bin/docker stop -t 60 weewx-influxdb
+
+[Install]
+WantedBy=multi-user.target
