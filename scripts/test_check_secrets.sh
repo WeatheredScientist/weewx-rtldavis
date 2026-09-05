@@ -86,6 +86,15 @@ bad=(
   'GMAIL_PASS = abcd efgh ijkl mnop'                             # (hole 27) unquoted, spaced =
   '    gmail_pass = abcd efgh ijkl mnop'                         # (hole 28) unquoted, conf-style indent
   'GMAIL_PASS=abcd efgh ijkl mnop'                               # (hole 29) unquoted, env-style
+  # --- hole class 7 (DEC-0144): a private-range LAN IP/subnet as bare prose ---
+  # None of these are KEY=VALUE shaped, which is exactly why they slipped through
+  # every rule above -- proven blind before the fix (`printf 'NAS on 192.168.127.5\n'
+  # | check_secrets.sh -` exited 0). Real instances: DEC-0127 (BOOT.md, full
+  # history rewrite) and DEC-0144 (this fix's own trigger).
+  'NAS on 192.168.127.5, laptop on 192.168.1.42'                 # (hole 30) full IPs, mid-sentence
+  'Mac on `192.168.1.x`, NAS on `192.168.127.x`'                 # (hole 31) the exact DEC-0127/0144 shape
+  'server_url = http://10.0.4.12:8086'                           # (hole 32) 10/8, in a config value
+  'bridge sits at 172.20.0.1 on the host'                        # (hole 33) 172.16/12
 )
 
 # --- must PASS (exit zero) ------------------------------------------------------
@@ -124,6 +133,12 @@ good=(
   'GMAIL_PASS = "${GMAIL_PASS}"'                                 # interpolation, _PASS key
   'passed = True'                                                # a word starting with pass
   'if verify_passcode(x): pass'                                  # the Python statement
+  # --- hole class 7 (DEC-0144): the private-IP rule must not cry wolf ---
+  'numeric -- "10.0.0" < "3" is True in Python, which would reject a'  # rtldavis.py:220 verbatim
+  'server_url = http://<MARVIN_IP>:8086'                         # the placeholder itself
+  'weewxd published to <NAS_IP>:8086 at 22:43:16'                # placeholder, prose
+  'health check reached 8.8.8.8 to confirm internet routing'     # a public IP, out of scope
+  'bound to 127.0.0.1 for local-only testing'                    # loopback, not RFC1918
 )
 
 echo "── planted BAD payloads (each MUST be caught) ──────────────────────────"
