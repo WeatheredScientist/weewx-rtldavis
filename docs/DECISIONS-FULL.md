@@ -9309,6 +9309,68 @@ stale, the port is what the marvin-side consumers have been using since DEC-0118
 · **closes** the weewx half of ops#270 stage 2 · **leaves open** step 9 (backfill) and stage 3 ·
 **as-run record** `docs/INFLUXDB-MIGRATION.md` §8
 
+
+## DEC-0143 — Closeout skeleton gets a step 0: `BOOT.md`/`CHANGELOG.md`/DEC entries ride the merge or promotion PR itself, never a deferred post-merge pass (OPS-DEC-0195)
+
+**Status:** Accepted (process, no code) · **Date:** 2026-09-05 (S125) · **adopts** OPS-DEC-0195
+(eaglehunt-ops `CLOSEOUT-TEMPLATE.md`) · **closes** weewx's half of ops#218 (HLF answers
+separately) · **amends** DEC-0052's closeout skeleton (`CLAUDE.md`) · **generalizes** the pattern
+DEC-0138→DEC-0139 already used once
+
+### Context
+
+ops#218 opened on an EHWD incident (their S261): a session shipped and merged a PR, kept running to
+do legitimate post-merge work (deploy, live verification), and — auto-archived on the PR merge
+event, or close to it — dropped out of a peer session's `ListAgents`/session-start visibility before
+its own repo's closeout ritual (`BOOT.md` pointer rewrite, `CHANGELOG.md` line, DEC row) ever ran. A
+second EHWD session had to notice the stale pointer, ask before touching shared docs itself, and wait
+for a manual repair. ops filed it, dashboard and HLF (S297) hit the same shape independently, and
+ops#218 asks each affected repo to adopt the fix or decline with a reason.
+
+weewx checked its own history rather than taking the pattern on trust: **S120 and S122 are the same
+shape**, just non-fatal so far. S120 merged PR #319 (DEC-0137, the `rxCheckPercent` denominator fix)
+and left `#317` open pending deploy rather than writing the closeout inline; S122 promoted `v2.0.16`
+to prod (DEC-0138) the same way. Both were repaired only because S121 and S123 happened to run next
+and caught the debt via the existing "debt hook" — nothing in the ritual itself prevented the gap
+from opening. Three independent repos hitting the identical shape is a pattern, not a coincidence.
+
+### Decision
+
+Add step 0 to the closeout skeleton (`CLAUDE.md`, before DEC-0052's step 1, cited there as
+"OPS-DEC-0195, ops#218 — adopted S125"): when a session's own work **is** a merge or a prod
+promotion, the `BOOT.md` pointer, the `CHANGELOG.md` line, and the DEC row ride that same PR or land
+before the merge — never queued for a closeout pass that runs after. Nothing in the 8-step skeleton's
+*content* changes; what changes is *sequencing* relative to the merge/promotion event, because that
+event is exactly the trigger an auto-archive race fires on.
+
+Folded into the same step, because it's the same underlying discipline (don't let a foregone
+conclusion wait on an external clock to be written down): a session that has already verified its own
+work does not idle-wait for a live recheck window (a 6-hourly monitor email, a ping, a scheduled
+re-check) to reconfirm before closing. It writes the pending re-verify into `BOOT.md`'s job list as a
+named next-session action and closes clean — the shape DEC-0138 (deploy-verified, S121) → DEC-0139
+(metric-confirmed against the next live window, S122) already used once for the `v2.0.16` cutover,
+now generalized as the default rather than a one-off judgment call.
+
+### Why adopt rather than decline
+
+- The failure mode is real here, not just imported: S120/S122 are direct instances, only masked by
+  luck of session ordering (S121/S123 ran before the gap could bite in the form ops#218 describes —
+  a peer session or the owner discovering a stale pointer with no session left to fix it).
+- The fix is sequencing discipline, not new mechanism — no tooling, no new file, no schema change to
+  `BOOT.md`/`CHANGELOG.md`/`DECISIONS.md`. Cost is near zero; it asks a session to write three things
+  it already writes, just not after walking away from the PR that made them true.
+- It composes with existing rules rather than conflicting: DEC-0052's skeleton, the branch-per-change
+  rule (never commit directly to `dev`), and the "pause for approval before push" rule are all
+  unaffected — step 0 governs *when within the session* steps 2–4 happen, not *whether* a human
+  approves the commit/push.
+
+### What does not change
+
+The rest of the closeout skeleton (steps 1–8), `docs/CONVENTIONS.md`'s green-gate commands, the
+branch/PR requirement, and the pause-for-approval rule are all untouched. This is scoped to sessions
+whose own work includes a merge or a prod promotion — a pure research/investigation session with
+nothing merging is unaffected.
+
 ### Context
 
 DEC-0141 was written and merged (PR #334) at ~21:38 ET with "daytime" as the proposed cutover
