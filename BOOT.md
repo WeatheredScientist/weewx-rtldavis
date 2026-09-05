@@ -16,12 +16,21 @@ is a **separate repo** — don't make dashboard changes here.
 
 ### What's settled (do not re-derive)
 
-**InfluxDB stage 3 (ops#270) essentially closed.** Backfill: 28 records posted, not 29 —
-22:40–22:42 don't exist in SQLite either ([ERR-0007](docs/DATA_ERRATA.md)), verified via `influx
-query`. `SuccessExitStatus=2` confirmed live. `weewx-influxdb-backup.service`/`.timer` installed by
-marvin and armed self-service — first fire **2026-09-06 03:15:00 EDT**. NAS-LEASE `BACKLOG.md` item
-closed. Only two pieces remain, neither weewx's action: (c) owner deletes the two token-bearing tars
-from the marvin-data share; (e) ops/dashboard's own doc rows.
+**InfluxDB stage 3 (ops#270) — CLOSED.** Backfill: 28 records posted, not 29 — 22:40–22:42 don't
+exist in SQLite either ([ERR-0007](docs/DATA_ERRATA.md)), verified via `influx query`.
+`SuccessExitStatus=2` confirmed live. `weewx-influxdb-backup.service`/`.timer` installed by marvin
+and armed self-service — first fire **2026-09-06 03:15:00 EDT**. NAS-LEASE `BACKLOG.md` item closed.
+The two token-bearing tars are deleted from the marvin-data share (owner, 12:36 ET); `weewx-stage`
+on the same share cleared except one ACL-blocked `weewx-data/` subtree (needs the owner's own
+interactive `sudo` on the NAS — low value, not chased). ops#270 closed on weewx's word.
+
+**ops#260 step 4 (Foundation retirement): weewx answered — retire everything.** Nothing on
+Foundation's tree is needed (stopped `influxdb`, `/volume1/docker/weewx-rtldavis/`), nothing on
+weewx's side reads marvin's NFS export at runtime. **Marvin confirmed the shim is still pending,
+not done** — `/etc/exports.d/marvin-weewx.exports` still exports `weewx-data` ro to the NAS; the
+retirement condition (both NAS-side consumers migrated) is met, it's just unactioned. Marvin-side
+root gesture (edit/remove the export, `exportfs -ra`), marvin's session is taking it to the owner as
+its own item — nothing further owed from weewx.
 
 **Foundation-dark drill (ops#260 item E) run and closed clean, weewx's slice.** First attempt
 (11:26–11:31) voided — marvin could still reach Foundation through a partial UniFi block; true T0
@@ -92,7 +101,7 @@ inline, past the ~3-session guideline (pre-existing debt, not new this session).
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · self-service `push` LIVE (ops#265, closes on first real push) |
 | GitHub Releases | dead since v2.0.11 — #331 |
 | Git | S125: PR #336 (backfill+backup timer), #339 (dev/main parity), #340 (DEC-0144) → `dev` |
-| Trackers | repo #327, #331 open · ops #270 ((c)/(e) only) · #257 (limbs 1/3 open, limb 2 closed) · #250, #110, #278 (parts 2/3) open · #273/#274/#275/#264/#218 closed S125 · #279 filed |
+| Trackers | repo #327, #331 open · ops #257 (limbs 1/3 open, limb 2 closed) · #250, #110, #278 (parts 2/3) open · #270/#273/#274/#275/#264/#218 closed S125 · #279 filed · marvin NFS shim retirement pending (owner item, marvin's tracker) |
 
 ## Blockers
 
