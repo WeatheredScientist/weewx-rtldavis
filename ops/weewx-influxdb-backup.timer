@@ -1,0 +1,11 @@
+# 03:15 daily, before restic's 03:30 read of /srv — same slot as weewx-db-dump.timer; independent
+# stores, no cross-tenant or cross-store conflict (see the .service header).
+[Unit]
+Description=Daily 03:15 weewx-influxdb consistent dump, ahead of the 03:30 restic backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target
