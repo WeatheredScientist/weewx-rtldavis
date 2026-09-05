@@ -6,6 +6,23 @@ under [Pre-S16].
 
 ---
 
+## [S125] — 2026-09-05 — InfluxDB backfill + first-ever backup timer (PR #336); closeout ritual gets a step 0 (DEC-0143)
+
+- **ops#270 stage 3, job 1a:** ran the transported `backfill_influx.py` for the 2026-09-04 22:13–22:43
+  ET gap — 28 records posted (not the assumed 29; 22:40–22:42 don't exist in SQLite either, weewx's
+  own restart for the cutover fell across those intervals). Filed ERR-0007, corrected
+  `docs/INFLUXDB-MIGRATION.md`'s as-run record. Verified independently via `influx query` (28, exact).
+- **`weewx-influxdb-backup.service`/`.timer`** drafted — a consistent `influx backup` pre-dump at
+  03:15 (the `weewx-db-dump` slot), mirroring HLF's `hlf-db-dump.timer`. Not yet installed on marvin
+  (needs a root gesture; no self-service "install new unit" verb).
+- NAS-LEASE `BACKLOG.md` cross-host item closed as moot — zero NAS I/O left to yield since the
+  InfluxDB move (PR #336).
+- Live-verified `SuccessExitStatus=2` and ops#257 limb 2's `:marvin-live` self-service tag are both
+  already in production, ahead of BOOT.md's own stale notes on both.
+- **DEC-0143 — adopted OPS-DEC-0195** (ops#218): the closeout ritual gets a step 0 — `BOOT.md`,
+  `CHANGELOG.md`, and DEC rows ride the merge/promotion PR itself, never a deferred post-merge pass.
+  Prompted by finding this exact gap in weewx's own history (S120, S122) while answering ops#218.
+
 ## [S124] — 2026-09-04 — DEC-0141 designed AND DEC-0142 executed the same night: InfluxDB serves from marvin since 22:35 ET; Foundation hosts no weather workload
 
 - **Cutover (owner's call to go tonight, 22:08–22:43 ET):** stage 0 by marvin (MARVIN-DEC-0121);

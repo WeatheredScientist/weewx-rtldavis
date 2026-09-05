@@ -73,6 +73,15 @@ gone stale on two values: the reception baseline and the driver-vs-config layer 
   command, the rest of eaglehunt-ops stays not-a-session-start-read):
   `gh issue list -R WeatheredScientist/eaglehunt-ops --label repo:weewx --state open`
 - **End (closeout skeleton — DEC-0052, adapted from eaglehunt-ops OPS-DEC-0016):**
+  0. **Closeout rides the merge, never follows it** (OPS-DEC-0195, ops#218 — adopted S125). When
+     this session's own work IS a merge or a prod promotion, the `BOOT.md` pointer, the
+     `CHANGELOG.md` line, and the DEC row ride that same PR or land before the merge — never
+     deferred to a later pass. Reason: a session can drop out of view (auto-archive on PR merge)
+     before a post-merge closeout pass runs, stranding the handoff on a stale pointer (ops#218's
+     EHWD S261 case; weewx hit the same shape at S120/S122, repaired only because S121/S123
+     happened to run the debt hook). A verified session does not idle-wait for a 6-hourly window or
+     a ping to re-confirm against — write the pending re-verify into `BOOT.md`'s job list and close
+     clean; a later session picks up the confirmation as its own step, not as a dangling closeout.
   1. **Green gate** — run the commands **exactly as `docs/CONVENTIONS.md` spells them** (they need
      the repo venv and, for mypy, explicit arguments; three of the four previously documented here
      did not work as written — S59b). If skipped, state why.
