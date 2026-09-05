@@ -1,6 +1,9 @@
 # InfluxDB migration — Foundation → marvin (ops#260 step 3)
 
-**Status:** runbook, S124 (2026-09-04) — *nothing executed yet.* Decision record: DEC-0141. Ledger:
+**Status:** **EXECUTED 2026-09-04 22:08–22:43 ET (S124)** — InfluxDB serves from marvin since
+22:35:02 ET; weewx publishing to it since 22:43:16 ET. §8 below is the as-run record and the
+deviations from the plan above (the plan text is left as written, so the diff is readable).
+Decision records: DEC-0141 (design), DEC-0142 (execution). Ledger:
 [ops#270](https://github.com/WeatheredScientist/eaglehunt-ops/issues/270) (the drill stays on ops#260).
 **Owner of the move:** weewx-rtldavis (compose owner of the `influxdb` container, as ops#260
 arbitrated). **Host:** marvin. **Consumers repoint once:** weewx's own `influx.py`, eh-proxy
@@ -145,3 +148,36 @@ The data contract (`docs/INTERFACES.md` §2: measurement `record`, series key `b
 unit-suffixed field names, `*_qc` flags), every token, the org, both buckets, the Task, the engine
 version, weewx's write cadence, the dashboard's queries. A consumer that only knows the schema
 notices nothing but a URL.
+
+## 8. As run — 2026-09-04, S124 (all times ET; owner attended throughout, in the weewx and ops chats)
+
+| Time | Step | What happened |
+|---|---|---|
+| 21:42 | baseline | weewx publishing every minute; Foundation store 64 shards, TSM 17.19 MB |
+| ~21:55 | stage 0 | marvin: unit vendored + root-installed (`loaded`, disabled), `influxdb:2.7.12` pulled, `/srv/docker/weewx/influxdb` `t-weewx` 0750 (MARVIN-DEC-0121). **Side effect:** the installer also swept in `weewx.service`'s committed `:marvin-live` re-pin (ops#257 limb 2); marvin tagged `v2.0.16` → `:marvin-live` the same turn, so the later weewx restart started from that alias (same bytes, banner `0.20+ws.5` confirmed) |
+| 21:58 | stage 1 · 1 | live snapshot via **`docker cp <ctr>:<path> -`** streamed to tar files on the marvin-data share (Class C, one mint) — **not** `sudo tar` on the NAS: `nas-admin` has no non-interactive sudo, and the docker daemon reads the `0700 uid 1000` tree as root. Data tar **152 MB** (the 17 MB TSM figure omits the bolt/sqlite/WAL files), config 3 KB |
+| 21:59 | stage 1 · 2 | owner: extract + `chown -R 996:986` on marvin; sha256 matched |
+| 22:07 | stage 1 · 3–4 | dark instance up in 8 s: `/health` pass v2.7.12, `weather.slice`, no warnings; `weewx` 16 shards / 16.86 MB, `eh_rollup` 16 shards / 204,580 B = Foundation's byte count. `_monitoring`/`_tasks` showed 6 and 3 shards, not 16 — the retention enforcer dropped their expired empty shards on start; system buckets, no user data. **Use the two user buckets as the equality test, not the raw 64** |
+| 22:08 | stage 1 · 6 | dark instance stopped — unit went `failed (status=2)`: **influxd exits 2 on SIGTERM**. Cosmetic; `SuccessExitStatus=2` added to the unit for stage 3 |
+| 22:08:57 | stage 2 · 1 | dashboard paused `dashboard-event-detect.timer` (last `eh_rollup` write 22:00:13). Note the verb order: **`marvinctl disable <unit> --now`** — unit first |
+| 22:13:35 | stage 2 · 3–4 | one Class C: `docker kill -s TERM influxdb` → `Exited (2)` in ~4 s → `docker update --restart=no` → snapshot tars deleted → final `docker cp` streams (`influxdb-final-20260904-{data,config}.tar`, sha256 recorded). **Influx write gap opens 22:13:30** |
+| 22:3x | stage 2 · 5 | owner: wipe dark copy, extract final, chown; sha256 matched |
+| 22:35:02 | stage 2 · 6 | `marvinctl enable weewx-influxdb.service --now`; `/health` pass; `weewx` 16 shards / 16.87 MB, `eh_rollup` 16 / 212,744 B (grew by exactly the 22:00 tick) |
+| ~22:38 | stage 2 · 7a | owner's one root `sed -i` over the four consumer files. **Deviation:** the runbook gave `weewx.conf.rx-baseline` under `weewx-data/`; it lives at the **tenant root** `/srv/docker/weewx/`. sed errored on that path and exited 2, which made the `&&`-chained "new address" grep skip — the zeros the owner then saw were the *old*-address grep, i.e. the correct result. Verified by redacted read: `weewx.conf` flipped. The `.rx-baseline` edit was re-issued as its own one-liner |
+| 22:40:42 | stage 2 · 7b | `marvinctl restart weewx.service` (image `:marvin-live`); 22:40:43 `user.influx INFO Data will be uploaded to http://<MARVIN_IP>:8086`; **22:43:16 first `Influx: Published record 2026-09-04 22:43:00`** |
+| 22:44 | stage 2 · 8 | dashboard cued with epoch `1788576042` (2026-09-05T02:40:42Z); their restart/enable/verify report is on ops#270 |
+| 22:44 | stage 2 · 10 | Foundation `:8086` refuses (`000`); `influxdb` absent from `nasctl ps` (stopped, retained) |
+
+**The gap:** last Foundation record 22:13:00, first marvin record 22:43:00 → **29 archive records
+(22:14–22:42) missing from the `weewx` bucket**, every one present in SQLite. Step 9 (backfill)
+**deferred to S125** — it needs the write token in a root shell on marvin and the DEC-0119-fixed
+tool transported first; nothing is lost by waiting.
+
+**Left on the share:** `influxdb-final-20260904-{data,config}.tar` (token store inside, IP-locked
+share, 0777) — delete with the next NAS gesture. **Left on Foundation, on purpose:** the stopped
+`influxdb` container, image and trees (rollback until ops#260 step 4).
+
+**Runbook corrections folded in for the next reader:** the copy route (`docker cp … -`, no sudo);
+`.rx-baseline` at the tenant root; `marvinctl <verb> <unit> --now` order; `SuccessExitStatus=2`;
+compare user-bucket shard counts, not the raw total; a `&&` after a multi-file `sed` hides the
+verification grep if any one path is wrong — use `;`.

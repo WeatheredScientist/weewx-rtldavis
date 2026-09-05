@@ -16,72 +16,71 @@ is a **separate repo** — don't make dashboard changes here.
 
 ### What's settled (do not re-derive)
 
-**Reception metric chain DEC-0134→0139 complete; `v2.0.16` is prod** (marvin, since 09-03 20:29 ET,
-gain 372, banner `0.20+ws.5`), promoted to `main` = `prod-baseline-20260904`, on Docker Hub as
-`:v2.0.16` (byte-identical, `CONSTANTS.md` Release row); `:latest` = v2.0.13, moves only by the
-owner's gesture. `DISC-0001` in `docs/DATA_ERRATA.md` carries both boundaries. Campaigns A–D are
-*untested*, not re-run (`docs/ROADMAP.md` P2).
+**InfluxDB serves from marvin since 2026-09-04 22:35:02 ET (DEC-0141 design, DEC-0142 execution;
+ops#270).** `weewx-influxdb.service` in `/weather.slice`, `influxdb:2.7.12`, `--user 996:986`,
+trees `/srv/docker/weewx/influxdb/`, self-service lifecycle. weewx publishing to it since 22:43:16;
+dashboard's eh-proxy + event-detect repointed and verified end-to-end through the public site
+(`verify_archive_fresh.py` GO 22:46). **Foundation hosts no weather workload** — its `influxdb`
+container is stopped, `--restart=no`, retained as rollback until ops#260 step 4. As-run record with
+every deviation: `docs/INFLUXDB-MIGRATION.md` §8. `weewx.conf` **and** `weewx.conf.rx-baseline`
+(tenant ROOT) both point at marvin.
 
-**ops#265 is WIRED (09-04 evening, ops session FYI):** marvin installed the `push`/`tag` verbs and
-the owner placed the Hub PAT. The next release publishes with `marvinctl --tenant weewx push
-weatheredscientist/weewx-rtldavis:vX.Y.Z` (versioned tags only; `:latest` stays the owner's). No
-manual save/scp/load/push again. Nothing to do until a release.
+**Reception metric chain DEC-0134→0139 complete; `v2.0.16` is prod** (banner `0.20+ws.5`, gain
+372), `main` = `prod-baseline-20260904`, Hub `:v2.0.16`; `:latest` = v2.0.13 (owner's gesture only).
+**The running image tag is now `:marvin-live`** (alias of v2.0.16 — marvin tagged it during stage 0,
+MARVIN-DEC-0121/0122, which also closes ops#257 limb 2's tag step by marvin's hand). Campaigns A–D
+untested-not-rerun (`docs/ROADMAP.md` P2).
 
-**InfluxDB is the LAST weather workload on Foundation (ops#260 step 3).** HLF (09-04 12:26 ET) and
-EHWD (09-04 ~19:35 ET) both cut over; ops posted the owner's ask for weewx's plan. S124 answered
-with **DEC-0141** + the runbook `docs/INFLUXDB-MIGRATION.md` + `ops/weewx-influxdb.service`.
-Settled there: stopped-server raw copy of the v2.7.12 store (**16.4 MB**, measured), container/unit
-`weewx-influxdb` inside the manifest globs (self-service lifecycle, no manifest change), `--user
-996:986`, pinned image `--pull=never`, Foundation instance kept stopped `--restart=no`. All three
-consumers already run on marvin — weewx (`weewx.conf` **and** `.rx-baseline`), dashboard
-`proxy.env` + `event-detect.env`; HLF has none. **Nothing executed yet.**
+**ops#265 is WIRED:** next release publishes with `marvinctl --tenant weewx push
+weatheredscientist/weewx-rtldavis:vX.Y.Z` (versioned tags only). Nothing to do until a release.
 
-**Monitor deploy path (S119):** transport owner-run, restart self-service, verify by sha +
-start-after-mtime + `Remedy armed:`. #316 fixed live 08-30, untested end-to-end (no stall since).
-
-**Also settled:** loop period `(41 + id)/16` s (#313). ops#256 closed empty. A marvin release is
-**two** Class C confirmations (`docs/GOTCHAS.md` §3). #320/#314 closed S123 (DEC-0140); #327 filed.
+**Also settled:** monitor deploy path (S119: owner transport, self-service restart, verify by sha +
+`Remedy armed:`); loop period `(41 + id)/16` s (#313); a marvin release is two Class C
+confirmations (`docs/GOTCHAS.md` §3); #320/#314 closed S123 (DEC-0140); #327 filed.
 
 ### ▶▶ S125 JOB LIST
 
-1. **InfluxDB move — execute `docs/INFLUXDB-MIGRATION.md`, stage by stage.** Stage 0: marvin
-   vendors + installs the unit, pulls `influxdb:2.7.12`, creates `/srv/docker/weewx/influxdb`;
-   dashboard preps its two env edits. Stage 1: dark-parallel from a snapshot (start, verify, stop,
-   wipe). Stage 2: one attended window (~20–30 min; **not** 01:00–01:30 or 03:10–03:40 ET); the
-   archive gap is backfilled from SQLite with the DEC-0119-fixed `ops/backfill_influx.py` — **the
-   copy on marvin is the old buggy one**, transport first. Stage 3: docs, backup timer, drill section.
-   Ledger: [ops#270](https://github.com/WeatheredScientist/eaglehunt-ops/issues/270) + ops#260. Sonnet-shaped: the design is settled.
-2. **ops#257 limb 2 — the `tag` step is weewx's, in order** (MARVIN-DEC-0116): marvin installs
-   `tag` → weewx runs `marvinctl --tenant weewx tag weatheredscientist/weewx-rtldavis:<running>
-   …:marvin-live` (read `<running>` off `inspect weewx-rtldavis-v2`) → marvin installs the unit +
-   `daemon-reload`. `tag` is installed now (ops#265's wiring) — check whether marvin's unit half is.
-3. **#331 — GitHub Releases backfill** (`git tag v2.0.12`…`v2.0.16` + `gh release create`) **and
-   write the step into CONVENTIONS.md / the closeout skeleton.** Public → owner go per step.
-4. **#327 — GPLv3 §5(a) notice in the dupgate `main.go`** — Go source → build + Dockerfile tripwire +
-   deploy; ride the next image cut.
-5. **Retire the campaign residue** — `weewx-rx-experiment.timer` (`marvinctl disable --now`) and the
-   unimplemented `campaign.inhibit` lifecycle at `ops/weewx-monitor.service:88`.
+1. **InfluxDB stage 3 (ops#270) — Sonnet, mechanical.** (a) **Backfill the 29-record gap
+   22:14–22:42 ET 2026-09-04** into the `weewx` bucket: transport the DEC-0119-fixed
+   `ops/backfill_influx.py` to marvin (the copy there is the 2026-06-19 buggy one; local sha
+   `61599d22…`), owner runs it in a root shell with the write token, `--server-url
+   http://127.0.0.1:8086 --org eaglehunt --db-path /srv/docker/weewx/weewx-data/archive/weewx.sdb
+   --start 2026-09-04T22:13:00 --end 2026-09-04T22:43:00`, `--dry-run` first — expect 29, 0 errors.
+   (b) Marvin re-installs the unit with `SuccessExitStatus=2` (already on `dev`). (c) Owner deletes
+   `influxdb-final-20260904-{data,config}.tar` from the marvin-data share (token store inside).
+   (d) `weewx-influxdb-backup.service/.timer` at 03:15 — `influx backup` pre-dump for restic, the
+   store's first backup ever; verify the CLI operator config works first. (e) ops/dashboard doc rows
+   (ops `NAS-RUNTIME.md`, `CONSTANTS.md` §5; dashboard `MARVIN-MIGRATION.md`) — theirs, nudge. (f) Close
+   `BACKLOG.md`'s NAS-LEASE cross-host item as moot. (g) weewx's section of the ops#260 drill.
+2. **#331 — GitHub Releases backfill** v2.0.12–16 + write the step into CONVENTIONS/closeout. Owner
+   go per step (public).
+3. **#327 — GPLv3 §5(a) notice in the dupgate `main.go`** — ride the next image cut.
+4. **ops#257 limb 2 — remaining half:** the tag exists; confirm marvin's unit + `daemon-reload` half
+   is complete (the installer already swept the re-pin in), then close.
+5. **Retire the campaign residue** — `weewx-rx-experiment.timer` + the unimplemented `campaign.inhibit`
+   at `ops/weewx-monitor.service:88`.
 6. **`ExecStop=docker stop` in `weewx.service`** (DEC-0008) — owner root-edit path.
 7. **Upstream issue/PR to `lheijst/rtldavis`** — draft in `docs/upstream/`, owner tone review first.
 8. **Post-fix baseline watch** — RF-dead episodes (blocker 2), observation only.
-9. Audit Phase 2 A/B/C · `campaign_analyze.py` port (ops#250) · logrotate for marvin `logs/` ·
-   ops#260 drill (weewx's section, after job 1) · ops#110 (2027 build).
+9. Audit Phase 2 A/B/C · `campaign_analyze.py` port (ops#250) · logrotate for marvin `logs/` · ops#110.
 
-**Carried forward:** NAS-LEASE cross-host wiring — **moot once job 1 ships** (DEC-0141; close the
-`BACKLOG.md` item then) · `CONSTANTS.md` infra re-verify · `docs/ROADMAP.md` tripwire **S126**.
+**Carried forward:** `CONSTANTS.md` infra re-verify (the InfluxDB rows were rewritten S124; the
+rest is S105-era) · `docs/ARCHITECTURE.md` mount table still NAS-pathed (S30) · `docs/ROADMAP.md`
+tripwire **S126**.
 
 ### Current state (S124 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `weewx.service` in `/weather.slice`, `docker run --rm`; **`v2.0.16`**, weewx 5.5.0, gain 372, since 09-03 20:29:06 ET |
+| Prod | marvin, `weewx.service` in `/weather.slice`; **`v2.0.16`** as `:marvin-live`, weewx 5.5.0, gain 372, restarted 09-04 22:40:42 ET for the Influx repoint |
+| InfluxDB | **marvin**, `weewx-influxdb.service` since 09-04 22:35:02 ET, v2.7.12; `weewx` 16 shards, `eh_rollup` 16 shards; **29-record hole 22:14–22:42** pending job 1a |
+| Foundation | no weather workload; stopped `influxdb` (rollback) + dashboard's idle `eh-proxy`; read-only `weewx-data` overlay |
 | `main` | `prod-baseline-20260904`; `dev` ahead by doc PRs only |
-| Docker Hub | `:v2.0.16` (09-04 11:30 ET, owner route) · `:latest` = v2.0.13 · **self-service `push` LIVE** (ops#265) |
-| GitHub Releases | dead since v2.0.11 — #331, job 3 |
-| InfluxDB | **still on Foundation**: `influxdb:2.7` = v2.7.12, 16.4 MB, up since 06-19, 8086 LAN-published. Runbook written, nothing executed — job 1 |
+| Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · self-service `push` LIVE (ops#265) |
+| GitHub Releases | dead since v2.0.11 — #331, job 2 |
 | Monitor | dev tip's file (sha `147f3eff…`); `REMEDY_MODE=restart_unit` armed |
-| Git | S124: PR (runbook + unit + DEC-0141 + ROADMAP P1.8) → `dev` |
-| Trackers | repo #327, #331 open · ops #260 (step 3 = us), **#270** (the InfluxDB move — ledger), #264 (closes on the next green sweep), #265 (wired — close on first self-service push), #257 limb 2, #250, #110 |
+| Git | S124: PR #334 (design) + the cutover-record PR → `dev` |
+| Trackers | repo #327, #331 open · ops **#270** (stage 3 open), #260 (drill pending), #264, #265 (close on first push), #257 limb 2 (job 4), #250, #110 |
 
 ## Blockers
 
@@ -92,18 +91,20 @@ start-after-mtime + `Remedy armed:`. #316 fixed live 08-30, untested end-to-end 
 
 ## Model tier
 
-S124 opened on Sonnet; the owner escalated to **Fable** for the InfluxDB design with a bare `/model`
-— **the desktop switch PERSISTS** (OPS-DEC-0036/0062): restore Sonnet at close or the next session
-inherits Fable. S125 job 1 is execution of a settled design → **Sonnet**; escalate only if a stage
-finds the design wrong. State the running model in the first reply.
+S124 opened on Sonnet; the owner escalated to **Fable** with a bare `/model` for the design and the
+live cutover — **the desktop switch PERSISTS** (OPS-DEC-0036/0062): `~/.claude/settings.json` still
+reads `sonnet`, so the app's own store holds Fable — restore it there. S125 job 1 is mechanical →
+**Sonnet**. State the running model in the first reply.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
 any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). **New traps land
-there.** S124's two — the `nasctl ls` permission false-zero and the stale compose port comment — are
-recorded in the runbook's §0.
+there.** S124's four are in `docs/INFLUXDB-MIGRATION.md` §8 for now: `nasctl ls` permission
+false-zero; `&&` after a multi-file `sed` hides the verification grep; `marvinctl <verb> <unit> --now`
+order; influxd exits 2 on SIGTERM. Move them to GOTCHAS at S125.
 
-_Last updated: 2026-09-04 (S124 close). Session summary: opened on the owner's "InfluxDB porting"
-focus, escalated to Fable; measured Foundation's store and marvin's tenant shape, wrote the runbook,
-the unit and DEC-0141, filed the ops issue and answered ops#260's owner ask. No prod touched._
+_Last updated: 2026-09-04 (S124 close, ~22:50 ET). Session summary: opened on the owner's "InfluxDB
+porting" focus; measured, designed (DEC-0141, PR #334), then — owner's call — executed the same night
+(DEC-0142): Foundation stopped 22:13:35, marvin store live 22:35:02, weewx publishing 22:43:16,
+dashboard verified end-to-end 22:46. Two Class C NAS gestures, three owner-hands marvin gestures._

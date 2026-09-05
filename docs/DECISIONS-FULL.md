@@ -9301,3 +9301,71 @@ stale, the port is what the marvin-side consumers have been using since DEC-0118
   `weewx` bucket is regenerable from SQLite, `eh_rollup` from dashboard's Task backfill procedure.
 - **What does not change:** the data contract (`docs/INTERFACES.md` §2), every token, the org, the
   buckets, the Task, the engine version, the write cadence, the dashboard's queries.
+
+
+## DEC-0142 — DEC-0141 executed the same night: InfluxDB serves from marvin since 2026-09-04 22:35:02 ET; Foundation hosts no weather workload; a 29-record gap is the one open item
+
+**Status:** Accepted (executed, verified live) · **Date:** 2026-09-04 (S124) · **executes** DEC-0141
+· **closes** the weewx half of ops#270 stage 2 · **leaves open** step 9 (backfill) and stage 3 ·
+**as-run record** `docs/INFLUXDB-MIGRATION.md` §8
+
+### Context
+
+DEC-0141 was written and merged (PR #334) at ~21:38 ET with "daytime" as the proposed cutover
+window. The owner, via the ops session, asked whether daytime was load-bearing. It was not — a
+default assumption, not a requirement — and the runbook's real preconditions (marvin's stage 0,
+the dark-parallel test, dashboard's confirmations) could all be met within the hour. The owner said
+go at ~21:50 ET; the move ran 22:08–22:43 ET with the owner attending in the weewx and ops chats.
+
+### What was decided during execution (each a deviation from the written plan, recorded so the
+runbook reads true)
+
+1. **Copy route: `docker cp <container>:<path> -` streamed into tar files on the marvin-data share**,
+   not `sudo tar` on the NAS. `nas-admin` has no non-interactive sudo, and the store's data dir is
+   `0700 uid 1000`; the docker daemon reads it as root and `docker cp` works on a stopped container,
+   which is exactly what the final copy needs. One Class C mint per NAS step (two in all).
+2. **The two copies were kept, the delta was not.** Snapshot for stage 1 (live, torn-bolt risk
+   accepted — it started clean), final copy from the stopped server for stage 2; the dark copy was
+   wiped before the final one landed. Equality test = the two user buckets' shard counts and bytes,
+   not the raw 64-shard total: the system buckets `_monitoring`/`_tasks` lose their expired empty
+   shards on first start (16 → 6 and 3), which is the retention enforcer working, not data loss.
+3. **Stage 0 landed before stage 1 with one side effect owned by marvin (MARVIN-DEC-0121/0122):**
+   `install-tenant-units.sh weewx` also installed `weewx.service`'s committed `:marvin-live` re-pin
+   (ops#257 limb 2). Marvin tagged `v2.0.16` → `:marvin-live` the same turn, so weewx's step-7
+   restart started from that alias — same bytes, banner `0.20+ws.5` confirmed live. ops#257 limb
+   2's "tag" step is therefore done, by marvin's hand rather than weewx's `marvinctl tag`.
+4. **`weewx.conf.rx-baseline` lives at the tenant root, not under `weewx-data/`.** The runbook had
+   the wrong path; the owner's four-file `sed` errored on it and exited 2, which made the
+   `&&`-chained "new address" grep skip — the zeros the owner then saw were the *old*-address grep
+   and were correct. Verified by redacted read that `weewx.conf` had flipped; the `.rx-baseline`
+   edit was re-issued as its own line. Lesson: never `&&` a verification grep after a multi-file
+   `sed`; and CONSTANTS.md now carries both paths.
+5. **influxd exits 2 on SIGTERM** — measured on both hosts. `SuccessExitStatus=2` added to the unit
+   (stage 3 re-install by marvin); Foundation's `Exited (2)` was a clean stop, not a crash.
+6. **Step 9 (backfill) deferred to S125.** 29 archive records (22:14–22:42 ET) are in SQLite and
+   not in the `weewx` bucket. Running the DEC-0119-fixed tool needs the write token in a root shell
+   on marvin; doing that at 22:45 with a token paste buys nothing that tomorrow does not.
+
+### Verified (timestamps ET)
+
+- 22:35:02 `weewx-influxdb.service` active + enabled in `/weather.slice`; `/health` pass v2.7.12;
+  `weewx` 16 shards / 16.87 MB, `eh_rollup` 16 shards / 212,744 B (= Foundation's last state
+  including the 22:00 event-detect write); no `lvl=warn|error`.
+- 22:40:43 `user.influx INFO Data will be uploaded to http://<MARVIN_IP>:8086`; 22:43:16 `Influx:
+  Published record 2026-09-04 22:43:00` — first write to the marvin store; publishing every minute
+  since.
+- 22:44 Foundation `:8086` refuses; `influxdb` container stopped, `--restart=no`, trees intact —
+  the rollback artifact until ops#260 step 4.
+- Dashboard's step 8 (eh-proxy restart, timer re-enable, `verify_archive_fresh.py`) is their report
+  on ops#270; weewx's own end-to-end probe through the public proxy is in `docs/INFLUXDB-MIGRATION.md` §8.
+
+### Consequences
+
+- **Foundation hosts no weather workload.** OPS-DEC-0188's weather half is true in fact from
+  22:43 ET; the drill (ops#260) can be scheduled once ops#270 stage 3 closes.
+- **Two Class C NAS gestures and three owner-hands marvin gestures** was the whole cost — the
+  16 MB estimate was right about the outage shape (gesture time), wrong by 9× on bytes (152 MB tar:
+  bolt/sqlite/WAL are not in `storage_shard_disk_size`).
+- **Open, S125:** backfill 22:14–22:42; `SuccessExitStatus=2` re-install; `weewx-influxdb-backup`
+  pre-dump timer; delete the two final tars from the share; ops/dashboard doc rows; weewx's drill
+  section; `BACKLOG.md` NAS-LEASE item closes as moot.

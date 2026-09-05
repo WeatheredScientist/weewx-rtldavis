@@ -19,8 +19,10 @@ treat anything that reaches one as compromised and rotate it server-side.
 ## Infra
 
 **The container moved hosts 2026-08-28/29 (DEC-0118) — it now runs on `marvin`, not the NAS.** The
-NAS still matters (InfluxDB stays there, and its old weewx path still resolves — see below) but
-`docker`/`nasctl` against the NAS no longer touches the live weewx container. This section got its
+**InfluxDB followed on 2026-09-04 22:35 ET (DEC-0141, ops#270)** — the NAS now hosts **no weather
+workload at all**; its old weewx path still resolves (see below) as a read-only compat overlay, and
+its stopped `influxdb` container is retained only as the rollback artifact until ops#260 step 4.
+`docker`/`nasctl` against the NAS no longer touches anything weewx runs. This section got its
 first pass at S105; **verify rows against live infra before trusting them for anything operational**
 (`BOOT.md` job 8) rather than assuming a one-session update caught everything.
 
@@ -29,11 +31,12 @@ first pass at S105; **verify rows against live infra before trusting them for an
 | **marvin (prod host, since DEC-0118)** | Debian hypervisor · `<MARVIN_HOST>` · `<MARVIN_IP>` — self-service is `marvinctl --tenant weewx` (`marvin-weewx` alias, key live since 2026-08-29); the guarded `marvin-admin` alias remains for anything outside that scope |
 | Tenant root (marvin) | `/srv/docker/weewx/` (owned `t-weewx`, mode `0750`) |
 | Container | `weewx-rtldavis-v2` (now on marvin) |
-| NAS | Synology DS918+ · `<NAS_HOST>` · `<NAS_IP>` · SSH port `<SSH_PORT>` · user `<NAS_USER>` — still hosts InfluxDB; no longer hosts the weewx container |
+| NAS | Synology DS918+ · `<NAS_HOST>` · `<NAS_IP>` · SSH port `<SSH_PORT>` · user `<NAS_USER>` — hosts **nothing weewx runs** since 2026-09-04 (InfluxDB moved, DEC-0141); keeps the read-only compat overlay of marvin's `weewx-data` and the stopped `influxdb` rollback container (`--restart=no`, trees intact under `/volume1/docker/influxdb/`) |
+| **InfluxDB (marvin, since 2026-09-04 22:35:02 ET)** | `weewx-influxdb.service` in `/weather.slice` → container `weewx-influxdb`, image `influxdb:2.7.12` pinned `--pull=never`, `--user 996:986` (`t-weewx`), `-p 8086:8086` (LAN, like Foundation's was), trees `/srv/docker/weewx/influxdb/{data,config}`. Self-service lifecycle (`marvinctl --tenant weewx start/stop/restart/logs/inspect weewx-influxdb…`). Consumers reach it at `http://<MARVIN_IP>:8086`: weewx `[[Influx]] server_url`, dashboard `secrets/proxy.env` + `secrets/event-detect.env`. Runbook + as-run record: `docs/INFLUXDB-MIGRATION.md` |
 | SSH / SCP (NAS) | `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` · `scp -P <SSH_PORT> -O` (capital `-P`; `-O` for the legacy protocol) |
 | Real values | gitignored local-infra doc — never committed. **Needs a marvin entry added; not done as of S105** |
 | Read-only NAS access | `nasctl` (`ps`, `logs <c> [N]`, `inspect`, `cat/ls/head/tail/sha/grep/conf`). Rides a read-only key; mutations refused by the box. **Marvin-side equivalent is `marvinctl --tenant weewx`** (same verb set plus `exec-ro`, DEC-0125) — live since 2026-08-29, not a gap |
-| Docker binary (NAS) | `/usr/local/bin/docker` (no sudo; not on default PATH) — relevant to InfluxDB and other NAS-resident containers now, not weewx |
+| Docker binary (NAS) | `/usr/local/bin/docker` (no sudo; not on default PATH) — relevant only to the stopped `influxdb` rollback container and dashboard's idle `eh-proxy` now; nothing live |
 | Project root, real (marvin) | `/srv/docker/weewx/` |
 | Project root, NAS-side compat path | `/volume1/docker/weewx-rtldavis/` — **now an NFS overlay mount of marvin's export**, not local NAS storage. Dashboard and HLF still read this exact path unchanged; only what's behind it changed |
 | Live config | `<project root>/weewx-data/weewx.conf` (bind-mounted; gain/ppm edits need only a restart) — path convention unchanged, host behind it did not |
@@ -84,7 +87,8 @@ mechanism is `ops/rx_experiment.sh` tooling that has not itself moved yet, `BOOT
 | `[StdCalibrate][[Corrections]]` → `radiation` exact-code zero | DEC-0080 line, verbatim from `weewx.conf.example` | Zeros the VP2+ diode floor (`sr_raw=1` ≈ 1.758 W/m²) every dark minute. Applied 2026-08-11 (S73), **also written into `weewx.conf.rx-baseline`** — `restore_baseline` copies that snapshot over the live conf at every campaign abort/end, so a live-conf-only apply would be silently wiped (hazard found at apply; BOOT's original steps missed it). Verify after any recreate from stock **and** confirm dark hours read 0 (if 3.516 shows, extend per-code) |
 | `[DavisPressure]` → `fetch_interval` | **300** (applied S101/DEC-0113 at the v2.0.14 build event, verified live) | WeatherLink v2's documented ceiling is 1,000 calls/hour + 10/s; 300s uses ~1.2% of quota. Cuts the archived barometer from a 60-min sample-and-hold staircase to a 5-min one (#144 item 3) |
 | `[Rtldavis]` → `cmd` gain | **372**, re-tested and holding as of DEC-0125 (S111). DEC-0118's cutover incident originally left it at 372 by accident (an unrelated USB controller, not gain); Campaign C then re-tested 372 vs DEC-0115's Foundation-adopted 496 at marvin's own RF position under a properly-powered design, and **496 did not clear the 2.0-pt adoption bar** (+1.16 pts, DEC-0059/DEC-0069). DEC-0115 stands for Foundation's own siting — this is a separate finding that the answer doesn't transfer to marvin, not a correction of it. 372 is no longer "provisional-by-accident"; it is measured-and-unbeaten at this site pending a longer multi-day campaign (`BACKLOG.md`) |
-| `[[Influx]]` → `lease_dir` | **`/nas-lease`** (in-container path, added S101/DEC-0111 — unchanged by the host move) | Points `influx.py`'s NAS-LEASE courtesy-yield at a mount. **On marvin this is a deliberately empty local directory (`MARVIN-DEC-0063`), not a live share of the NAS's real lease file** — the courtesy-yield is a permanent no-op until cross-host lease sharing is built (`BOOT.md` job 7). On the NAS through S104 it was `-v /volume1/docker/nas-lease:/nas-lease:ro`, a live bind. Either way, absent/broken silently disables the yield — the mechanism fails open by design, never errors |
+| `[[Influx]]` → `server_url` | **`http://<MARVIN_IP>:8086`** since 2026-09-04 22:40:42 ET (DEC-0141; was Foundation's IP from DEC-0118, `http://influxdb:8086` before that). **Also set in `weewx.conf.rx-baseline` at the tenant ROOT** (`/srv/docker/weewx/`, not `weewx-data/`) — a campaign `restore_baseline` would otherwise point the writer back at the dead Foundation port | The InfluxDB host move. The `.rx-baseline` edit is the DEC-0080 hazard shape: two copies of one setting, one of which silently overwrites the other |
+| `[[Influx]]` → `lease_dir` | **`/nas-lease`** (in-container path, added S101/DEC-0111 — unchanged by the host move; **moot since DEC-0141**: weewx has no NAS I/O left to yield) | Points `influx.py`'s NAS-LEASE courtesy-yield at a mount. **On marvin this is a deliberately empty local directory (`MARVIN-DEC-0063`), not a live share of the NAS's real lease file** — the courtesy-yield is a permanent no-op until cross-host lease sharing is built (`BOOT.md` job 7). On the NAS through S104 it was `-v /volume1/docker/nas-lease:/nas-lease:ro`, a live bind. Either way, absent/broken silently disables the yield — the mechanism fails open by design, never errors |
 
 ## Release / rollback
 

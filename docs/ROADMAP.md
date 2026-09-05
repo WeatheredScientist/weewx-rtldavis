@@ -293,12 +293,15 @@ ops#260 — now waits on weewx.
       stages, cutover table, rollback) + `ops/weewx-influxdb.service`. Stopped-server raw tree copy
       of the v2.7.12 store (16.4 MB); container/unit inside the weewx manifest globs; consumers
       change one URL each.
-- [ ] **Stage 0–1:** marvin vendors and installs the unit, pulls the pinned image; dark-parallel from a
-      snapshot proves unit, uid and bolt store; wiped again.
-- [ ] **Stage 2 cutover** in one attended window; archive gap backfilled from SQLite.
-- [ ] **Stage 3:** docs across weewx/ops/dashboard; `weewx-influxdb-backup` pre-dump timer (the store's
-      first backup ever); `BACKLOG.md`'s NAS-LEASE cross-host item closes as moot; weewx's section of
-      the ops#260 drill.
+- [x] **Stage 0–1 (S124, same night):** marvin installed the unit + pulled the image (MARVIN-DEC-0121);
+      dark-parallel from a live snapshot passed 22:07 ET.
+- [x] **Stage 2 cutover (S124, 22:13–22:43 ET, DEC-0142):** Foundation stopped 22:13:35, marvin
+      store live 22:35:02, weewx publishing 22:43:16. **29-record gap (22:14–22:42) still to
+      backfill** — S125.
+- [ ] **Stage 3:** backfill; `SuccessExitStatus=2` unit re-install (marvin); `weewx-influxdb-backup`
+      pre-dump timer (the store's first backup ever); docs in ops/dashboard; delete the final tars from
+      the share; `BACKLOG.md`'s NAS-LEASE cross-host item closes as moot; weewx's section of the
+      ops#260 drill; Foundation's stopped instance retires at ops#260 step 4.
 
 ---
 
