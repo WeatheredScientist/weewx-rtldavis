@@ -126,9 +126,11 @@ Written by `influx.py` (`user.influx.Influx`, a RESTThread uploader — the davi
 fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.x line protocol**.
 
 **Contract:**
-- Config keys in `weewx.conf [[Influx]]`: `server_url`, `org`, `bucket`, `token`. In the running
-  system these resolve to an InfluxDB reachable over the Docker `weather-net` network; the example
-  ships generic placeholders (`http://influxdb:8086`, `YOUR_INFLUX_ORG`, `weewx`, `YOUR_INFLUXDB_TOKEN`).
+- Config keys in `weewx.conf [[Influx]]`: `server_url`, `org`, `bucket`, `token`. `server_url` is
+  whatever reaches your InfluxDB 2.x — in the reference deployment it is a same-host published port
+  (`http://<host>:8086`; InfluxDB moved hosts twice, DEC-0118/DEC-0141, and only this value changed);
+  the example ships generic placeholders (`http://influxdb:8086`, `YOUR_INFLUX_ORG`, `weewx`,
+  `YOUR_INFLUXDB_TOKEN`).
 - Field **names are suffixed by unit** matching the WeeWX US schema (the same naming the backfill
   tooling in `ops/backfill_influx.py` maps to). The dashboard's Flux queries are written against these
   suffixed names — renaming a field is a breaking change.

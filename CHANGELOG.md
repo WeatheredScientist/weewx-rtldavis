@@ -6,7 +6,26 @@ under [Pre-S16].
 
 ---
 
-## [S124] — 2026-09-04 — DEC-0141: the InfluxDB Foundation→marvin move is designed and written up (runbook + unit); nothing executed
+## [S124] — 2026-09-04 — DEC-0141 designed AND DEC-0142 executed the same night: InfluxDB serves from marvin since 22:35 ET; Foundation hosts no weather workload
+
+- **Cutover (owner's call to go tonight, 22:08–22:43 ET):** stage 0 by marvin (MARVIN-DEC-0121);
+  stage 1 dark-parallel from a live snapshot passed 22:07; Foundation `influxdb` TERM-stopped 22:13:35
+  (`--restart=no`, retained as rollback); final stopped-server copy via `docker cp … -` to the
+  marvin-data share; `weewx-influxdb.service` live 22:35:02; owner's four-file `sed` repoint; weewx
+  restarted 22:40:42, first publish to marvin 22:43:16; dashboard repointed + `verify_archive_fresh.py`
+  GO 22:46. Two Class C NAS mints, three owner-hands marvin lines. As-run record: runbook §8.
+- **Open (S125 job 1):** 29-record `weewx`-bucket gap 22:14–22:42 (all in SQLite) — backfill deferred;
+  `SuccessExitStatus=2` unit re-install; delete the two final tars from the share; pre-dump backup
+  timer; ops/dashboard doc rows; drill section.
+- **Deviations recorded (DEC-0142):** `docker cp` route instead of NAS `sudo tar`; `.rx-baseline` is at
+  the tenant ROOT (runbook path was wrong — a `&&`-chained grep hid the fact the `sed` had worked);
+  influxd exits 2 on SIGTERM; system buckets drop expired empty shards on first start; the 16 MB
+  estimate was 9× low on bytes (152 MB tar) and right about the outage shape.
+- `CONSTANTS.md` Infra + live-config rows rewritten for the new host (`server_url` row added, NAS rows
+  say "nothing weewx runs"); `docs/INTERFACES.md` §2 drops the `weather-net` wording; ROADMAP P1.8
+  stages 0–2 checked.
+
+### Earlier the same session — the design (PR #334, merged 21:38 ET)
 
 - **Why this session:** ops#260's sequencing put InfluxDB last; HLF (12:26 ET) and EHWD (~19:35 ET)
   both cut over today, ops posted the owner's ask for weewx's plan, and the owner opened this session
