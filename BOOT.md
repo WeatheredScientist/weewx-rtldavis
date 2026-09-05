@@ -24,13 +24,14 @@ The two token-bearing tars are deleted from the marvin-data share (owner, 12:36 
 on the same share cleared except one ACL-blocked `weewx-data/` subtree (needs the owner's own
 interactive `sudo` on the NAS — low value, not chased). ops#270 closed on weewx's word.
 
-**ops#260 step 4 (Foundation retirement): weewx answered — retire everything.** Nothing on
-Foundation's tree is needed (stopped `influxdb`, `/volume1/docker/weewx-rtldavis/`), nothing on
-weewx's side reads marvin's NFS export at runtime. **Marvin confirmed the shim is still pending,
-not done** — `/etc/exports.d/marvin-weewx.exports` still exports `weewx-data` ro to the NAS; the
-retirement condition (both NAS-side consumers migrated) is met, it's just unactioned. Marvin-side
-root gesture (edit/remove the export, `exportfs -ra`), marvin's session is taking it to the owner as
-its own item — nothing further owed from weewx.
+**ops#260 step 4 (Foundation retirement): fully done, weewx's part.** weewx answered — retire
+everything; nothing on Foundation's tree is needed, nothing on weewx's side reads marvin's NFS
+export at runtime. Marvin retired the export (`/etc/exports.d/marvin-weewx.exports` removed,
+`exportfs -ra` confirmed zero, `nfs-server.service` stopped — MARVIN-DEC-0134), and the owner
+manually deleted the `marvin-weewx-mount` DSM boot task on Foundation. The drill also surfaced and
+fixed a real finding on marvin's side (unrelated to weewx's own tree): `/srv/nas/marvin-data`'s
+`hard` NFS mount could hang uninterruptibly on an outage (measured 35 min) — switched to `soft`
+(MARVIN-DEC-0135), bounds a repeat to ~15-20s.
 
 **Foundation-dark drill (ops#260 item E) run and closed clean, weewx's slice.** First attempt
 (11:26–11:31) voided — marvin could still reach Foundation through a partial UniFi block; true T0
@@ -101,7 +102,7 @@ inline, past the ~3-session guideline (pre-existing debt, not new this session).
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · self-service `push` LIVE (ops#265, closes on first real push) |
 | GitHub Releases | dead since v2.0.11 — #331 |
 | Git | S125: PR #336 (backfill+backup timer), #339 (dev/main parity), #340 (DEC-0144) → `dev` |
-| Trackers | repo #327, #331 open · ops #257 (limbs 1/3 open, limb 2 closed) · #250, #110, #278 (parts 2/3) open · #270/#273/#274/#275/#264/#218 closed S125 · #279 filed · marvin NFS shim retirement pending (owner item, marvin's tracker) |
+| Trackers | repo #327, #331 open · ops #257 (limbs 1/3 open, limb 2 closed) · #250, #110, #278 (parts 2/3) open · #270/#273/#274/#275/#264/#218 closed S125 · #279 filed · ops#260 step 4 Foundation cleanup (weewx's part) DONE: marvin's NFS shim retired (MARVIN-DEC-0134), `marvin-weewx-mount` boot task deleted by owner |
 
 ## Blockers
 
