@@ -9310,6 +9310,68 @@ stale, the port is what the marvin-side consumers have been using since DEC-0118
 **as-run record** `docs/INFLUXDB-MIGRATION.md` §8
 
 
+### Context
+
+DEC-0141 was written and merged (PR #334) at ~21:38 ET with "daytime" as the proposed cutover
+window. The owner, via the ops session, asked whether daytime was load-bearing. It was not — a
+default assumption, not a requirement — and the runbook's real preconditions (marvin's stage 0,
+the dark-parallel test, dashboard's confirmations) could all be met within the hour. The owner said
+go at ~21:50 ET; the move ran 22:08–22:43 ET with the owner attending in the weewx and ops chats.
+
+### What was decided during execution (each a deviation from the written plan, recorded so the
+runbook reads true)
+
+1. **Copy route: `docker cp <container>:<path> -` streamed into tar files on the marvin-data share**,
+   not `sudo tar` on the NAS. `nas-admin` has no non-interactive sudo, and the store's data dir is
+   `0700 uid 1000`; the docker daemon reads it as root and `docker cp` works on a stopped container,
+   which is exactly what the final copy needs. One Class C mint per NAS step (two in all).
+2. **The two copies were kept, the delta was not.** Snapshot for stage 1 (live, torn-bolt risk
+   accepted — it started clean), final copy from the stopped server for stage 2; the dark copy was
+   wiped before the final one landed. Equality test = the two user buckets' shard counts and bytes,
+   not the raw 64-shard total: the system buckets `_monitoring`/`_tasks` lose their expired empty
+   shards on first start (16 → 6 and 3), which is the retention enforcer working, not data loss.
+3. **Stage 0 landed before stage 1 with one side effect owned by marvin (MARVIN-DEC-0121/0122):**
+   `install-tenant-units.sh weewx` also installed `weewx.service`'s committed `:marvin-live` re-pin
+   (ops#257 limb 2). Marvin tagged `v2.0.16` → `:marvin-live` the same turn, so weewx's step-7
+   restart started from that alias — same bytes, banner `0.20+ws.5` confirmed live. ops#257 limb
+   2's "tag" step is therefore done, by marvin's hand rather than weewx's `marvinctl tag`.
+4. **`weewx.conf.rx-baseline` lives at the tenant root, not under `weewx-data/`.** The runbook had
+   the wrong path; the owner's four-file `sed` errored on it and exited 2, which made the
+   `&&`-chained "new address" grep skip — the zeros the owner then saw were the *old*-address grep
+   and were correct. Verified by redacted read that `weewx.conf` had flipped; the `.rx-baseline`
+   edit was re-issued as its own line. Lesson: never `&&` a verification grep after a multi-file
+   `sed`; and CONSTANTS.md now carries both paths.
+5. **influxd exits 2 on SIGTERM** — measured on both hosts. `SuccessExitStatus=2` added to the unit
+   (stage 3 re-install by marvin); Foundation's `Exited (2)` was a clean stop, not a crash.
+6. **Step 9 (backfill) deferred to S125.** 29 archive records (22:14–22:42 ET) are in SQLite and
+   not in the `weewx` bucket. Running the DEC-0119-fixed tool needs the write token in a root shell
+   on marvin; doing that at 22:45 with a token paste buys nothing that tomorrow does not.
+
+### Verified (timestamps ET)
+
+- 22:35:02 `weewx-influxdb.service` active + enabled in `/weather.slice`; `/health` pass v2.7.12;
+  `weewx` 16 shards / 16.87 MB, `eh_rollup` 16 shards / 212,744 B (= Foundation's last state
+  including the 22:00 event-detect write); no `lvl=warn|error`.
+- 22:40:43 `user.influx INFO Data will be uploaded to http://<MARVIN_IP>:8086`; 22:43:16 `Influx:
+  Published record 2026-09-04 22:43:00` — first write to the marvin store; publishing every minute
+  since.
+- 22:44 Foundation `:8086` refuses; `influxdb` container stopped, `--restart=no`, trees intact —
+  the rollback artifact until ops#260 step 4.
+- Dashboard's step 8 (eh-proxy restart, timer re-enable, `verify_archive_fresh.py`) is their report
+  on ops#270; weewx's own end-to-end probe through the public proxy is in `docs/INFLUXDB-MIGRATION.md` §8.
+
+### Consequences
+
+- **Foundation hosts no weather workload.** OPS-DEC-0188's weather half is true in fact from
+  22:43 ET; the drill (ops#260) can be scheduled once ops#270 stage 3 closes.
+- **Two Class C NAS gestures and three owner-hands marvin gestures** was the whole cost — the
+  16 MB estimate was right about the outage shape (gesture time), wrong by 9× on bytes (152 MB tar:
+  bolt/sqlite/WAL are not in `storage_shard_disk_size`).
+- **Open, S125:** backfill 22:14–22:42; `SuccessExitStatus=2` re-install; `weewx-influxdb-backup`
+  pre-dump timer; delete the two final tars from the share; ops/dashboard doc rows; weewx's drill
+  section; `BACKLOG.md` NAS-LEASE item closes as moot.
+
+
 ## DEC-0143 — Closeout skeleton gets a step 0: `BOOT.md`/`CHANGELOG.md`/DEC entries ride the merge or promotion PR itself, never a deferred post-merge pass (OPS-DEC-0195)
 
 **Status:** Accepted (process, no code) · **Date:** 2026-09-05 (S125) · **adopts** OPS-DEC-0195
@@ -9371,63 +9433,112 @@ branch/PR requirement, and the pause-for-approval rule are all untouched. This i
 whose own work includes a merge or a prod promotion — a pure research/investigation session with
 nothing merging is unaffected.
 
-### Context
 
-DEC-0141 was written and merged (PR #334) at ~21:38 ET with "daytime" as the proposed cutover
-window. The owner, via the ops session, asked whether daytime was load-bearing. It was not — a
-default assumption, not a requirement — and the runbook's real preconditions (marvin's stage 0,
-the dark-parallel test, dashboard's confirmations) could all be met within the hour. The owner said
-go at ~21:50 ET; the move ran 22:08–22:43 ET with the owner attending in the weewx and ops chats.
+## DEC-0144 — The secret gate gains a general private-IP/subnet detector, proven necessary twice in one evening
 
-### What was decided during execution (each a deviation from the written plan, recorded so the
-runbook reads true)
+**Status:** Accepted (executed) · **Date:** 2026-09-05 (S125) · **follows** DEC-0127, same failure
+class · **hardens** the mechanism DEC-0012/DEC-0039 established for credentials, extended to LAN
+identifiers · **files** the comment-body gap as a separate cross-repo issue, not fixed here
 
-1. **Copy route: `docker cp <container>:<path> -` streamed into tar files on the marvin-data share**,
-   not `sudo tar` on the NAS. `nas-admin` has no non-interactive sudo, and the store's data dir is
-   `0700 uid 1000`; the docker daemon reads it as root and `docker cp` works on a stopped container,
-   which is exactly what the final copy needs. One Class C mint per NAS step (two in all).
-2. **The two copies were kept, the delta was not.** Snapshot for stage 1 (live, torn-bolt risk
-   accepted — it started clean), final copy from the stopped server for stage 2; the dark copy was
-   wiped before the final one landed. Equality test = the two user buckets' shard counts and bytes,
-   not the raw 64-shard total: the system buckets `_monitoring`/`_tasks` lose their expired empty
-   shards on first start (16 → 6 and 3), which is the retention enforcer working, not data loss.
-3. **Stage 0 landed before stage 1 with one side effect owned by marvin (MARVIN-DEC-0121/0122):**
-   `install-tenant-units.sh weewx` also installed `weewx.service`'s committed `:marvin-live` re-pin
-   (ops#257 limb 2). Marvin tagged `v2.0.16` → `:marvin-live` the same turn, so weewx's step-7
-   restart started from that alias — same bytes, banner `0.20+ws.5` confirmed live. ops#257 limb
-   2's "tag" step is therefore done, by marvin's hand rather than weewx's `marvinctl tag`.
-4. **`weewx.conf.rx-baseline` lives at the tenant root, not under `weewx-data/`.** The runbook had
-   the wrong path; the owner's four-file `sed` errored on it and exited 2, which made the
-   `&&`-chained "new address" grep skip — the zeros the owner then saw were the *old*-address grep
-   and were correct. Verified by redacted read that `weewx.conf` had flipped; the `.rx-baseline`
-   edit was re-issued as its own line. Lesson: never `&&` a verification grep after a multi-file
-   `sed`; and CONSTANTS.md now carries both paths.
-5. **influxd exits 2 on SIGTERM** — measured on both hosts. `SuccessExitStatus=2` added to the unit
-   (stage 3 re-install by marvin); Foundation's `Exited (2)` was a clean stop, not a crash.
-6. **Step 9 (backfill) deferred to S125.** 29 archive records (22:14–22:42 ET) are in SQLite and
-   not in the `weewx` bucket. Running the DEC-0119-fixed tool needs the write token in a root shell
-   on marvin; doing that at 22:45 with a token paste buys nothing that tomorrow does not.
+### Trigger
 
-### Verified (timestamps ET)
+ops#275 (ops S39, 2026-09-05) found a private LAN subnet literal in two 2026-08-15 commits —
+`5e7e759` adds it to `BOOT.md`, `0419d54` removes it — the exact exposure class DEC-0127 (S112)
+already rewrote this repo's full history to remove once, for a different value. The owner's
+question, verbatim: *how does this keep happening — I can't keep going to GitHub support asking
+them to clean up messes I create through bad LLM management.* That question is answered honestly
+below, not deflected.
 
-- 22:35:02 `weewx-influxdb.service` active + enabled in `/weather.slice`; `/health` pass v2.7.12;
-  `weewx` 16 shards / 16.87 MB, `eh_rollup` 16 shards / 212,744 B (= Foundation's last state
-  including the 22:00 event-detect write); no `lvl=warn|error`.
-- 22:40:43 `user.influx INFO Data will be uploaded to http://<MARVIN_IP>:8086`; 22:43:16 `Influx:
-  Published record 2026-09-04 22:43:00` — first write to the marvin store; publishing every minute
-  since.
-- 22:44 Foundation `:8086` refuses; `influxdb` container stopped, `--restart=no`, trees intact —
-  the rollback artifact until ops#260 step 4.
-- Dashboard's step 8 (eh-proxy restart, timer re-enable, `verify_archive_fresh.py`) is their report
-  on ops#270; weewx's own end-to-end probe through the public proxy is in `docs/INFLUXDB-MIGRATION.md` §8.
+### What actually happened, rewrite half
 
-### Consequences
+Rewritten again tonight: fresh `git clone --mirror`, `git filter-repo --replace-text` (the two
+literals → placeholder tokens), verified clean, force-pushed `refs/heads/*`/`refs/tags/*` — owner-run
+by hand from agent-prepared one-liners, per DEC-0127's own precedent (the classifier will not run
+history-mutation commands for an agent, and DEC-0127 recorded the owner holding the pen on every
+irreversible step as *correct*, not a workaround). Branch protection deleted and restored to its
+exact prior config on both `main`/`dev`. Verified independently, not on report: a fresh mirror clone
+from GitHub post-push showed 0 hits across `refs/heads`/`refs/tags`; `refs/pull/*` (GitHub-managed,
+not writable by a normal push) still pins pre-rewrite objects starting at PR #298 — the same platform
+residual DEC-0127 already named and accepted (SHA-addressable until a Support-side purge). Scope,
+measured directly: **221 commits** get new SHAs (everything from `5e7e759` forward, S84 through
+S125) — every SHA cited in this repo's own docs/cross-repo messages for three weeks stops resolving,
+content unchanged. PR #338 (open at the time, unrelated content) was merged first deliberately, to
+keep the rewrite from being one more moving part on top of an in-flight PR.
 
-- **Foundation hosts no weather workload.** OPS-DEC-0188's weather half is true in fact from
-  22:43 ET; the drill (ops#260) can be scheduled once ops#270 stage 3 closes.
-- **Two Class C NAS gestures and three owner-hands marvin gestures** was the whole cost — the
-  16 MB estimate was right about the outage shape (gesture time), wrong by 9× on bytes (152 MB tar:
-  bolt/sqlite/WAL are not in `storage_shard_disk_size`).
-- **Open, S125:** backfill 22:14–22:42; `SuccessExitStatus=2` re-install; `weewx-influxdb-backup`
-  pre-dump timer; delete the two final tars from the share; ops/dashboard doc rows; weewx's drill
-  section; `BACKLOG.md` NAS-LEASE item closes as moot.
+### Root cause, the part that answers the owner's question
+
+`scripts/check_secrets.sh` had exactly two detectors before tonight: assignment-shaped credentials
+(`KEY = value`, DEC-0012/DEC-0039) and a finite, gitignored list of exact known identifiers
+(`.identifiers`). A LAN IP or subnet written as bare prose — a routing note, a diagnostic comment —
+is **neither shape**: it never sits after a `=`/`:`, and a subnet nobody had enumerated in advance
+(or the same subnet spelled with a wildcard trailing octet) was never going to be on a finite list
+written before the fact. **Proven blind, not assumed**: a throwaway file containing a real private IP
+in ordinary prose passed the gate clean (exit 0) before this fix — the same doctrine this file's own
+header insists on ("a green exit code is not evidence") applied to the gate's own coverage, not just
+its logic.
+
+**Made concrete within this very session, not hypothetical**: while investigating ops#275 and
+reporting weewx's InfluxDB drill results, this session posted marvin's raw LAN IP into a GitHub
+comment on ops#270 — caught by a peer (ops) session reading the comment, not by any mechanism on
+this end. `gh issue comment` is not a git operation; no git-triggered gate, however well the pattern
+set was tuned, could ever have reached it. Two independent instances of the identical root cause,
+roughly ninety minutes apart, in one session. That is the honest answer: the gate that exists was
+never built to catch this class of value, and the discipline that was supposed to substitute for a
+mechanical gate (remembering to use `<NAS_IP>`/`<MARVIN_IP>` placeholders) failed within the hour of
+being restated as a memory note — because a note is advisory, and advisory is exactly what already
+failed twice before tonight.
+
+### Fix — hole class 7
+
+A new pattern-based detector in `check_secrets.sh`, matching the same "general shape, not a finite
+list" approach `_assign` already takes for credentials: any RFC1918-range (`10/8`, `172.16/12`,
+`192.168/16`) IPv4 literal or wildcard-octet subnet, as bare prose. Deliberately a *separate* check
+from `.identifiers` rather than folded into it — `.identifiers` stays the right home for exact known
+values; this rule exists precisely because a new or wildcarded value is not one. No allow-list rule
+was needed for the existing placeholder tokens (`<NAS_IP>`, `<MARVIN_IP>`, …) — they contain no
+digits, so they cannot accidentally match an IP-shaped pattern.
+
+Checked for false positives before shipping, not assumed clean: `git grep` over the full tracked tree
+for both the four-octet and wildcard-octet forms found zero existing hits (the placeholder discipline
+already held everywhere it mattered). The one real risk found and verified handled —
+`rtldavis.py:220`'s `"10.0.0" < "3"` version-string comparison (a three-dotted-number, not an IP) —
+does not trip the rule, because the pattern requires all four octets; checked directly against that
+exact line, not inferred. `scripts/test_check_secrets.sh` gained 4 new BAD payloads (full IPs
+mid-sentence, the exact wildcard-subnet shape that caused tonight's incident, one payload per RFC1918
+range) and 5 new GOOD payloads (the version string, both placeholder tokens, a public IP, loopback) —
+63/63 passed, tracked tree clean (131 files).
+
+Caught its own author immediately: this DEC's first draft of the rule's explanatory comments used
+real-shaped example IPs in prose, which the new rule correctly flagged in `check_secrets.sh` itself.
+Fixed by describing the shape in words instead, per this file's own S40 precedent for the `_apppw`
+rule ("writing the example would make this comment a finding").
+
+### What this does NOT fix
+
+The `gh issue`/`gh pr` comment-and-body path has no git hook to reach it — `check_secrets.sh` only
+ever runs on `git commit` (pre-commit) and CI's scan of the tracked tree. Closing that gap needs a
+different mechanism (a PreToolUse-style hook scanning `gh` command bodies before they post, mirroring
+this repo's existing `docker-guard.sh`/`secret-read-guard.sh` pattern) — and that mechanism would be
+machine-wide tooling, not a file inside this repo, so it is not something a single repo session should
+install unilaterally. Filed as its own cross-repo issue for whoever owns that layer, rather than
+patched here as a workaround.
+
+### Also found and fixed while doing this work, recorded for completeness
+
+- **PR #338 (this session's DEC-0143 adoption) targeted `main` instead of `dev`** —
+  `gh pr create`'s default base branch, not overridden; this repo's convention is dev-first,
+  confirmed by #335/#336 both correctly targeting `dev`. Repaired via PR #339 (dev brought to parity
+  with main — the two branches were otherwise content-identical, so the fix was the exact missing
+  diff, not a rebase or a revert).
+- **This DEC's own first draft split DEC-0142's body in the process of inserting DEC-0143** — an
+  `old_string` match landed mid-entry instead of at the true end of DEC-0142's body. Caught by
+  re-reading the file rather than trusting the edit tool's success report, and repaired in the same
+  session before either doc left this branch. Recorded here rather than silently fixed, because it is
+  the same underlying lesson as the rest of this entry: verify against the actual state, not the
+  action taken.
+
+### Public communication
+
+`SECURITY.md` gains a second dated re-clone notice (same doctrine as the first: name the action and
+the class of exposure, not the specific value) plus a line noting the gate is now hardened against
+this class going forward.

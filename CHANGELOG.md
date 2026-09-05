@@ -12,16 +12,34 @@ under [Pre-S16].
   ET gap — 28 records posted (not the assumed 29; 22:40–22:42 don't exist in SQLite either, weewx's
   own restart for the cutover fell across those intervals). Filed ERR-0007, corrected
   `docs/INFLUXDB-MIGRATION.md`'s as-run record. Verified independently via `influx query` (28, exact).
-- **`weewx-influxdb-backup.service`/`.timer`** drafted — a consistent `influx backup` pre-dump at
-  03:15 (the `weewx-db-dump` slot), mirroring HLF's `hlf-db-dump.timer`. Not yet installed on marvin
-  (needs a root gesture; no self-service "install new unit" verb).
+- **`weewx-influxdb-backup.service`/`.timer`** drafted (PR #336), installed on marvin by marvin S28,
+  armed self-service (`marvinctl enable ... --now`) — first fire confirmed 2026-09-06 03:15:00 EDT.
+  Closes ops#270 stage 3 (d).
 - NAS-LEASE `BACKLOG.md` cross-host item closed as moot — zero NAS I/O left to yield since the
   InfluxDB move (PR #336).
 - Live-verified `SuccessExitStatus=2` and ops#257 limb 2's `:marvin-live` self-service tag are both
-  already in production, ahead of BOOT.md's own stale notes on both.
+  already in production, ahead of BOOT.md's own stale notes on both. ops#257 limb 2 confirmed closed.
+- **ops check-in:** ops#273 (CWOP verification never reads back through APRS-IS) answered and closed;
+  ops#270's record count corrected (29→28, ERR-0007) and weewx's drill probes (§5.6) posted, all
+  green. ops#274 (marvin self-service prompt audit) independently converged on the same "seven
+  relaxations already shipped" picture as ops's own S39 sweep; surfaced one live correctness bug
+  (`weewx-monitor.service`'s armed remedy would fail — `REMEDY_SYSTEMCTL=sudo systemctl` vs the
+  actual sudoers grant), tracked against BOOT job 6.
 - **DEC-0143 — adopted OPS-DEC-0195** (ops#218): the closeout ritual gets a step 0 — `BOOT.md`,
   `CHANGELOG.md`, and DEC rows ride the merge/promotion PR itself, never a deferred post-merge pass.
   Prompted by finding this exact gap in weewx's own history (S120, S122) while answering ops#218.
+  Landed via PR #338 — misrouted to `main` instead of `dev` (caught and repaired same session, PR
+  #339); a DECISIONS-FULL.md structural slip from the same edit (DEC-0143's insertion split DEC-0142's
+  body) also caught and repaired in-session.
+- **DEC-0144 — the secret gate gains a general private-IP/subnet detector.** ops#275 found a private
+  LAN subnet in two 2026-08-15 commits — the same exposure class DEC-0127 already rewrote history for
+  once. Rewritten again (owner-run, DEC-0127's precedent); the real fix is mechanical, not just
+  another scrub: `scripts/check_secrets.sh` previously only caught credential-shaped values, so a LAN
+  IP written as bare prose sailed through — proven blind before the fix, and proven live twice in one
+  evening (this session separately posted a raw marvin IP to a GitHub comment on ops#270, caught by a
+  peer session, not by any local mechanism). New pattern-based detector, hole class 7, 63/63 tests
+  passing. The `gh` comment-body gap (no git hook reaches it) is filed as its own cross-repo issue,
+  not patched here.
 
 ## [S124] — 2026-09-04 — DEC-0141 designed AND DEC-0142 executed the same night: InfluxDB serves from marvin since 22:35 ET; Foundation hosts no weather workload
 

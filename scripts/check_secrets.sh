@@ -6,6 +6,7 @@
 # Exit non-zero (and print the offending line) if a scanned file contains:
 #   - an assignment-style secret with a real-looking value
 #   - a known personal identifier (PWS id, place name, the NAS IP, …)
+#   - a private-range LAN IP/subnet written as bare prose, known or not (DEC-0144)
 #
 # ---------------------------------------------------------------------------
 # READ THIS BEFORE TOUCHING THE ALLOW-LIST. Four bug classes have already shipped
@@ -131,6 +132,40 @@ _apppw_assign="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[a-z]{4}([[:space:]
 
 secret_re="${_assign}|${_apppw}|${_apppw_assign}"
 
+# --- hole class 7 (DEC-0144): a private-range LAN IP/subnet as bare PROSE ---
+# Everything above is KEY=VALUE shaped: a credential always sits after an `=`/`:`.
+# A LAN IP/subnet does not — it shows up mid-sentence in a diagnostic note (an
+# "X is on this subnet, Y is on that one" routing observation) or a routing
+# comment, so no assignment-shaped rule was ever going to catch it, and none of
+# the ALLOW rules below apply to it (they are all keyed off `$_key`, which a bare
+# IP never has). This is a SEPARATE, pattern-based detector for that reason,
+# matching the same "general shape, not a finite list" approach `_assign` takes
+# for credentials — `.identifiers` (below) is the opposite approach, a finite list
+# of exact known values, and that is precisely why it never caught this: a subnet
+# written a new way, or with a wildcard octet, is not a value that list can
+# enumerate in advance.
+#
+# Proven blind before this fix, not assumed: a throwaway file containing a real
+# private IP in prose passed the gate clean (exit 0) pre-fix. Two real instances
+# already shipped through it — DEC-0127 (a personal LAN identifier in tracked
+# docs, full history rewrite) and DEC-0144 (this one: the same subnet class, plus
+# a raw marvin IP posted straight to a GitHub comment, which no git-triggered gate
+# could ever reach — see the DEC for why that half needs a different fix, not this
+# script).
+#
+# RFC1918 ranges only (10/8, 172.16/12, 192.168/16) — a public IP is not a LAN
+# secret. The `x` alternation matches this repo's own placeholder-adjacent habit
+# of writing a subnet with a wildcard trailing octet, which is prose ABOUT the
+# exposure, not an escape from it (see the planted BAD payloads in
+# scripts/test_check_secrets.sh for the exact shape, per DEC-0040 — this comment
+# deliberately does not spell it out, for the same reason the `_apppw` comment
+# above doesn't). Boundary groups (`^|[^0-9.]` / `[^0-9]|$`) stop a match from
+# starting or ending mid-octet, which is what keeps this from firing on a
+# three-dotted-number version string like weewx's own (see the GOOD payloads) —
+# the pattern requires all four octets, so a three-number version string never
+# engages it; verified against that exact repo line, not assumed.
+_private_ip='(^|[^0-9.])(10\.[0-9x]{1,3}\.[0-9x]{1,3}\.[0-9x]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9x]{1,3}\.[0-9x]{1,3}|192\.168\.[0-9x]{1,3}\.[0-9x]{1,3})([^0-9]|$)'
+
 # NOTE: there is deliberately NO "the line is a comment" allow rule. It was
 # removed in S40 (bug class 4 / DEC-0045). A comment marker is not evidence about
 # the VALUE, and a commented-out credential in a public repo is still leaked.
@@ -201,7 +236,17 @@ for f in "${files[@]}"; do
     fi
   fi
 
-  # (b) assignment-style secrets with a real value.
+  # (b) a private-range LAN IP/subnet as bare prose (hole class 7, DEC-0144).
+  # Own check, not folded into (c): it is not KEY=VALUE shaped, so none of (c)'s
+  # allow-list applies to it, and it needs none — a placeholder like <NAS_IP> or
+  # <MARVIN_IP> contains no digits, so it cannot accidentally match this pattern.
+  hits=$(grep -nE "$_private_ip" "$f" 2>/dev/null)
+  if [ -n "$hits" ]; then
+    echo "SECRET-SCAN: private LAN IP/subnet literal in $f (use a <..._IP>/<..._SUBNET> placeholder):"
+    echo "$hits"; status=1
+  fi
+
+  # (c) assignment-style secrets with a real value.
   #
   # The allow-list is evaluated against the RAW line. `grep -n` gives us the line
   # number for the human; the "N:" prefix is then stripped with bash parameter

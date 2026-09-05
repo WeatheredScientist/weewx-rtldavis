@@ -23,6 +23,21 @@ credentials, keys, or tokens were ever committed on any branch** — this was a 
 credential leak. Every commit SHA changed; if you cloned before this date, please **re-clone**
 rather than pull. Release tags keep their names and now point at the rewritten commits.
 
+## 2026-09-05 second history rewrite
+
+On 2026-09-05 two commits from 2026-08-15 were rewritten (`git-filter-repo`, same method as above)
+to remove a private LAN subnet reference from a diagnostic note. **No credentials, keys, or tokens
+were involved** — a non-routable local-network address is a lower-severity class than the 2026-09-01
+scrub, but the same privacy-first policy applies. Every branch/tag SHA from that point forward
+changed again; re-clone rather than pull if you have a copy from before this date. GitHub's own
+pull-request refs retain some pre-rewrite objects independent of this repo's branches/tags — a known
+platform limitation, not a gap in the rewrite itself.
+
+The gap that let this happen twice is now closed at the tool level, not just the discipline level:
+`scripts/check_secrets.sh` (this repo's CI-enforced secret gate) previously only recognized
+credential-shaped values; it now also blocks any private-range (RFC1918) IP or subnet literal in a
+commit, regardless of whether that specific value was ever seen before.
+
 ## Scope notes
 
 - This repository is **public**. It must never contain credentials, tokens, or personal
