@@ -169,9 +169,20 @@ notices nothing but a URL.
 | 22:44 | stage 2 · 10 | Foundation `:8086` refuses (`000`); `influxdb` absent from `nasctl ps` (stopped, retained) |
 
 **The gap:** last Foundation record 22:13:00, first marvin record 22:43:00 → **29 archive records
-(22:14–22:42) missing from the `weewx` bucket**, every one present in SQLite. Step 9 (backfill)
-**deferred to S125** — it needs the write token in a root shell on marvin and the DEC-0119-fixed
-tool transported first; nothing is lost by waiting.
+(22:14–22:42) missing from the `weewx` bucket**, ~~every one present in SQLite~~ **correction below:
+only 26 of the 29 actually were.** Step 9 (backfill) **deferred to S125** — it needs the write token
+in a root shell on marvin and the DEC-0119-fixed tool transported first; nothing is lost by waiting.
+
+**Step 9 executed — 2026-09-05, S125.** Tool transported (`curl` from `dev`'s raw URL to
+`/srv/docker/weewx/backfill_influx.py`, sha256 `61599d22…` confirmed match), dry-run then real run:
+`--start 2026-09-04T22:13:00 --end 2026-09-04T22:43:00` posted **28** records, 0 errors — not 29.
+Querying the archive directly (not assuming it, per the false "every one present" line above) showed
+why: minutes **22:40, 22:41, 22:42 don't exist in SQLite either** — `weewx.service`'s own 22:40:42
+restart (stage 2 step 7b, above) fell across those three archive-interval boundaries, so they were
+never recorded anywhere, not just missing from Influx. Only 26 of the 29 nominally-missing minutes
+were real gaps-to-fill; the other 3 are a permanent, separate, smaller gap. Filed as
+[ERR-0007](DATA_ERRATA.md). Verified independently post-write via `docker exec weewx-influxdb influx
+query ... |> count()` against the live store: `_value: 28`, matching exactly.
 
 **Left on the share:** `influxdb-final-20260904-{data,config}.tar` (token store inside, IP-locked
 share, 0777) — delete with the next NAS gesture. **Left on Foundation, on purpose:** the stopped
