@@ -447,6 +447,39 @@ reception-quality-correlated wind guard raised in response to this incident.
 
 ---
 
+## ERR-0007 — 2026-09-04 22:40–22:42 ET, 3-minute gap from the InfluxDB cutover restart
+
+**Window:** 2026-09-04 22:40:00 → 22:43:00 EDT (3 archive records, ~3 min) · **Logged:** 2026-09-05 (S125)
+**Cause:** not a sensor or decode fault — `weewx.service` was restarted at 22:40:42 ET (DEC-0141/0142's
+InfluxDB cutover, `docs/INFLUXDB-MIGRATION.md` stage 2 step 7b) to repoint the writer at marvin's new
+InfluxDB host. The daemon was down/reinitializing through the interval boundaries for :40, :41 and
+:42, so no archive record was ever generated for those three minutes — an absence, not a discard.
+
+**Discovered:** while executing the deferred backfill (`BOOT.md` job 1a, S125). The as-run record
+(`docs/INFLUXDB-MIGRATION.md` §8) had assumed all 29 minutes missing from InfluxDB (22:14–22:42)
+existed intact in SQLite and could simply be replayed. A direct query of the archive for that window
+instead showed consecutive minutes 22:13–22:39, then a jump straight to 22:43 — confirmed
+independently via `influx query` against the live store after the backfill ran (`_value: 28`, matching
+the corrected expectation exactly, not the originally assumed 29).
+
+**Correction status:**
+
+- **local-archive:** ⛔ not correctable — the observations were never taken; there is nothing to
+  insert. 26 of the original 29 minutes (22:14–22:39) existed all along and needed no correction.
+- **influxdb:** ⛔ same gap, same reason — `ops/backfill_influx.py` posted the 26 recoverable minutes
+  plus the two already-present boundary records (22:13, 22:43, an idempotent overwrite), 28 total, 0
+  errors. Minutes 22:40–22:42 are absent from both stores identically.
+- **external:** ⛔ immaterial — nothing was published for this window regardless; the writer was
+  already mid-restart for the cutover before this point.
+
+**Lesson:** a deferred backfill's expected-count assumption should be checked against the archive
+itself, not carried forward from the as-run gap measurement — "how much is missing from InfluxDB" (29
+min) is not the same question as "how much can actually be recovered from SQLite" (26 min). The
+difference is this incident's own 3-minute sub-gap, caused by the very restart that fixed the larger
+problem.
+
+---
+
 ## DISC-0001 — `rxCheckPercent` steps ~73% → ~99% at the DEC-0135 deploy (not an error)
 
 **Not an `ERR-####`.** No observation is wrong, before or after. This is a **metric-definition
