@@ -738,7 +738,17 @@ stations. **Re-send check (DEC-0135's model):** wind bytes changed in 33 of 213 
 consecutive pairs and 0 of 80 same-type pairs — fresh samples would have changed ~12 — so the repeat
 is a verbatim copy. (The Vantage Vue sheet is a sibling product's document; not a source here.)
 
-**What campaign A says about the LNA — hold it loosely (moved from BOOT.md, S67):**
+**What campaign A says about the LNA — hold it loosely (moved from BOOT.md, S67).**
+**Correction (S126, per DEC-0134/0135, the same caveat ROADMAP.md's P2 header already carries but
+this section never got): every absolute figure below pre-dates the duplicate-decode fix. The
+~25% "loss" all four numbers below share was the demodulator booking the ISS's own re-sent packets
+as misses — a systematic bias, not link quality — so these are `campaign_analyze.py`'s numbers as
+they existed before that was known, demoted from *settled* to *untested*, same as campaigns A-D
+generally. The **relative ranking is still probably informative** (the bias hits all four arms
+alike), but DEC-0135 is explicit that campaign B's own run-to-run scatter (sd 8.47 at 496, sd 4.67
+at 372) *exceeds* the entire 0.94-pt spread quoted below — so "no arm anywhere near the 2-pt bar"
+is a plausible read, not a settled one, and was never worth re-measuring given the headroom
+arithmetic in ROADMAP's P2 closing note.**
 - **Recomputed at S66 on per-minute `rxCheckPercent` (DEC-0069):** arm A (372/ex0) **74.81%** ·
   C (372/ex50) 74.37 · D (207/ex50) 74.17 · B (207/ex0) 73.87. Spread **0.94 pts** — no arm anywhere
   near the 2-pt adoption bar.
