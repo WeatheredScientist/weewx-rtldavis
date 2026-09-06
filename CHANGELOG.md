@@ -51,6 +51,11 @@ under [Pre-S16].
 - Gates, every PR: ruff clean · 475 passed / 17 skipped · mypy clean, 68 files · secret gate 0.
   Nine PRs (#344–#352) merged via the sanctioned wrapper; one same-session merge conflict (two PRs
   inserting at the same `DECISIONS.md` anchor) resolved by keeping both entries in DEC order.
+- **ops#274 item 5 designed (DEC-0147).** weewx's container moves from root to `t-weewx` (996:986)
+  via `--user` on marvin's unit, not a baked `USER` — the image is public, so a baked uid would break
+  every downstream user's bind mounts on upgrade. MARVIN-DEC-0106's udev rule already covers the
+  dongle; two file fixes pre-staged (`chmod u+w` on `weewx.sdb`, `chown` on `weewx.log`). Design only;
+  execution and verification numbers land in a follow-up entry.
 
 ## [S125] — 2026-09-05 — InfluxDB stage 3 closed out, closeout ritual gets a step 0 (DEC-0143), secret gate hardened against LAN literals (DEC-0144), Foundation-dark drill run clean
 
