@@ -85,11 +85,16 @@ CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 #                 trusting it: across ~17 forensically-captured events on our
 #                 hardware it never once demonstrably fixed a stall, and
 #                 ERR-0005 suspects reset #10 caused a strictly worse mode.
-#   restart_unit  marvin: `systemctl restart <REMEDY_UNIT>`. weewx.service is
-#                 `docker run --rm` with `ExecStartPre=docker rm -f`, so a
-#                 restart IS the full container recreate -- the remedy that
-#                 actually resolved ERR-0005, which the Foundation monitor could
-#                 only reconstruct via `docker inspect` and mail to a human.
+#   restart_unit  marvin: REMEDY_SYSTEMCTL's prefix + `restart <REMEDY_UNIT>` --
+#                 NOT literally bare `systemctl` (ops#274: t-weewx's sudoers
+#                 only grants `marvin-own weewx <verb> <target>`, so the
+#                 deployment's own Environment= line supplies whatever prefix
+#                 that box actually allows; see REMEDY_SYSTEMCTL below).
+#                 weewx.service is `docker run --rm` with
+#                 `ExecStartPre=docker rm -f`, so a restart IS the full
+#                 container recreate -- the remedy that actually resolved
+#                 ERR-0005, which the Foundation monitor could only
+#                 reconstruct via `docker inspect` and mail to a human.
 #   none          detect and escalate only; never act. The honest setting for
 #                 any host where no remedy has been shown to work.
 #
