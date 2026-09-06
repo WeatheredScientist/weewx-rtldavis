@@ -9687,3 +9687,134 @@ is gone, and the runbook is kept as historical record of the actual swap night, 
 future use. `BACKLOG.md`'s S104 entry is marked resolved in place (text preserved, per STANDARD rule
 1 — move text, never delete or rewrite history) and its neighboring "2026-08-25 21:40 restart" entry
 is corrected to drop the now-eliminated DSM hypothesis rather than silently continuing to suggest it.
+
+## DEC-0147 — weewx's container runs as `t-weewx` via `--user` on the unit, not a baked `USER` (ops#274 item 5)
+
+**Status:** Accepted (design; execution recorded in the follow-up) · **Date:** 2026-09-06 (S126) ·
+**answers** ops#274 item 5 · **departs from** HLF's baked-`USER` pattern
+(`hyperlocal-forecast#470`, MARVIN-DEC-0138) for a stated reason · **relies on** MARVIN-DEC-0106 ·
+**interacts with** MARVIN-DEC-0139 (ACL mask) · **upholds** DEC-0008 · **applies** OPS-DEC-0192
+(no peer-relayed authorization)
+
+### Trigger
+
+ops#274 item 5: "run tenant containers as their own uid, not root." HLF shipped theirs
+(`hyperlocal-forecast#470`, MARVIN-DEC-0138) with a numeric `USER` baked into their Dockerfile plus a
+one-time chown of their bind mounts. ops asked weewx's status; measured, not assumed: `marvinctl
+--tenant weewx inspect weewx-rtldavis-v2` shows `"User": ""` and the tracked Dockerfile carries no
+`USER` directive at all — the container has been running as root the entire time it has lived on
+marvin. The owner green-lit the move in this repo's own chat. A marvin-relayed "owner said go" for the
+same change reached this session first and was **explicitly not acted on** — a peer relay is not
+owner authorization for a live change on this repo's single receiver, the same doctrine OPS-DEC-0192
+recorded: a gesture given in another window is invisible here, and this session waited for the
+owner's word in its own chat before doing anything.
+
+### Decision 1 — run-time `--user`, not a baked Dockerfile `USER`
+
+`weewx.service`'s `docker run` line gains `--user 996:986` (`t-weewx`'s uid:gid on marvin) and
+`-e HOME=/tmp`. The Dockerfile itself is untouched — no `USER` directive, no `chown` step added to
+the image build.
+
+**Rationale:** this image is **public** — `weatheredscientist/weewx-rtldavis` on Docker Hub, pulled
+and run by people who are not this repo's owner, on their own hosts with their own bind mounts. A
+uid baked into the image only works if every downstream user's `weewx-data`/`logs` bind mounts happen
+to already be writable by that exact numeric uid; for anyone upgrading an existing install, a baked
+uid would silently turn writable files into unwritable ones on the next pull, with no way for the
+image itself to fix a host-side directory it doesn't own. That is the same shape of hazard the
+monitor's `REMEDY_MODE` default already treats as unacceptable — *changing an existing install's
+behavior silently is its own defect*, not a `main`/`dev`-flag-visible one. HLF's baked pattern is the
+right call for their own private image with a known, controlled set of hosts; it is the wrong call
+for a published extension with an unknown install base. Run-time `--user` gets the same non-root
+outcome without asking every downstream host to already match a number this repo picks.
+
+`HOME=/tmp` exists because uid 996 has no `/etc/passwd` entry inside the container, so any code path
+that calls `expanduser("~")` (Python's `os.path.expanduser`, or a library doing the equivalent) falls
+back to reading `$HOME` and, failing that, historically resolves to the current user's home directory
+lookup failing — inside a minimal container image that can mean falling through to the image's own
+root-owned tree, which is read-only for uid 996. Setting `HOME=/tmp` gives any such lookup a writable,
+uid-agnostic target instead.
+
+### Decision 2 — USB device access needs nothing new
+
+MARVIN-DEC-0106 (S23, ops#253) already installed a udev rule for weewx's exec-ro spectrum-capture
+work: `SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="2838", GROUP="t-weewx",
+MODE="0660"` — matched by vendor:product rather than bus number, because the bus number is not
+stable on this board (MARVIN-DEC-0064).
+
+Measured from inside the currently-running (root) container: `/dev/bus/usb/007/003` — the RTL-SDR
+dongle — is `crw-rw---- 0:986`; every other node under `/dev/bus/usb/` is `crw-rw---- 0:0`, untouched
+by the rule because they don't match vendor:product 0bda:2838. `docker run --user 996:986` makes gid
+986 (`t-weewx`) the container's **primary** group, so the existing group-rw bit on the dongle's device
+node grants access with no `--group-add` flag needed. `rtl_biast` (the bias-tee control used to toggle
+the LNA) opens the same libusb handle and needs nothing separate. The container's `--device
+/dev/bus/usb` mount (the whole bus, not a single node — the bus number itself is unstable) stays
+exactly as it is; only the one node the dongle presents as actually opens for uid 996, same as it did
+for root.
+
+### Decision 3 — file permissions, measured from inside the running container
+
+Uid mapping between container and host is identity on this setup (no user-namespace remapping): files
+the current root container created show as host uid:gid `0:0`; the mounted `weewx.sdb` — created
+before the container existed — already shows as `996:986`. Walked every writable path the driver
+touches:
+
+- **`archive/weewx.sdb`** — mode `r-x------`, no owner write bit at all, plus a POSIX ACL mask left by
+  MARVIN-DEC-0139's `t-hlf` read grant (`setfacl -m u:t-hlf:r--`). Root could write it only because
+  root ignores DAC checks entirely; uid 996 could not. **Fix: `chmod u+w`** — deliberately **not**
+  `chmod 600`. On a file carrying a POSIX ACL, `chmod`'s group-permission bits set the ACL **mask**,
+  not the traditional group bits; `600` would set that mask to `---`, which silently caps every ACL
+  entry — including `t-hlf`'s read grant — back to no access, undoing MARVIN-DEC-0139 as a side effect
+  of an unrelated permission fix. `u+w` touches only the owner bit and leaves the mask (and `t-hlf`'s
+  grant) untouched.
+- **`logs/weewx.log`** — root-owned `0644`. `[Logging]`'s `TimedRotatingFileHandler` opens this file
+  in place for append; owner-only write with a different owner would fail on the first log line.
+  **Fix: `chown 996:986`.**
+- **`current.json` / `loop-data.txt`** — root-owned, but `loop_json_writer.py` (lines 244–246) never
+  opens them for in-place append: it writes to a temp file with `open(tmp, 'w')` and calls
+  `os.replace(tmp, dest)`, which only needs the **directory** to be writable, not the destination file.
+  The directory is already `996`-owned `rwx`. **No action** — these self-heal on the first write.
+- **`public_html`** — mode `0555`, but every `[StdReport]` report entry is `enable = false`, so nothing
+  ever writes there. **No action.**
+- **`weewx.conf`** — `0600 996:986` already. **No action.**
+- **Rotated logs** (`weewx.log.YYYY-MM-DD`) — root-owned, but log rotation only renames/unlinks at the
+  directory level; a rotated file is never opened again for writing. **No action.**
+
+Pre-staged via `marvinctl --tenant weewx exec` running as root-in-container, against weewx's own bind
+mounts, while the root container was still running and serving prod. Flagged to marvin as within the
+tenant's own envelope (own tree, own container, no cross-tenant touch). Safe to apply against a live
+container because permission changes don't retroactively affect file descriptors already open, and
+root's own writes ignore the modes being changed anyway.
+
+### Decision 4 — cutover keeps SIGKILL; one hazard is specific to this transition
+
+DEC-0008 measured that a graceful SIGTERM shutdown left the RTL-SDR dongle in a bad state and adopted
+`docker kill` (SIGKILL, via the unit's `ExecStop`) instead — considered and rejected on the record
+again here rather than assumed to still hold, because "a cleaner shutdown" is exactly the kind of
+plausible-sounding change a root→non-root cutover invites revisiting.
+
+The one hazard genuinely new to *this* transition: if the SIGKILL lands mid-transaction, the
+(still-root, pre-cutover) `weewxd` process can leave a root-owned hot `weewx.sdb-journal` behind. The
+next `weewxd` — now uid 996 — cannot open a hot journal it doesn't have write access to
+(`sqlite3PagerSharedLock` returns `SQLITE_CANTOPEN` when a journal exists but can't be opened
+read-write), so the archive database would fail to open on the very first start under the new user.
+Probability is roughly transaction-duration-in-ms / 60 s — small, but non-zero and specific to the one
+restart that crosses the uid boundary; every restart afterward has no root-owned journal to strand.
+
+**Mitigation:** cut over as three separate steps — `marvinctl stop`, `ls archive/` (confirm no
+`weewx.sdb-journal` present), `marvinctl start` — rather than a single `restart`, with a marvin `chown`
+gesture on the journal only if one is actually found sitting there. After the switch, every journal
+created is already `996`-owned, so this is a one-time hazard, not a standing one.
+
+### Verification plan (results in a follow-up entry, not here)
+
+Nothing in this DEC was executed against prod; it records the design only. The follow-up entry is
+expected to confirm: the container's runtime `id` reports uid 996; the startup log carries the
+bias-tee-off line, the driver banner `0.20+ws.5`, and `Initializing weewxd`; no `PermissionError`
+anywhere in the startup log; `current.json`/`loop-data.txt` flip to `996:986` ownership on their first
+write; `weewx.sdb`'s mtime advances past the cutover; the monitor's `RECEPTION:` lines resume on
+schedule. Expected outage: one container recreate, ~16–31 s, per the `v2.0.15`/`v2.0.16` precedent
+(DEC-0136/DEC-0138). **Rollback** is a unit-flag revert (marvin gesture: drop `--user`/`-e HOME`,
+`daemon-reload`, `marvinctl restart`) — the root image starts fine again after the pre-staged
+permission fixes, since root ignores file modes regardless of who last changed them. This is **not** a
+retag: the image bytes never changed, only the unit's invocation of them, so rollback carries none of
+the image-rollback machinery in `CONSTANTS.md`'s Release/rollback table.
