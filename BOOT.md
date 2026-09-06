@@ -80,12 +80,20 @@ executed); 13 PRs merged (#344–#357); dev clean and green.**
 4. `CONSTANTS.md` infra re-verify (S105-era, still stale) · `docs/ARCHITECTURE.md` mount table still
    NAS-pathed (S30) · `CHANGELOG.md` archive rollup overdue — S122 and earlier still inline, past the
    ~3-session guideline (pre-existing debt, carried again).
+5. **Container not actually in `weather.slice` yet (marvin S29, MARVIN-DEC-0141).** `Slice=` only
+   placed systemd's docker-run launcher there; dockerd creates the real cgroup under
+   `system.slice/docker-<id>.scope` without `--cgroup-parent`. Marvin added
+   `--cgroup-parent=weather.slice` to `weewx.service`/`weewx-influxdb.service` and reloaded, but the
+   currently-running container (today's item-5 `--user` cutover) predates that and hasn't picked it
+   up. No urgency — fold into the next natural restart of `weewx.service`, don't restart solely for
+   this. Verify after: `docker inspect --format '{{.State.Pid}}' weewx-rtldavis-v2` then
+   `cat /proc/<pid>/cgroup` should show `weather.slice`, not `system.slice/docker-….scope`.
 
 ### Current state (S126 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `weewx.service` in `/weather.slice`; `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, `ExecStop=docker kill` (MARVIN-DEC-0137, S126) — runs as `t-weewx` (996:986) via unit `--user` since 13:12:05 EDT (DEC-0147) |
+| Prod | marvin, `weewx.service` unit in `/weather.slice`, but the **container's actual cgroup is not** — needs one more restart to pick up `--cgroup-parent` (job 5, MARVIN-DEC-0141); `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, `ExecStop=docker kill` (MARVIN-DEC-0137, S126) — runs as `t-weewx` (996:986) via unit `--user` since 13:12:05 EDT (DEC-0147) |
 | Reception | **100% mean, every post-v2.0.16 6h window since 09-03 18:00** (job 6) — RF question reads closed; blocker 2 (RF-dead) unfired, watch continues |
 | InfluxDB | marvin, `weewx-influxdb.service` since 09-04 22:35:02 ET, v2.7.12; backup timer armed |
 | Foundation | fully decommissioned — project directory deleted, NFS export retired, DSM tasks disabled (ops#278 closed) |
