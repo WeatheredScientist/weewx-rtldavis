@@ -43,7 +43,12 @@ The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 ## Git workflow
 
 - **`main` = production truth** (tagged `prod-baseline-YYYYMMDD`); **`dev` = work**; feature branches
-  off `dev` for individual changes (DEC-0011). Promotion = merge + deploy + tag.
+  off `dev` for individual changes (DEC-0011). Promotion = merge + deploy + tag. **If the promotion
+  bumps the version, "tag" means both**: `prod-baseline-YYYYMMDD` (the promotion anchor) **and**
+  `git tag -a vX.Y.Z` + `gh release create` (the public release) — a version bump is not done until
+  both exist. Five releases (v2.0.12–v2.0.16) shipped to prod and Docker Hub with no `vX.Y.Z` tag
+  and no GitHub release for weeks before this line existed (#331) — nothing in the promotion path
+  named the step, so no session was ever prompted to do it.
 - **Start of session:** `git fetch && git status`. **End:** `git status` shows *up to date*.
 - **Pause for approval before every commit and before any push.** Show `git status` + a diff summary
   first; show `git log --oneline --all` before any push.
