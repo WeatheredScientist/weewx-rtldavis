@@ -56,15 +56,24 @@ trigger below is plainly satisfied.
 - **DEC-0056 revisit trigger** — a rain-rejection email on a genuinely *wet* day.
 - **Upstream replies** — four open threads (lheijst #22/#23, issue #15, david-lutz#1).
   `docs/UPSTREAM-THREADS.md` holds the state and the etiquette.
-- **Post-DEC-0135 reception baseline (new S116)** — the deliberate replacement for re-running the
-  campaigns, and the one thing that decides whether any of them ever come back. After the fix
-  deploys, read `rxCheckPercent` over several days with no apparatus and no pre-registration.
+- **Post-DEC-0135 reception baseline (new S116) — first multi-day read taken, S126.** After the
+  fix deploys, read `rxCheckPercent` over several days with no apparatus and no pre-registration.
   **~99% closes the RF question permanently.** **Materially lower (say < 95%) is a real signal** —
   and the first one a campaign could actually resolve, because the ~27% of background pseudo-loss
   that swamped every previous sweep is gone. **This watch is also how blocker 2 becomes measurable:**
   an RF-dead episode currently hides inside that background; against a flat ~99% baseline it stands
   out sharply. Do not read a *pre*-fix figure against a post-fix one — the metric steps ~26 points at
   the deploy (`docs/DATA_ERRATA.md` DISC-0001).
+  **S126 read (2026-09-06): every fully-post-v2.0.16 6-hour `RECEPTION SUMMARY` window from
+  2026-09-03 18:00 through 2026-09-06 06:00 (ten windows, ~2.5 days) reads `Mean reception: 100%`,
+  `Packets dropped (est, lower bound)` 1-12 out of ~7680 per window (0.01-0.16%).** This clears the
+  ~99% bar comfortably — the RF question reads closed, not just "not yet reopened." **Blocker 2 is
+  still unfired, not resolved**: zero `rtldavis process stalled` lines across `weewx.log` for the
+  same window (09-03 through today) — no RF-dead episode has occurred to measure, which is within
+  normal variance for an intermittent phenomenon (the pre-fix base rate was ~21 episodes over ~30
+  days, roughly one every 1.4 days, clustered) rather than evidence the episodes have stopped. Watch
+  continues; re-read after a longer stretch, or immediately if a stall line appears — the flat
+  baseline this session measured is exactly what would make the next one stand out.
 - **Dependabot** may open a deps PR — review it, never auto-merge.
 - **RF-dead pause/resume incident rate (DEC-0087, new S79)** — first fired S81 (2026-08-13
   19:40:05, arm H) and immediately escalated to a hard abort at the 120-min ceiling — not the

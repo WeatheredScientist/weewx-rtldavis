@@ -1084,11 +1084,13 @@ def format_reception_summary(summary, label):
                      f"{summary['records']}")
     lines.append("")
     lines.append("Note: received = per-record rxCheckPercent x physical TX rate, each record "
-                 "clamped at 100%. The driver floor-divides the archive period by the loop "
-                 f"period (60 s -> {int(RF_TX_PER_MIN)}, a 59 s period -> {int(RF_TX_PER_MIN) - 1}) "
-                 f"against {RF_TX_PER_MIN:.2f} real transmissions/min, so a fully received minute "
-                 "reads 101-105% (~103% mean, measured since DEC-0135; #313). The clamp keeps "
-                 "'dropped' a lower bound on real loss instead of netting good hours negative.")
+                 "clamped at 100%. Before #317 (DEC-0137-0139, shipped v2.0.16) the driver "
+                 "floor-divided the archive period by the loop period, so a fully received "
+                 "minute read 101-105% (~103% mean, DEC-0135; #313) and the clamp did real work. "
+                 "#317 denominates by the ISS's own inter-arrival clock instead, so a fully "
+                 "received minute now reads exactly 100% by construction -- the clamp stays as a "
+                 "safety net, not the primary source of accuracy, and 'dropped' remains a lower "
+                 "bound on real loss either way.")
     return "\n".join(lines)
 
 
