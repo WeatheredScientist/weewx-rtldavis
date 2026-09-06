@@ -77,9 +77,22 @@ Environment=INPUT_STALE_S=300
 # (MARVIN-DEC-0051 reassigned two controller roles). On a box hosting two live
 # tenants and a passed-through ASM3142 it would either no-op or reset someone
 # else's device.
+#
+# REMEDY_SYSTEMCTL is NOT literally "systemctl" here -- ops#274 found that
+# t-weewx's actual sudoers grant is `marvin-own weewx <verb> <target>`, not a
+# bare `sudo systemctl`, so the old value would fail every time restart_unit
+# is armed. weewx_monitor.py's do_restart_unit() always appends
+# ['restart', REMEDY_UNIT] to this value's own tokens (never re-derive that
+# composition here or in marvin's copy -- read it from source), so the value
+# below is the prefix ONLY, through the tenant name, with no verb of its own:
+# split + ['restart', 'weewx.service'] resolves to exactly
+# `sudo -n /usr/local/lib/marvin/marvin-own weewx restart weewx.service`,
+# matching the granted shape verb-for-verb. Untested end-to-end as of this
+# edit -- verify with a deliberate restart_unit exercise once marvin installs
+# it, per ops#274's own note.
 Environment=REMEDY_MODE=none
 Environment=REMEDY_UNIT=weewx.service
-Environment="REMEDY_SYSTEMCTL=sudo systemctl"
+Environment="REMEDY_SYSTEMCTL=sudo -n /usr/local/lib/marvin/marvin-own weewx"
 
 # Campaign inhibit. An RX campaign restarts weewx once per arm on purpose; every
 # one of those looks exactly like the fault this watchdog remedies, and a remedy

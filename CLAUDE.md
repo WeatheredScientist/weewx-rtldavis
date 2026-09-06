@@ -76,7 +76,10 @@ gone stale on two values: the reception baseline and the driver-vs-config layer 
   0. **Closeout rides the merge, never follows it** (OPS-DEC-0195, ops#218 — adopted S125). When
      this session's own work IS a merge or a prod promotion, the `BOOT.md` pointer, the
      `CHANGELOG.md` line, and the DEC row ride that same PR or land before the merge — never
-     deferred to a later pass. Reason: a session can drop out of view (auto-archive on PR merge)
+     deferred to a later pass. **If the promotion bumps the version, `git tag -a vX.Y.Z` +
+     `gh release create` ride it too** (`docs/CONVENTIONS.md`'s Git workflow section, #331) — five
+     releases shipped silently without either before this line existed. Reason: a session can drop
+     out of view (auto-archive on PR merge)
      before a post-merge closeout pass runs, stranding the handoff on a stale pointer (ops#218's
      EHWD S261 case; weewx hit the same shape at S120/S122, repaired only because S121/S123
      happened to run the debt hook). A verified session does not idle-wait for a 6-hourly window or

@@ -1,7 +1,7 @@
 # Changes from upstream
 
 **Status:** Source of truth for what this project changed in code it did not write.
-**Last updated:** 2026-09-04 (S123)
+**Last updated:** 2026-09-06 (S126)
 
 This project is a Docker distribution of a **modified** Davis/rtldavis receiver stack. It is not
 stock upstream, and several of the files it ships are other people's work with our patches on top.
@@ -172,15 +172,13 @@ unchanged payloads has been mis-reporting reception the same way. Draft lives in
 with `--batch --forward` and followed by a `grep -c dupwindow` assertion, so a build **fails loud**
 rather than silently producing an unpatched binary if upstream's source moves.
 
-**GPLv3 §5(a) notice: not yet added to `main.go` itself.** The patch's `From:`/`Subject:` header
-identifies the fork, and the added code comments explain the change, but unlike `rtldavis.py`
-(which logs a fork-identity line at startup) nothing in the patched binary states outright that it
-carries a modification. `main.go`'s existing `log.Printf` startup line does now print `dupWindow=%d`
-alongside the other flags, which at least surfaces the new flag — but that is not the same as a
-"you modified this, on this date" notice. Tracked as
-[#327](https://github.com/WeatheredScientist/weewx-rtldavis/issues/327) rather than patched here:
-it is a Go source change to a file that is not vendored in this repo, and belongs with a
-build/deploy verification pass, not a docs-only session.
+**GPLv3 §5(a) notice: added to `main.go` itself** ([#327](https://github.com/WeatheredScientist/weewx-rtldavis/issues/327)).
+A new hunk in `patch/rtldavis-dupgate.patch` inserts a `//`-comment block right after the import
+block (before `const maxTr = 8`) stating the file was modified, by whom, and on what date, with
+pointers to DEC-0135 and the patch file for the actual diff — so the patched binary now states
+outright that it carries a modification, matching what `rtldavis.py`'s startup fork-identity line
+already does for the driver side. Verified applying cleanly against the live `src.tgz` bundle with
+the same `patch -p1 --batch --forward` recipe the Dockerfile uses.
 
 ## `influx.py`
 

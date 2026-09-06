@@ -35,7 +35,18 @@ Upstream: https://github.com/lheijst/rtldavis
 
 --- a/main.go
 +++ b/main.go
-@@ -51,6 +51,7 @@
+@@ -46,4 +46,10 @@
+     "github.com/lheijst/rtldavis/protocol"
+     "github.com/jpoirier/gortlsdr"
+ )
++
++// Modified by the weewx-rtldavis project (WeatheredScientist), 2026-09-06:
++// time-gated the duplicate-packet filter below so a transmitter re-send is
++// no longer misbooked as a lost packet. See DEC-0135 and
++// patch/rtldavis-dupgate.patch (weewx-rtldavis repo) for the full diff.
++
+ const maxTr = 8
+@@ -51,6 +57,7 @@
  var (
      // program settings
      ex                int            // -ex = extra loopTime in msex
