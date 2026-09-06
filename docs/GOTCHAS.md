@@ -184,6 +184,16 @@ alone did not catch.
   marvin build now budgets for **one** owner confirmation (extraction), not two, as long as the
   transport step is a plain alias-scoped scp/rsync/sftp — until `ops#257` closes the self-service
   gap for good.
+- **`chmod 600` on a file that carries a POSIX ACL silently revokes the ACL grant** (S126): chmod's
+  group bits set the ACL *mask*, so `600` sets the mask to `---` and every named-user entry becomes
+  ineffective — `weewx.sdb`'s t-hlf read (MARVIN-DEC-0139) would have vanished hours after it was
+  granted. Use `chmod u+w` (owner bits only) or set `g=` deliberately; check with `stat -c %a` — the
+  group triad shows the mask, and a trailing `+` on `ls -l` means an ACL is present.
+- **A SIGKILL'd root container can leave a root-owned hot `weewx.sdb-journal` that its non-root
+  successor cannot open** (S126, DEC-0147): SQLite refuses to play back a hot journal it can't open
+  read-write (`SQLITE_CANTOPEN`), so the DB open fails outright. On any uid transition, cut over as
+  `stop` → `ls archive/` → `start`, never one `restart`, and have a chown gesture ready. One-time:
+  after the switch every journal belongs to the new uid.
 
 ## §4 Liveness and deployment — proving a thing is actually running
 

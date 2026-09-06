@@ -9690,7 +9690,7 @@ is corrected to drop the now-eliminated DSM hypothesis rather than silently cont
 
 ## DEC-0147 — weewx's container runs as `t-weewx` via `--user` on the unit, not a baked `USER` (ops#274 item 5)
 
-**Status:** Accepted (design; execution recorded in the follow-up) · **Date:** 2026-09-06 (S126) ·
+**Status:** Accepted (executed 2026-09-06 13:12:05 EDT, verified same session) · **Date:** 2026-09-06 (S126) ·
 **answers** ops#274 item 5 · **departs from** HLF's baked-`USER` pattern
 (`hyperlocal-forecast#470`, MARVIN-DEC-0138) for a stated reason · **relies on** MARVIN-DEC-0106 ·
 **interacts with** MARVIN-DEC-0139 (ACL mask) · **upholds** DEC-0008 · **applies** OPS-DEC-0192
@@ -9818,3 +9818,40 @@ schedule. Expected outage: one container recreate, ~16–31 s, per the `v2.0.15`
 permission fixes, since root ignores file modes regardless of who last changed them. This is **not** a
 retag: the image bytes never changed, only the unit's invocation of them, so rollback carries none of
 the image-rollback machinery in `CONSTANTS.md`'s Release/rollback table.
+
+### Execution and verification (same session)
+
+- **Cutover:** `marvinctl stop weewx.service` issued and completed 13:11:55 EDT (unit went `failed
+  (Result: exit-code)` — expected, `docker kill` exits the `docker run` non-zero). Archive dir
+  checked between stop and start: no `weewx.sdb-journal` present — clean kill, the hot-journal
+  contingency above did not fire. `marvinctl start weewx.service` 13:12:05 EDT → active. Container
+  recreate: 10 s.
+- **Unit edit:** `--user 996:986` + `-e HOME=/tmp` added to `ExecStart`, `daemon-reload` done —
+  marvin's gesture, recorded as MARVIN-DEC-0140. Verified from weewx's side before cutover:
+  `marvinctl cat` of the unit showed the flags with everything else byte-identical to the pre-edit
+  capture; `marvinctl unit` showed no "changed on disk" warning.
+- **uid verification:** `marvinctl exec … id` → `uid=996 gid=986 groups=986` (name lookups fail
+  cosmetically — no passwd entry, by design). `Config.User` = `996:986`. Container stdout showed the
+  entrypoint's bias-tee-off line and `rtl_biast` finding the RTL2838 (device opened as 996).
+- **`weewx.log` at 13:12:06:** every service init, driver banner `0.20+ws.5`, startup process
+  `/usr/local/bin/rtldavis -gain 372 …`, `Using binding 'wx_binding' to database 'weewx.sdb'`,
+  `Daily summaries up to date`, `Starting main packet loop.` — no `PermissionError`.
+- **fd-level USB verification:** `/proc` inside the container showed PID 1 `weewxd`, PID 15
+  `rtldavis` holding fd 7 → `/dev/bus/usb/007/003` (the dongle) — USB access as uid 996 confirmed at
+  the file-descriptor level (MARVIN-DEC-0106's `root:t-weewx 0660` udev rule, primary gid 986).
+- **Monitor continuity:** `weewx_monitor.log` kept reading the now-996-owned log; `WINDOW: 0/21` at
+  13:13:18 and 13:14:18 (the expected acquisition gap), lines resumed 13:14:48.
+- **RF acquisition:** ~175 s (DEC-0136 measured 128 s on 09-03; same order, inherent to any restart,
+  not caused by this change) — first `Wunderground-RF: Published record` at 13:15:03.
+- **loop-JSON self-heal:** `current.json` (mtime 13:14) and `loop-data.txt` (mtime 13:15) flipped
+  from `root:root` to `t-weewx:t-weewx` on their first write — the tmp+`os.replace` self-heal
+  predicted above; no chown was needed.
+- **First archive record:** `Influx: Published record 2026-09-06 13:15:00 EDT` logged at 13:15:17;
+  `weewx.sdb` mtime 13:15, no journal left behind.
+- **Errors:** lines matching `ERROR|CRITICAL|Traceback|Permission` in `weewx.log` since 13:12: 0.
+
+**Data gap:** as seen by consumers, 13:11:55 → 13:15:00 ≈ 3 min 5 s, of which ~10 s is the container
+recreate and the rest is the driver's cold-start RF acquisition — the same shape every restart has.
+
+**Rollback:** not needed — the cutover succeeded on the first attempt; the unit-flag-revert path
+above was never invoked.
