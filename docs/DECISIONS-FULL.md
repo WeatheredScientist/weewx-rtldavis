@@ -9542,3 +9542,65 @@ patched here as a workaround.
 `SECURITY.md` gains a second dated re-clone notice (same doctrine as the first: name the action and
 the class of exposure, not the specific value) plus a line noting the gate is now hardened against
 this class going forward.
+
+## DEC-0145 — GitHub Releases backfilled for v2.0.12–v2.0.16; the version-tag step joins the promotion convention
+
+**Status:** Accepted (executed) · **Date:** 2026-09-06 (S126) · **closes** #331 · **extends**
+`docs/CONVENTIONS.md`'s Git workflow section and CLAUDE.md's closeout skeleton step 0
+
+### Trigger
+
+#331 (weewx S123, 2026-09-04): five prod promotions (v2.0.12 through v2.0.16) had shipped to prod
+and Docker Hub over five weeks with no `vX.Y.Z` git tag and no GitHub release — the second published
+channel this repo describes itself by ("Docker Hub + GitHub releases") had been silently dead since
+`v2.0.11` (2026-07-28). Root cause: nothing in the promotion convention or the closeout skeleton
+named the step, so no session was ever prompted to run it.
+
+### Backfill
+
+Five annotated tags created and pushed, each anchored on the actual commit that built the
+corresponding image — verified, not taken from the historical record, because both DEC-0127 (S112)
+and DEC-0144 (S125) rewrote this repo's history since some of those images were built, changing every
+commit hash from that point forward. A fresh `git fetch --force --tags origin` first, after finding
+this session's own local clone still carried pre-rewrite tag objects (`prod-baseline-20260904`
+resolved locally to a commit no longer reachable from `origin/main` at all) — the remote's tags were
+already correct; only the local cache was stale.
+
+| Tag | Commit | Anchor |
+|---|---|---|
+| `v2.0.12` | `80329b3` | `main`, PR #151 (`prod-baseline-20260810`) |
+| `v2.0.13` | `0265621` | `main`, PR #161 (`prod-baseline-20260811`) |
+| `v2.0.14` | `18264d8` | `dev`, PR #275 (S101 close) |
+| `v2.0.15` | `ea17ea8` | `dev`, PR #308 (S116 close) |
+| `v2.0.16` | `4adb07c` | `main`, PR #324 (`prod-baseline-20260904`) |
+
+v2.0.14 and v2.0.15 never got their own `main` promotion — both were folded into the single
+267-commit v2.0.16 promotion (PR #324) — so those two tags anchor on the `dev` commit the image was
+actually built from, matching CONSTANTS.md's own release-mechanics record rather than inventing a
+`main` anchor that never existed.
+
+`gh release create` for each, titled and noted from this repo's own already-public CHANGELOG/
+CHANGELOG-ARCHIVE content — no new infra detail introduced. **Explicit owner instruction going in:
+the release text must carry zero identifiable infrastructure or location detail**, not just no
+secrets — so the five bodies were written to describe software behavior only (metric fixes, gain
+adoption, packet-decode changes) and deliberately omit the `Foundation`/`marvin` host codenames that
+already appear elsewhere in this repo's public docs, out of caution rather than because those
+codenames are themselves sensitive.
+
+### Convention change
+
+`docs/CONVENTIONS.md`'s Git workflow section: "Promotion = merge + deploy + tag" now spells out that
+a version-bumping promotion needs **both** tags — `prod-baseline-YYYYMMDD` (the promotion anchor) and
+`vX.Y.Z` + a GitHub release (the public release) — not done until both exist. CLAUDE.md's closeout
+skeleton step 0 (DEC-0143/OPS-DEC-0195) gets the same addition: the tag and release ride the
+promotion PR, same as the `BOOT.md`/`CHANGELOG.md`/DEC-row discipline it already states.
+
+### Declined for now
+
+#331's step 3 asked whether a release workflow should exist (joining `dockerhub-description.yml`,
+which already runs on every `main` push) or whether releases stay owner/session-triggered like
+`:latest`'s own move (DEC-0078's precedent). **Declined — stays manual**, same as `:latest`: the
+convention-doc fix (above) is what was missing, not automation; a promotion is already a deliberate,
+low-frequency, human-attended event (weeks apart), so a workflow would add CI surface for a step that
+this DEC's own convention change already makes hard to forget. Revisit if a promotion is ever missed
+again after this fix — that would be evidence the doc alone isn't enough.
