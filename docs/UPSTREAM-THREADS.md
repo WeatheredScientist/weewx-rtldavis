@@ -9,7 +9,12 @@ been quiet since 2023, so that one may simply sit.
 
 **Etiquette (DEC-0034, and the S38 litmus test):** state the fork honestly — modification notices,
 the `+ws` version suffix, `CHANGES-FROM-UPSTREAM.md`. Drafts are owner-reviewed before posting and
-**never posted without an explicit go**. Credit other people's diagnoses by name and number.
+**never posted without an explicit go**. Credit other people's diagnoses by name and number. Any
+internal-only detail (our own version numbers, session/DEC references) stays out of the posted text
+entirely — an upstream reader has no context for either. **Draft structure (S126 feedback):** put
+the actual postable text first, set off with a loud banner (`>>>>> ONLY THIS GETS POSTED <<<<<`),
+then a second loud banner before any internal status notes — a small heading after a long preamble
+isn't enough; it cost a round-trip when the owner assumed the whole draft was going out.
 
 **Drafts live in `docs/upstream/` — a gitignored directory, deliberately not tracked.** This file is
 the tracked *state* of the threads; that directory is the untracked *prose* awaiting review. Don't
@@ -17,16 +22,16 @@ conflate them, and don't commit the drafts.
 
 ## Open
 
-- **[DRAFTED — S126] `lheijst/rtldavis` (the Go demodulator, `src/lheijst/rtldavis`): the byte-only
-  duplicate filter drops the ISS's genuine repeat packets and books each as a miss (DEC-0134).**
-  Measured 80 of 81 misses in 15 min; real loss 0.3%. Fix is a time gate on `lastRecMsg`, deployed
-  on our own hardware since v2.0.15 (DEC-0136). Draft in `docs/upstream/dupgate-time-gate.md`;
-  not posted without a go. Affects every user whose ISS repeats. **Two things found while
-  drafting:** issues are disabled on this repo (target is a PR, not a comment — no existing thread
-  to reply into), and the repo itself is much quieter than `weewx-rtldavis` (last push 2023-12-22).
-  LloydR's [`#2`](https://github.com/lheijst/rtldavis/pull/2) sits in the same function, still
-  open since 2023-02-11, but fixes a different failure mode (content-agnostic near-duplicates) —
-  complementary, not conflicting; credited directly in the draft.
+- **[lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7)** — the byte-only duplicate
+  filter drops the ISS's genuine repeat packets and books each as a miss (DEC-0134). Measured 80 of
+  81 misses in 15 min; real loss 0.3%. Fix is a time gate on `lastRecMsg`, deployed on our own
+  hardware since v2.0.15 (DEC-0136). **POSTED 2026-09-06** (owner-approved, trimmed to ~70 words
+  from an over-long first draft) via a fork (`WeatheredScientist/rtldavis`, branch
+  `fix/time-gate-duplicate-filter`) — issues are disabled on this repo, so a PR was the only option,
+  no existing thread to reply into. **OPEN.** LloydR's [`#2`](https://github.com/lheijst/rtldavis/pull/2)
+  sits in the same function, still open since 2023-02-11, fixes a different failure mode
+  (content-agnostic near-duplicates) — complementary, not conflicting; credited in the PR body. Repo
+  is much quieter than `weewx-rtldavis` (last push before this PR: 2023-12-22) — may sit a while.
 - **[lheijst/weewx-rtldavis#23](https://github.com/lheijst/weewx-rtldavis/pull/23)** — the temp-sign
   + `0xFF8` companion PR (S55, owner-reviewed before posting). Credits LloydR's #19 for the
   diagnosis; offers the masked 12-bit two's complement as an alternative (#19's 16-bit-signed ÷16
