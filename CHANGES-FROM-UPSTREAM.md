@@ -165,8 +165,8 @@ transmissions, holding `rxCheckPercent` at ~73% on a ~99% link. The patch gates 
 loop period of 2.5625 s) and logs the survivors as `repeat packet:`.
 
 **Belongs upstream** — it is not station-specific: any Davis station whose transmitter re-sends
-unchanged payloads has been mis-reporting reception the same way. Draft lives in `docs/upstream/`
-(gitignored); see `docs/UPSTREAM-THREADS.md`.
+unchanged payloads has been mis-reporting reception the same way. **Posted 2026-09-06** as
+[lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7); see `docs/UPSTREAM-THREADS.md`.
 
 **Maintenance note:** because the tarball is unpinned, the patch is also a tripwire. It is applied
 with `--batch --forward` and followed by a `grep -c dupwindow` assertion, so a build **fails loud**
