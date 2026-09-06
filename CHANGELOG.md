@@ -48,14 +48,18 @@ under [Pre-S16].
   `marvinctl grep` reaches both the startup line and the reception-summary body; limb 1 stays open.
   **ops#274 item 5 answered**: weewx's container still runs as root, not yet ported to HLF's shape —
   same judgment-work gate as the `t-weewx`-as-root item, not a new gap.
+  **Superseded later the same session — ported, see the DEC-0147 bullet below.**
 - Gates, every PR: ruff clean · 475 passed / 17 skipped · mypy clean, 68 files · secret gate 0.
   Nine PRs (#344–#352) merged via the sanctioned wrapper; one same-session merge conflict (two PRs
   inserting at the same `DECISIONS.md` anchor) resolved by keeping both entries in DEC order.
-- **ops#274 item 5 designed (DEC-0147).** weewx's container moves from root to `t-weewx` (996:986)
+- **ops#274 item 5 DONE (DEC-0147).** weewx's container moves from root to `t-weewx` (996:986)
   via `--user` on marvin's unit, not a baked `USER` — the image is public, so a baked uid would break
   every downstream user's bind mounts on upgrade. MARVIN-DEC-0106's udev rule already covers the
-  dongle; two file fixes pre-staged (`chmod u+w` on `weewx.sdb`, `chown` on `weewx.log`). Design only;
-  execution and verification numbers land in a follow-up entry.
+  dongle; two file fixes pre-staged (`chmod u+w` on `weewx.sdb`, `chown` on `weewx.log`). Cutover
+  13:11:55 → 13:12:05 EDT (10 s recreate, no hot journal); uid 996 verified at the fd level
+  (`rtldavis` holding the dongle); first archive record 13:15:00 (Influx-published 13:15:17);
+  loop-JSON files self-healed to `t-weewx`; 0 error lines since; ~175 s RF acquisition is the
+  restart's own cost, not this change's. Unit edit = MARVIN-DEC-0140.
 
 ## [S125] — 2026-09-05 — InfluxDB stage 3 closed out, closeout ritual gets a step 0 (DEC-0143), secret gate hardened against LAN literals (DEC-0144), Foundation-dark drill run clean
 

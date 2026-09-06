@@ -18,14 +18,10 @@ is a **separate repo** — don't make dashboard changes here.
 
 **All eight S126 job-list items landed, nine PRs merged (#344–#352), dev clean and green.**
 
-- **Job 1 — ROADMAP tripwire reconciliation, done.** One stale item found: P1.8's last checkbox
-  (owner's tar deletion + ops#260 step 4 Foundation retirement) had landed S125 but sat unmarked.
-  Fixed; tripwire reset to **S136**.
-- **Job 2 — #331 closed.** Five annotated tags + GitHub Releases backfilled (v2.0.12–v2.0.16),
-  anchored on verified-current commits (v2.0.14/15 on `dev`, since neither got its own `main`
-  promotion). `docs/CONVENTIONS.md` + `CLAUDE.md` now require the `vX.Y.Z` tag + release as part of
-  any version-bumping promotion (DEC-0145). Found and fixed a stale local tag cache from the
-  DEC-0127/DEC-0144 history rewrites along the way — remote tags were already correct.
+- **Job 1 — ROADMAP tripwire reconciliation, done.** One stale P1.8 checkbox fixed; tripwire reset
+  to **S136**.
+- **Job 2 — #331 closed (DEC-0145).** Five annotated tags + GitHub Releases backfilled
+  (v2.0.12–v2.0.16); `docs/CONVENTIONS.md`/`CLAUDE.md` now require the tag+release step.
 - **Job 3 — done, both halves.** `REMEDY_SYSTEMCTL` fixed to marvin's actual sudoers grant
   (ops#274) — **confirmed correct by marvin against the real sudoers file**. `ExecStop=docker kill`
   shipped live (MARVIN-DEC-0137). GPLv3 §5(a) notice added to the dupgate patch, #327 closed.
@@ -53,8 +49,11 @@ is a **separate repo** — don't make dashboard changes here.
   `marvin-release.sh` (reads as marvin's own repo's tooling).
 - **ops#257 limb 3 settled** — `marvinctl grep` confirmed reaching both the startup line and the
   full reception-summary body today; the 09-05 restatement just hadn't rechecked. Limb 1 stays open.
-- **ops#274 item 5 answered:** still root (`"User": ""`, no `USER` directive) — same judgment-work
-  gate as job 8's `t-weewx` item, not a gap.
+- **ops#274 item 5 DONE (DEC-0147) — the container runs as `t-weewx` (996:986).** Run-time `--user`
+  on marvin's unit (MARVIN-DEC-0140), not a baked `USER` (public image). Cutover 13:11:55→13:12:05
+  EDT, 10 s recreate, no hot journal, uid 996 verified at the dongle fd, first archive record
+  13:15:00, 0 errors. Pre-stage was `chmod u+w` (not 600 — ACL mask) + one chown; loop-JSON files
+  self-healed.
 - **Tooling lessons, now in `docs/GOTCHAS.md` §2:** a subagent without `isolation:"worktree"` shares
   the parent's checkout and can switch its branch mid-task (found live, no data lost); two
   same-session PRs inserting at the same `DECISIONS.md` anchor conflict on `update-branch`, resolve
@@ -73,7 +72,7 @@ is a **separate repo** — don't make dashboard changes here.
 1. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix and install both unit changes in
    their next units gesture (queued, owner check-in pending on marvin's side as of S126 close).
-2. Carry forward job 8's three untouched items (EnvironmentFile, `t-weewx`-as-root, `marvin-release.sh`)
+2. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`)
    exactly as S126 left them — none are due, none are blocked on anything weewx can do alone.
 3. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
    repo's been dormant since 2023-12-22, don't chase it, just notice if it moves.
@@ -85,7 +84,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `weewx.service` in `/weather.slice`; `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, `ExecStop=docker kill` (MARVIN-DEC-0137, S126) — still runs as root (ops#274 item 5) |
+| Prod | marvin, `weewx.service` in `/weather.slice`; `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, `ExecStop=docker kill` (MARVIN-DEC-0137, S126) — runs as `t-weewx` (996:986) via unit `--user` since 13:12:05 EDT (DEC-0147) |
 | Reception | **100% mean, every post-v2.0.16 6h window since 09-03 18:00** (job 6) — RF question reads closed; blocker 2 (RF-dead) unfired, watch continues |
 | InfluxDB | marvin, `weewx-influxdb.service` since 09-04 22:35:02 ET, v2.7.12; backup timer armed |
 | Foundation | fully decommissioned — project directory deleted, NFS export retired, DSM tasks disabled (ops#278 closed) |
@@ -93,7 +92,7 @@ is a **separate repo** — don't make dashboard changes here.
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · self-service `push` LIVE (ops#265, unchanged, still closes on first real push) |
 | GitHub Releases | **v2.0.12–v2.0.16 backfilled, live** (#331 closed, DEC-0145) |
 | Git | S126: PRs #344–#354, all merged → `dev`. No local branches left over |
-| Trackers | repo: none open (#327/#331 closed) · ops: #257 limb 1 open (limbs 2/3 closed) · #250/#110/#274(items b/c) open, correctly gated/deferred · #278/#275/#273/#264/#218 closed prior sessions, #278 closed S126 |
+| Trackers | repo: none open (#327/#331 closed) · ops: #257 limb 1 open (limbs 2/3 closed) · #250/#110/#274 (EnvironmentFile + marvin-release.sh only) open, correctly gated/deferred · #278/#275/#273/#264/#218 closed prior sessions, #278 closed S126 |
 
 ## Blockers
 
@@ -105,10 +104,10 @@ is a **separate repo** — don't make dashboard changes here.
 
 ## Model tier
 
-S126 ran entirely on Sonnet, no bare `/model` switch — nothing to restore. Used parallel subagents
-for independent mechanical pieces (job 3's GPLv3 notice) per the owner's own instruction this
-session; the two judgment-work items flagged (job 8's `t-weewx`-as-root, ops#274 item 5) were
-correctly left untouched rather than actioned on the base tier.
+S126 ran on Sonnet through job 8, then the owner switched to Fable (desktop `/model`, which
+PERSISTS — OPS-DEC-0036/0062) for the item-5 design + live cutover, the one judgment-work item
+flagged. **Floor NOT yet restored at this write** — owner re-runs `/model` to `claude-sonnet-5` at
+close; an agent cannot.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -117,7 +116,7 @@ any NAS or campaign task (§3) · judging a component live, dead, or shipped (§
 traps to §2 (subagent checkout collisions, same-anchor DEC conflicts, `gh pr merge`'s bare-command
 requirement) — nothing left to move.
 
-_Last updated: 2026-09-06 (S126 close, ~11:15 ET). Session summary: worked the full 8-item job list
+_Last updated: 2026-09-06 (S126, ~13:30 ET). Session summary: worked the full 8-item job list
 end to end (nine PRs, all merged) — GitHub Releases backfilled after 5 releases shipped silently
 (#331), two of three marvin unit-file fixes shipped (REMEDY_SYSTEMCTL confirmed correct against the
 real sudoers file, ExecStop=docker kill live), ops#278 closed with a full code trace rather than a
@@ -126,4 +125,5 @@ still unfired), and two separate stale-doc findings (BACKLOG.md missing the DEC-
 correction, a pre-#317 footnote) caught while doing other work rather than left for someone else.
 Settled a live cross-session discrepancy on ops#257 by checking the actual log rather than deferring
 it. One item (job 5's upstream post) is deliberately left mid-flight pending the owner's tone
-review — not a gap, the correct stopping point for that specific task._
+review — not a gap, the correct stopping point for that specific task. Late addition: ops#274 item 5
+executed and verified — weewx's container no longer runs as root._
