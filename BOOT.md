@@ -16,7 +16,8 @@ is a **separate repo** — don't make dashboard changes here.
 
 ### What's settled (do not re-derive)
 
-**All eight S126 job-list items landed, nine PRs merged (#344–#352), dev clean and green.**
+**All eight S126 job-list items landed plus two late items (upstream PR posted, ops#274 item 5
+executed); 13 PRs merged (#344–#357); dev clean and green.**
 
 - **Job 1 — ROADMAP tripwire reconciliation, done.** One stale P1.8 checkbox fixed; tripwire reset
   to **S136**.
@@ -91,7 +92,7 @@ is a **separate repo** — don't make dashboard changes here.
 | `main`/`dev` | `dev` carries all of S126 (DEC-0145/0146); `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · self-service `push` LIVE (ops#265, unchanged, still closes on first real push) |
 | GitHub Releases | **v2.0.12–v2.0.16 backfilled, live** (#331 closed, DEC-0145) |
-| Git | S126: PRs #344–#354, all merged → `dev`. No local branches left over |
+| Git | S126: PRs #344–#357, all merged → `dev`. No local branches or worktrees left over |
 | Trackers | repo: none open (#327/#331 closed) · ops: #257 limb 1 open (limbs 2/3 closed) · #250/#110/#274 (EnvironmentFile + marvin-release.sh only) open, correctly gated/deferred · #278/#275/#273/#264/#218 closed prior sessions, #278 closed S126 |
 
 ## Blockers
