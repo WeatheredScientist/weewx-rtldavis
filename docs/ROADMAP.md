@@ -3,7 +3,13 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-05 (S125 — targeted line update per DEC-0057, not a full pass; tripwire
+**Last updated:** 2026-09-06 (S126 — **scheduled full reconciliation, tripwire fired on time**:
+P1.8 closes out fully on weewx's side — the owner's tar deletion (12:36 ET, S125) and ops#260 step
+4's Foundation retirement (weewx's slice, MARVIN-DEC-0134/0135, S125) were the only items still
+open; both landed S125 but sat unmarked here. Header and last checkbox updated. Everything else —
+P2's freeze/DB-lock rows, P3's INTERFACES line — diffed clean against DECISIONS.md/CHANGELOG.md/
+BOOT.md, nothing else stale found. Next check: S136.)
+Prior: 2026-09-05 (S125 — targeted line update per DEC-0057, not a full pass; tripwire
 now S126, due next session. P1.8's stage 3 mostly closes out: backfill, `SuccessExitStatus=2`,
 backup timer, and the Foundation-dark drill all landed S125; only the owner's tar deletion and
 ops/dashboard's own doc rows remain. DEC-0143/DEC-0144 are process/tooling decisions, not P0–P3
@@ -91,11 +97,20 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S126** (~10 sessions out). If the session counter is
-  at or past S126 and this line still says S126, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106 and S116 did (diff every open/pending item here against
-  DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S116, 2026-09-02** — tripwire fired on time, and this was the
+- **Next scheduled reconciliation check: by S136** (~10 sessions out). If the session counter is
+  at or past S136 and this line still says S136, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116 and S126 did (diff every open/pending item here
+  against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
+- Last full reconciliation: **S126, 2026-09-06** — tripwire fired on time. **One stale item found and
+  fixed, nothing else stale.** P1.8's last open checkbox (Stage 3 remaining) had already landed S125
+  — the owner's tar deletion and ops#260 step 4's Foundation retirement (weewx's slice) — but sat
+  unmarked; checkbox and section header (🔶 IN PROGRESS → ✅ CLOSED) both updated. Everything else
+  diffed clean: P2's freeze-rate row (DEC-0088's 1.31/day, unchanged since DEC-0094) and DB-lock row
+  (DEC-0070/0071, unchanged) are current; P3's INTERFACES.md line is current through DEC-0093 — the
+  one INTERFACES.md edit since (S124's `weather-net` wording drop) is infra terminology from the host
+  move, not producer-contract progress, so it doesn't belong on this line. DEC-0143/DEC-0144/DEC-0140
+  confirmed process/tooling, no P0–P3 line touched, matching prior sessions' own calls.
+- Prior full reconciliation: **S116, 2026-09-02** — tripwire fired on time, and this was the
   heaviest pass since S66. **Two findings.** (1) **P2's entire evidence base was demoted**: DEC-0134
   showed the ~25% the campaigns chased was a demodulator accounting artifact, so every ~73–75%
   figure in that section is a repeat fraction and every "axis is flat" verdict was measured with an
@@ -288,7 +303,7 @@ S59**, closed on five consecutive clean days with a positive control.
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
 bound and done via reversible live hot-swap with an instant rollback path.
 
-## P1.8 — Foundation decoupling: InfluxDB host move (ops#260 step 3, OPS-DEC-0188) — 🔶 IN PROGRESS (S125)
+## P1.8 — Foundation decoupling: InfluxDB host move (ops#260 step 3, OPS-DEC-0188) — ✅ CLOSED (S126), weewx's slice
 
 The last weather workload on Foundation is this repo's `influxdb` container; HLF and the
 dashboard cut over 2026-09-04. weewx's slice of the Foundation-dark drill (ops#260 item E) ran
@@ -307,9 +322,12 @@ NAS dependency observed, zero stall through the restore.
       `SuccessExitStatus=2` confirmed live; `weewx-influxdb-backup` pre-dump timer installed +
       armed (first fire 2026-09-06 03:15 EDT); `BACKLOG.md`'s NAS-LEASE item closed as moot (PR
       #336); weewx's section of the ops#260 drill run and posted.
-- [ ] **Stage 3, remaining:** owner deletes the two token-bearing tars from the marvin-data share;
-      ops/dashboard doc rows (`NAS-RUNTIME.md`, `CONSTANTS.md` §5, dashboard `MARVIN-MIGRATION.md`
-      — theirs); Foundation's stopped instance retires at ops#260 step 4.
+- [x] **Stage 3, remaining — CLOSED (S126):** owner deleted the two token-bearing tars from the
+      marvin-data share (12:36 ET, S125); Foundation's stopped instance retired at ops#260 step 4 —
+      marvin's NFS export removed (MARVIN-DEC-0134) and the owner deleted the `marvin-weewx-mount`
+      DSM boot task, both confirmed S125. **Remaining ops/dashboard doc rows**
+      (`NAS-RUNTIME.md`, `CONSTANTS.md` §5, dashboard `MARVIN-MIGRATION.md`) are those repos' own
+      trackers, not a weewx line — this item closes on weewx's own scope.
 
 ---
 
