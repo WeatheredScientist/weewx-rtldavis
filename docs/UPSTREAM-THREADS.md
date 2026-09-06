@@ -17,10 +17,16 @@ conflate them, and don't commit the drafts.
 
 ## Open
 
-- **[TO DRAFT — S116] `lheijst/rtldavis` (the Go demodulator, `src/lheijst/rtldavis`): the byte-only
+- **[DRAFTED — S126] `lheijst/rtldavis` (the Go demodulator, `src/lheijst/rtldavis`): the byte-only
   duplicate filter drops the ISS's genuine repeat packets and books each as a miss (DEC-0134).**
-  Measured 80 of 81 misses in 15 min; real loss 0.3%. Fix is a time gate on `lastRecMsg`. Draft
-  goes to `docs/upstream/` first; not posted without a go. Affects every user whose ISS repeats.
+  Measured 80 of 81 misses in 15 min; real loss 0.3%. Fix is a time gate on `lastRecMsg`, deployed
+  on our own hardware since v2.0.15 (DEC-0136). Draft in `docs/upstream/dupgate-time-gate.md`;
+  not posted without a go. Affects every user whose ISS repeats. **Two things found while
+  drafting:** issues are disabled on this repo (target is a PR, not a comment — no existing thread
+  to reply into), and the repo itself is much quieter than `weewx-rtldavis` (last push 2023-12-22).
+  LloydR's [`#2`](https://github.com/lheijst/rtldavis/pull/2) sits in the same function, still
+  open since 2023-02-11, but fixes a different failure mode (content-agnostic near-duplicates) —
+  complementary, not conflicting; credited directly in the draft.
 - **[lheijst/weewx-rtldavis#23](https://github.com/lheijst/weewx-rtldavis/pull/23)** — the temp-sign
   + `0xFF8` companion PR (S55, owner-reviewed before posting). Credits LloydR's #19 for the
   diagnosis; offers the masked 12-bit two's complement as an alternative (#19's 16-bit-signed ÷16
