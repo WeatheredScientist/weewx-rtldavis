@@ -108,6 +108,24 @@ alone did not catch.
 - **`/code-review ultra`'s cloud launcher wants a base branch, not a path target** — the local
   `/code-review <target> <level>` is the one honoring a path/PR/branch argument. Paths passed to
   `ultra` are read as a free-text note and it diffs `dev`→`main` instead (S91, cost a free slot).
+- **A subagent spawned without `isolation:"worktree"` shares the parent's own checkout** (S126). One
+  ran its own `git checkout -b <branch> dev` mid-task, which silently switched the shared working
+  directory's branch out from under the parent session — CLAUDE.md/CONVENTIONS.md briefly looked
+  reverted to an older state, and it was real: the shared checkout genuinely moved. Nothing was lost
+  because the parent's own prior work was already committed elsewhere, but it could have collided
+  with uncommitted parent work. Fix: pass `isolation:"worktree"` for any subagent that will touch
+  git, or park the parent's own concurrent git work in a manually-created `git worktree add` first.
+  **Different from, but related to, ops#284**: that finding is about `isolation:"worktree"` itself
+  basing the new worktree on `main`'s tip rather than the spawning session's branch or `dev` — a
+  second-order trap for whichever fix path is taken here.
+- **Two same-session PRs that both insert a new row at the same anchor line in a shared index doc
+  (`docs/DECISIONS.md`/`DECISIONS-FULL.md`) conflict on `update-branch`, not on open** (S126) — each
+  branch diffed cleanly against `dev` alone, but merging one first makes the second's insertion point
+  ambiguous. Resolve by keeping both entries, ordered by DEC number, not by picking one side.
+- **`gh pr merge` is advisory-allowed here only as a bare, standalone command** (S126) — the same
+  invocation wrapped inside a larger multi-step bash script (a `set -e` block with a loop, `sleep`,
+  other `gh` calls) tripped the hard Class C guard instead of the usual FYI-allow. Issue the merge as
+  its own separate Bash call, after checks/branch-update logic have already run in prior calls.
 
 ## §3 NAS and campaign operations
 
