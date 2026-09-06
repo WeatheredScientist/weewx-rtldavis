@@ -26,8 +26,16 @@ under [Pre-S16].
 - **First post-v2.0.16 RF baseline read (BACKLOG.md standing watch): 100% mean reception across ten
   6-hour windows, zero RF-dead stall lines.** Blocker 2 stays open — nothing to measure yet is not
   evidence episodes stopped.
-- **Upstream contribution drafted, not posted:** `docs/upstream/dupgate-time-gate.md` proposes the
-  DEC-0134/0135/0136 fix to `lheijst/rtldavis`; sent for owner tone review.
+- **Upstream contribution posted: [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7).**
+  Two tone passes trimmed the PR body from ~430 words to ~70 and dropped an internal version number
+  meaningless to an upstream reader. Forked, applied `patch/rtldavis-dupgate.patch` after stripping
+  its GPLv3 notice hunk (only meaningful in our own downstream copy). LloydR's complementary PR #2
+  credited. `docs/UPSTREAM-THREADS.md` etiquette section gains a draft-structure rule from this
+  feedback: postable text goes first, loudly separated from internal notes, not buried after them.
+- **Cross-tenant permission fix on weewx's own tree:** HLF's move to a non-root container (ops#274
+  item 5) broke their read-only mount of `weewx.sdb` (`-r-x------`, owner-only). Scoped ACL applied
+  by marvin (`setfacl -m u:t-hlf:r--`, MARVIN-DEC-0139) rather than a shared group; HLF confirmed
+  and redeployed.
 - **Two stale-doc corrections caught while doing other work:** `BACKLOG.md`'s Campaign-A section
   still stated pre-DEC-0134/0135 reception figures with no caveat, unlike `ROADMAP.md`'s P2 header
   — fixed. A reception-summary email footnote still described the pre-#317 denominator mechanism —
