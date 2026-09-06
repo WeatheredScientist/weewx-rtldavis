@@ -9542,3 +9542,87 @@ patched here as a workaround.
 `SECURITY.md` gains a second dated re-clone notice (same doctrine as the first: name the action and
 the class of exposure, not the specific value) plus a line noting the gate is now hardened against
 this class going forward.
+
+## DEC-0146 — Foundation's DSM `rx_experiment.sh` tasks fired for 13 days past campaign close and never touched anything
+
+**Status:** Accepted (investigation, no code) · **Date:** 2026-09-06 (S126) · **closes** ops#278 ·
+**corroborates and closes out** BACKLOG.md's S104 finding · **eliminates a candidate cause for**
+the 2026-08-25 21:40 restart mystery, without solving it
+
+### Trigger
+
+ops#278 (owner's DSM Task Scheduler read, 2026-09-05 10:50 AM ET): Foundation still ran two ENABLED
+user-defined DSM tasks every 10 minutes — `guard` and `tick`, both invoking
+`/volume1/docker/weewx-rtldavis/rx_experiment.sh` — even though the weewx container on Foundation
+was decommissioned 2026-09-02 and marvin runs the same driver as `weewx-rx-experiment.timer`. This
+is not a new observation: `BACKLOG.md` already flagged the identical shape at S104 (2026-08-25),
+three days after campaign B closed, and recorded it as "no arm is being swapped and no data is at
+risk" from reading `rx_experiment.state` = `BASELINE` — but nobody had disabled the DSM tasks in the
+eleven days between that entry and this one, and by the time this session looked, the owner had
+already disabled them (2026-09-05 11:20 ET) and Foundation's entire `/volume1/docker/weewx-rtldavis/`
+directory had been deleted as part of ops#260 step 4's NFS-export retirement (MARVIN-DEC-0134). The
+historical log/state files ops's own comment thread quoted mtimes and partial content for no longer
+exist to re-read directly.
+
+### What was actually traced
+
+Rather than re-assert the S104 observation or take "no arm is being swapped" on faith a second time,
+this session read `ops/rx_experiment.sh`'s own gating logic end to end:
+
+- `current_arm()` (`rx_experiment.sh:382`) is a pure read of `$STATE`'s first `|`-delimited field.
+  Foundation's copy last wrote that file 2026-08-23 (per ops's own mtime read) — campaign B's actual
+  `BASELINE` self-termination — and it never changed again.
+- `due_arm()` (`:418`) walks `$SCHEDULE`, a hardcoded block baked into the script at deploy time, and
+  returns the latest row at-or-before "now", or `BASELINE`/nothing once every row has passed.
+  Foundation's copy of the script carries a file mtime of 2026-08-14 (ops's own stat read) — **before**
+  DEC-0096 (S88, 2026-08-18) introduced the "empty `SCHEDULE=` between campaigns" stand-down
+  convention. So Foundation's frozen copy still carries whatever schedule was live for campaign B's
+  actual pilot, ending at the 2026-08-23 `BASELINE` row — the same row `current_arm()` already reads.
+  Past that date, `due_arm()` has nothing later to return.
+- `tick()` (`:720`) only reaches `write_arm()`/`restart_container()` (the two functions that touch
+  `weewx.conf` or the container) when `want != have` **and** `want` is a real, distinct arm string —
+  neither condition was ever met: `want` and `have` were both pinned to `BASELINE` (or, if the
+  schedule were somehow already empty, `want` would read `NONE`, hitting the earlier, equally inert
+  `[ "$want" = "NONE" ]` branch instead). Either way, the config-writing path was structurally
+  unreachable for the entire 09-02→09-05 window.
+- `guard()` (`:773`) exits immediately and silently once `current_arm()` reads `BASELINE` (`:787`) —
+  it never reaches its own reception-pause/abort logic either.
+
+### Explaining the log churn without the files
+
+Ops's read found Foundation's `rx_experiment.log` mtime as recent as 2026-09-04 06:30 — apparently in
+tension with "every path is a silent no-op." It is not: `acquire_lock()` (`:323`) logs
+`"LOCK: breaking stale lock ..."` whenever it finds a lock directory older than
+`LOCK_STALE_SECS` with no live holder, independent of what `guard`/`tick` do afterward. This is
+exactly the signature `BACKLOG.md`'s S104 entry already recorded verbatim ("churning `LOCK: breaking
+stale lock` and `another instance holds the lock`") for the same script running the same way, eleven
+days earlier. The log traffic is lock-contention noise, not campaign or config activity — consistent
+across both this session's code trace and the independent S104 read, four weeks apart.
+
+### Positive control
+
+Rather than rest solely on a code-reading argument with no way to re-inspect the deleted historical
+files, this session checked the one artifact that a real config write would have changed: marvin's
+live `[Rtldavis] cmd` line, read via `marvinctl --tenant weewx conf ... Rtldavis` (the redacting
+reader — a bare `grep` on `weewx.conf` is blocked by `secret-read-guard.sh`, DEC-0047, since the same
+file carries credentials elsewhere). It still reads `-gain 372`, matching `CONSTANTS.md`'s recorded
+value with no drift. `marvinctl --tenant weewx cat .../rx_experiment.state` reads
+`BASELINE|1788240639|2026-09-01 01:30:39` — campaign D's own self-termination timestamp, confirming
+marvin's copy is the current, correctly-advancing state, independent of Foundation's frozen one.
+
+### What this does NOT resolve
+
+`BACKLOG.md` had listed the DSM scheduler as "the leading hypothesis" for an unexplained
+2026-08-25 21:40 EDT prod restart, on the reasoning that it was "the one thing left on the box still
+holding a mandate to touch this container." This DEC's tracing removes that mandate entirely — the
+scheduler could not reach `restart_container()` at any point after campaign B's close, which
+includes 08-25. That **eliminates** the hypothesis rather than confirming it: the restart's cause is
+now more open than before, with no remaining candidate on `BACKLOG.md`'s own elimination list.
+
+### Documentation
+
+`docs/CAMPAIGN-B-RUNBOOK.md` gets a retirement banner: Foundation no longer exists, its DSM apparatus
+is gone, and the runbook is kept as historical record of the actual swap night, not a template for
+future use. `BACKLOG.md`'s S104 entry is marked resolved in place (text preserved, per STANDARD rule
+1 — move text, never delete or rewrite history) and its neighboring "2026-08-25 21:40 restart" entry
+is corrected to drop the now-eliminated DSM hypothesis rather than silently continuing to suggest it.

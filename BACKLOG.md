@@ -254,15 +254,22 @@ failed resets currently produce no further action.
   future stall as a one-off unless it shows up on consecutive restarts.
 - **NAS boot task fragility (S32):** after the next DSM update/reboot, verify the `weewx_monitor`
   scheduler task still runs as root (symptom: `sudo: a terminal is required` spam, no pidfile).
-- **⚠️ Campaign B's DSM scheduled tasks are STILL FIRING, three days after it closed (found S104).**
-  `rx_experiment.log` shows `tick` and `guard` passes every few minutes through 2026-08-25, churning
-  `LOCK: breaking stale lock` and `another instance holds the lock`. The state file reads `BASELINE`,
-  so **no arm is being swapped and no data is at risk** — but "Campaign B closed, nothing further
-  scheduled" was only ever true of the *campaign*, never of the *scheduler*. The two DSM Task
-  Scheduler entries created at campaign setup outlived it. **Owner action** — they live in the DSM UI,
-  which no read-only tool here can enumerate, so no session can see them from this side.
-  **This is also the leading hypothesis for the unexplained 2026-08-25 21:40 prod restart** (see the
-  next entry): it is the one thing left on the box still holding a mandate to touch this container.
+- **✅ RESOLVED (S126, ops#278) — Campaign B's DSM scheduled tasks, still firing since S104, never
+  touched anything.** They kept firing every ~10 min for 13 more days past this entry's own S104
+  finding — through the Foundation→marvin migration (08-28/29) and right up to 2026-09-05 11:20 ET,
+  when the owner finally unchecked both DSM tasks (found independently by ops during the
+  Foundation-dark drill's pre-window inventory, ops#278). Confirmed harmless the whole time, the
+  same way this entry already suspected: `rx_experiment.state` never left `BASELINE` (Foundation's
+  frozen copy of the script predates DEC-0096's schedule stand-down, and its own hardcoded schedule
+  ends at campaign B's 08-23 self-termination, so `due_arm()` had nothing later to return), so no
+  code path that writes `weewx.conf` or restarts a container was ever reachable — confirmed both by
+  tracing `rx_experiment.sh`'s own gating logic and, as a positive control, marvin's live gain
+  still reading 372 with no drift. Foundation's entire project directory is now deleted (ops#260
+  step 4), so the DSM tasks physically cannot fire again regardless. **This REMOVES the next
+  entry's leading hypothesis rather than confirming it**: if the scheduler could never reach
+  `restart_container()`, it cannot explain the 2026-08-25 21:40 restart either — that mystery is
+  now more open, not less; see that entry, which still has no cause in any artifact this repo
+  keeps.
 - **The 2026-08-25 21:40 EDT prod restart has no cause in any artifact this repo keeps (S104).** The
   container stopped 21:40:51 and started 21:47:25 — 6m34s. Reception went 76% → 0%, the monitor
   alerted at 21:45:23, recovery at 21:50:27, episode logged (304 s). Prod healthy since.
@@ -273,10 +280,13 @@ failed resets currently produce no further action.
   restart policy (`RestartCount: 0`, and `Created` still predates it, so it was stopped-and-started,
   never recreated); not the monitor (no `RESET`/`WATCHDOG`/`STALL`/`RESTART`/`ESCALAT` lines at all —
   it observed and emailed, it never acted); not the campaign harness (its log's last entry is 3 h
-  earlier); not a USB reset (`usb-forensics/` untouched for two days). **What remains is a deliberate
-  external kill+start by something that writes to none of our logs** — DSM Task Scheduler is the only
-  unexamined surface, and it needs the DSM UI. If it recurs, capture `docker events` if anything is
-  watching, and check the DSM task list *first* rather than re-walking the elimination above.
+  earlier); not a USB reset (`usb-forensics/` untouched for two days). **Also ruled out (S126,
+  ops#278): the `rx_experiment.sh` DSM tasks** — traced end to end, they could never reach
+  `restart_container()` at any point past campaign B's close (see the entry above), so they are not
+  the "something" either, closing the one surface this entry used to leave open. **What remains is
+  a deliberate external kill+start by something that writes to none of our logs, with no remaining
+  candidate on this list.** If it recurs, capture `docker events` if anything is watching — the DSM
+  task list is no longer worth checking first, now that its one plausible mechanism is eliminated.
 - **⚠️ Off-site backup is a MIRROR, not versioned — now UNBLOCKED, not yet designed (S105).**
   ops#209 established that the DS918+ runs Cloud Sync rather than Hyper Backup, so deletions and
   corruption **propagate off-site**. Two irreplaceable artifacts have no versioned copy anywhere:

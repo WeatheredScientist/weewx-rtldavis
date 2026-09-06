@@ -1,5 +1,22 @@
 # Campaign B swap-night runbook — LNA removal + no-LNA RX campaign
 
+**RETIRED (2026-09-06, S126, ops#278).** Campaign B closed 2026-08-23 (DEC-0115); the apparatus
+this runbook describes ran on **Foundation**, the NAS host that no longer exists in this repo's
+infra — it was decommissioned and its `rx_experiment.sh` DSM tasks (`guard`/`tick`) disabled
+2026-09-05 as the last piece of ops#260 step 4's Foundation retirement. Its whole project
+directory (`/volume1/docker/weewx-rtldavis/`) is gone, deleted along with marvin's NFS export
+(MARVIN-DEC-0134). Investigated as part of ops#278: those DSM tasks kept firing every ~10 min for
+**13 days past campaign close** with zero effect — `rx_experiment.state` stayed pinned at
+`BASELINE` the whole time (Foundation's copy of the script predates DEC-0096's schedule
+stand-down, so `due_arm()` could only ever resolve to `BASELINE` or nothing at all — never a real
+arm), and the log churn BACKLOG.md already characterized at S104 (`LOCK: breaking stale lock`) is
+lock-contention noise, not campaign activity. No config write, no container restart, no data
+correction needed. Kept below as historical record of how the actual swap night ran — do not use
+it as a template for any future host; the RX-experiment apparatus now lives only on marvin, self-
+terminated since Campaign D (2026-09-01), and no further campaign is scheduled.
+
+---
+
 **Design: DEC-0064** (campaign A was DEC-0059/0061). This is the checklist version: the swap
 night is executed from chat, step by step, with two explicit owner gates. Everything here was
 built and dry-run in advance so the night is execution, not derivation.
