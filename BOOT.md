@@ -34,10 +34,10 @@ is a **separate repo** — don't make dashboard changes here.
   container in the 13 days its DSM tasks kept firing (positive control: gain still 372, no drift).
   Also **eliminates**, doesn't confirm, the DSM scheduler as the still-unexplained 08-25 21:40
   restart's cause. `CAMPAIGN-B-RUNBOOK.md` retired (Foundation's directory is gone entirely).
-- **Job 5 — upstream draft written, NOT posted.** `docs/upstream/dupgate-time-gate.md` (gitignored)
-  proposes the DEC-0134/0135/0136 fix to `lheijst/rtldavis` (issues disabled there, dormant since
-  2023-12-22, LloydR's complementary PR #2 credited). Sent for owner tone review — **still needs a
-  go before anything is forked/posted.**
+- **Job 5 — DONE. Posted as [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7).**
+  Trimmed ~430 words → ~70 across two tone passes; stripped an internal version number meaningless
+  upstream. Forked, applied `patch/rtldavis-dupgate.patch` — **removed the GPLv3 notice hunk first**
+  (only makes sense in our own downstream copy). Dormant repo, issues disabled — may sit a while.
 - **Job 6 — first post-fix baseline read, clean.** Every fully post-v2.0.16 window (09-03 18:00
   through 09-06 06:00) reads **100% mean reception**. Zero RF-dead stall lines in the same span —
   nothing to measure yet, not evidence it stopped; blocker 2 stays open, watch continues.
@@ -60,17 +60,23 @@ is a **separate repo** — don't make dashboard changes here.
   same-session PRs inserting at the same `DECISIONS.md` anchor conflict on `update-branch`, resolve
   by keeping both in DEC order; `gh pr merge` needs to be a bare standalone call, not wrapped in a
   larger script, to get the advisory-allow instead of a hard Class C block.
+- **Cross-tenant permission fix on weewx's own tree:** HLF's non-root container move (ops#274 item
+  5) broke their read of `weewx-data/archive/weewx.sdb` (`-r-x------`, owner-only). Proposed a
+  scoped ACL over a shared group; marvin applied `setfacl -m u:t-hlf:r--` (MARVIN-DEC-0139) — HLF
+  confirmed and redeployed. Caveat on record: a DB rebuild/restore drops the ACL, needs reapplying.
+- **Draft-structure feedback, now this repo's convention** (`docs/UPSTREAM-THREADS.md` etiquette):
+  postable text goes first, loud banner, not a small heading after a long preamble. Relayed to ops
+  for cross-repo adoption.
 
 ### ▶▶ S127 JOB LIST
 
-1. **Job 5's tone review** — once the owner signs off on `docs/upstream/dupgate-time-gate.md`, fork
-   `lheijst/rtldavis`, apply `patch/rtldavis-dupgate.patch`, open the PR. Not a repeat task; picks up
-   exactly where S126 left it.
-2. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
+1. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix and install both unit changes in
    their next units gesture (queued, owner check-in pending on marvin's side as of S126 close).
-3. Carry forward job 8's three untouched items (EnvironmentFile, `t-weewx`-as-root, `marvin-release.sh`)
+2. Carry forward job 8's three untouched items (EnvironmentFile, `t-weewx`-as-root, `marvin-release.sh`)
    exactly as S126 left them — none are due, none are blocked on anything weewx can do alone.
+3. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
+   repo's been dormant since 2023-12-22, don't chase it, just notice if it moves.
 4. `CONSTANTS.md` infra re-verify (S105-era, still stale) · `docs/ARCHITECTURE.md` mount table still
    NAS-pathed (S30) · `CHANGELOG.md` archive rollup overdue — S122 and earlier still inline, past the
    ~3-session guideline (pre-existing debt, carried again).
@@ -86,7 +92,7 @@ is a **separate repo** — don't make dashboard changes here.
 | `main`/`dev` | `dev` carries all of S126 (DEC-0145/0146); `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · self-service `push` LIVE (ops#265, unchanged, still closes on first real push) |
 | GitHub Releases | **v2.0.12–v2.0.16 backfilled, live** (#331 closed, DEC-0145) |
-| Git | S126: PRs #344–#352, all merged → `dev`. No local branches left over |
+| Git | S126: PRs #344–#354, all merged → `dev`. No local branches left over |
 | Trackers | repo: none open (#327/#331 closed) · ops: #257 limb 1 open (limbs 2/3 closed) · #250/#110/#274(items b/c) open, correctly gated/deferred · #278/#275/#273/#264/#218 closed prior sessions, #278 closed S126 |
 
 ## Blockers
