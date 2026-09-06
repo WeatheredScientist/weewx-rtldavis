@@ -6,6 +6,44 @@ under [Pre-S16].
 
 ---
 
+## [S126] — 2026-09-06 — GitHub Releases backfilled after 5 silent (DEC-0145), ops#278 closed with a full code trace (DEC-0146), first clean post-fix RF baseline read, two stale-doc corrections
+
+- **#331 closed (DEC-0145).** Five annotated tags + GitHub Releases backfilled for v2.0.12–v2.0.16,
+  anchored on verified-current commits (v2.0.14/15 on `dev`, folded into the v2.0.16 promotion
+  rather than getting their own). `docs/CONVENTIONS.md` + `CLAUDE.md` now require the tag + release
+  as part of any version-bumping promotion. Local tag cache found stale from the DEC-0127/DEC-0144
+  history rewrites; remote tags were already correct.
+- **Marvin unit fixes, both halves.** `weewx-monitor.service`'s `REMEDY_SYSTEMCTL` pointed at
+  marvin's actual sudoers grant (ops#274) — confirmed correct by marvin against the real sudoers
+  file, no changes needed. `weewx.service`'s `ExecStop=docker kill` shipped live (MARVIN-DEC-0137).
+  GPLv3 §5(a) notice added to the dupgate patch (#327 closed), verified against a live fetch of
+  upstream.
+- **ops#278 closed (DEC-0146).** Foundation's DSM `rx_experiment.sh` tasks fired for 13 days past
+  campaign close; traced the actual gating logic rather than re-asserting BACKLOG.md's S104 "looks
+  harmless" read — no code path ever reached `weewx.conf` or the container, confirmed by a positive
+  control (gain still 372). Also eliminates the DSM scheduler as a candidate for the unexplained
+  2026-08-25 21:40 restart. `docs/CAMPAIGN-B-RUNBOOK.md` retired.
+- **First post-v2.0.16 RF baseline read (BACKLOG.md standing watch): 100% mean reception across ten
+  6-hour windows, zero RF-dead stall lines.** Blocker 2 stays open — nothing to measure yet is not
+  evidence episodes stopped.
+- **Upstream contribution drafted, not posted:** `docs/upstream/dupgate-time-gate.md` proposes the
+  DEC-0134/0135/0136 fix to `lheijst/rtldavis`; sent for owner tone review.
+- **Two stale-doc corrections caught while doing other work:** `BACKLOG.md`'s Campaign-A section
+  still stated pre-DEC-0134/0135 reception figures with no caveat, unlike `ROADMAP.md`'s P2 header
+  — fixed. A reception-summary email footnote still described the pre-#317 denominator mechanism —
+  fixed.
+- **`docs/GOTCHAS.md` updated**: OPS-DEC-0193 relaxed marvin release transport to advisory (one
+  owner confirmation now, not two); three new tooling traps from this session (subagent checkout
+  collisions without `isolation:"worktree"`, same-anchor `DECISIONS.md` conflicts across
+  same-session PRs, `gh pr merge` needing a bare standalone call to get the advisory-allow).
+- **ops#257 limb 3 settled** (weewx's own bookkeeping, checked directly rather than left open) —
+  `marvinctl grep` reaches both the startup line and the reception-summary body; limb 1 stays open.
+  **ops#274 item 5 answered**: weewx's container still runs as root, not yet ported to HLF's shape —
+  same judgment-work gate as the `t-weewx`-as-root item, not a new gap.
+- Gates, every PR: ruff clean · 475 passed / 17 skipped · mypy clean, 68 files · secret gate 0.
+  Nine PRs (#344–#352) merged via the sanctioned wrapper; one same-session merge conflict (two PRs
+  inserting at the same `DECISIONS.md` anchor) resolved by keeping both entries in DEC order.
+
 ## [S125] — 2026-09-05 — InfluxDB stage 3 closed out, closeout ritual gets a step 0 (DEC-0143), secret gate hardened against LAN literals (DEC-0144), Foundation-dark drill run clean
 
 - **ops#270 stage 3, job 1a:** ran the transported `backfill_influx.py` for the 2026-09-04 22:13–22:43
