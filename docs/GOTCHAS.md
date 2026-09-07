@@ -157,6 +157,15 @@ alone did not catch.
 - **`due_arm()` never returns `NONE` once the pilot block has run** — check `current_arm()`/state +
   STOP/PAUSE directly, not log silence. *(An EMPTY schedule does return `NONE` — the DEC-0096
   stand-down state; `install` refuses it before it can matter.)*
+- **`marvin-<tenant>` SSH aliases have no shell or `git clone` verb** (S129, ops#257/DEC-0150) — the
+  forced command (`marvinctl-remote`) dispatches only to `sftp-server`, `rsync --server`, or its own
+  fixed verb list (`ps`, `logs`, `pull`, `restart`, …). `ssh marvin-weewx 'bash -s' < script` fails
+  with `unknown verb 'bash'`, not a permission error — there is no raw shell to reach for one, ever.
+  For anything `marvinctl` itself doesn't cover (renaming a tree, editing a file outside its verb
+  set), use plain SFTP directly — `mkdir`/`rename`/`rmdir`/`get`/`put` all work under the tenant's
+  own filesystem permissions, no shell involved, and it needs no Class C mint (OPS-DEC-0193's
+  advisory-allow covers plain-shape sftp/rsync/scp over these aliases). `get`+edit+`put` also covers
+  a small file edit (e.g. `.git/config`'s `origin` URL) without any shell `sed`/`git remote`.
 - **Fresh/low soak counters usually mean a scheduled arm swap, not a fault** — the soak window is
   "since container start". Confirm against the state file *and* container uptime before treating it
   as anything else (S93, S94).

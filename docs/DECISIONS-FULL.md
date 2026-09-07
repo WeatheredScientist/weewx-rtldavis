@@ -10000,3 +10000,113 @@ discuss-design-before-coding rule and `CONSTANTS.md`'s "prod is sacred" doctrine
 conversion (stop `weewx.service`, build the fresh clone in `.git-recon/`, rename the live tree
 aside, swap, restore the named landmine paths, restart, confirm `pull` live) is future work,
 sequenced in `BOOT.md`'s job list, not this DEC.
+
+## DEC-0150 — ops#257 limb 1: DEC-0149's swap executed and verified; the mechanism turned out to be sftp, not ssh
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-07 (S129) · **executes** DEC-0149
+· **closes** ops#257 (limb 1 was the last open piece; limbs 2/3 already closed) · **unblocks**
+ops#272's weewx row · **incidentally closes** `BOOT.md` job 6 (cgroup placement)
+
+### What ran, and how — the mechanism DEC-0149 assumed didn't exist
+
+DEC-0149 assumed the swap would run as a shell script over `ssh marvin-weewx`. It doesn't: that
+alias's forced command (`marvinctl-remote`) dispatches only to `sftp-server`, `rsync --server`, or
+its fixed verb list — there is no `bash`/shell verb and no `git clone` verb. Confirmed by trying
+`ssh marvin-weewx 'bash -s' < script` and getting `unknown verb 'bash'` back, then confirmed
+against marvin's own `marvinctl-remote` source (relayed by the live marvin session): `pull` is
+hardcoded to `git -C $repo pull --ff-only`, nothing else, and the deploy key (`MARVIN-DEC-0144`) is
+wired only into that one code path.
+
+**What actually worked:** the SFTP protocol itself is not verb-parsed — once the forced command
+hands off to `sftp-server`, the full SFTP op set is available (`mkdir`, `rename`, `rmdir`, `get`,
+`put`), scoped by `t-weewx`'s own filesystem permissions, no shell involved. The entire swap ran as
+one `sftp -b batchfile marvin-weewx` batch: `mkdir live-aside-20260907`, then one `rename` per
+existing top-level entry (158 of them, enumerated from a live `ls -a1`, not guessed) into that
+directory, then one `rename` per fresh-clone entry (43, same method) promoting `.git-recon/`'s
+contents to the top level, then `rmdir .git-recon`. This transport is plain-shape SFTP over a
+`marvin-<tenant>` alias — OPS-DEC-0193's advisory-allow — so the swap itself needed **no Class C
+mint**. (Two incidental commands *did* trigger Class C during prep: a mis-parsed local-redirect
+`sftp | tail > file` the push-nas-guard couldn't prove was local-only, and one earlier failed `ssh
+… bash` attempt before the mechanism above was known — both owner-confirmed in chat, one-shot
+tokens minted, per SOP. No guard was bypassed or routed around.)
+
+### The landmine list grew by one, and by one category
+
+DEC-0149 named `weewx.conf`, `weewx.conf.rx-baseline`, `archive/weewx.sdb`, `logs/`, the
+`loop_json_writer.py`/`ogoxeUploader.py` decoys, and `sortedcontainers/`. Verifying live state
+directly (`docker inspect`'s mount list, `.gitignore`, `git ls-tree`) before touching anything
+found two things the plan hadn't:
+
+1. **`weewx-data/` is not git-tracked at all** (`git ls-tree` on `dev` has zero `weewx-data/`
+   entries; `.gitignore` confirms `weewx-data/` and `archive/` are excluded). So `weewx.conf`,
+   `archive/weewx.sdb`, and the decoy files aren't independent landmines to restore piecemeal —
+   they're all just contents of one untracked directory. The swap restored `weewx-data/` wholesale
+   from the aside copy, which subsumes all of DEC-0149's individually-named paths inside it. Two
+   more untracked live files at the tenant root — `monitor.env`, `proxy.env` — got the same
+   wholesale-restore treatment; DEC-0149 didn't name them, but they're the same kind of live secret
+   config `weewx.conf.rx-baseline` already was, sitting right next to it, and there was no reason to
+   treat them differently.
+2. **`weewx_monitor.py` is git-tracked, sits at the exact path the swap occupies, and its live SHA
+   did not match `dev`'s tip** (`147f3eff…` live vs `285743d4…` on `dev`). Checked every other
+   root-level tracked file the same way — `loop_json_writer.py` and `influx.py` are byte-identical
+   to `dev` (CONSTANTS.md already documents scp-deploy for those, so no surprise); driver files
+   (`rtldavis.py`, `pressure_service.py`, `dewpoint_service.py`, `owm.py`, `windy.py`, `wcloud.py`,
+   `entrypoint.sh`, `docker-compose.yml`, `Dockerfile`, root `.gitignore`) differ too, but
+   CONSTANTS.md's deploy-layers table already establishes these are baked into the image at build
+   time — the host copy has never been what runs, so landing on `dev`'s tip is the desired outcome
+   of self-service builds going forward, not a risk. `weewx_monitor.py` is the one exception: it
+   runs as a host-level daemon (`weewx-monitor.service`) directly off the on-disk file, with its own
+   separate owner-run deploy history (CONSTANTS.md's deploy-layers row) — letting the swap silently
+   hand it `dev`'s tip would have been an undiscussed prod deploy disguised as a tree conversion.
+   marvin's session agreed with this read before execution. Handled by renaming the fresh clone's
+   copy aside as `weewx_monitor.py.dev-tip-not-deployed` (kept, not discarded — it documents exactly
+   what's queued) and restoring the live copy as `weewx_monitor.py`.
+
+### A now-visible, not newly-created, piece of drift
+
+`weewx_monitor.py` now shows as a git-tracked file whose on-disk content differs from `HEAD` — this
+is real and will persist until someone deliberately reconciles it (checks out `dev`'s tip and
+restarts `weewx-monitor.service` to pick it up, once that's a decision someone actually makes, not
+a byproduct of this swap). This is not new drift the swap introduced — CONSTANTS.md's deploy-layers
+table already documented that this file deploys separately from any merge, meaning a
+merged-but-undeployed gap has always been possible here; there was simply no git checkout before
+now to make it visible as a diff. Treat it as the first case of a general fact: for any host file
+that is both git-tracked and used directly (unlike the baked driver files), `git status` on this
+checkout is now the honest, previously-unavailable answer to "does the deployed version match
+`dev`?" — a capability this repo didn't have before this session.
+
+### Execution facts
+
+Outage: `weewx.service` stopped 14:15:36 EDT, restarted 14:24:48 EDT — **~9 minutes**, not the
+"well under a minute" estimate given before starting. The swap operations themselves were fast; the
+gap is verification and script-building time spent with the service already down rather than
+staged fully in advance. `weewx_monitor.py`'s own staleness alarm fired correctly at the 5-minute
+mark during this window — expected behavior, not a new incident, and it cleared once the log
+resumed.
+
+`marvinctl --tenant weewx pull` returned "Already up to date" — but the **first** run of it used
+`https://github.com/…` (anonymous, unauthenticated — works only because this repo is public), not
+the SSH deploy-key path DEC-0149's obligation was actually about, because the local clone that got
+rsynced up was never repointed off its default HTTPS origin before transport. Fixed post-hoc:
+fetched `.git/config` via `sftp get`, edited `origin`'s URL to
+`git@github.com:WeatheredScientist/weewx-rtldavis.git` locally, `sftp put` back — no shell edit
+needed, same mkdir/rename/get/put toolkit covers file edits, not just moves. Re-ran `pull`:
+`From github.com:WeatheredScientist/weewx-rtldavis` — confirms the SSH/deploy-key path this
+whole obligation was meant to prove.
+
+**Container's cgroup placement corrected as a side effect** (`BOOT.md` job 6 /
+`MARVIN-DEC-0141`): the restart re-ran `docker run` fresh from the unit file, which already carried
+`--cgroup-parent=weather.slice` since marvin's S29 edit — the pre-swap container just predated that
+edit. Confirmed in the post-restart `docker run` invocation string. No separate action needed;
+folding it into this restart (rather than a second one later) was the plan already.
+
+`weewx-data/archive/weewx.sdb` verified intact post-swap (43MB, correct mtime). `current.json` and
+`loop-data.txt` confirmed writing fresh timestamps within a minute of restart. `weewx.log` resumed
+normal startup sequence, main packet loop running, no error lines.
+
+### What this does NOT do
+
+Does not reconcile `weewx_monitor.py`'s drift — that stays a deliberate, separate action. Does not
+update `docs/CONVENTIONS.md`'s release-mechanics section or `CONSTANTS.md`'s deploy-layers table —
+same session, tracked as this session's own remaining closeout work, not deferred past it. Does not
+touch ops#272's other tenants' rows (already closed by HLF/coffeeradar/dashboard/marvin).
