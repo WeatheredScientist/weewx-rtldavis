@@ -49,10 +49,25 @@ coordination sweep (their S40) on #272/#265/#257/#250 mid-session; answered belo
 
 ### ▶▶ S128 JOB LIST
 
-1. **Watch for marvin setting `git_branch` in weewx's tenant manifest** (the pull-deploy switch just
-   agreed to, above). When it lands: verify `marvinctl pull` actually works, then update
-   `docs/CONVENTIONS.md`'s release-mechanics section — it still documents the owner-run
-   git-archive/scp/tar flow as current, which becomes wrong the moment this switch is live.
+1. **ops#257 limb 1 (Phase A/B execution) — S128 update.** `git_branch=dev` landed (`MARVIN-DEC-0144`,
+   marvin S29), deploy key added and owner-confirmed on GitHub. Reconciliation shape decided this
+   session (DEC-0149): the CoffeeRadar swap, not a diff-and-categorize pass — fresh `dev` clone in a
+   `.git-recon/` scratch subdir inside our own tenant tree, live tree renamed aside intact, fresh
+   clone dropped into place, then the documented landmine paths (`weewx.conf`,
+   `weewx.conf.rx-baseline`, `archive/weewx.sdb`, `logs/`, the `loop_json_writer.py`/
+   `ogoxeUploader.py` decoys, `sortedcontainers/`) restored from the renamed-aside tree. Needs no
+   marvin gesture — all inside `/srv/docker/weewx`, `t-weewx`-owned. **Marvin's review flagged a
+   hazard the plan missed: `weewx.service` runs continuously through this, unlike HLF/dashboard's
+   clones — the host loses path access to `/srv/docker/weewx/...` mid-rename, and anything else
+   touching that path during the window (restic, a `marvinctl` read, the monitor daemon) would see
+   it move. `weewx.service` must be STOPPED for the swap window, same discipline as any other live
+   cutover here — folded into DEC-0149.** **Not yet executed.** Next session: **stop
+   `weewx.service`**, build `.git-recon/`, do the rename-aside + swap, restore the landmine list,
+   restart, then **run a live `marvinctl --tenant weewx pull` test** (required per DEC-0149 —
+   CoffeeRadar's own `pull` was never confirmed working end-to-end, only dashboard's is a proven
+   precedent). Once `pull` is confirmed, update `docs/CONVENTIONS.md`'s release-mechanics section —
+   it still documents the owner-run git-archive/scp/tar flow as current, which becomes wrong the
+   moment this lands.
 2. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix and install both unit changes in
    their next units gesture (queued, owner check-in pending on marvin's side as of S126 close).

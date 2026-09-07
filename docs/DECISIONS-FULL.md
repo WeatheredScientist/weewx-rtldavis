@@ -9932,3 +9932,71 @@ related-surface note left the sequencing to weewx, and that script's shape is a 
 checks with remote awk-based log windowing, not two clean read calls; a separate, larger port).
 Does not port `ops/freeze_baseline.py` (out of ops#250's scope; decoupled only enough to stop this
 session's change from silently breaking it).
+
+## DEC-0149 — ops#257 limb 1 (marvin tenant-root git conversion): adopt the CoffeeRadar swap shape over a diff-and-categorize pass
+
+**Status:** Accepted (design, no code yet) · **Date:** 2026-09-07 (S128) · **decides** the open
+question in ops#257's Phase A/B exchange with marvin S29 · **supersedes** weewx's own originally
+proposed diff-and-categorize plan (never itself logged as a DEC) · **depends on** marvin
+`MARVIN-DEC-0144` (`git_branch=dev` set, deploy key added) · limb 2/3 already closed (`MARVIN-DEC-0109`/S119)
+
+### The decision
+
+marvin S29 researched how HLF, dashboard, and CoffeeRadar's onboardings each reconciled a tenant
+root into a real git checkout, at weewx's request after weewx floated a Phase A/B (file-by-file
+diff-and-categorize) plan. HLF and dashboard were both fresh clones into empty trees — no
+precedent value for weewx's case, a 4-month working directory of a continuously-running receiver.
+CoffeeRadar is the one comparable mess (a tar-packaging corruption, not organic accretion), and its
+fix was **not** a diff-and-categorize pass: fresh clone made elsewhere, the entire stale tree
+renamed aside intact (kept, not deleted), the fresh clone dropped into its place, then only the
+known-live untracked paths manually restored.
+
+Owner's call: adopt that shape for weewx's own conversion. Reasoning — a full diff-and-categorize
+pass requires pre-judging every file in an unknown junk drawer before anything is safe to touch, on
+a tree backing a live receiver; the swap needs no such judgment up front, deletes nothing, and
+leaves the renamed-aside tree available to consult if something's later found missing. The known
+landmines this repo has already documented (`loop_json_writer.py`/`ogoxeUploader.py` decoys in
+`weewx-data/bin/user/`, the `sortedcontainers` whole-directory mount with no repo copy,
+`weewx.conf`/`weewx.conf.rx-baseline`, `archive/weewx.sdb`, `logs/`) have to be correctly restored
+post-swap regardless of which strategy was picked — this decision is about the *mechanism*, not
+about skipping that list.
+
+### Scratch-location question, resolved as a side effect
+
+Marvin's access-model correction (same exchange) offered two shapes for where the fresh clone gets
+made: (a) a scratch subdir inside weewx's own tenant tree (`/srv/docker/weewx/.git-recon/`, same
+shape as the existing `build-vX.Y.Z/` dirs, deleted when done, zero marvin gestures), or (b) a
+one-off root chown of a separate path. The swap shape needs no separation from the live tree beyond
+what a rename-aside already provides, so (a) is sufficient — no marvin root gesture required for
+this step. `t-weewx` already owns `/srv/docker/weewx` 0750 end to end.
+
+### Verification obligation carried forward, not yet satisfied
+
+Marvin's research also surfaced that CoffeeRadar's `marvinctl pull` was **never actually confirmed
+working end-to-end** (wrong `origin` remote for a period, no later re-run recorded) — only
+dashboard's `pull` is a proven-working precedent. Adopting the swap shape does not itself prove
+`pull` works afterward; a live `marvinctl --tenant weewx pull` test (expect "Already up to date" or
+a real fast-forward) is a required step of Phase A/B, not an optional nicety, the same way
+dashboard's onboarding got one.
+
+### Execution safety, flagged by marvin's review before anything ran
+
+marvin reviewed this plan on ops#257 and caught a hazard neither post had stated: `weewx.service`
+runs continuously throughout, unlike HLF/dashboard's onboardings (no live service yet at their
+clone time). The container's existing per-file bind mounts are established by dentry at
+container-start, so they'd keep resolving transiently even through a mid-run parent rename — but
+the **host** side loses the ability to reach `/srv/docker/weewx/...` by that path for the swap's
+duration, and anything else touching the path during the window (restic's nightly backup list, a
+`marvinctl` read, the monitor daemon) would see it move out from under them. **`weewx.service` must
+be stopped for the swap window** (rename → clone → restore → verify `git status` clean), same
+discipline as any other live cutover in this repo — not optional, and not previously stated in
+either the owner's decision or this DEC's first draft.
+
+### What this does NOT do
+
+Does not execute the swap. No code or prod-tree change happened this session — this closes the
+strategy question so Phase A/B can be built against an agreed shape, per the repo's
+discuss-design-before-coding rule and `CONSTANTS.md`'s "prod is sacred" doctrine. The actual
+conversion (stop `weewx.service`, build the fresh clone in `.git-recon/`, rename the live tree
+aside, swap, restore the named landmine paths, restart, confirm `pull` live) is future work,
+sequenced in `BOOT.md`'s job list, not this DEC.
