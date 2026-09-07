@@ -6,6 +6,20 @@ under [Pre-S16].
 
 ---
 
+## [S128] — 2026-09-07 — ops#257 limb 1: reconciliation shape decided (DEC-0149)
+
+- **ops#257 checked in on** with the live ops session. Read marvin S29's precedent research
+  (HLF/dashboard were clean fresh clones, no precedent; CoffeeRadar's comparable mess was fixed with
+  a clean swap, not a diff). **Owner decided (DEC-0149): adopt the CoffeeRadar swap shape** — fresh
+  clone in a `.git-recon/` scratch subdir inside our own tenant tree, live tree renamed aside intact,
+  fresh clone dropped into place, documented landmine paths restored — over the originally-floated
+  file-by-file diff-and-categorize plan. Needs no marvin gesture. Carries forward a required-not-
+  optional obligation: a live `marvinctl pull` test after the swap, since CoffeeRadar's own `pull`
+  was never confirmed working end-to-end. **Marvin's same-session review caught a missed hazard:**
+  `weewx.service` runs continuously through the swap (unlike HLF/dashboard's clones), so the host
+  loses path access mid-rename — the service must be stopped for the swap window, folded into
+  DEC-0149. **Not yet executed** — `BOOT.md` job 1.
+
 ## [S127] — 2026-09-07 — `ops/campaign_analyze.py` ported to marvin, closing the DEC-0125/DEC-0128 method gap (DEC-0148)
 
 - **ops#250 closed (DEC-0148).** `fetch()`'s NAS-ssh transport replaced with `marvinctl --tenant
