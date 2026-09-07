@@ -16,6 +16,12 @@ under [Pre-S16].
   container's in-container path — never written down before. Decoupled `ops/freeze_baseline.py`
   (still NAS-hardwired, unported, same as `ops/soak_check.sh`) from `campaign_analyze`'s constants
   after the port silently broke it (caught by mypy, not inspection).
+- **PR #360 merged.** `ops/freeze_baseline.py`'s NAS-hardwired finding filed separately as
+  [ops#286](https://github.com/WeatheredScientist/eaglehunt-ops/issues/286).
+- **Ops coordination sweep (their S40) answered.** ops#265: still "wired but unused," no action.
+  ops#257 limb 1 / ops#272's weewx half: owner agreed to switch to pull-based marvin deploys
+  (`marvinctl pull` once `git_branch` is set in the tenant manifest) — not yet done, waiting on
+  marvin's side.
 
 ---
 
