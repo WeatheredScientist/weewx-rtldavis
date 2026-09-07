@@ -6,6 +6,32 @@ under [Pre-S16].
 
 ---
 
+## [S129] — 2026-09-07 — ops#257 limb 1 executed and closed; ops#272's weewx row unblocked (DEC-0150)
+
+- **Executed DEC-0149's swap, live, on marvin.** `/srv/docker/weewx` is now a real `dev` git
+  checkout with `origin` on the SSH deploy-key URL — `marvinctl --tenant weewx pull` verified
+  working end-to-end (the obligation DEC-0149 carried forward, since CoffeeRadar's own `pull` was
+  never proven). Mechanism turned out to be plain SFTP (`mkdir`/`rename`/`rmdir`/`get`/`put`), not a
+  shell script over ssh — the tenant's forced command has no shell/clone verb, discovered by a
+  failed attempt and confirmed against marvin's own source. No Class C mint needed for the swap
+  itself (SFTP over a tenant alias is OPS-DEC-0193's advisory-allow); two incidental prep commands
+  did need one, both owner-confirmed in chat.
+- **Landmine list grew on inspection, not guesswork:** `weewx-data/` turned out to be entirely
+  untracked by git, so it was restored wholesale (subsuming DEC-0149's individually-named
+  `weewx.conf`/`archive/weewx.sdb`/decoy paths); `monitor.env`/`proxy.env` got the same treatment.
+  **New finding:** `weewx_monitor.py` is git-tracked at the swap's own path but its live SHA didn't
+  match `dev`'s tip (a real, previously-invisible merged-but-undeployed gap) — restored the live
+  copy rather than letting the fresh clone silently deploy unreviewed monitor code; `dev`'s copy
+  kept as `weewx_monitor.py.dev-tip-not-deployed` for a deliberate follow-up.
+- **Outage ~9 min** (14:15:36–14:24:48 EDT) — longer than the pre-execution estimate, spent on
+  verification/script-building with the service already down. Container's cgroup placement
+  corrected as a free side effect of the restart (closes the standing `--cgroup-parent` gap,
+  MARVIN-DEC-0141). `archive/weewx.sdb` and live data confirmed intact post-swap.
+- `CONSTANTS.md`'s "Release mechanics" row and `weewx_monitor.py`'s deploy-layer row rewritten to
+  describe the new self-service reality. Full body: `DECISIONS-FULL.md` DEC-0150.
+
+---
+
 ## [S128] — 2026-09-07 — ops#257 limb 1: reconciliation shape decided (DEC-0149)
 
 - **ops#257 checked in on** with the live ops session. Read marvin S29's precedent research

@@ -12,82 +12,70 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S128 → S129)
+## ▶ Resume here (S129 → S130)
 
 ### What's settled (do not re-derive)
 
-**S127's own history (PR #360, campaign_analyze.py port) is prior history — see CHANGELOG/
-DECISIONS, not repeated here. S128 did not touch prod: it decided, but did not execute, ops#257
-limb 1's reconciliation shape.**
+**ops#257 is CLOSED. Limb 1 (the tenant-root git conversion) executed and verified live this
+session — DEC-0150. Limbs 2/3 were already closed. ops#272's weewx row is now postable — see job 1.**
 
-- **ops#257 limb 1 — reconciliation shape decided (DEC-0149), not yet executed.** marvin S29
-  landed `git_branch=dev` + the deploy key (`MARVIN-DEC-0144`, owner-confirmed on GitHub) and
-  researched HLF/dashboard/CoffeeRadar's onboarding precedent at weewx's request. Owner picked the
-  **CoffeeRadar swap shape** over weewx's own originally-floated file-by-file diff-and-categorize
-  plan: fresh `dev` clone in a `.git-recon/` scratch subdir inside our own tenant tree, live tree
-  renamed aside intact (kept, not deleted), fresh clone dropped into place, documented landmine
-  paths restored. No marvin gesture needed — all inside `/srv/docker/weewx`, `t-weewx`-owned.
-  Marvin's own review then caught a hazard neither plan draft stated: `weewx.service` runs
-  continuously through this (unlike HLF/dashboard's clean-tree onboardings), so the host loses path
-  access mid-rename — **the service must be stopped for the whole swap window**, folded into
-  DEC-0149 before anything ran. Landed as PR [#362](https://github.com/WeatheredScientist/weewx-rtldavis/pull/362),
-  merged to `dev`. **The swap itself is next session's work — see job 1.**
-- **Model tier: this session ran entirely on Sonnet, no escalation** — S126's "floor not yet
-  restored" note is stale; the floor reads correctly restored (this session started and stayed on
-  Sonnet). Nothing to restore.
+- **ops#257 limb 1 executed (DEC-0150).** `/srv/docker/weewx` is a real `dev` checkout, `origin` on
+  the SSH deploy-key URL, `marvinctl --tenant weewx pull` verified working end-to-end (fast-forward
+  succeeded, confirmed over the deploy-key path after fixing an origin that briefly landed on
+  anonymous HTTPS). Mechanism was plain SFTP (`mkdir`/`rename`/`rmdir`/`get`/`put`) — the tenant's
+  forced command has no shell/clone verb, discovered mid-session and confirmed against marvin's own
+  `marvinctl-remote` source. `weewx-data/` turned out to be entirely untracked by git so it moved
+  wholesale; `weewx_monitor.py` is tracked but its live SHA didn't match `dev`'s tip (a real,
+  previously-invisible deploy gap) — restored the live copy rather than silently deploying
+  unreviewed monitor code, kept `dev`'s copy as `weewx_monitor.py.dev-tip-not-deployed`. Outage ~9
+  min (14:15:36–14:24:48 EDT 09-07). Container's cgroup placement corrected as a free side effect of
+  the restart — **job 6 closed too.** Full account: `DECISIONS-FULL.md` DEC-0150.
+- **Model tier: this session ran entirely on Sonnet, no escalation.** Nothing to restore.
 
-### ▶▶ S129 JOB LIST
+### ▶▶ S130 JOB LIST
 
-1. **ops#257 limb 1 — execute the swap (DEC-0149).** Plan is agreed, nothing executed yet. Steps,
-   in order: **stop `weewx.service`**; build the fresh `dev` clone in
-   `/srv/docker/weewx/.git-recon/`; rename the live tree aside intact (do not delete); drop the
-   fresh clone into place; restore the documented landmine paths from the renamed-aside tree
-   (`weewx.conf`, `weewx.conf.rx-baseline`, `archive/weewx.sdb`, `logs/`, the
-   `loop_json_writer.py`/`ogoxeUploader.py` decoys in `weewx-data/bin/user/`, the
-   `sortedcontainers/` vendor directory); restart `weewx.service`; verify `git status` clean; then
-   **run a live `marvinctl --tenant weewx pull` test** (required, not optional — DEC-0149:
-   CoffeeRadar's own `pull` was never confirmed end-to-end, only dashboard's is a proven
-   precedent). Once `pull` is confirmed, update `docs/CONVENTIONS.md`'s release-mechanics section —
-   it still documents the owner-run git-archive/scp/tar flow as current, which becomes wrong the
-   moment this lands.
-2. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
-   `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix and install both unit changes in
-   their next units gesture (queued, owner check-in pending on marvin's side as of S126 close).
-3. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`)
+1. **Reconcile `weewx_monitor.py`'s dev-tip-vs-deployed gap, deliberately, not reflexively.**
+   `/srv/docker/weewx/weewx_monitor.py` still holds the pre-swap deployed content;
+   `weewx_monitor.py.dev-tip-not-deployed` sits next to it holding what `dev`'s tip actually has.
+   Diff the two, decide whether the pending change is safe to roll out, then either `git checkout --
+   weewx_monitor.py` + `marvinctl --tenant weewx restart weewx-monitor.service` to adopt it, or
+   leave it parked and note why. Not urgent (the running process is unaffected either way until a
+   restart), but don't let `weewx_monitor.py.dev-tip-not-deployed` become permanent clutter either.
+3. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
+   `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337) and install both unit
+   changes in their next units gesture (queued, owner check-in pending on marvin's side as of S126
+   close) — note this is the **unit file**, a separate artifact from `weewx_monitor.py` above.
+4. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`)
    exactly as S126 left them — none are due, none are blocked on anything weewx can do alone.
-4. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
+5. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
    repo's been dormant since 2023-12-22, don't chase it, just notice if it moves.
-5. `CONSTANTS.md` infra re-verify (S105-era, still stale) · `docs/ARCHITECTURE.md` mount table still
-   NAS-pathed (S30) · `CHANGELOG.md` archive rollup overdue — S122 and earlier still inline, past the
-   ~3-session guideline (pre-existing debt, carried again).
-6. **Container not actually in `weather.slice` yet (marvin S29, MARVIN-DEC-0141).** `Slice=` only
-   placed systemd's docker-run launcher there; dockerd creates the real cgroup under
-   `system.slice/docker-<id>.scope` without `--cgroup-parent`. Marvin added
-   `--cgroup-parent=weather.slice` to `weewx.service`/`weewx-influxdb.service` and reloaded, but the
-   currently-running container (S126's `--user` cutover) predates that and hasn't picked it up. No
-   urgency — fold into the next natural restart of `weewx.service` (**job 1's swap restart is that
-   trigger** — verify cgroup placement as part of the same restart, don't do it twice). Verify:
-   `docker inspect --format '{{.State.Pid}}' weewx-rtldavis-v2` then `cat /proc/<pid>/cgroup` should
-   show `weather.slice`, not `system.slice/docker-….scope`.
+6. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129 touched) ·
+   `docs/ARCHITECTURE.md` mount table still NAS-pathed (S30) · `CHANGELOG.md` archive rollup
+   overdue — S122 and earlier still inline, past the ~3-session guideline (pre-existing debt,
+   carried again, one session closer).
 7. **`ops/soak_check.sh` still NAS-hardwired**, same root cause ops#250/ops#286 were — not yet filed
-   as its own tracker item (do that, or fold into ops#286, before picking it up). `ops/freeze_baseline.py`
-   is now tracked at ops#286. `campaign_analyze.py`'s port (S127, PR #360, merged) is the template: two
-   clean `marvinctl` calls replaced a whole ssh round-trip; `soak_check.sh` is shaped differently (a
-   dozen live checks, remote awk log-windowing) and will need its own design pass, not a copy.
+   as its own tracker item (do that, or fold into ops#286, before picking it up). `campaign_analyze.py`'s
+   port (S127, PR #360) is the template: two clean `marvinctl` calls replaced a whole ssh round-trip;
+   `soak_check.sh` is shaped differently (a dozen live checks, remote awk log-windowing) and will
+   need its own design pass, not a copy.
+8. **Now that a real `dev` checkout exists on marvin, revisit whether `ops/soak_check.sh` and other
+   still-NAS/ssh-hardwired tooling could instead run via `marvinctl exec-ro`** the way
+   `campaign_analyze.py` (DEC-0148) does — worth a look before designing job 7's fix from scratch.
 
-### Current state (S128 close)
+### Current state (S129 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `weewx.service` unit in `/weather.slice`, but the **container's actual cgroup is not** — needs one more restart to pick up `--cgroup-parent` (job 6, MARVIN-DEC-0141; job 1's swap restart is the natural trigger); `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, `ExecStop=docker kill` (MARVIN-DEC-0137) — runs as `t-weewx` (996:986) via unit `--user` since 13:12:05 EDT 09-06 (DEC-0147). **Untouched this session** — DEC-0149 is a plan, not an execution |
-| Reception | **100% mean, every post-v2.0.16 6h window since 09-03 18:00** (S126 job 6) — RF question reads closed; blocker 2 (RF-dead) unfired, watch continues |
-| InfluxDB | marvin, `weewx-influxdb.service` since 09-04 22:35:02 ET, v2.7.12; backup timer armed |
+| Prod | marvin, `weewx.service` unit AND container both in `/weather.slice` now (job 6 closed this session); `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, `ExecStop=docker kill` (MARVIN-DEC-0137) — runs as `t-weewx` (996:986) via unit `--user` since 13:12:05 EDT 09-06 (DEC-0147). Restarted 14:24:48 EDT 09-07 as part of the ops#257 swap (DEC-0150) — same image, tree layout changed underneath it, not the image |
+| Reception | unchanged this session — 100% mean through S126's last read (09-03 18:00 baseline); watch continues |
+| InfluxDB | marvin, `weewx-influxdb.service` since 09-04 22:35:02 ET, v2.7.12; backup timer armed; untouched this session |
 | Foundation | fully decommissioned — project directory deleted, NFS export retired, DSM tasks disabled (ops#278 closed) |
-| `main`/`dev` | `dev` carries all of S127 + PR #362 (S128, DEC-0149); `main` still weeks behind, unpromoted |
+| `main`/`dev` | `dev` unchanged in content this session (docs-only commit pending, no feature branch code) — `/srv/docker/weewx` now tracks it directly; `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · self-service `push` LIVE (ops#265, unchanged, still closes on first real push) |
-| GitHub Releases | **v2.0.12–v2.0.16 backfilled, live** (#331 closed, DEC-0145) |
-| Git | S128: PR #362 merged → `dev` (`s128-ops257-limb1-recon-plan`, deleted both sides). No other local branches or worktrees left over |
-| Trackers | repo: none open · ops: **#257 limb 1 recon shape decided (DEC-0149), execution pending — job 1** (limbs 2/3 already closed); #250 closed S127 (DEC-0148), #286 filed S127 (freeze_baseline.py); #272 weewx-half unchanged since S127 · #110/#265/#274 (EnvironmentFile + marvin-release.sh only) open, correctly gated/deferred · #278/#275/#273/#264/#218 closed prior sessions |
+| GitHub Releases | v2.0.12–v2.0.16 backfilled, live (#331 closed, DEC-0145) |
+| Git | S129: docs-only change (DECISIONS/CHANGELOG/CONSTANTS/BOOT), no feature branch code |
+| Tenant tree | **Real `git` checkout as of S129** — `/srv/docker/weewx` on `dev`, `origin` = SSH deploy-key URL, `marvinctl --tenant weewx pull` self-service and verified. Pre-swap tree preserved intact at `/srv/docker/weewx/live-aside-20260907/` (not deleted) |
+| Trackers | repo: none open · ops: **#257 CLOSED S129 (DEC-0150)**; #272 weewx row pending — job 1; #250/#278/#275/#273/#264/#218 closed prior sessions; #286 (freeze_baseline.py) open · #110/#265/#274 (EnvironmentFile + marvin-release.sh only) open, correctly gated/deferred |
 
 ## Blockers
 
@@ -99,24 +87,27 @@ limb 1's reconciliation shape.**
 
 ## Model tier
 
-**Floor confirmed restored, no action needed.** S128 ran entirely on Sonnet, no `/model` switch —
-S126's Fable escalation (desktop, persists — OPS-DEC-0036/0062) has been reverted by the time this
-session started.
+**Floor confirmed restored, no action needed.** S129 ran entirely on Sonnet, no `/model` switch.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
-any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). No new traps found
-this session.
+any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). **One new trap this
+session, not yet written up there — do it as part of closing this out:** `marvin-<tenant>` SSH
+aliases have NO shell/clone verb (forced command dispatches only to `sftp-server`, `rsync --server`,
+or `marvinctl-remote`'s fixed verb list) — a raw `ssh marvin-<tenant> 'bash -s'`-style command will
+always fail with `unknown verb`. Use plain SFTP (`mkdir`/`rename`/`rmdir`/`get`/`put`) for anything
+`marvinctl` itself doesn't cover; it needs no Class C mint (OPS-DEC-0193).
 
-_Last updated: 2026-09-07 (S128, ~09:40 ET). Session summary: opened checking in with the live ops
-session on ops#257, per the ops-loop SOP. marvin S29 came back with precedent research on the tenant
-git-checkout conversion (limb 1) — HLF/dashboard were clean fresh clones, no precedent value;
-CoffeeRadar's comparable mess was fixed with a clean rename-aside-and-swap, not a file-by-file diff.
-Owner picked the swap shape (DEC-0149), which also resolved the scratch-dir access question for
-free (inside our own tenant tree, no marvin gesture) and carries forward a required live `pull`
-verification (CoffeeRadar's own was never confirmed working). Marvin's own review then caught a
-hazard neither draft had stated — `weewx.service` must be stopped for the swap window since it runs
-continuously, unlike the clean-tree onboardings — folded into the decision before anything touched
-prod. Landed as PR #362 (green gate, squash-merged, `dev` fast-forwarded). No code or prod-tree
-change this session — planning only; the swap itself is S129's job 1._
+_Last updated: 2026-09-07 (S129, ~14:35 ET). Session summary: executed and verified ops#257 limb 1
+live (DEC-0150) — the tenant-root git-conversion plan DEC-0149 agreed but hadn't run. Coordinated
+with live ops and marvin sessions before touching prod; marvin confirmed clear (no marvin-side write
+queued into the tenant tree) and answered the bootstrap-clone mechanics question with real code, not
+a guess. Discovered mid-session that the planned ssh-shell-script mechanism doesn't exist on this
+alias and switched to plain SFTP, generated from a live directory listing rather than hand-typed.
+Found and handled one landmine DEC-0149 hadn't named (`weewx_monitor.py`'s live/dev-tip SHA
+mismatch) after systematically SHA-checking every git-tracked root file against live, not just the
+ones already suspected. Verified `pull` end-to-end after fixing an origin that briefly landed on
+plain HTTPS. Outage ran longer than estimated (~9 min) — verification happened with the service
+already down rather than staged first; worth doing more dry-run prep before the next live-service
+cutover. `docs/GOTCHAS.md` §3 got the new ssh-forced-command entry same session._
