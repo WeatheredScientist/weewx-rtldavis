@@ -9855,3 +9855,80 @@ recreate and the rest is the driver's cold-start RF acquisition — the same sha
 
 **Rollback:** not needed — the cutover succeeded on the first attempt; the unit-flag-revert path
 above was never invoked.
+
+---
+
+## DEC-0148 — `ops/campaign_analyze.py` ported to marvin (ops#250): closes the DEC-0128/DEC-0134 method gap, and finds `exec-ro`'s mount path is host-side, not the live container's
+
+**Status:** Accepted (executed, verified against live data) · **Date:** 2026-09-07 (S127) ·
+**closes** ops#250 · **closes the method gap** DEC-0125/DEC-0128 both flagged ("hand-assembled
+transport... port it before a third") · **does not touch** `ops/soak_check.sh` (same root cause,
+ops#250's related-surface note, sequenced as a separate follow-up)
+
+### The port
+
+`fetch()` was the only NAS-hardwired part of the tool — the analysis core (`gap_adjacent`,
+`partition`, `parse_blocks`, `attempt_starts`, `summarize`, `report`) is pure and untouched, exactly
+as DEC-0125/DEC-0128 already proved by importing it unmodified against a hand-assembled transport.
+Two `marvinctl --tenant weewx` calls replace the old raw-ssh round trip: `cat` for the apparatus log
+(tier 1, floor-allowed, no gesture) and `exec-ro <image> -- /opt/weewx-venv/bin/python3 -` for the
+archive rows, with the sqlite query piped on **stdin**, never `-c` argv — DEC-0124 already found
+`-c` rejects any string with quotes or parentheses even at zero literal whitespace, so stdin (live
+since ops#235's `-i` fix) is the only path that can carry real Python. The image tag is resolved at
+run time from `marvinctl inspect weewx-rtldavis-v2`'s `Config.Image` rather than hardcoded, so it
+doesn't go stale at the next release. `DEFAULT_LOG` moved to marvin's project root
+(`/srv/docker/weewx/logs/rx_experiment.log`); the `NAS_PORT`/`NAS_USER`/`NAS_HOST` env-var
+requirement is gone entirely — `marvinctl` carries its own auth and host, so running this tool no
+longer needs `~/.claude/nas.env`.
+
+### New finding: `exec-ro` mounts the tenant root at its own HOST path, not the live container's
+
+Not documented anywhere before this session. `exec-ro` is a fresh one-off `docker run` from the bare
+image (tier 2, "own resources"), not an attach to the already-running `weewx-rtldavis-v2` — so it
+does **not** carry that container's per-file bind list (`/opt/weewx-data`, `/var/log/weewx`, etc.).
+Verified live: `exec-ro ... -- mount` shows `/dev/mapper/vg0-srv on /srv/docker/weewx type ext4
+(ro,relatime)` — the whole tenant root, read-only, at its real **host** path. So the archive DB
+inside `exec-ro` is `/srv/docker/weewx/weewx-data/archive/weewx.sdb`, not the live container's
+in-container `/opt/weewx-data/archive/weewx.sdb` — confirmed present and readable
+(`-rwxr-----+ 996 986`) at the host path, and confirmed *absent* at the in-container one (`ls` there
+returns the image's own baked example tree, not the live data — no `archive/` directory exists in
+it at all). `campaign_analyze.py`'s `ARCHIVE_DB` constant now names the host path; `VENV_PY`
+(`/opt/weewx-venv/bin/python3`) is unaffected because the venv is image-baked, not a live bind.
+DEC-0125/DEC-0128's own two prior pulls must have used this same host path already — the DECISIONS
+entries elided the literal string ("`file:.../weewx.sdb?mode=ro`"), so it was never actually written
+down before now.
+
+### A second file broke silently: `ops/freeze_baseline.py`'s borrowed constants
+
+`ops/freeze_baseline.py` (companion to `stall_baseline.py`, DEC-0083's freeze-rate baseline) imports
+`campaign_analyze.DOCKER`/`CONTAINER`/`ARCHIVE_DB`/`VENV_PY` to build its *own* raw-NAS-ssh
+`docker exec` script — a different, unported transport that still runs **inside** the live
+container, where `/opt/weewx-data/archive/weewx.sdb` is correct and `/srv/docker/weewx/...` would be
+wrong. Repointing `campaign_analyze.ARCHIVE_DB` to the `exec-ro` host path (and removing `DOCKER`
+entirely, since `exec-ro` needs no docker-binary path) would have silently fed the wrong DB path into
+`freeze_baseline.py`'s own remote script — caught by mypy's `Module has no attribute "DOCKER"` on the
+green gate, not by inspection. Fix: `freeze_baseline.py` gets its own local copies of all four
+constants (identical values to what `campaign_analyze.py` used to export), decoupling the two
+files. **`freeze_baseline.py` itself is unchanged in behavior and still NAS-hardwired** — same
+unported status as `soak_check.sh`, now for the same reason (its transport talks to the live
+container directly; `campaign_analyze.py`'s no longer does).
+
+### Verification
+
+Ran the ported tool live against marvin (`--campaign B --since <epoch spanning Campaign C+D>`) and
+compared arm-by-arm against the historical record rather than trusting "it ran": **exact match** to
+DEC-0125's Campaign C figures (arm A 72.82%/n=368/sd=8.13, arm B 73.98%/n=350/sd=8.35) and DEC-0128's
+Campaign D pilot figures (P496 74.65, P449 73.79, P402 74.98, P372 74.97, P328 73.29, P207 68.17) —
+matched to the decimal, not just "same ballpark." The tool correctly printed its own pooled-attempt
+warning (two campaigns' swap events both fall inside the wide `--since` chosen for this check).
+Green gate: ruff clean, mypy clean (0 errors after the `freeze_baseline.py` fix, previously 1),
+pytest 475 passed / 17 skipped (unchanged — none of the 14 `test_campaign_analyze.py` tests touch
+`fetch()`, all pass unmodified).
+
+### What this does NOT do
+
+Does not port `ops/soak_check.sh` (same NAS-ssh root cause, explicitly deferred — ops's own
+related-surface note left the sequencing to weewx, and that script's shape is a dozen live health
+checks with remote awk-based log windowing, not two clean read calls; a separate, larger port).
+Does not port `ops/freeze_baseline.py` (out of ops#250's scope; decoupled only enough to stop this
+session's change from silently breaking it).

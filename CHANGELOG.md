@@ -6,6 +6,19 @@ under [Pre-S16].
 
 ---
 
+## [S127] — 2026-09-07 — `ops/campaign_analyze.py` ported to marvin, closing the DEC-0125/DEC-0128 method gap (DEC-0148)
+
+- **ops#250 closed (DEC-0148).** `fetch()`'s NAS-ssh transport replaced with `marvinctl --tenant
+  weewx cat`/`exec-ro`, matching the shape DEC-0125/DEC-0128 already proved by hand; the pure
+  analysis core is untouched, all 14 of its tests pass unmodified. Verified against live data:
+  reproduces Campaign C/D's historical arm means to the decimal. Found and documented along the way:
+  `exec-ro` mounts the tenant root at its own host path (`/srv/docker/weewx/...`), not the live
+  container's in-container path — never written down before. Decoupled `ops/freeze_baseline.py`
+  (still NAS-hardwired, unported, same as `ops/soak_check.sh`) from `campaign_analyze`'s constants
+  after the port silently broke it (caught by mypy, not inspection).
+
+---
+
 ## [S126] — 2026-09-06 — GitHub Releases backfilled after 5 silent (DEC-0145), ops#278 closed with a full code trace (DEC-0146), first clean post-fix RF baseline read, two stale-doc corrections
 
 - **#331 closed (DEC-0145).** Five annotated tags + GitHub Releases backfilled for v2.0.12–v2.0.16,

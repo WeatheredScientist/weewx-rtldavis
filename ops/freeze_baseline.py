@@ -84,8 +84,18 @@ import sys
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import campaign_analyze as ca  # noqa: E402
 import stall_baseline as sb  # noqa: E402
+
+# Own copy, not imported from ops/campaign_analyze.py: that tool moved to the
+# marvinctl exec-ro transport (ops#250) and its ARCHIVE_DB now names exec-ro's
+# host-side path, not this script's in-container one -- this script still ssh's
+# straight into the live container's own docker-exec context (unported, same
+# NAS-hardwired shape as ops/soak_check.sh), so its constants must stay
+# whatever THAT context needs, not follow the other tool's transport.
+DOCKER = "/usr/local/bin/docker"
+CONTAINER = "weewx-rtldavis-v2"
+ARCHIVE_DB = "/opt/weewx-data/archive/weewx.sdb"
+VENV_PY = "/opt/weewx-venv/bin/python3"
 
 GAP_SEC = 150  # the driver's own watchdog timeout -- a fact, not a tunable
 SWAP_HOURS = (0, 6, 12, 18)  # ops/rx_experiment.sh SCHEDULE: every 6h at :05
@@ -113,10 +123,10 @@ def fetch_archive(query_lo: datetime) -> list[tuple[datetime, str]]:
     after query_lo. Read-only (`mode=ro`) -- matches ops/campaign_analyze.py.
     """
     port, user, host = sb.nas_env()
-    script = (REMOTE.replace("@DOCKER@", ca.DOCKER)
-              .replace("@CONTAINER@", ca.CONTAINER)
-              .replace("@VENV_PY@", ca.VENV_PY)
-              .replace("@DB@", ca.ARCHIVE_DB)
+    script = (REMOTE.replace("@DOCKER@", DOCKER)
+              .replace("@CONTAINER@", CONTAINER)
+              .replace("@VENV_PY@", VENV_PY)
+              .replace("@DB@", ARCHIVE_DB)
               .replace("@LO@", str(int(query_lo.timestamp()))))
     r = subprocess.run(["ssh", "-p", port, f"{user}@{host}", "bash -s"],
                        input=script, capture_output=True, text=True,
