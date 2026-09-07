@@ -30,18 +30,18 @@ session — DEC-0150. Limbs 2/3 were already closed. ops#272's weewx row is now 
   unreviewed monitor code, kept `dev`'s copy as `weewx_monitor.py.dev-tip-not-deployed`. Outage ~9
   min (14:15:36–14:24:48 EDT 09-07). Container's cgroup placement corrected as a free side effect of
   the restart — **job 6 closed too.** Full account: `DECISIONS-FULL.md` DEC-0150.
+- **`weewx_monitor.py`'s dev-tip-vs-deployed gap reconciled same session** (right after the swap,
+  same S129 sitting). Diffed the two copies: the entire gap was comment/docstring text plus one
+  email-summary string, correcting stale explanatory text to match issue #317's driver fix (already
+  shipped in v2.0.16) — zero functional code change, safe to adopt. `weewx_monitor.py` now matches
+  `dev`'s tip exactly (sha-verified), old deployed copy kept as
+  `weewx_monitor.py.pre-reconcile-20260907` (not deleted), `weewx-monitor.service` restarted clean,
+  `Remedy armed:` line confirmed post-restart.
 - **Model tier: this session ran entirely on Sonnet, no escalation.** Nothing to restore.
 
 ### ▶▶ S130 JOB LIST
 
-1. **Reconcile `weewx_monitor.py`'s dev-tip-vs-deployed gap, deliberately, not reflexively.**
-   `/srv/docker/weewx/weewx_monitor.py` still holds the pre-swap deployed content;
-   `weewx_monitor.py.dev-tip-not-deployed` sits next to it holding what `dev`'s tip actually has.
-   Diff the two, decide whether the pending change is safe to roll out, then either `git checkout --
-   weewx_monitor.py` + `marvinctl --tenant weewx restart weewx-monitor.service` to adopt it, or
-   leave it parked and note why. Not urgent (the running process is unaffected either way until a
-   restart), but don't let `weewx_monitor.py.dev-tip-not-deployed` become permanent clutter either.
-3. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
+1. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337) and install both unit
    changes in their next units gesture (queued, owner check-in pending on marvin's side as of S126
    close) — note this is the **unit file**, a separate artifact from `weewx_monitor.py` above.
@@ -73,9 +73,9 @@ session — DEC-0150. Limbs 2/3 were already closed. ops#272's weewx row is now 
 | `main`/`dev` | `dev` unchanged in content this session (docs-only commit pending, no feature branch code) — `/srv/docker/weewx` now tracks it directly; `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · self-service `push` LIVE (ops#265, unchanged, still closes on first real push) |
 | GitHub Releases | v2.0.12–v2.0.16 backfilled, live (#331 closed, DEC-0145) |
-| Git | S129: docs-only change (DECISIONS/CHANGELOG/CONSTANTS/BOOT), no feature branch code |
+| Git | S129: docs-only changes (PR #364 merged; the `weewx_monitor.py` reconciliation is a prod-tree action, no repo code) |
 | Tenant tree | **Real `git` checkout as of S129** — `/srv/docker/weewx` on `dev`, `origin` = SSH deploy-key URL, `marvinctl --tenant weewx pull` self-service and verified. Pre-swap tree preserved intact at `/srv/docker/weewx/live-aside-20260907/` (not deleted) |
-| Trackers | repo: none open · ops: **#257 CLOSED S129 (DEC-0150)**; #272 weewx row pending — job 1; #250/#278/#275/#273/#264/#218 closed prior sessions; #286 (freeze_baseline.py) open · #110/#265/#274 (EnvironmentFile + marvin-release.sh only) open, correctly gated/deferred |
+| Trackers | repo: none open · ops: **#257 CLOSED S129 (DEC-0150)**; #272 weewx row posted S129 (staleness gate → yes); #250/#278/#275/#273/#264/#218 closed prior sessions; #286 (freeze_baseline.py) open · #110/#265/#274 (EnvironmentFile + marvin-release.sh only) open, correctly gated/deferred |
 
 ## Blockers
 
@@ -92,14 +92,10 @@ session — DEC-0150. Limbs 2/3 were already closed. ops#272's weewx row is now 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
-any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). **One new trap this
-session, not yet written up there — do it as part of closing this out:** `marvin-<tenant>` SSH
-aliases have NO shell/clone verb (forced command dispatches only to `sftp-server`, `rsync --server`,
-or `marvinctl-remote`'s fixed verb list) — a raw `ssh marvin-<tenant> 'bash -s'`-style command will
-always fail with `unknown verb`. Use plain SFTP (`mkdir`/`rename`/`rmdir`/`get`/`put`) for anything
-`marvinctl` itself doesn't cover; it needs no Class C mint (OPS-DEC-0193).
+any NAS or campaign task (§3, now covers `marvin-<tenant>` SSH's missing shell/clone verb — S129) ·
+judging a component live, dead, or shipped (§4). No new traps found beyond that one this session.
 
-_Last updated: 2026-09-07 (S129, ~14:35 ET). Session summary: executed and verified ops#257 limb 1
+_Last updated: 2026-09-07 (S129, ~15:15 ET). Session summary: executed and verified ops#257 limb 1
 live (DEC-0150) — the tenant-root git-conversion plan DEC-0149 agreed but hadn't run. Coordinated
 with live ops and marvin sessions before touching prod; marvin confirmed clear (no marvin-side write
 queued into the tenant tree) and answered the bootstrap-clone mechanics question with real code, not
@@ -110,4 +106,8 @@ mismatch) after systematically SHA-checking every git-tracked root file against 
 ones already suspected. Verified `pull` end-to-end after fixing an origin that briefly landed on
 plain HTTPS. Outage ran longer than estimated (~9 min) — verification happened with the service
 already down rather than staged first; worth doing more dry-run prep before the next live-service
-cutover. `docs/GOTCHAS.md` §3 got the new ssh-forced-command entry same session._
+cutover. `docs/GOTCHAS.md` §3 got the new ssh-forced-command entry. **After PR #364 merged, the
+owner asked directly for the `weewx_monitor.py` reconciliation this same session** — diffed the two
+copies (comment/docstring text + one email-summary string correcting stale #317 wording, zero
+functional change), adopted `dev`'s tip, restarted `weewx-monitor.service`, sha- and
+`Remedy armed:`-verified. Old deployed copy kept as `weewx_monitor.py.pre-reconcile-20260907`._
