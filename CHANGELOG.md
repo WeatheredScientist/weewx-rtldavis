@@ -29,6 +29,11 @@ under [Pre-S16].
   MARVIN-DEC-0141). `archive/weewx.sdb` and live data confirmed intact post-swap.
 - `CONSTANTS.md`'s "Release mechanics" row and `weewx_monitor.py`'s deploy-layer row rewritten to
   describe the new self-service reality. Full body: `DECISIONS-FULL.md` DEC-0150.
+- **Same session, on request: reconciled `weewx_monitor.py`'s dev-tip-vs-deployed gap.** Diffed the
+  pre-swap deployed copy against `dev`'s tip — comment/docstring text plus one email-summary string
+  correcting stale wording about issue #317's already-shipped driver fix, zero functional change.
+  Adopted `dev`'s tip, restarted `weewx-monitor.service`, sha- and `Remedy armed:`-verified. Old
+  deployed copy kept as `weewx_monitor.py.pre-reconcile-20260907`, not deleted.
 
 ---
 
