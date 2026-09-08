@@ -6,6 +6,21 @@ under [Pre-S16].
 
 ---
 
+## [S133] — 2026-09-08 — ERR-0009: DEC-0150 tree-swap's 11-minute gap logged as genuinely unrecoverable
+
+- **Closes out the `eaglehunt-ops` S42 full-history-enumeration ask.** A concurrent ops session
+  checked all 684 archive gaps since 2026-05-19; only 4 are infrastructure-caused. #1 (09-04
+  cutover) already closed via ERR-0007; #3 (09-07 reception outage) closed this session's own
+  ERR-0008; #4 (09-07 hardware-install incident) already backfilled per DEC-0151. This entry closes
+  #2: the 09-07 14:15–14:26 EDT gap from DEC-0150's tenant-tree swap.
+- **Tried the same WeatherLink→WU recovery ERR-0003/ERR-0005/ERR-0008 used — no source exists this
+  time.** WU's own public history table has no reading between 2:15 PM and 2:29 PM local that day,
+  landing almost exactly over our own gap. Both the archive boundary and the WU-side gap were
+  independently re-verified here (not taken on the coordinating session's report alone, per this
+  repo's standing rule).
+- Logged as `ERR-0009` in `docs/DATA_ERRATA.md` — no correction possible, no DEC needed (nothing was
+  decided; this documents a declined recovery, same shape as ERR-0004/ERR-0006).
+
 ## [S132] — 2026-09-08 — ERR-0008: 76-minute reception gap backfilled from the WeatherLink→WU path (DEC-0153)
 
 - **Owner-requested backfill for a gap that landed and was tracked, but never documented here.**

@@ -534,6 +534,45 @@ design decision on the monitor itself, orthogonal to this backfill, and still op
 
 ---
 
+## ERR-0009 — 2026-09-07 14:15–14:26 EDT, 11-minute gap from the DEC-0150 tree-swap, not recoverable
+
+**Window:** 2026-09-07 14:15:00 → 14:26:00 EDT (11 min) · **Logged:** 2026-09-08 (S133, ops S42
+coordination round) · **Cause:** not a sensor or decode fault. `weewx.service` was down for
+DEC-0150's tenant-tree swap (`ops#257` limb 1, the git-checkout cutover) — archive-confirmed
+14:15:00→14:26:00 EDT, close to but not identical to the tracker's own contemporaneous estimate of
+~14:15:36–14:24:48 (the same log-estimate-vs-archive-ground-truth discrepancy shape as `#373`'s own
+22:31–23:42 estimate against ERR-0008's confirmed 22:29–23:45 boundaries).
+
+**Correction attempted — declined, genuinely unrecoverable.** Same method as ERR-0003/ERR-0005/
+ERR-0008: checked Weather Underground's public history table for the co-located WeatherLink Live
+console's independent upload (same WU station identity as our own weewx uploader). **No recovery
+source exists this time** — WU's own table has no reading between 2:15 PM and 2:29 PM local that
+day, a ~14-minute gap on their side landing almost exactly over ours (verified directly against the
+table, not taken on report: the last WU row before the gap is 2:15 PM, the next is 2:29 PM).
+Whether this is a real correlated event (a shared network/power blip during the swap) or an
+unrelated coincidence in WU's own reporting cadence is not established and not investigated further
+here — either way there is nothing to pull back.
+
+- **local-archive:** ⛔ not correctable — no source has the observations.
+- **influxdb:** ⛔ same reason.
+- **external:** ⛔ immaterial — nothing was published for this window from our own path.
+
+**Lesson:** the WeatherLink→WU path is not a universal safety net — it depends on the console's own
+independent upload actually having data for the window, and this is the first incident where it
+didn't. ERR-0003/ERR-0005/ERR-0008 all succeeded; this one is the null result that proves the method
+has a real failure mode, not just a theoretical one.
+
+**Provenance note:** this gap was found and the recovery attempt run by a concurrent `eaglehunt-ops`
+coordination session (S42) enumerating every historical archive gap since 2026-05-19 at the owner's
+request — 684 gaps checked, only 4 infrastructure-caused (the rest routine RF-dead noise per
+DEC-0081), this being the second of those four (the first, the 09-04 cutover gap, already closed via
+ERR-0007; the third, ERR-0008's 09-07 reception outage, closed this session; the fourth is the
+09-07 hardware-install incident, already backfilled per DEC-0151). Both the archive boundary and the
+WU-side gap were independently re-verified in this repo before writing this entry, per this repo's
+own standing rule not to accept a peer session's report unchecked.
+
+---
+
 ## DISC-0001 — `rxCheckPercent` steps ~73% → ~99% at the DEC-0135 deploy (not an error)
 
 **Not an `ERR-####`.** No observation is wrong, before or after. This is a **metric-definition
