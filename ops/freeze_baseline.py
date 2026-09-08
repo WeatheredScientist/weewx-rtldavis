@@ -72,69 +72,72 @@ USAGE
     ops/freeze_baseline.py               # full report
     ops/freeze_baseline.py --pad-min 10  # widen the RF-dead proximity window
 
-Connection facts come from the environment or ~/.claude/nas.env, same posture
-as ops/stall_baseline.py -- never from this PUBLIC repo (DEC-0012).
+Transport is `marvinctl --tenant weewx` (ops#286), same as ops/stall_baseline.py
+(this tool's own `sb.fetch()` dependency) and ops/campaign_analyze.py's exec-ro
+shape -- no connection secrets, nothing from this PUBLIC repo (DEC-0012).
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
-import subprocess
 import sys
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stall_baseline as sb  # noqa: E402
 
-# Own copy, not imported from ops/campaign_analyze.py: that tool moved to the
-# marvinctl exec-ro transport (ops#250) and its ARCHIVE_DB now names exec-ro's
-# host-side path, not this script's in-container one -- this script still ssh's
-# straight into the live container's own docker-exec context (unported, same
-# NAS-hardwired shape as ops/soak_check.sh), so its constants must stay
-# whatever THAT context needs, not follow the other tool's transport.
-DOCKER = "/usr/local/bin/docker"
+# Same exec-ro constants as ops/campaign_analyze.py (ops#250's port): ARCHIVE_DB
+# is exec-ro's own host-side mount path for the tenant root, not the live
+# container's in-container path -- the two are NOT interchangeable (found the
+# hard way when this script still borrowed the in-container path after
+# campaign_analyze.py's own port moved on, ops#286).
 CONTAINER = "weewx-rtldavis-v2"
-ARCHIVE_DB = "/opt/weewx-data/archive/weewx.sdb"
+ARCHIVE_DB = "/srv/docker/weewx/weewx-data/archive/weewx.sdb"
 VENV_PY = "/opt/weewx-venv/bin/python3"
+RESTART_LOG_FILES = ("rx_experiment.log", "rx_experiment.log.campaignA")
+# `.` stands in for the literal space -- marvinctl grep refuses a whitespace
+# pattern (same trick ops/stall_baseline.py's STALL_GREP/NOTRUN_GREP use).
+RESTART_SWAP_GREP = "tick:.swapping"
+RESTART_RESTORE_GREP = "RESTORING.baseline"
 
 GAP_SEC = 150  # the driver's own watchdog timeout -- a fact, not a tunable
 SWAP_HOURS = (0, 6, 12, 18)  # ops/rx_experiment.sh SCHEDULE: every 6h at :05
 SWAP_SLACK_MIN = 12  # swap rows are always "<hour>:05"; a few min to complete
-RESTART_LOG_FILES = ("rx_experiment.log", "rx_experiment.log.campaignA")
 RESTART_PAD_BEFORE_MIN = 3  # last good archive record can land up to one
     # archive interval (60s) before the restart's own log line fires; padded
 RESTART_PAD_AFTER_MIN = SWAP_SLACK_MIN  # health_ok()'s own worst-case budget
     # is ~245s; SWAP_SLACK_MIN's 12min is already proven generous, reused here
 
-REMOTE = r"""
-set -u
-@DOCKER@ exec @CONTAINER@ @VENV_PY@ -c "
+DB_QUERY = """
 import sqlite3
-db = sqlite3.connect('file:@DB@?mode=ro', uri=True)
-q = 'SELECT dateTime,interval FROM archive WHERE dateTime>=@LO@ ORDER BY dateTime'
+db = sqlite3.connect('file:{db}?mode=ro', uri=True)
+q = 'SELECT dateTime,interval FROM archive WHERE dateTime>={lo} ORDER BY dateTime'
 for dt, iv in db.execute(q):
     print('%d,%s' % (dt, '' if iv is None else iv))
-"
 """
 
 
+def _resolve_image(container: str) -> str:
+    """The live container's own image -- read off the running container
+    rather than hardcoded, same reason as ops/campaign_analyze.py's own
+    `_resolve_image`: a fixed tag goes stale every release."""
+    info = json.loads(sb._marvinctl("inspect", container))
+    return info[0]["Config"]["Image"]
+
+
 def fetch_archive(query_lo: datetime) -> list[tuple[datetime, str]]:
-    """One ssh round trip: dateTime + interval for every archive row on or
-    after query_lo. Read-only (`mode=ro`) -- matches ops/campaign_analyze.py.
+    """dateTime + interval for every archive row on or after query_lo, via
+    `marvinctl exec-ro` (ops#286) -- same transport and stdin-query shape as
+    ops/campaign_analyze.py's `fetch()` (DEC-0124: real Python cannot survive
+    exec-ro's argv path, only stdin). Read-only (`mode=ro`).
     """
-    port, user, host = sb.nas_env()
-    script = (REMOTE.replace("@DOCKER@", DOCKER)
-              .replace("@CONTAINER@", CONTAINER)
-              .replace("@VENV_PY@", VENV_PY)
-              .replace("@DB@", ARCHIVE_DB)
-              .replace("@LO@", str(int(query_lo.timestamp()))))
-    r = subprocess.run(["ssh", "-p", port, f"{user}@{host}", "bash -s"],
-                       input=script, capture_output=True, text=True,
-                       timeout=180)
-    if r.returncode != 0:
-        sys.exit(f"freeze_baseline: ssh failed — {r.stderr.strip()[:300]}")
+    image = _resolve_image(CONTAINER)
+    query = DB_QUERY.format(db=ARCHIVE_DB, lo=int(query_lo.timestamp()))
+    out = sb._marvinctl("exec-ro", image, "--", VENV_PY, "-",
+                        input=query, timeout=180)
     rows: list[tuple[datetime, str]] = []
-    for line in r.stdout.splitlines():
+    for line in out.splitlines():
         line = line.strip()
         if "," not in line:
             continue
@@ -155,17 +158,17 @@ def fetch_restarts() -> list[datetime]:
     trip_abort() and campaign completion). Ground truth for "expected
     downtime", unlike SWAP_HOURS above, which has no way to see a restart
     landing off its fixed schedule.
+
+    Two greps per file rather than the old ssh form's one `grep -hE`
+    alternation: `marvinctl grep` takes a single whitespace-free pattern, so
+    the OR has to happen client-side instead of in the regex.
     """
-    port, user, host = sb.nas_env()
-    remote = (f'cd {sb.LOGDIR} 2>/dev/null || exit 1; '
-              f'grep -hE "tick: swapping |RESTORING baseline snapshot" '
-              f'{" ".join(RESTART_LOG_FILES)} 2>/dev/null')
-    r = subprocess.run(["ssh", "-p", port, f"{user}@{host}", remote],
-                       capture_output=True, text=True)
-    if r.returncode != 0 and not r.stdout:
-        sys.exit("freeze_baseline: ssh failed fetching restart log — "
-                 f"{r.stderr.strip()[:200]}")
-    return sb.stamps(r.stdout.splitlines())
+    lines: list[str] = []
+    for fname in RESTART_LOG_FILES:
+        path = f"{sb.LOGDIR}/{fname}"
+        lines += sb._grep(RESTART_SWAP_GREP, path)
+        lines += sb._grep(RESTART_RESTORE_GREP, path)
+    return sb.stamps(lines)
 
 
 def per_minute(rows: list[tuple[datetime, str]]) -> tuple[list[datetime], int]:
