@@ -203,6 +203,18 @@ alone did not catch.
   read-write (`SQLITE_CANTOPEN`), so the DB open fails outright. On any uid transition, cut over as
   `stop` → `ls archive/` → `start`, never one `restart`, and have a chown gesture ready. One-time:
   after the switch every journal belongs to the new uid.
+- **`marvinctl grep`/`ls`/`stat` each have a sharp edge found porting three tools off NAS-ssh**
+  (S131, DEC-0152): `grep <pattern> <path>` refuses any pattern containing whitespace — a space
+  becomes two remote tokens — even when the pattern arrives as one already-whitespace-containing
+  argv element from a script's own subprocess call (no shell involved); use `.` as a regex
+  stand-in for the literal space (`rtldavis.process.stalled`), and split an OR across two
+  signatures into two greps, since the alternation itself would need a space. Exit code 1 from
+  `grep` means EITHER zero matches OR a missing path — indistinguishable by exit code alone, only
+  by whether stderr says "does not exist"; treat both as zero lines unless the distinction actually
+  matters. `ls <dir>` takes no glob and no flags (`ls -1 file*` fails outright) — always full
+  `ls -la`-style output, filter filenames client-side. `stat`'s `Size:` field is indented under
+  `File:` in GNU's default layout, NOT anchored at column 0 like `Modify:`/`Access:`/`Change:` are —
+  an `awk '/^Size:/'` anchor silently matches nothing; use `grep -oE 'Size: [0-9]+'` instead.
 
 ## §4 Liveness and deployment — proving a thing is actually running
 

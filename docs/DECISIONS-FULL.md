@@ -10180,3 +10180,95 @@ change `ops/backfill_influx.py` itself to run against marvin natively — the ad
 invocation solved this incident's specific window; a real port (NAS-path and `localhost:8086`
 defaults, batch size, `--dry-run`) is separate follow-up work, not filed as its own tracker item
 yet.
+
+## DEC-0152 — ops#286/ops#287: the last of the NAS-ssh transport retired, three tools ported to `marvinctl`
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-07/08 (S131) · **closes** ops#286,
+ops#287 · **extends** the `marvinctl exec-ro` transport DEC-0124/DEC-0148 established for
+`ops/campaign_analyze.py` · **relates to** DEC-0118 (the host move that made NAS-ssh dead)
+
+### What happened
+
+`ops/freeze_baseline.py`, `ops/stall_baseline.py`, and `ops/soak_check.sh` still `ssh`'d straight
+to the NAS and `docker exec`'d into the live container using in-container paths — all three dead
+since DEC-0118 moved the tenant to marvin, reaching nothing real. Ported all three to
+`marvinctl --tenant weewx`, in two PRs:
+
+1. **PR #369 (ops#286):** `freeze_baseline.py`'s own `fetch_archive()`/`fetch_restarts()` moved to
+   `marvinctl exec-ro` (same stdin-query shape as `campaign_analyze.py`, DEC-0124: `exec-ro`'s argv
+   path rejects any token with quotes/parens, so a real Python query can only survive on stdin) and
+   `marvinctl grep` respectively. **`stall_baseline.py`'s `fetch()` had to move too**, even though
+   ops#286 named only `freeze_baseline.py`'s two functions: `freeze_baseline.py`'s own `main()`
+   calls `stall_baseline.fetch()` directly, so porting only the two named functions would still
+   leave the tool unable to run at all post-move. `marvinctl grep` enforces a whitespace-free
+   pattern client-side (a space becomes two remote tokens) — multi-word signatures use `.` as a
+   regex stand-in for the literal space (`rtldavis.process.stalled`), and an OR across two
+   signatures (`tick: swapping` / `RESTORING baseline snapshot`) runs as two separate greps instead
+   of one alternation, since the pattern can carry no whitespace at all. Dropped a dead `DATA
+   DROUGHT` grep in the old `stall_baseline.fetch()`: computed but never returned, found while
+   rewriting the function's transport — a pre-existing no-op, not a regression.
+2. **PR #371 (ops#287):** `soak_check.sh` needed its own design pass, not a copy-paste, as the
+   issue itself predicted — a dozen checks fed by one remote awk/grep round trip became ~15
+   separate `marvinctl` calls (`inspect`, `unit`, `stat`, `proc meminfo`, `cat`/`grep` per log file,
+   `exec-ro`), with windowed counts done by `cat`-ing the needed rotated log(s) once and filtering
+   locally via plain string comparison — log timestamps are zero-padded ISO, which sorts correctly
+   as text, so no remote (or even local) date arithmetic is needed for the per-line cut, only for
+   the cutoff itself.
+
+### The real bug the port avoided
+
+The old `EXPECT_IMAGE` canary compared `docker inspect`'s `Config.Image` to a **versioned tag
+string** (e.g. `:v2.0.13`). marvin's `set-image` deploy flow runs the live container under a
+**local alias tag** — `marvin-live` today — so `Config.Image` never reads back a versioned tag at
+all post-move. A straight string compare would have failed the canary **permanently, on a healthy
+station**, exactly the DEC-0031 stock-driver-trap shape this check exists to catch, except now
+crying wolf on every single run instead of catching a real regression. Fixed to compare **image
+ID** via `marvinctl check-image <expected-versioned-tag>` against `inspect`'s own `.Image` field —
+confirmed live that `marvin-live` and `:v2.0.16` share one sha256 image ID, so the fix is inert on
+a healthy station and fires correctly on a genuine mismatch (test-covered both ways).
+
+### Other findings along the way
+
+- The old pid-file + `/proc` liveness check for `weewx-monitor.service` cannot work post-move
+  either: the monitor is a **host systemd unit**, invisible to `exec-ro`'s own isolated container.
+  Replaced with `marvinctl unit weewx-monitor.service` (an OS-level liveness signal) kept
+  **alongside** the existing log-mtime freshness check, not instead of it — the mtime check is the
+  one that catches a wedge (alive but not writing), which a pure `Active: active (running)` read
+  cannot see; DEC-0036's whole point.
+- **One feature dropped, not silently:** the old single ssh round trip timed itself
+  (`remote_elapsed_s`, an NAS-load signal, itself found to be miscomputed by DEC-0087/S87). ~15
+  separate `marvinctl` calls have no single number to report in its place; each measured fast live
+  (a 3.3 MB `weewx.log` `cat` took 0.56s), so this is a removed diagnostic, not a functional loss —
+  no replacement is proposed.
+- `tests/test_soak_check.py` was not named in ops#287 and was found broken by the port: it drives
+  the real script with `ssh` stubbed on `PATH`, so the transport change broke all 15 of its tests
+  at collection. Rewritten around a fake `marvinctl` on `PATH` instead, keyed by verb and the
+  basename of the path/pattern asked for, so the script's own windowing/counting logic still runs
+  for real rather than against a pre-computed answer. 22 tests now (was 15): the existing coverage
+  plus new positive/negative pairs for the image-ID-vs-tag fix and the restart-loop detector
+  (S95/#245's named incident).
+- `marvinctl grep`/`ls`/`stat` have their own quirks not previously documented — see
+  `docs/GOTCHAS.md` §3.
+
+### Verification
+
+Both scripts run live against the real marvin host end to end (not just the offline test suites):
+`stall_baseline.py` — 11 log files, 2 episodes over 10.9 days; `freeze_baseline.py` — 15,273
+archive rows, 44 freezes classified (a live side-finding, not acted on here: the freeze rate read
+**4.03/day, AT RECORD MAX across every rolling window**, against DEC-0083's ~1.49/day baseline —
+flagged to the user, not investigated in this entry); `soak_check.sh` — 17 passed/1 warning/1 real
+fail (a restart-loop flag from that same session's own legitimate S130 deploy, 22 min apart — the
+script's own comment already names an attended deploy as this shape's expected false-positive).
+Green gate clean on both PRs (ruff/mypy/pytest, 480 passed/17 skipped after both merged — +5 over
+the S130 baseline, matching the net new test count); secret scan clean.
+
+### What this does NOT do
+
+Does not investigate the AT-RECORD-MAX freeze rate `freeze_baseline.py` surfaced live — flagged as
+a live finding, not a regression from this port (the classification logic is unit-tested and
+unchanged in behavior), and left for a session that can actually look into root cause. Does not
+touch `ops/campaign_analyze.py` (already ported, DEC-0148, working, out of scope) or
+`ops/backfill_influx.py` (DEC-0151 already named this as separate follow-up work). Does not close
+ops#265 (Docker Hub publish path) — checked in passing this session (`marvinctl push` exists,
+citing ops#265 itself) and confirmed via the ops session to already be accurately tracked as
+"wired but unexercised," not newly resolved.

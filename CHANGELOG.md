@@ -6,6 +6,22 @@ under [Pre-S16].
 
 ---
 
+## [S131] — 2026-09-07/08 — Last of the NAS-ssh transport retired: freeze_baseline.py, stall_baseline.py, soak_check.sh ported to marvinctl (DEC-0152)
+
+- **PR #369 (ops#286):** `ops/freeze_baseline.py` + `ops/stall_baseline.py` ported off dead NAS-ssh
+  to `marvinctl --tenant weewx` — `stall_baseline.py` had to move too, since `freeze_baseline.py`'s
+  own `main()` calls it directly and porting only the two named functions would still leave the
+  tool unable to run. Dropped a dead `DATA DROUGHT` grep found unused while rewriting the transport.
+- **PR #371 (ops#287):** `ops/soak_check.sh` fully rewritten for `marvinctl` — a dozen checks fed by
+  one remote ssh round trip become ~15 separate calls, with windowed counts done by `cat`-ing the
+  needed rotated log(s) once and filtering locally by string comparison. **Fixed a real bug along
+  the way:** the old `EXPECT_IMAGE` canary compared image tag strings, but marvin's deploy flow runs
+  containers under a local alias tag — a string compare would have failed permanently on a healthy
+  station. Now compares image ID via `marvinctl check-image`. `tests/test_soak_check.py` (broken by
+  the transport change, not named in ops#287) rewritten around a fake `marvinctl` stub; 22 tests.
+- Both scripts verified live against marvin end to end. Full account: `docs/DECISIONS-FULL.md`
+  DEC-0152.
+
 ## [S130] — 2026-09-07 — Post-hardware-install incident: influxdb restored, gap backfilled, weewx-monitor pidfile bug fixed (DEC-0151)
 
 - **Filed `ops/soak_check.sh`'s NAS-hardwiring as its own tracker item**, [ops#287](https://github.com/WeatheredScientist/eaglehunt-ops/issues/287), cross-linked from ops#286 (PR #366).
