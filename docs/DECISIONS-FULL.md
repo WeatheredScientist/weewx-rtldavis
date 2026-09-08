@@ -10355,3 +10355,110 @@ confirmed. Does not audit whether other consumers (dashboard cards, records) nee
 retroactively write a BOOT.md/CHANGELOG entry for the #370/#373 incident session itself (that
 session's own work — the physical dongle move, the tracker filings — is accounted for by the issues
 it filed; this entry documents only the backfill this session performed).
+
+## DEC-0154 — `#370`/`#373`: the RTL2838's `/dev/bus/usb` view went stale after the port move; a container recreate fixed it; the monitor's fully-down-vs-degraded blind spot filed separately
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-07/08 (S134, the `#370`/`#373`
+incident session DEC-0153 flagged as still owing its own entry) · **precedes** DEC-0153 (that
+entry's backfill target is this entry's outage) · **files** `#373` · **relates to**
+`eaglehunt-ops#370` (marvin's own finding)
+
+### What happened
+
+Checking in on tracked issues found `#370` (filed by marvin S31/Fable): reception degraded from
+~19:51 ET after the RTL2838 re-enumerated on marvin's chipset-xHCI port following case work —
+`MARVIN-DEC-0064` already established that port class breaks this driver's hop-tracking. By the
+time this session investigated, the picture had moved past the reported ~50% degradation: live logs
+showed `rtldavis` crash-looping every ~70s with `user.rtldavis ERROR rtldavis exited with no stderr
+captured` since 22:38:37 EDT — zero archive records, not a partial loss.
+
+**Root cause, established from `weewx.service`'s own unit line, not assumed:** the container's
+`--device /dev/bus/usb:/dev/bus/usb` passthrough is a one-time snapshot Docker takes at container
+start (19:51:02 EDT, *before* the 22:31 port move), not a live bind. `marvinctl --tenant weewx exec
+weewx-rtldavis-v2 -- ls /dev/bus/usb/005` inside the running container showed no `002` node at all,
+while the host's own `kmsg` confirmed the RTL2838 re-enumerated there (`usb 5-1`, 22:38:37) — the
+exact "stale container view" signature DEC-0075 built `ops/usb_forensics.sh` to detect, one of that
+tool's two predicted failure shapes, now observed for the first time. This is a different mechanism
+from `#370`'s own reported degradation (a genuine RF/hop-tracking problem); the two stacked because
+the owner's physical remedy for the first problem triggered the second.
+
+### The fix
+
+`marvinctl --tenant weewx restart weewx.service` (self-service, no owner gesture) — `weewx.service`
+already does `ExecStartPre=docker rm -f` + a fresh `docker run` on restart (confirmed from the unit
+file), which re-snapshots `/dev/bus/usb` against the port's current state. Restarted 23:42:48 EDT;
+clean startup, `rtldavis` came up once and stayed up (no repeat of the "no stderr" error); first
+`Wunderground-RF` publish 23:44:41; first archive record `23:45:00 EDT` on the normal 60s cadence;
+`weewx_monitor.py` auto-fired "RECOVERY: Wunderground-RF after 63min." Verified via the archive
+directly, not the log alone: `SELECT dateTime FROM archive` shows a clean 76-minute hole
+22:29:00→23:45:00 EDT and nothing since — the gap DEC-0153 backfilled from WU.
+
+### `#373` filed, not fixed here
+
+Independently confirmed during this response: `weewx_monitor.log` read `WINDOW: 0/21 (0%)` /
+`DRIVER NOT RUNNING detected` throughout the *entire* 71-minute crash loop — structurally identical
+to what a much milder reception dip would also produce. Nothing in the monitor's own state
+distinguished "completely down" from "degraded." Filed as `#373` rather than patched inline — a
+monitor alert-class change needs its own design pass (DEC-0081/DEC-0120 already carry comparable
+machinery for RF-quiet vs. mute-child episodes; this may be a variant, or already covered and just
+under-surfaced in the log formatting), not a quick fix under incident pressure. Still open as of this
+entry.
+
+### What this does NOT do
+
+Does not change the container's device-passthrough shape (a full `/dev/bus/usb` directory mount) to
+something that would auto-recover from a future port move without a restart — no such Docker
+mechanism exists for `--device` on a directory; a recreate is the only lever, same conclusion
+DEC-0065/DEC-0147 already reached for the adjacent USB-reset question. Does not investigate why the
+owner's physical move landed the dongle on `5-1` rather than back at the documented-good `7-1.2`
+cluster — a hardware-siting question outside this repo's own visibility, `eaglehunt-ops#370`'s to
+own if reception quality (as opposed to this outage) turns out to still be degraded at the new
+position.
+
+## DEC-0155 — `eaglehunt-ops#288`: derive a tenant-tree restore list from live unit files, not memory (`ops/tenant_mounts.py`)
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-08 (S134) · **closes**
+`eaglehunt-ops#288` · **confirms** DEC-0151's `influxdb/`/`nas-lease` finding independently, by a
+different method
+
+### What happened
+
+`eaglehunt-ops#288`'s still-open lesson 1 (marvin's own comment already shipped lesson 2, the
+`ExecStartPre=test -e <marker>` store guards on `weewx.service`/`weewx-influxdb.service`): a
+tree-swap's restore list must be *derived* from the units' own bind mounts, not hand-curated —
+DEC-0150's swap missed `influxdb/` for exactly that reason, and a curated list is only ever as
+complete as whoever wrote it remembered to be.
+
+Built `ops/tenant_mounts.py`. **Reads unit *files*, not `marvinctl unit`'s runtime status** —
+`weewx-influxdb-backup.service` and `weewx-rx-experiment.service` are periodic and print no
+`ExecStart` line in `systemctl status` once inactive, so a runtime-status-only approach would silently
+under-report; the unit file is authoritative regardless of whether anything is currently running.
+Every `-v SRC:DST[:MODE]` extracted (backslash-continuation-aware, multi-`ExecStart=`-aware for
+`weewx-rx-experiment.service`'s `tick`/`guard` pair) and classified against *this repo's own local
+git tree*: **TRACKED** (git-restorable, e.g. `influx.py`), **IGNORED** (a known `.gitignore`d data
+dir, e.g. `weewx-data/`, `logs/`, `sortedcontainers/`), or **UNDOCUMENTED** (neither — the exact
+DEC-0150 failure shape). Also reports cross-tenant reads *into* weewx's own tree, discovered via
+`marvinctl --tenant weewx unit weather.slice`'s box-wide visibility (`eh-proxy.service`,
+`hlf-api.service` both mount weewx paths read-only) — paths a weewx-side swap must not relocate
+without warning those tenants. An optional `--check FILE` flag diffs a swap plan's own list against
+the derived one.
+
+**Live-verified against marvin, not just unit-tested:** correctly flags `influxdb/data`,
+`influxdb/config`, and `nas-lease` as undocumented — reproducing DEC-0151's real, independently-found
+result by a completely different method (git-tree classification vs. that incident's own
+after-the-fact SHA-diff sweep). `sortedcontainers/` initially looked like a possible
+tool bug (assumed vendored-and-tracked) until a fuller `.gitignore` read confirmed it is
+deliberately excluded, same class as `weewx-data/`/`logs/` — a reminder that a "surprising"
+classification is worth checking against the source of truth before trusting the tool over it.
+
+16 new tests (`tests/test_tenant_mounts.py`), offline — `classify()` tested against this repo's own
+real git state rather than a mocked one, the same pattern `stall_baseline.py`'s tests use. Full suite
+green (496 passed/17 skipped), ruff/mypy clean. Merged via PR #375.
+
+### What this does NOT do
+
+Does not auto-discover `OWN_UNITS`/`EXTERNAL_UNITS` — both lists are hardcoded, matching this repo's
+existing convention of hardcoded log paths/signatures elsewhere in `ops/`; box-wide unit enumeration
+is not a `marvinctl` verb, so a new cross-tenant consumer showing up needs a human to add it. Does
+not change how a tree-swap is actually *executed* (still DEC-0149/0150's SFTP-batch shape) — this is
+a pre-flight check to run before one, not a replacement for the runbook.

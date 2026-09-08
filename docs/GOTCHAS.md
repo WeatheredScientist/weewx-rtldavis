@@ -126,6 +126,12 @@ alone did not catch.
   invocation wrapped inside a larger multi-step bash script (a `set -e` block with a loop, `sleep`,
   other `gh` calls) tripped the hard Class C guard instead of the usual FYI-allow. Issue the merge as
   its own separate Bash call, after checks/branch-update logic have already run in prior calls.
+- **A bare `#N` written while thinking about a cross-repo incident silently inherits the WRONG repo**
+  (S132/S134, same slip twice in one incident cluster) — `#370`/`#373` are this repo's own tracker
+  issues, but both the `ERR-0008` backfill draft *and* `#373`'s own issue body cited them as
+  `eaglehunt-ops#370`/`#373`. The trap: writing about a cross-repo coordination thread primes "ops"
+  as the mental default even when the actual issue lives here. Grep for the number across whichever
+  repos are in play before citing it, don't trust which repo felt right in the moment.
 
 ## §3 NAS and campaign operations
 

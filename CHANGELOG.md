@@ -6,6 +6,35 @@ under [Pre-S16].
 
 ---
 
+## [S134] — 2026-09-08 — `#370` outage diagnosed + fixed (DEC-0154); `eaglehunt-ops#288` closed with `ops/tenant_mounts.py` (DEC-0155)
+
+- **`#370`/`#373` — the reception-outage crash loop diagnosed and fixed, not just tracked.** The
+  RTL2838's physical port move left the running container's `/dev/bus/usb` view stale (`weewx.service`
+  started before the move) — DEC-0075's "stale container view" signature, seen for the first time.
+  `marvinctl --tenant weewx restart weewx.service` (self-service) re-snapshotted the device tree;
+  clean recovery verified against the archive, 23:42:48→23:45:00 EDT. `#373` filed for the monitor's
+  own blind spot — its log read identically whether the station was degraded or fully dead the whole
+  71 minutes — design question left open, not patched under incident pressure.
+- **`eaglehunt-ops#288` closed.** `ops/tenant_mounts.py` derives a tenant tree-swap's restore list
+  from live unit files, classifying every bind-mount source against this repo's own git tree
+  (TRACKED / IGNORED / UNDOCUMENTED) instead of trusting a hand-curated list — the exact gap that let
+  DEC-0150's swap miss `influxdb/`. Live-verified against marvin: reproduces DEC-0151's real finding
+  independently. 16 new tests, full suite green. Merged via PR #375.
+- **Checked in on the rest of this session's tracker sweep, closed inline where possible:** #337
+  found stale (this repo's own `ops/weewx-monitor.service` already has the fix; the bug is only in
+  marvin's un-synced vendored copy — nothing to change here). ops#286/#287 confirmed already closed
+  (S131). ops#265 confirmed unchanged (wired, unexercised, waiting on the next version cut). ops#110
+  acknowledged (2027 sky-sensor plan, nothing to build yet).
+- **Missing-InfluxDB-datapoints question, corrected mid-investigation.** First concluded the `#370`
+  gap was permanently unrecoverable (true for weewx's own archive path) before realizing the
+  co-located WeatherLink Live console's independent WU upload might have it — which a concurrent S132
+  session confirmed and backfilled as `ERR-0008`/DEC-0153 before this session finished investigating.
+  Correctly told the user EHWD's redirect back to weewx was structurally right either way (dashboard
+  has no InfluxDB write path).
+- **`eaglehunt-ops` S42 mislabel found and fixed:** this session's own `#373` issue body cross-referenced
+  "`eaglehunt-ops#370`" — `#370` is this repo's own issue, not ops's, the same mixup S42 caught in the
+  `ERR-0009` draft text. Edited the issue body directly.
+
 ## [S133] — 2026-09-08 — ERR-0009: DEC-0150 tree-swap's 11-minute gap logged as genuinely unrecoverable
 
 - **Closes out the `eaglehunt-ops` S42 full-history-enumeration ask.** A concurrent ops session
