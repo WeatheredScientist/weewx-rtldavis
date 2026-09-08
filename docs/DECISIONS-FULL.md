@@ -10272,3 +10272,86 @@ touch `ops/campaign_analyze.py` (already ported, DEC-0148, working, out of scope
 ops#265 (Docker Hub publish path) — checked in passing this session (`marvinctl push` exists,
 citing ops#265 itself) and confirmed via the ops session to already be accurately tracked as
 "wired but unexercised," not newly resolved.
+
+---
+
+## DEC-0153 — ERR-0008: 76-minute reception gap backfilled from the WeatherLink→WU path, same method as ERR-0003/ERR-0005
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-08 (S132) · **applies** DEC-0032's
+`backfill`/`_qc` in-band-flag pattern · **confirms** ERR-0005's finding that neither machine history
+API carries read entitlement on this account · **relates to** `#370`/`#373`
+
+### What happened
+
+Between S131's close (22:59:47 EDT, 2026-09-07) and this session, a live incident ran and was never
+closed out in this repo's own docs — only on the tracker. `#370` (filed by "marvin S31,"
+Fable): post-case-work re-enumeration put the RTL2838 on a chipset-xHCI USB port, a configuration
+`MARVIN-DEC-0064` already established breaks this driver's hop-tracking on this board, degrading
+reception from ~19:51 ET to irregular 1–5 minute gaps. The owner's physical fix — moving the dongle
+back to the CPU-attached cluster — triggered a harder failure in flight: `#373`, filed
+by whichever session responded to the move, records the container's `/dev/bus/usb` view going stale
+and `rtldavis` crash-looping with **zero** archive records for ~71 minutes (22:31–23:42 EDT by the
+tracker's own account). Neither issue got a matching `DATA_ERRATA.md`/`DECISIONS.md` entry, and
+`BOOT.md`'s resume pointer still read "S131 → S132" with no mention of either — the same
+closeout-debt shape `ops#218` exists to catch, just not caught by it here because the pointer's own
+staleness didn't cross a commit boundary until this session.
+
+Independently confirmed against the archive itself before doing anything: the SQLite archive shows
+a clean 76-minute gap, last real record **22:29:00 EDT** (already degraded — `outTemp = NULL`, the
+tail of #370's condition) to next real record **23:45:00 EDT**, with nothing in between — closely
+matching but not identical to #373's own 22:31–23:42 estimate (archive boundaries are ground truth
+here; the tracker figure was a log-read estimate).
+
+### What this session did
+
+1. **Confirmed the gap is real and unaddressed** via a read-only query against marvin's live archive
+   (`marvinctl --tenant weewx exec weewx-rtldavis-v2` into the **running** container, per DEC-0151's
+   precedent — `exec-ro` has no network egress and, separately here, no `sqlite3` binary; the live
+   container has both Python's stdlib `sqlite3` and network access).
+2. **Sourced the backfill from Weather Underground's public history table** for our own station
+   identity (no login required, so reachable from the ordinary browser tool — not gated the way an
+   authenticated console would be). **Tried the machine-readable path first and it failed exactly as ERR-0005
+   predicted it would**: `v2/pws/history/all` returned `401 Unauthorized` with the station's own
+   upload password (the same credential that authenticates current-conditions and RapidFire posts) —
+   this account has no historical-read entitlement, now confirmed a second time on a second
+   incident. Went straight to the manual/table read per that erratum's own stated recommendation,
+   rather than also re-trying WeatherLink v2's `historic` endpoint (already shown empty-but-200 on
+   this account by ERR-0005; no reason to expect a different result).
+3. **Cross-validated the WU rows against our own archive boundaries** before booking anything: WU's
+   62.0 °F neighborhood at 10:18–10:29 PM matches our last-good 62.0 °F at 22:18 EDT; WU's 60.0 °F at
+   11:44 PM matches our first-resumed 59.9 °F at 23:45 EDT. Dropped the 11:44 PM row itself from the
+   booked set — missing dewpoint/humidity/gust, and immediately adjacent to the boundary, which
+   DEC-0069 already established as the record most likely to carry contamination from whatever
+   caused the gap.
+4. **Backfilled the archive**, same technique as DEC-0151/ERR-0003/ERR-0005: backup first
+   (`weewx.sdb.bak-S132-preBackfill-20260908-084528`), 5 rows inserted at `interval = 15` (honest
+   cadence, not our 1-minute native rate — the SQLite schema has no dedicated backfill column, so
+   `interval` is itself the provenance signal here, as it was in both prior incidents),
+   `weectl database rebuild-daily --date=2026-09-07 -y` run immediately after (1,117 records
+   reprocessed, matches the day's known record count).
+5. **Backfilled InfluxDB**, same 5 points on `record,binding=archive`, each carrying the in-band
+   **`backfill = 1`** field (DEC-0032's `rain_qc` pattern) — written via the weewx uploader's own
+   write-scoped token, read directly out of the live container's mounted `weewx.conf` and used
+   entirely inside that subprocess, never appearing in this session's transcript (DEC-0151's
+   technique, applied to a second credential). `POST /api/v2/write` returned HTTP 204.
+6. **Read-verified both stores** before considering this done: the SQLite query re-run shows the 5
+   new rows exactly where expected, bracketed cleanly by the real 22:29 and 23:45 records with no
+   collision; the InfluxDB write-token cannot read its own bucket back (confirmed, not assumed — an
+   expected shape per CONSTANTS §5's write-only scoping, not a defect), so verification instead used
+   the `weewx-influxdb` container's own `operator` CLI profile, which returned all 5 `outTemp_F`
+   values and all 5 `backfill=1` fields at the correct timestamps.
+7. **Logged `ERR-0008`** (`docs/DATA_ERRATA.md`) with the full correction-status table, in the same
+   format as ERR-0003/ERR-0005/ERR-0007.
+
+### What this does NOT do
+
+Does not fix `#373` (`weewx_monitor.py` can't distinguish a full outage from partial
+degradation) — that is a design decision on the monitor's alert classes, orthogonal to backfilling
+the data the outage cost, and stays open on the tracker. Does not re-attempt either machine history
+API a third time — two incidents now agree neither carries read entitlement on this account; a
+future backfill should go straight to the manual table read, per ERR-0005's own advice, now doubly
+confirmed. Does not audit whether other consumers (dashboard cards, records) need to know about the
+`backfill=1` flag — same open item ERR-0003 left for the dashboard side, unchanged here. Does not
+retroactively write a BOOT.md/CHANGELOG entry for the #370/#373 incident session itself (that
+session's own work — the physical dongle move, the tracker filings — is accounted for by the issues
+it filed; this entry documents only the backfill this session performed).

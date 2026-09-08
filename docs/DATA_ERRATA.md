@@ -480,6 +480,60 @@ problem.
 
 ---
 
+## ERR-0008 — 2026-09-07 22:29–23:45 EDT, 76-minute reception gap, backfilled from the WeatherLink→WU path
+
+**Window:** 2026-09-07 22:29:00 → 23:45:00 EDT (76 min) · **Logged:** 2026-09-08 (S132)
+**Cause:** not a sensor or decode fault. `#370`: marvin's post-case-work re-enumeration
+put the RTL2838 on a chipset-xHCI port (`MARVIN-DEC-0064` — every such port on this board breaks
+hop-tracking), degrading reception from ~19:51 ET. The owner's physical fix (moving the dongle back
+to the CPU-attached cluster) caused a harder failure while in flight — `#373`: the
+container's `/dev/bus/usb` view went stale and `rtldavis` crash-looped with **zero** archive records
+for the full window, confirmed against the archive itself (last real record 22:29:00 — already
+`outTemp = NULL`, the tail of the degradation — next real record 23:45:00, cleanly bracketing the gap
+with no partial rows on either side).
+
+**Correction applied — backfilled, with different provenance, same method as ERR-0003/ERR-0005.**
+The co-located Davis WeatherLink Live console uploads to the same Wunderground station identity as
+our own weewx uploader, independently of our RTL-SDR path, so WU's own history for that station
+carries whatever the WLL relayed during our outage. **Both machine-readable history APIs were tried
+first and failed exactly as ERR-0005 documented they would** — WU's `v2/pws/history/all` 401'd with
+the station's own upload key (this account has no historical-read entitlement, confirmed a second
+time) — so this went straight to the public WU history table (`wunderground.com/dashboard/pws/...`,
+no login required) per that erratum's own recommendation.
+
+- **local-archive:** ✅ **applied 2026-09-08 (S132)** — 5 records inserted at `interval = 15`
+  (`dateTime` 1788834600–1788838200, i.e. 22:30–23:30 EDT), backed up first:
+  `weewx.sdb.bak-S132-preBackfill-20260908-084528`. `weectl database rebuild-daily --date=2026-09-07`
+  (local date) run immediately after — 1,117 records reprocessed. Only 5 of the possible ~6 fifteen-
+  minute slots were booked: the 11:44 PM WU row nearest the gap's own boundary was dropped for
+  missing dewpoint/humidity/gust (the DEC-0069 lesson — a boundary-adjacent record is the one most
+  likely contaminated, and the real archive's own 23:45:00 resumption already covers that minute).
+  Fields booked: `outTemp`, `dewpoint`, `outHumidity`, `windDir`, `windSpeed`, `windGust`,
+  `windGustDir`, `barometer`, `rain`, `rainRate`, `radiation`, `UV` — all directly read off the WU
+  table, nothing derived. Wind direction is coarse (WU's table gives compass words, not degrees;
+  booked as North=0°/West=270°) — immaterial at the near-zero speeds throughout. Cross-checked
+  against the real archive at both boundaries: WU's 62.0 °F/55.0 °F-dewpoint neighborhood at
+  10:18–10:29 PM matches our own last-good 62.0 °F at 22:18; WU's 60.0 °F at 11:44 PM matches our
+  own first-resumed 59.9 °F at 23:45.
+- **influxdb:** ✅ **applied 2026-09-08 (S132)** — same 5 points, `record,binding=archive`, each
+  carrying the in-band **`backfill = 1`** flag (the DEC-0032 `rain_qc` pattern), written via the
+  weewx Influx uploader's own write-scoped token read out of the live `weewx.conf` (never touched
+  this session's transcript, same technique as DEC-0151's S130 backfill) — `POST /api/v2/write`,
+  HTTP 204. Read-verified via the InfluxDB `operator` CLI profile (the weewx write token cannot read
+  its own bucket back, confirmed as expected — see CONSTANTS §5).
+- **external:** ⛔ immaterial — nothing was ever published for this window from our own path; the WU
+  record for it already exists, sourced from the WLL relay, not us.
+
+**Conditions during the gap:** calm and dry throughout — 62.0 °F cooling to 60.4 °F, dewpoint
+54–55 °F, humidity 76–82%, wind ≤2 mph gust from N/W, pressure steady 30.24–30.25 inHg, zero rain,
+zero solar (fully overnight). Same featureless-night character as ERR-0003 and ERR-0005's gaps.
+
+**Not addressed here, left to `#373`:** whether `weewx_monitor.py` should escalate its
+alert class when a fully-down condition is distinguishable from partial degradation — that's a
+design decision on the monitor itself, orthogonal to this backfill, and still open on the tracker.
+
+---
+
 ## DISC-0001 — `rxCheckPercent` steps ~73% → ~99% at the DEC-0135 deploy (not an error)
 
 **Not an `ERR-####`.** No observation is wrong, before or after. This is a **metric-definition

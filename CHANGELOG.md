@@ -6,6 +6,27 @@ under [Pre-S16].
 
 ---
 
+## [S132] — 2026-09-08 — ERR-0008: 76-minute reception gap backfilled from the WeatherLink→WU path (DEC-0153)
+
+- **Owner-requested backfill for a gap that landed and was tracked, but never documented here.**
+  Between S131's close and this session, `#370` (chipset-xHCI USB re-enumeration
+  degrading reception) and `#373` (a harder crash-loop while the owner moved the dongle back,
+  22:29–23:45 EDT 2026-09-07, ~76 min zero-record gap confirmed against the archive) both landed on
+  the tracker with no matching `DATA_ERRATA.md`/`DECISIONS.md` entry and no `BOOT.md` update.
+- **Backfilled from WU's public history table for our own station** (the co-located WeatherLink
+  Live console's independent upload target, same WU station identity as our own), after both
+  machine-readable history APIs failed exactly as
+  ERR-0005 already documented they would — `v2/pws/history/all` 401'd with the station's own upload
+  key, no historical-read entitlement on this account, now confirmed a second time.
+- **5 records** at `interval=15` inserted into the SQLite archive (backup first, daily summary
+  rebuilt for 2026-09-07) and into InfluxDB (`backfill=1` field, DEC-0032 pattern) — cross-validated
+  against the real archive's own boundaries at both ends before booking anything. Read-verified via
+  the InfluxDB `operator` CLI profile (the weewx write-token can't read its own bucket back, an
+  expected shape, not a defect).
+- Logged as `ERR-0008` in `docs/DATA_ERRATA.md`; full account `docs/DECISIONS-FULL.md` DEC-0153.
+  `#373`'s own ask (should the monitor escalate a full-outage alert class) is left open
+  — a design decision, out of scope for this backfill.
+
 ## [S131] — 2026-09-07/08 — Last of the NAS-ssh transport retired: freeze_baseline.py, stall_baseline.py, soak_check.sh ported to marvinctl (DEC-0152)
 
 - **PR #369 (ops#286):** `ops/freeze_baseline.py` + `ops/stall_baseline.py` ported off dead NAS-ssh
