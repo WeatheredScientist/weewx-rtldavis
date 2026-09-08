@@ -123,3 +123,11 @@ gone stale on two values: the reception baseline and the driver-vs-config layer 
   not from CHANGELOG or memory; every other doc points at it. DEC-0023 supersedes the old
   shared-counter idea in DEC-0013. The governed era runs **S16 → S17 → S18 → S19 → S20 → S21 → S22 →
   S23 → …**; pre-S16 history is reconstructed/approximate.
+
+## Estate context — 2026-09-08
+Home IT estate repo of record is `~/Projects/heartofgold`: docs, policies, ADRs, runbooks, CHANGELOG, inventory.
+This repo owns its image build and dev compose only. Production deployment on marvin — pinned tags,
+named volumes, systemd slice / io.weight — is owned by heartofgold/compose/weewx/ (ADR-0005).
+Do not add production deployment config here. Handoffs for this repo stay in this repo.
+If a session here changes what runs on marvin or how, add a heartofgold/CHANGELOG.md line, same session.
+marvin's own tracker and decisions live at heartofgold/MARVIN-STATE.md and heartofgold/MARVIN-DECISIONS.md.
