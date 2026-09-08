@@ -9,6 +9,7 @@ import os
 import sys
 import re
 import sqlite3
+import fcntl
 from email.mime.text import MIMEText
 from datetime import datetime
 
@@ -213,17 +214,26 @@ RF_REPORT_INTERVAL_HOURS = max(1, min(24, int(os.environ.get('RF_REPORT_INTERVAL
 # --- PID guard ---
 # '--test-alert' bypasses the guard entirely: it sends one test email and exits,
 # and must NOT touch the running monitor's pidfile.
+#
+# Uses flock, not a PID-existence check: `/proc/<pid>` existing only means SOME
+# process holds that number, not that it's a prior monitor instance. Across a
+# reboot, systemd's own docker-run process can land on the exact PID the old
+# monitor happened to use, and the old check treated that as "still running"
+# forever (every restart attempt saw the same live-but-foreign PID and exited).
+# flock is scoped to the open file description, cleared by the kernel the
+# moment a process exits or the box reboots -- no staleness window to hit.
 _TEST_ALERT = '--test-alert' in sys.argv
 if not _TEST_ALERT:
-    if os.path.exists(PIDFILE):
-        old = open(PIDFILE).read().strip()
-        if old and os.path.exists(f'/proc/{old}'):
-            print(f'Already running (PID {old}), exiting')
-            sys.exit(0)
-    with open(PIDFILE, 'w') as f:
-        f.write(str(os.getpid()))
-    import atexit
-    atexit.register(lambda: os.remove(PIDFILE) if os.path.exists(PIDFILE) else None)
+    _pidfile_fh = open(PIDFILE, 'a+')
+    try:
+        fcntl.flock(_pidfile_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print('Already running (lock held), exiting')
+        sys.exit(0)
+    _pidfile_fh.seek(0)
+    _pidfile_fh.truncate()
+    _pidfile_fh.write(str(os.getpid()))
+    _pidfile_fh.flush()
 
 # --- Helpers ---
 def log(msg):

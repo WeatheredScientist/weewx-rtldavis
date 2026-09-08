@@ -6,6 +6,27 @@ under [Pre-S16].
 
 ---
 
+## [S130] — 2026-09-07 — Post-hardware-install incident: influxdb restored, gap backfilled, weewx-monitor pidfile bug fixed (DEC-0151)
+
+- **Filed `ops/soak_check.sh`'s NAS-hardwiring as its own tracker item**, [ops#287](https://github.com/WeatheredScientist/eaglehunt-ops/issues/287), cross-linked from ops#286 (PR #366).
+- **Incident:** hardware installs required a graceful `weewx.service` stop at 17:09 EDT; DEC-0150's
+  landmine list never named `influxdb/` (not git-tracked) and a bind-mount-follows-inode effect
+  masked the gap until that stop. First post-install boot of `weewx-influxdb.service` hit empty
+  root-owned placeholders and crash-looped. Root-caused and the store restored by the marvin-side
+  session; verified independently here before acting on the report.
+- **Recovery, self-service throughout:** started `weewx-influxdb.service` (42/42 shards clean,
+  buckets confirmed); backfilled the archive→Influx gap via an ad hoc `marvinctl exec` into the
+  **live** container (`exec-ro` turns out to have no network egress at all), reading the token
+  straight out of the mounted `weewx.conf` so it never touched this session's transcript. Window
+  bounded from `weewx.log` ground truth (last good 17:08:00 EDT, first good-after 20:52:00 EDT) —
+  34 records posted, verified via `influx query`.
+- **Fixed `weewx_monitor.py`'s PID guard** (crash-looping since 19:51, alerting/watchdog dark the
+  whole time): the old `os.path.exists('/proc/<pid>')` check can't tell "the old monitor is alive"
+  from "some unrelated process now owns that number" — post-reboot the number landed on
+  `weewx.service`'s own docker-run process. Replaced with an `flock`-based lock, immune to PID
+  reuse by construction.
+- Full account: `docs/DECISIONS-FULL.md` DEC-0151.
+
 ## [S129] — 2026-09-07 — ops#257 limb 1 executed and closed; ops#272's weewx row unblocked (DEC-0150)
 
 - **Executed DEC-0149's swap, live, on marvin.** `/srv/docker/weewx` is now a real `dev` git

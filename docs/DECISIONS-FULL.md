@@ -10110,3 +10110,73 @@ Does not reconcile `weewx_monitor.py`'s drift — that stays a deliberate, separ
 update `docs/CONVENTIONS.md`'s release-mechanics section or `CONSTANTS.md`'s deploy-layers table —
 same session, tracked as this session's own remaining closeout work, not deferred past it. Does not
 touch ops#272's other tenants' rows (already closed by HLF/coffeeradar/dashboard/marvin).
+
+## DEC-0151 — post-hardware-install incident: DEC-0150's landmine list missed `influxdb/`; `weewx-monitor`'s PID-existence guard failed on PID reuse across reboot
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-07 (S130) · **follows** DEC-0150 ·
+**fixes** a gap DEC-0150's landmine list didn't name · **amends** `weewx_monitor.py`'s PID guard
+
+### What happened
+
+Owner-scheduled hardware installs on marvin required a graceful `weewx.service` stop at 17:09 EDT.
+A bind mount follows the inode, not the path, so `weewx-influxdb.service` — still running — kept
+writing to DEC-0150's already-moved `influxdb/` directory the whole time, which is why nobody
+noticed at the 14:24:48 swap that DEC-0150's landmine list never named `influxdb/` at all (it isn't
+git-tracked, so the SHA-diff sweep that caught `weewx_monitor.py`'s drift had no reason to look at
+it). The first post-install boot of `weewx-influxdb.service` (19:28:27 EDT) started against a bind
+source that no longer existed at that path; dockerd auto-created empty `root:root` placeholders,
+and `influxd` (running as uid 996) couldn't create its own data directories inside them — a crash
+loop, stopped by a peer session at 20:09:20 EDT to end the noise. Found and root-caused by the
+marvin-side session (Fable, "marvin S31"), not this repo — full mechanism, timestamps and
+ownership bits are that session's own account; this entry covers only weewx's side of the
+recovery, verified independently rather than taken on the peer's report alone (`docs/GOTCHAS.md`
+§1/§2).
+
+Separately, `weewx-monitor.service` was found crash-looping (`activating (auto-restart)`, exiting
+clean every ~15–30s) since its own post-reboot start at 19:51. Root cause: `weewx_monitor.py`'s PID
+guard (`os.path.exists(f'/proc/{old}')`) only checks that *some* process holds the PID recorded in
+the last run's pidfile — not that it's a prior monitor instance. Across the reboot, the number
+happened to land on `weewx.service`'s own `docker run` process (PID 1822), so every restart
+attempt saw a live-but-foreign PID and exited immediately, believing another monitor was already
+running. Effect: no uploader alerting or RF-reception watchdog since 19:51.
+
+### What weewx did, in order (self-service throughout, no Class C needed)
+
+1. **Verified marvin's restore independently** before touching anything — `marvinctl --tenant
+   weewx stat`/`ls` on `/srv/docker/weewx/influxdb/{data,config}` confirmed `t-weewx:t-weewx`
+   ownership and the real store contents (`engine/`, `backup/`, `influxd.bolt`, `influxd.sqlite`)
+   in place, independent of the peer session's own report.
+2. **Started `weewx-influxdb.service`** (`marvinctl --tenant weewx start`) — clean boot, all 42
+   shards loaded, no mkdir errors, `influx bucket list --org eaglehunt` confirmed all four buckets
+   (`weewx`, `eh_rollup`, `_tasks`, `_monitoring`) intact.
+3. **Backfilled the archive→InfluxDB gap.** `ops/backfill_influx.py` assumes NAS-side execution
+   (local sqlite path, `localhost:8086`) and doesn't run as-is against marvin. Rather than port it
+   under incident pressure, ran its logic ad hoc via `marvinctl --tenant weewx exec
+   weewx-rtldavis-v2` — the **live running container**, not `exec-ro` (which turned out to have no
+   network egress at all: `exec-ro` is an isolated one-off, fine for `campaign_analyze.py`'s
+   read-only DB queries per DEC-0148 but useless for a POST). The script read the InfluxDB token
+   out of the container's own mounted `weewx.conf` and used it entirely inside that subprocess —
+   the token value never appeared in this session's own transcript. Window bounded from
+   `weewx.log` ground truth, not the peer's stated estimate: last good `Influx: Published` was
+   record **17:08:00 EDT**, first good publish after the fix was **20:52:00 EDT** — 34 archive
+   records existed in that span (the two fully-dark stretches, 17:09→19:28 and 19:47→19:51, have no
+   archive rows at all, so nothing to backfill there). Posted all 34, verified via `influx query`
+   from the `weewx-influxdb` container: 32 carry `rxCheckPercent`, 19 carry `outTemp_F` — the gap
+   between those two counts is expected, not every archive record populates every field.
+4. **Fixed the `weewx_monitor.py` PID guard** (`weewx_monitor.py:213-231`): replaced the
+   PID-existence check with `fcntl.flock(LOCK_EX | LOCK_NB)` on the pidfile. A flock is scoped to
+   the open file description and released by the kernel the instant the holding process exits or
+   the box reboots — there is no stale-but-plausible state for a reused PID number to hit, unlike a
+   number compared against `/proc`. Landed via PR, deployed with `marvinctl --tenant weewx pull` +
+   `restart weewx-monitor.service` once merged.
+
+### What this does NOT do
+
+Does not fix `docs/CONVENTIONS.md`'s or `CONSTANTS.md`'s DEC-0150 runbook language to derive a
+landmine list from every unit's bind-mount sources (`grep -- '-v /srv/docker/weewx'
+/etc/systemd/system/weewx*.service`) rather than from memory — flagged by the peer session as a
+correction ops is filing cross-repo; tracked as a `BOOT.md` job, not done in this entry. Does not
+change `ops/backfill_influx.py` itself to run against marvin natively — the ad hoc `marvinctl exec`
+invocation solved this incident's specific window; a real port (NAS-path and `localhost:8086`
+defaults, batch size, `--dry-run`) is separate follow-up work, not filed as its own tracker item
+yet.
