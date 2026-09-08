@@ -17,15 +17,15 @@ is a **separate repo** — don't make dashboard changes here.
 ### What's settled (do not re-derive)
 
 **ERR-0008 backfilled and documented — DEC-0153. Also closes a documentation gap: an incident
-(`eaglehunt-ops#370`/`#373`) ran between S131's close and this session, got tracker issues filed,
+(`#370`/`#373`) ran between S131's close and this session, got tracker issues filed,
 but no matching `DATA_ERRATA.md`/`DECISIONS.md`/`BOOT.md` entry until now.**
 
 - **The incident, reconstructed from the tracker (not this repo's own doing — a marvin-side/Fable
   session and whichever session responded to it):** post-case-work USB re-enumeration put the
   RTL2838 on a chipset-xHCI port (`MARVIN-DEC-0064` — breaks hop-tracking on this board),
-  degrading reception from ~19:51 ET 2026-09-07 (`ops#370`). The owner's physical fix (moving the
+  degrading reception from ~19:51 ET 2026-09-07 (`#370`). The owner's physical fix (moving the
   dongle back) triggered a harder failure in flight: the container's `/dev/bus/usb` view went
-  stale and `rtldavis` crash-looped with zero archive records (`ops#373`). Confirmed against the
+  stale and `rtldavis` crash-looped with zero archive records (`#373`). Confirmed against the
   archive itself: a clean 76-minute gap, **22:29:00 → 23:45:00 EDT**, no partial rows either side.
 - **Backfilled from WU's public history table for our own station** (the co-located WeatherLink
   Live console's independent upload, same WU station identity as our own — see DEC-0153 for why
@@ -39,7 +39,7 @@ but no matching `DATA_ERRATA.md`/`DECISIONS.md`/`BOOT.md` entry until now.**
   boundaries at both ends, dropped the one WU row nearest the boundary for missing fields
   (DEC-0069's contamination lesson). Read-verified via the InfluxDB `operator` CLI profile (the
   weewx write-token can't read its own bucket back — expected, CONSTANTS §5).
-- **Not addressed:** `ops#373`'s own ask — whether `weewx_monitor.py` should escalate its alert
+- **Not addressed:** `#373`'s own ask — whether `weewx_monitor.py` should escalate its alert
   class when a fully-down condition is distinguishable from partial degradation. Design decision,
   left open on the tracker, not this session's to make.
 - Full account: `docs/DECISIONS-FULL.md` DEC-0153; erratum: `docs/DATA_ERRATA.md` ERR-0008.
@@ -57,7 +57,7 @@ but no matching `DATA_ERRATA.md`/`DECISIONS.md`/`BOOT.md` entry until now.**
 3. Consider porting `ops/backfill_influx.py` to run natively against marvin (NAS-path and
    `localhost:8086` defaults) — two incidents now (DEC-0151, DEC-0153) have solved this ad hoc
    inside the live container rather than fixing the tool itself; still not filed as its own item.
-4. **`eaglehunt-ops#373`** — decide whether `weewx_monitor.py` needs a distinct alert class for a
+4. **`#373`** — decide whether `weewx_monitor.py` needs a distinct alert class for a
    full outage vs. partial degradation (carried from this session, not investigated further).
 5. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337).
@@ -76,14 +76,14 @@ but no matching `DATA_ERRATA.md`/`DECISIONS.md`/`BOOT.md` entry until now.**
 |---|---|
 | Prod | marvin, `weewx.service` unaffected this session (data backfill only, no config/code touched). `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986) since DEC-0147 |
 | InfluxDB | marvin, `weewx-influxdb.service` — healthy; received this session's 5-point ERR-0008 backfill (`backfill=1`), no other change |
-| weewx-monitor | unchanged this session — flock-based lock (PR #367) still live and stable; `ops#373`'s alert-class question still open |
-| Reception | recovered per `ops#370`'s physical fix (dongle moved back) — this session's own archive read confirms clean 60s-ish cadence resuming at 23:45 EDT 09-07, onward |
+| weewx-monitor | unchanged this session — flock-based lock (PR #367) still live and stable; `#373`'s alert-class question still open |
+| Reception | recovered per `#370`'s physical fix (dongle moved back) — this session's own archive read confirms clean 60s-ish cadence resuming at 23:45 EDT 09-07, onward |
 | Foundation | fully decommissioned (unchanged) |
 | `main`/`dev` | S132: PR pending for DEC-0153/ERR-0008 docs. `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged this session |
 | GitHub Releases | unchanged this session |
 | Tenant tree | unchanged this session — real `git` checkout since S129, `marvinctl pull` self-service |
-| Trackers | repo: #337 open (unchanged) · ops: #370/#373 open (physical/monitor fixes tracked there, not this session's to close) · #288/#265/#110 open, correctly gated/deferred |
+| Trackers | repo: #337, #370, #373 open (physical/monitor fixes tracked, not this session's to close) · ops: #288/#265/#110 open, correctly gated/deferred |
 
 ## Blockers
 
@@ -93,7 +93,7 @@ but no matching `DATA_ERRATA.md`/`DECISIONS.md`/`BOOT.md` entry until now.**
 2. **RF-dead episode root cause unknown** (DEC-0081) — first clean post-fix baseline read taken
    S126 (100% mean, zero episodes observed yet); watch continues, re-read after a longer stretch.
 3. **ERR-0005** — unchanged.
-4. **`eaglehunt-ops#373`** — monitor can't distinguish full outage from partial degradation (job 4).
+4. **`#373`** — monitor can't distinguish full outage from partial degradation (job 4).
 5. 6-hourly reception email watch — unchanged since S125.
 
 ## Model tier
@@ -115,7 +115,7 @@ under `/opt/weewx-venv/`.
 _Last updated: 2026-09-08 (S132). Session summary: owner asked for a backfill of yesterday's
 reception outage from the WeatherLink→WU backup path. Redirected from the dashboard repo (which
 owns no InfluxDB write path) to this one; found the outage was actually two tracker issues
-(`ops#370`/`#373`) that had never gotten a matching docs entry here. Confirmed the exact gap
+(`#370`/`#373`) that had never gotten a matching docs entry here. Confirmed the exact gap
 against the live archive (22:29–23:45 EDT), that the WLL relays to our own WU station identity
 independently, and that the machine-readable history APIs are dead-ended on this account (ERR-0005
 precedent, reconfirmed). Backfilled both stores, cross-

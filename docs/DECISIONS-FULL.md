@@ -10279,16 +10279,16 @@ citing ops#265 itself) and confirmed via the ops session to already be accuratel
 
 **Status:** Accepted (executed, verified) · **Date:** 2026-09-08 (S132) · **applies** DEC-0032's
 `backfill`/`_qc` in-band-flag pattern · **confirms** ERR-0005's finding that neither machine history
-API carries read entitlement on this account · **relates to** `eaglehunt-ops#370`/`#373`
+API carries read entitlement on this account · **relates to** `#370`/`#373`
 
 ### What happened
 
 Between S131's close (22:59:47 EDT, 2026-09-07) and this session, a live incident ran and was never
-closed out in this repo's own docs — only on the tracker. `eaglehunt-ops#370` (filed by "marvin S31,"
+closed out in this repo's own docs — only on the tracker. `#370` (filed by "marvin S31,"
 Fable): post-case-work re-enumeration put the RTL2838 on a chipset-xHCI USB port, a configuration
 `MARVIN-DEC-0064` already established breaks this driver's hop-tracking on this board, degrading
 reception from ~19:51 ET to irregular 1–5 minute gaps. The owner's physical fix — moving the dongle
-back to the CPU-attached cluster — triggered a harder failure in flight: `eaglehunt-ops#373`, filed
+back to the CPU-attached cluster — triggered a harder failure in flight: `#373`, filed
 by whichever session responded to the move, records the container's `/dev/bus/usb` view going stale
 and `rtldavis` crash-looping with **zero** archive records for ~71 minutes (22:31–23:42 EDT by the
 tracker's own account). Neither issue got a matching `DATA_ERRATA.md`/`DECISIONS.md` entry, and
@@ -10345,7 +10345,7 @@ here; the tracker figure was a log-read estimate).
 
 ### What this does NOT do
 
-Does not fix `eaglehunt-ops#373` (`weewx_monitor.py` can't distinguish a full outage from partial
+Does not fix `#373` (`weewx_monitor.py` can't distinguish a full outage from partial
 degradation) — that is a design decision on the monitor's alert classes, orthogonal to backfilling
 the data the outage cost, and stays open on the tracker. Does not re-attempt either machine history
 API a third time — two incidents now agree neither carries read entitlement on this account; a

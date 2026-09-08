@@ -483,10 +483,10 @@ problem.
 ## ERR-0008 — 2026-09-07 22:29–23:45 EDT, 76-minute reception gap, backfilled from the WeatherLink→WU path
 
 **Window:** 2026-09-07 22:29:00 → 23:45:00 EDT (76 min) · **Logged:** 2026-09-08 (S132)
-**Cause:** not a sensor or decode fault. `eaglehunt-ops#370`: marvin's post-case-work re-enumeration
+**Cause:** not a sensor or decode fault. `#370`: marvin's post-case-work re-enumeration
 put the RTL2838 on a chipset-xHCI port (`MARVIN-DEC-0064` — every such port on this board breaks
 hop-tracking), degrading reception from ~19:51 ET. The owner's physical fix (moving the dongle back
-to the CPU-attached cluster) caused a harder failure while in flight — `eaglehunt-ops#373`: the
+to the CPU-attached cluster) caused a harder failure while in flight — `#373`: the
 container's `/dev/bus/usb` view went stale and `rtldavis` crash-looped with **zero** archive records
 for the full window, confirmed against the archive itself (last real record 22:29:00 — already
 `outTemp = NULL`, the tail of the degradation — next real record 23:45:00, cleanly bracketing the gap
@@ -528,7 +528,7 @@ no login required) per that erratum's own recommendation.
 54–55 °F, humidity 76–82%, wind ≤2 mph gust from N/W, pressure steady 30.24–30.25 inHg, zero rain,
 zero solar (fully overnight). Same featureless-night character as ERR-0003 and ERR-0005's gaps.
 
-**Not addressed here, left to `eaglehunt-ops#373`:** whether `weewx_monitor.py` should escalate its
+**Not addressed here, left to `#373`:** whether `weewx_monitor.py` should escalate its
 alert class when a fully-down condition is distinguishable from partial degradation — that's a
 design decision on the monitor itself, orthogonal to this backfill, and still open on the tracker.
 
