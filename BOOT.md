@@ -53,11 +53,11 @@ session — DEC-0150. Limbs 2/3 were already closed. ops#272's weewx row is now 
    `docs/ARCHITECTURE.md` mount table still NAS-pathed (S30) · `CHANGELOG.md` archive rollup
    overdue — S122 and earlier still inline, past the ~3-session guideline (pre-existing debt,
    carried again, one session closer).
-7. **`ops/soak_check.sh` still NAS-hardwired**, same root cause ops#250/ops#286 were — not yet filed
-   as its own tracker item (do that, or fold into ops#286, before picking it up). `campaign_analyze.py`'s
-   port (S127, PR #360) is the template: two clean `marvinctl` calls replaced a whole ssh round-trip;
-   `soak_check.sh` is shaped differently (a dozen live checks, remote awk log-windowing) and will
-   need its own design pass, not a copy.
+7. **`ops/soak_check.sh` still NAS-hardwired** — now filed as its own item,
+   [ops#287](https://github.com/WeatheredScientist/eaglehunt-ops/issues/287) (S130), cross-linked
+   from ops#286. `campaign_analyze.py`'s port (S127, PR #360) is the template: two clean `marvinctl`
+   calls replaced a whole ssh round-trip; `soak_check.sh` is shaped differently (a dozen live checks,
+   remote awk log-windowing) and will need its own design pass, not a copy.
 8. **Now that a real `dev` checkout exists on marvin, revisit whether `ops/soak_check.sh` and other
    still-NAS/ssh-hardwired tooling could instead run via `marvinctl exec-ro`** the way
    `campaign_analyze.py` (DEC-0148) does — worth a look before designing job 7's fix from scratch.
@@ -75,7 +75,7 @@ session — DEC-0150. Limbs 2/3 were already closed. ops#272's weewx row is now 
 | GitHub Releases | v2.0.12–v2.0.16 backfilled, live (#331 closed, DEC-0145) |
 | Git | S129: docs-only changes (PR #364 merged; the `weewx_monitor.py` reconciliation is a prod-tree action, no repo code) |
 | Tenant tree | **Real `git` checkout as of S129** — `/srv/docker/weewx` on `dev`, `origin` = SSH deploy-key URL, `marvinctl --tenant weewx pull` self-service and verified. Pre-swap tree preserved intact at `/srv/docker/weewx/live-aside-20260907/` (not deleted) |
-| Trackers | repo: none open · ops: **#257 CLOSED S129 (DEC-0150)**; #272 weewx row posted S129 (staleness gate → yes); #250/#278/#275/#273/#264/#218 closed prior sessions; #286 (freeze_baseline.py) open · #110/#265/#274 (EnvironmentFile + marvin-release.sh only) open, correctly gated/deferred |
+| Trackers | repo: #337 open (REMEDY_SYSTEMCTL quoting, marvin's follow-through) · ops: **#257 CLOSED S129 (DEC-0150)**; #272 weewx row posted S129 (staleness gate → yes); #250/#278/#275/#273/#264/#218 closed prior sessions; #286 (freeze_baseline.py) open, cross-linked to new **#287 (soak_check.sh, filed S130)** · #110/#265/#274 (EnvironmentFile + marvin-release.sh only) open, correctly gated/deferred |
 
 ## Blockers
 
