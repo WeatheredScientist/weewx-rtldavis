@@ -12,86 +12,91 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S130 → S131)
+## ▶ Resume here (S131 → S132)
 
 ### What's settled (do not re-derive)
 
-**Post-hardware-install incident recovered, fixed, deployed and verified this session — DEC-0151.
-Nothing outstanding on it.**
+**The last of the NAS-ssh transport retired — DEC-0152. ops#286 and ops#287 both closed (with
+comments), both PRs merged. Nothing outstanding on the port itself.**
 
-- **Incident:** owner hardware installs required a graceful `weewx.service` stop at 17:09 EDT.
-  DEC-0150's landmine list never named `influxdb/` (not git-tracked) and a bind-mount-follows-inode
-  effect masked the gap until that stop — the first post-install boot of `weewx-influxdb.service`
-  hit empty root-owned placeholders and crash-looped. Root-caused and the store restored by the
-  marvin-side session; **verified independently here** (ownership, contents, unit state) before
-  acting on the report, per this repo's own "verify infra claims externally" rule.
-- **Recovery, self-service throughout, no Class C needed:** started `weewx-influxdb.service` (42/42
-  shards clean, all 4 buckets confirmed); backfilled the archive→Influx gap via an ad hoc
-  `marvinctl exec` into the **live** container — `exec-ro` turns out to have **no network egress at
-  all** (fine for `campaign_analyze.py`'s read-only queries, useless for a POST) — reading the
-  InfluxDB token straight out of the mounted `weewx.conf` so it never touched this session's
-  transcript. Window bounded from `weewx.log` ground truth, not the peer's estimate: last good
-  publish 17:08:00 EDT, first good-after 20:52:00 EDT — 34 records posted, verified via
-  `influx query`.
-- **Fixed `weewx_monitor.py`'s PID guard** (`weewx_monitor.py`, was crash-looping every ~15-30s since
-  19:51, alerting/watchdog dark the whole time): `os.path.exists('/proc/<pid>')` can't tell "the old
-  monitor is alive" from "some unrelated process now owns that number" — post-reboot the number
-  landed on `weewx.service`'s own docker-run process. Replaced with an `flock`-based lock (kernel
-  releases it on process exit/reboot, immune to PID reuse by construction). Green gate passed
-  (ruff/mypy/475 pytest). **PR #367 merged (0829c41), deployed via `marvinctl pull` + `restart
-  weewx-monitor.service` at 21:27:09 EDT, verified stable (same PID, no restarts) 1min16s+ post-restart,
-  `Remedy armed:` line confirmed.** Alerting/watchdog back online.
-- **`ops/soak_check.sh`'s NAS-hardwiring filed as its own item**,
-  [ops#287](https://github.com/WeatheredScientist/eaglehunt-ops/issues/287), cross-linked from
-  ops#286, PR #366 merged.
-- Full account: `docs/DECISIONS-FULL.md` DEC-0151.
+- **PR #369 (ops#286):** `ops/freeze_baseline.py` + `ops/stall_baseline.py` ported to
+  `marvinctl --tenant weewx` (`stall_baseline.py` had to move too — `freeze_baseline.py`'s own
+  `main()` calls it directly). Live-verified against marvin: 11 log files/2 episodes;
+  15,273 archive rows/44 freezes classified.
+- **PR #371 (ops#287):** `ops/soak_check.sh` fully rewritten for `marvinctl` — ~15 separate calls
+  replacing the one ssh round trip. **Fixed a real bug found along the way:** the old
+  `EXPECT_IMAGE` canary compared image TAG strings; marvin's `set-image` deploy flow runs
+  containers under a local alias tag (`marvin-live`), so a string compare would have failed
+  permanently on a healthy station — now compares image ID via `marvinctl check-image`, confirmed
+  live (`marvin-live` and `:v2.0.16` share one sha256 ID). `tests/test_soak_check.py` (not named in
+  ops#287, found broken by the transport change) rewritten around a fake `marvinctl` stub, 22 tests.
+  Live-verified against marvin: 17 passed/1 warning/1 real fail (today's own S130 deploy restarts,
+  22min apart — the script's own comment already names this as an attended-deploy false positive).
+- Both branches needed a `dev` merge mid-flight (#369 merged first; #371's branch was then behind)
+  — clean, no conflicts, different files. Green gate clean throughout (480 passed/17 skipped after
+  both merged — +5 over the S130 baseline, matching net new test count).
+- **New gotchas documented** (`docs/GOTCHAS.md` §3): `marvinctl grep` needs a whitespace-free
+  pattern (use `.` for a literal space); its exit code 1 means either zero matches or a missing
+  path, indistinguishably; `ls` takes no glob/flags; `stat`'s `Size:` line isn't column-0-anchored
+  like `Modify:` is.
+- **Live side-finding, NOT investigated this session:** `freeze_baseline.py`'s live run read
+  **4.03/day, AT RECORD MAX across every rolling window**, against DEC-0083's ~1.49/day baseline.
+  Plausible confound, not confirmed: today's own incident-driven restarts (DEC-0151's InfluxDB
+  restart, the weewx-monitor PR #367 deploy restart) are exactly the kind of unscheduled,
+  ops-triggered restart `freeze_baseline.py`'s swap classifier can't see — it only recognizes
+  `rx_experiment.sh`'s own logged swap/restore lines, not an arbitrary `marvinctl restart`/`pull`.
+  **Don't treat this as a confirmed regression; re-run after a quiet stretch (job 1 below).**
+- Ops checked `marvinctl push` (cited against ops#265 in its own `--help` text) and confirmed
+  ops#265 is already accurately tracked as "wired but unexercised" — not newly resolved, no update
+  needed there.
+- Full account: `docs/DECISIONS-FULL.md` DEC-0152.
 - **Model tier: this session ran entirely on Sonnet, no escalation.** Nothing to restore.
 
-### ▶▶ S131 JOB LIST
+### ▶▶ S132 JOB LIST
 
-1. **Fix DEC-0150's own runbook** per the marvin session's correction: derive a landmine list from
-   every unit's bind-mount sources (`grep -- '-v /srv/docker/weewx' /etc/systemd/system/weewx*.service`,
-   plus hlf-api's read-only mount of `weewx.sdb`) rather than from memory/git-tracked-file diffing
-   alone — `influxdb/` being untracked is exactly what the old method missed. Update
-   `CONSTANTS.md`'s release-mechanics section and/or `docs/CONVENTIONS.md` with this, not just BOOT.
-2. Consider porting `ops/backfill_influx.py` to run natively against marvin (NAS-path and
-   `localhost:8086` defaults, no `--dry-run`-through-marvinctl path) — this session solved one
-   incident's window with an ad hoc inline script rather than fixing the tool itself.
-3. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
+1. **Re-run `ops/freeze_baseline.py` after a quiet stretch** (no ops-driven restarts in the window)
+   to check whether the AT-RECORD-MAX reading above holds or was an artifact of today's own
+   incident/deploy activity. If it holds, root-cause; if not, no further action needed.
+2. **Fix DEC-0150's own runbook** — carried from S130, now tracked as its own item,
+   [ops#288](https://github.com/WeatheredScientist/eaglehunt-ops/issues/288) (filed by ops, not
+   this repo): derive a tree-swap restore list from every unit's bind-mount sources rather than
+   from memory/git-diffing alone.
+3. Consider porting `ops/backfill_influx.py` to run natively against marvin (NAS-path and
+   `localhost:8086` defaults) — DEC-0151 solved one incident's window with an ad hoc inline script
+   rather than fixing the tool itself; still not filed as its own tracker item.
+4. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337) and install both unit
-   changes in their next units gesture — note this is the **unit file**, a separate artifact from
-   `weewx_monitor.py` above.
-4. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`)
-   exactly as S126 left them — none are due, none are blocked on anything weewx can do alone.
-5. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
+   changes in their next units gesture.
+5. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`) exactly
+   as S126 left them — none are due, none are blocked on anything weewx can do alone.
+6. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
    repo's been dormant since 2023-12-22, don't chase it, just notice if it moves.
-6. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130 touched) ·
+7. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130 touched) ·
    `docs/ARCHITECTURE.md` mount table still NAS-pathed (S30) · `CHANGELOG.md` archive rollup
    overdue — S122 and earlier still inline, past the ~3-session guideline (pre-existing debt,
    carried again, one session closer).
-7. **Now that a real `dev` checkout exists on marvin, revisit whether `ops/soak_check.sh` and other
-   still-NAS/ssh-hardwired tooling could instead run via `marvinctl exec-ro`** — with the caveat
-   this session found: `exec-ro` has no network egress, so anything needing to reach Influx (like
-   `soak_check.sh`'s own checks might) needs the `marvinctl exec`-into-live-container path instead.
 
-### Current state (S130 close)
+### Current state (S131 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `weewx.service` running unaffected throughout this incident (the incident was `weewx-influxdb.service` and `weewx-monitor.service`, not the main container). `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986) since DEC-0147 |
-| InfluxDB | marvin, `weewx-influxdb.service` — was down 20:09:20→20:53:19 EDT 09-07 (this incident), restarted and verified clean; gap 17:09→20:52 backfilled (34 records, DEC-0151) |
-| weewx-monitor | **Fixed and deployed** — flock-based lock replacing the PID-reuse-vulnerable guard, PR #367 merged, live since 21:27:09 EDT 09-07, stable, no restarts, alerting/watchdog back online |
-| Reception | unchanged this session — 100% mean through S126's last read; watch continues |
+| Prod | marvin, `weewx.service` unaffected this session (no code touched what's actually running — this session ported tooling, not the driver/monitor). `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986) since DEC-0147 |
+| InfluxDB | marvin, `weewx-influxdb.service` — unchanged this session, healthy since DEC-0151's S130 recovery |
+| weewx-monitor | unchanged this session — flock-based lock (PR #367) still live and stable |
+| Reception | unchanged this session — watch continues; see the freeze-rate side-finding above for a related but distinct signal |
 | Foundation | fully decommissioned (unchanged) |
-| `main`/`dev` | S130: PR #366 (ops#287 filing) + PR #367 (DEC-0151/pidfile fix) both merged — `dev` at `0829c41`. `main` still weeks behind, unpromoted |
+| `main`/`dev` | S131: PR #369 (ops#286/DEC-0152) + PR #371 (ops#287/DEC-0152) both merged — `dev` at `26ff355`. `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged this session |
 | GitHub Releases | unchanged this session |
-| Tenant tree | unchanged this session — real `git` checkout since S129, `marvinctl pull` self-service, now at `dev`'s tip (`0829c41`) |
-| Trackers | repo: #337 open (unchanged) · ops: #287 filed S130 (soak_check.sh), cross-linked to #286 · #286/#265/#110 open, correctly gated/deferred |
+| Tenant tree | unchanged this session — real `git` checkout since S129, `marvinctl pull` self-service |
+| Trackers | repo: #337 open (unchanged, marvin's file to fix) · ops: #286/#287 **closed this session** · #288 (new, ops-filed) open · #265/#110 open, correctly gated/deferred |
 
 ## Blockers
 
-1. **weewx process freezes — 1.31/day, median 240 s (DEC-0088-corrected).** Root cause unproven.
+1. **weewx process freezes — was 1.31/day median 240s (DEC-0088); a live `freeze_baseline.py` read
+   this session showed 4.03/day AT RECORD MAX, plausibly confounded by today's own ops-driven
+   restarts (see job 1 above).** Root cause unproven either way — don't treat the new figure as
+   confirmed without a quiet-window re-read.
 2. **RF-dead episode root cause unknown** (DEC-0081) — first clean post-fix baseline read taken
    S126 (100% mean, zero episodes observed yet); watch continues, re-read after a longer stretch.
 3. **ERR-0005** — unchanged.
@@ -99,27 +104,21 @@ Nothing outstanding on it.**
 
 ## Model tier
 
-**Floor confirmed restored, no action needed.** S130 ran entirely on Sonnet, no `/model` switch.
+**Floor confirmed restored, no action needed.** S131 ran entirely on Sonnet, no `/model` switch.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
-any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). **New this session:**
-a bind mount follows the inode, not the path — a directory move after a container starts is
-invisible to it until the next restart, and an untracked (non-git) directory won't show up in a
-SHA-diff landmine sweep. Also: `marvinctl exec-ro` has no network egress at all; `marvinctl exec`
-into the live container does.
+any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). **New this
+session:** `marvinctl grep`/`ls`/`stat` each have a sharp edge (whitespace-free patterns, no glob,
+`Size:`'s indentation) — see §3's new bullet before writing another `marvinctl`-based tool.
 
-_Last updated: 2026-09-07 (S130, ~21:30 ET). Session summary: filed ops#287 (soak_check.sh
-NAS-hardwiring, PR #366), then a live incident arrived via cross-session message from the
-marvin-side session — DEC-0150's landmine list had missed `influxdb/`, causing a crash loop
-discovered during owner hardware installs. Verified every claim independently via read-only
-`marvinctl` checks before acting (ownership, unit status, log evidence) rather than trusting the
-peer report outright — one peer correction (a claimed window inversion) turned out itself to be
-based on a slightly wrong log read, caught the same way. Started `weewx-influxdb.service`,
-backfilled the 17:09-20:52 EDT gap (34 records) via an ad hoc script run inside the live container
-after discovering `exec-ro` has no network path. Found and fixed `weewx_monitor.py`'s PID-reuse
-pidfile bug independently (crash-looping since 19:51, watchdog/alerting dark) — replaced with an
-flock-based lock, PR #367. Both PRs merged this session (owner-approved each time), fix deployed via
-`marvinctl pull` + `restart`, verified stable. Coordinated throughout via `send_message` to the
-marvin session per this repo's cross-repo SOP. Full account: DEC-0151._
+_Last updated: 2026-09-08 (S131, ~22:55 ET). Session summary: user asked to close out the open
+ops backlog; triaged six items, started with the two mechanical NAS-ssh ports (ops#286, ops#287)
+per user direction. Ported `freeze_baseline.py`/`stall_baseline.py` (PR #369) then, after a design
+discussion on soak_check.sh's larger scope (confirmed by testing live against marvin: the
+image-tag-vs-ID bug, the monitor-unit primitive, the windowing approach), fully rewrote
+`soak_check.sh` and its test suite (PR #371). Both merged this session (owner-approved each time);
+#371 needed a mid-flight `dev` merge after #369 landed first. Relayed status to a concurrent ops
+session via `send_message` per this repo's cross-repo SOP, including a proactive flag on ops#265
+that ops then verified and closed the loop on. Full account: DEC-0152._
