@@ -114,13 +114,19 @@ def main():
     parser.add_argument("--org", default=os.environ.get("INFLUX_ORG"),
                         help="InfluxDB org. Default is $INFLUX_ORG")
     parser.add_argument("--server-url", default=INFLUX_URL,
-                        help=f"InfluxDB base URL. Default is {INFLUX_URL} "
-                             "(the NAS venue where InfluxDB is local; override "
-                             "for a different execution host, e.g. marvin)")
+                        help=f"InfluxDB base URL. Default is {INFLUX_URL}, stale "
+                             "since the DEC-0141 InfluxDB move to marvin -- "
+                             "override explicitly for any real run. For "
+                             "self-service in-container runs, prefer "
+                             "ops/backfill_container.py instead, which reads "
+                             "this from weewx.conf automatically")
     parser.add_argument("--db-path", default=DB_PATH,
                         help=f"WeeWX sqlite archive path. Default is {DB_PATH} "
                              "(NAS-side path to marvin's archive via the "
-                             "read-only NFS overlay, DEC-0118)")
+                             "read-only NFS overlay, DEC-0118) -- this mode is "
+                             "for an external host with that overlay mounted; "
+                             "for self-service in-container runs, prefer "
+                             "ops/backfill_container.py instead")
     parser.add_argument("--start", default="2026-05-19T00:00:00",
                         help="Start datetime (local, default: 2026-05-19T00:00:00)")
     parser.add_argument("--end", default=None,
