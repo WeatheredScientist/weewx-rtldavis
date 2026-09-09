@@ -2,11 +2,10 @@
 
 **Always-load, tier 1.** What to pull on demand, and when — never read at session start. *"Working
 near it" means read it.* **Classes, not instances** (rule 9): a row names a set and its convention;
-instances self-describe at source. **A file in no class gets its own row.** *~1.18K tok vs a 1000
-cap — carried, not shaved: coverage beats cap (OPS-DEC-0101), `docs/` rows are rule 9's reserved
-exception, and the sweep matches bare filenames. See ops#158/#165. **+82 at S94** for the
-`docs/GOTCHAS.md` row — the deliberate other half of BOOT.md's diet: an unindexed artifact is a lost
-one, and 82 tokens here bought ~1,700 out of the always-load tier.*
+instances self-describe at source. **A file in no class gets its own row**; `docs/` rows are rule
+9's reserved exception, each already its own class. Priority under conflict (OPS-DEC-0101): coverage
+beats cap, classes before instances — verify current size with `boot-cap-check.sh` rather than a
+number held here. Re-collapsed for `eaglehunt-ops#306` at S136.
 
 ## Governance & history
 
@@ -28,9 +27,9 @@ one, and 82 tokens here bought ~1,700 out of the always-load tier.*
 | `docs/ARCHITECTURE.md` — ISS→RTL-SDR→driver→WeeWX→sinks, mounts, the **pyc gotcha** | touching any part of that chain |
 | `docs/INTERFACES.md` — **the data contract**, loop-JSON + InfluxDB schema | changing anything a consumer reads. The repo's real deliverable |
 | `docs/DATA_ERRATA.md` — known-bad observations, corrections (`ERR-####`) | a suspect historical reading, or a retrospective correction (DEC-0025) |
-| `CHANGES-FROM-UPSTREAM.md` — the fork's divergence (DEC-0034), one section per file. **Vendored forks:** `rtldavis.py` `influx.py` `ogoxeUploader.py` `wcloud.py`. **Ours, no upstream:** `dewpoint_service.py` `pressure_service.py` `loop_json_writer.py` `owm.py` `windy.py` | changing any of those files' behavior, or confirming whether one has an upstream to check at all; preparing an upstream PR |
-| **`weewx_monitor.py` (repo ROOT, not `ops/`) — the NAS-side daemon.** It **is** the USB watchdog (`reset_dongle`, `watchdog_stall` + escalation), the uploader alerter and the reception tracker. Runs on the NAS host, not in the container | **any "what handles X at runtime?" question — read this BEFORE concluding a capability is missing** (DEC-0074) |
-| **`ops/*` + `scripts/*` + the root-level NAS scripts (`usb_reset.sh`, `entrypoint.sh`) — the harness**, plus the runbooks `docs/CAMPAIGN-B-RUNBOOK.md` and `docs/INFLUXDB-MIGRATION.md` (the Foundation→marvin InfluxDB move, DEC-0141) | any ops task, the swap night, and the InfluxDB cutover window. **Each script's header is its manual — read it before using or extending one.** `ops/campaign_analyze.py` is the **only** sanctioned campaign readout (DEC-0069); `usb_reset.sh` runs as **root** under a path-scoped sudo grant (DEC-0075) |
+| `CHANGES-FROM-UPSTREAM.md` — the fork's divergence (DEC-0034), one section per file: every vendored-fork driver/uploader module and every our-own, no-upstream module (each section states which) | changing any such file's behavior, or confirming whether one has an upstream to check at all; preparing an upstream PR |
+| **`weewx_monitor.py` (repo ROOT, not `ops/`) — the host-side daemon.** It **is** the USB watchdog (`reset_dongle`, `watchdog_stall` + escalation), the uploader alerter and the reception tracker. Runs on the host (marvin), not in the container | **any "what handles X at runtime?" question — read this BEFORE concluding a capability is missing** (DEC-0074) |
+| **`ops/*` + `scripts/*` + the root-level NAS scripts (`usb_reset.sh`, `entrypoint.sh`) — the harness**, plus the runbooks `docs/CAMPAIGN-B-RUNBOOK.md` and `docs/INFLUXDB-MIGRATION.md` (DEC-0141) | any ops task, the swap night, and the InfluxDB cutover window. **Each script's header is its manual — read it before using or extending one.** `ops/campaign_analyze.py` is the **only** sanctioned campaign readout (DEC-0069); `usb_reset.sh` runs as **root** under a path-scoped sudo grant (DEC-0075) |
 | `README.md` · `CONTRIBUTING.md` · `SECURITY.md` · `AGENTS.md` · `LICENSE` — the public face | changing anything user-visible, handling a report, or when another agent tool is involved |
 
 ## Not in a clone, never in the load path
