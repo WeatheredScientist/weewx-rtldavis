@@ -3,7 +3,22 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-06 (S126 — **scheduled full reconciliation, tripwire fired on time**:
+**Last updated:** 2026-09-09 (S136 — **scheduled full reconciliation, tripwire fired exactly on
+time**: read every open P0–P3 item against `BOOT.md`/`DECISIONS.md`/`CHANGELOG.md` fresh this
+session rather than trusting the last pass. **Nothing stale found.** The P0 freeze-rate line
+stays at DEC-0088's 1.31/day on purpose: S131 read 4.03/day "at record max," but that reading is
+explicitly unconfirmed (confounded by that session's own restarts, plus S134/S135 each adding
+one more) and still awaits a quiet-window re-read (`BOOT.md` job 1) — carrying an unconfirmed
+number here would repeat the exact provisional-as-settled mistake this guardrail exists to catch,
+so it stays in `BOOT.md`'s job list until DEC-settled. The P0 DB-lock row is unchanged, no new
+work queued. P3's INTERFACES.md line is current through DEC-0093 — re-verified via `git log`,
+same one post-DEC-0093 edit (S124's InfluxDB-move wording) S126 already found and correctly
+excluded as infra terminology, not producer-contract progress; nothing has touched the file
+since. This session's own DEC-0196 (`ops/backfill_container.py` fixed to run self-service
+against marvin) and the `MANIFEST.md` rule-9 trim (`eaglehunt-ops#306`) both touch no P0–P3
+line, same category call as DEC-0119/DEC-0143/DEC-0144: incident-response and tooling-hygiene
+work belongs in `BOOT.md`/`CHANGELOG.md`, not the sequenced plan. Next check: S146.)
+Prior: 2026-09-06 (S126 — **scheduled full reconciliation, tripwire fired on time**:
 P1.8 closes out fully on weewx's side — the owner's tar deletion (12:36 ET, S125) and ops#260 step
 4's Foundation retirement (weewx's slice, MARVIN-DEC-0134/0135, S125) were the only items still
 open; both landed S125 but sat unmarked here. Header and last checkbox updated. Everything else —
@@ -97,11 +112,20 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S136** (~10 sessions out). If the session counter is
-  at or past S136 and this line still says S136, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106, S116 and S126 did (diff every open/pending item here
-  against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S126, 2026-09-06** — tripwire fired on time. **One stale item found and
+- **Next scheduled reconciliation check: by S146** (~10 sessions out). If the session counter is
+  at or past S146 and this line still says S146, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116, S126 and S136 did (diff every open/pending item
+  here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
+- Last full reconciliation: **S136, 2026-09-09** — tripwire fired exactly on time. **Nothing stale
+  found.** The P0 freeze line deliberately still reads DEC-0088's 1.31/day: S131's 4.03/day
+  "record max" reading remains unconfirmed (restart-confounded, watched in `BOOT.md` job 1, not
+  DEC-settled), and this guardrail's whole point is to not carry a provisional number as if
+  settled. P0 DB-lock row unchanged. P3's INTERFACES.md line re-verified via `git log` — current
+  through DEC-0093, the one later edit (S124) already correctly excluded by S126's own pass as
+  infra terminology, nothing since. This session's own DEC-0196 and the MANIFEST.md trim
+  (`eaglehunt-ops#306`) are tooling/incident-response, not P0–P3 lines, same call as DEC-0119/
+  DEC-0143/DEC-0144.
+- Prior full reconciliation: **S126, 2026-09-06** — tripwire fired on time. **One stale item found and
   fixed, nothing else stale.** P1.8's last open checkbox (Stage 3 remaining) had already landed S125
   — the owner's tar deletion and ops#260 step 4's Foundation retirement (weewx's slice) — but sat
   unmarked; checkbox and section header (🔶 IN PROGRESS → ✅ CLOSED) both updated. Everything else
