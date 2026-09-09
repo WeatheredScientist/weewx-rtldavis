@@ -10467,3 +10467,68 @@ existing convention of hardcoded log paths/signatures elsewhere in `ops/`; box-w
 is not a `marvinctl` verb, so a new cross-tenant consumer showing up needs a human to add it. Does
 not change how a tree-swap is actually *executed* (still DEC-0149/0150's SFTP-batch shape) — this is
 a pre-flight check to run before one, not a replacement for the runbook.
+
+## DEC-0196 — `ops/backfill_container.py` fixed to actually run self-service against marvin
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-09 (S136) · **follows** DEC-0151,
+DEC-0153, DEC-0155 (the incidents that worked around this) · **fixes** `ops/backfill_container.py`
+
+### Context
+
+Three separate incidents (DEC-0151 S130, DEC-0153, and the ERR-0009 attempt near DEC-0155) each
+needed to backfill an archive→InfluxDB gap after a marvin incident, and each reimplemented the
+backfill logic ad hoc via `marvinctl --tenant weewx exec weewx-rtldavis-v2` rather than running
+either checked-in tool. Investigated why, rather than assuming: `ops/backfill_container.py`
+(existing since S16, purpose-built for exactly this in-container execution) was broken as
+committed — `INFLUX_ORG = "YOUR_INFLUX_ORG"` was a never-filled placeholder, `INFLUX_URL =
+"http://influxdb:8086"` a compose-network hostname that hasn't resolved since `docker-compose.yml`
+became decorative, and its sqlite connection opened the LIVE production archive read-write
+instead of read-only (weedb's own 30 s lock-timeout fix, DEC-0070/DEC-0071, doesn't apply to a
+separate process's own connection). `ops/backfill_influx.py`'s own defaults were merely stale
+(NAS/localhost-era), not broken outright, but it can't be run self-service from marvin regardless:
+`marvinctl` exposes no verb to run an arbitrary command on marvin's bare host — every
+network-capable tier-2 verb (`exec`, as opposed to `exec-ro`, which has no network egress) is
+scoped to a live container.
+
+### The fix
+
+Fixed `backfill_container.py` in place, verified live against the real running container
+(read-only, no secret values printed to this session's transcript during verification):
+
+- Reads `server_url`/`org`/`bucket`/`token` directly from the container's own mounted
+  `weewx.conf` (`/opt/weewx-data/weewx.conf`, confirmed live: `[[Influx]]` sits under
+  `[StdRESTful]`) via `configobj` — already a weewx dependency, confirmed importable via the
+  container's own venv (`/opt/weewx-venv/bin/python3`; the container's plain `python3` does not
+  have it). The token never has to be typed, exported, or otherwise cross a transcript
+  (MARVIN-DEC-0128's own warning against `env`/`printenv` inside `marvinctl exec`).
+- Opens the archive read-only (`file:...?mode=ro`, `uri=True`), matching
+  `backfill_influx.py`'s already-correct pattern.
+- `--start`/`--end` are now required, with no default — the committed defaults were leftover
+  one-off incident dates (2026-05-19/06-19), a footgun for a tool meant to be reusable across
+  incidents.
+- Documented the actual working invocation in the module's own docstring: `marvinctl exec`'s
+  argv must be whitespace-free tokens, so the script body is piped over stdin instead of run
+  from a mounted path:
+  `cat ops/backfill_container.py | marvinctl --tenant weewx exec weewx-rtldavis-v2 --
+  /opt/weewx-venv/bin/python3 - --start ... --end ... --dry-run`.
+
+`backfill_influx.py` is unchanged in behavior; only its docstring now says its defaults are
+stale (DEC-0141 moved InfluxDB off the NAS entirely) and points at `backfill_container.py` for
+self-service in-container runs.
+
+### Verification
+
+Live `--dry-run` against the real running container: conf auto-read, read-only connect, and
+batching all worked end to end against the real archive — 870 records found and correctly
+batched for a same-day window, zero writes (dry-run never POSTs). Full local suite green (496
+passed/17 skipped), ruff/mypy clean; no test exercises either script directly (they are
+incident-response tools, not library code, matching `ops/campaign_analyze.py`'s own class), so
+the live dry-run is the real verification here, not the test suite.
+
+### Incidental finding, filed not fixed
+
+While verifying, `marvinctl --tenant weewx conf` (whose own stated job is "config read, values
+redacted server-side") redacted `token` correctly but returned `server_url` — a real marvin LAN
+IP — in the clear. That's a heartofgold/marvinctl tooling gap, not this repo's to fix; filed as
+`eaglehunt-ops#308` with a suggested key-name-based remedy, and heartofgold's live session
+notified directly per the standing cross-repo SOP.

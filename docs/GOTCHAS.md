@@ -221,6 +221,15 @@ alone did not catch.
   `ls -la`-style output, filter filenames client-side. `stat`'s `Size:` field is indented under
   `File:` in GNU's default layout, NOT anchored at column 0 like `Modify:`/`Access:`/`Change:` are —
   an `awk '/^Size:/'` anchor silently matches nothing; use `grep -oE 'Size: [0-9]+'` instead.
+- **`marvinctl conf`'s server-side redaction covers `token`-shaped keys but not `server_url`**
+  (S136, `eaglehunt-ops#308`) — reading `[[Influx]]` via `marvinctl --tenant weewx conf <path>
+  Influx` came back with `token = <REDACTED:...>` but a real LAN IP in `server_url` unredacted,
+  reaching this session's transcript. Don't trust this command to fully protect a section with
+  more than one sensitive-shaped key; the fix is heartofgold's own tool, filed not fixed here.
+- **The container's plain `python3` lacks `configobj`** (and presumably other weewx deps) — only
+  importable via `/opt/weewx-venv/bin/python3`, the venv weewx itself runs from (S136). A one-off
+  script piped into `marvinctl exec ... -- python3` fails with `ModuleNotFoundError` on anything
+  weewx depends on; use the venv interpreter's full path instead.
 
 ## §4 Liveness and deployment — proving a thing is actually running
 

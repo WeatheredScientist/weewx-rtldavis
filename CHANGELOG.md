@@ -6,6 +6,33 @@ under [Pre-S16].
 
 ---
 
+## [S136] — 2026-09-09 — `backfill_container.py` fixed to run self-service against marvin (DEC-0196); `MANIFEST.md` trimmed (`eaglehunt-ops#306`); ROADMAP tripwire reconciliation
+
+- **`ops/backfill_container.py` fixed (DEC-0196), closing the gap behind three separate ad hoc
+  incident workarounds** (DEC-0151, DEC-0153, the ERR-0009 attempt near DEC-0155). It was broken
+  as committed — a never-filled `INFLUX_ORG` placeholder, a dead compose-network hostname, and a
+  read-write connection against the live production archive. Now reads
+  `server_url`/`org`/`bucket`/`token` straight from the container's own mounted `weewx.conf` via
+  `configobj` (the token never crosses a transcript), connects read-only, and requires
+  `--start`/`--end` instead of defaulting to stale one-off incident dates. Verified live with
+  `--dry-run` against the real running container — 870 records correctly batched, zero writes.
+  `ops/backfill_influx.py` unchanged in behavior, docstring only. PR #382.
+- **`MANIFEST.md` trimmed for `eaglehunt-ops#306`'s estate-wide tier-file sweep**: collapsed the
+  one real rule-9 violation (`CHANGES-FROM-UPSTREAM.md`'s 9 enumerated filenames → a class
+  description), dropped the header's stale S94-specific size arithmetic in favor of pointing at
+  `boot-cap-check.sh`, and fixed a stale "NAS-side daemon" reference for `weewx_monitor.py` found
+  in passing. Residual size is a coverage-beats-cap case per OPS-DEC-0101, not further
+  compressible without cutting real load-when guidance. PR #381.
+- **Incidental finding, filed not fixed:** `marvinctl conf`'s server-side redaction catches
+  `token` but not `server_url` — a real marvin LAN IP reached this session's transcript while
+  verifying the above. Filed as `eaglehunt-ops#308`; heartofgold's live session notified directly
+  per the standing cross-repo SOP.
+- **`docs/ROADMAP.md`'s own ~10-session reconciliation tripwire fired exactly on time (due "by
+  S136").** Full pass: nothing stale found. The P0 freeze-rate line deliberately still reads
+  DEC-0088's 1.31/day — S131's 4.03/day reading stays unconfirmed and un-DEC'd pending a
+  quiet-window re-read (`BOOT.md` job 1), so it belongs in `BOOT.md`, not here. P3's
+  INTERFACES.md line re-verified current through DEC-0093. Next check: S146.
+
 ## [S135] — 2026-09-09 — HeartOfGold rename sweep: repo-wide search for stale `marvin` repo/tracker references (`eaglehunt-ops#299`)
 
 - **Follow-up to the 2026-09-08 HeartOfGold bootstrap** (weewx-rtldavis#378): the marvin build repo

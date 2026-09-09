@@ -12,102 +12,121 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S135 → S136)
+## ▶ Resume here (S136 → S137)
 
 ### What's settled (do not re-derive)
 
-**`eaglehunt-ops#299`'s final open item — the repo-wide sweep for stale `marvin`-repo references
-after the 2026-09-08 HeartOfGold merge (weewx-rtldavis#378) — done. One stale reference found and
-fixed; everything else in this repo already pointed correctly at `heartofgold`.**
+**Two independent backlog items closed this session: `ops/backfill_container.py` fixed and
+verified live (DEC-0196, BOOT job 2), and `MANIFEST.md` trimmed for `eaglehunt-ops#306`. Plus
+`docs/ROADMAP.md`'s own ~10-session reconciliation tripwire, due exactly "by S136," fired and ran
+clean.**
 
-- **Full sweep, this repo's own tooling only** (`git grep` over every tracked file outside
-  `ARCHIVE/`): searched for the old repo path (`~/Projects/marvin`, `marvin.git`), the old tracker
-  file names (marvin's `STATE.md`/`DECISIONS.md`, as distinct from this repo's own `docs/DECISIONS.md`),
-  and `marvin`+`repo` phrasing. Every other `marvin` mention in this repo (~400, across 31 files) is
-  the host/tenant name — unchanged by the rename — not the old build repo.
-- **One fix:** `docs/DECISIONS-FULL.md`'s DEC-0118 entry (dated 2026-08-28/29, provenance — not
-  rewritten) named `` `marvin` repo, `MARVIN-DEC-0062` `` as a discoverability path. Added a one-line
-  pointer note after the entry rather than editing the historical prose: the repo is now
-  `~/Projects/heartofgold`, `MARVIN-DEC-0062` now lives in `heartofgold/MARVIN-DECISIONS.md`.
-- **The estate block itself (`CLAUDE.md` "Estate context", added `#378`) was already correct** —
-  not touched, per this session's own instructions.
-- **Model tier: session inherited Fable 5.1** (desktop-app floor is inert, per `AGENT-ECONOMY.md`
-  §3 — some prior session's escalation persisted). User switched to `claude-sonnet-5` mid-session;
-  floor now correctly re-pinned at Sonnet. Nothing further to restore.
+- **`ops/backfill_container.py` (DEC-0196) — was broken as committed, not merely stale.** A
+  never-filled `INFLUX_ORG = "YOUR_INFLUX_ORG"` placeholder, a dead compose-network hostname
+  (`http://influxdb:8086`), and a read-write sqlite connection against the LIVE production
+  archive — this is why DEC-0151/DEC-0153/the ERR-0009 attempt near DEC-0155 each reimplemented
+  the backfill ad hoc rather than using either checked-in tool. Fixed to read
+  `server_url`/`org`/`bucket`/`token` from the container's own mounted `weewx.conf` via
+  `configobj` (already a weewx dependency; the container's *plain* `python3` doesn't have it —
+  needs `/opt/weewx-venv/bin/python3`), connect read-only, and require `--start`/`--end` instead
+  of defaulting to stale one-off incident dates. **Verified live with `--dry-run` against the real
+  running container**, not a mock: conf auto-read, read-only connect, batching all worked, 870
+  records correctly found for a same-day window, zero writes. PR #382, merged.
+- **`MANIFEST.md` trimmed for `eaglehunt-ops#306`'s estate-wide sweep.** Collapsed the one real
+  rule-9 violation (`CHANGES-FROM-UPSTREAM.md`'s 9 enumerated filenames → a class description),
+  dropped the header's stale S94-specific size arithmetic in favor of pointing at
+  `boot-cap-check.sh`, and fixed a stale "NAS-side daemon" reference for `weewx_monitor.py` found
+  in passing. Residual size is a coverage-beats-cap case per OPS-DEC-0101 — commented on ops#306
+  saying so. PR #381, merged.
+- **Incidental finding while verifying the above, filed not fixed:** `marvinctl conf`'s
+  server-side redaction catches `token` but not `server_url` — a real marvin LAN IP reached this
+  session's transcript. Filed `eaglehunt-ops#308`; messaged heartofgold's live session directly
+  (fix belongs there) and looped eaglehunt-ops, both per the standing cross-repo SOP. **No reply
+  from either before this closeout — job 8 below.**
+- **`docs/ROADMAP.md`'s reconciliation tripwire fired exactly on time.** Full pass, nothing stale:
+  the P0 freeze-rate line deliberately still reads DEC-0088's 1.31/day (S131's 4.03/day reading
+  stays unconfirmed/un-DEC'd pending job 1 below — carrying it here would be exactly the
+  provisional-as-settled mistake this guardrail exists to catch); P0 DB-lock row unchanged; P3's
+  INTERFACES.md line re-verified current through DEC-0093 via `git log`, nothing new since S126's
+  own pass. This session's own DEC-0196 and the MANIFEST.md trim correctly touch no P0–P3 line,
+  same call as DEC-0119/DEC-0143/DEC-0144. Next check: S146.
+- **`docs/GOTCHAS.md` §3 gained two entries**: the `marvinctl conf` redaction gap above, and that
+  the container's plain `python3` lacks `configobj` (weewx-venv's interpreter has it).
+- **Model tier: this session ran entirely on Sonnet, no escalation.** Nothing to restore.
 
-### ▶▶ S136 JOB LIST
+### ▶▶ S137 JOB LIST
 
-1. **Re-run `ops/freeze_baseline.py` after a quiet stretch** (no ops-driven restarts in the window)
-   to check whether S131's AT-RECORD-MAX reading (4.03/day vs DEC-0083's ~1.49/day baseline) holds
-   or was an artifact of incident/deploy activity — this session's own `weewx.service` restart
-   (DEC-0154) adds one more confound to wait out, not fewer. Still not re-read as of this note.
-2. Consider porting `ops/backfill_influx.py` to run natively against marvin (NAS-path and
-   `localhost:8086` defaults) — three incidents now (DEC-0151, DEC-0153, DEC-0155's sibling
-   ERR-0009 attempt) have solved this ad hoc inside the live container rather than fixing the tool
-   itself; still not filed as its own item.
-3. **`#373`** — decide whether `weewx_monitor.py` needs a distinct alert class for a
+1. **Re-run `ops/freeze_baseline.py` after a quiet stretch** (no ops-driven restarts in the
+   window) to check whether S131's AT-RECORD-MAX reading (4.03/day vs DEC-0083's ~1.49/day
+   baseline) holds or was an artifact of incident/deploy activity. Still not re-read — now the
+   subject of two full sessions' worth of carried watch (S135, S136) plus ROADMAP's own S136
+   reconciliation explicitly declining to update the P0 line until this happens.
+2. **`#373`** — decide whether `weewx_monitor.py` needs a distinct alert class for a
    full outage vs. partial degradation (filed S134/DEC-0154, not investigated further).
-4. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
+3. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337).
-5. **Whether reception at the dongle's new physical position (`5-1`) is actually better or worse
+4. **Whether reception at the dongle's new physical position (`5-1`) is actually better or worse
    than the old `7-1.2` cluster is unmeasured** — DEC-0154 fixed the crash loop, not this open
    question from #370's own original ask; needs a longer `rxCheckPercent` read once enough windows
    accumulate.
-6. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`) exactly
+5. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`) exactly
    as S126 left them — none are due, none are blocked on anything weewx can do alone.
-7. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
+6. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
    repo's been dormant since 2023-12-22, don't chase it, just notice if it moves.
-8. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130 touched) ·
+7. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130 touched) ·
    `docs/ARCHITECTURE.md` mount table still NAS-pathed (S30) · `CHANGELOG.md` archive rollup
-   overdue — S122 and earlier still inline, past the ~3-session guideline (pre-existing debt,
-   carried again, one session closer).
+   overdue — S135/S136 both still inline, past the ~3-session guideline (pre-existing debt,
+   carried again, two sessions closer).
+8. **Check for a reply from heartofgold's session or eaglehunt-ops on `eaglehunt-ops#308`**
+   (the `marvinctl conf` redaction gap) — messaged directly S136, no reply landed before this
+   closeout; fold in whatever context comes back rather than re-asking.
 
-### Current state (S135 close)
+### Current state (S136 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `weewx.service` **restarted 23:42:48 EDT 09-07 to fix the `#370` crash loop** (DEC-0154) — otherwise unaffected this session. `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986) since DEC-0147 |
+| Prod | marvin, `weewx.service` unaffected this session — no restarts, no incidents. `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986) since DEC-0147 |
 | InfluxDB | marvin, `weewx-influxdb.service` — unchanged this session |
-| weewx-monitor | unchanged this session — flock-based lock (PR #367) still live and stable; `#373`'s alert-class question still open (filed this session) |
-| Reception | **recovered 23:45:00 EDT 09-07** (DEC-0154); whether the new dongle position is better/worse than the old one is unmeasured (job 5) |
+| weewx-monitor | unchanged this session — flock-based lock (PR #367) still live and stable; `#373`'s alert-class question still open |
+| Reception | unchanged since DEC-0154's recovery; whether the new dongle position is better/worse than the old one is unmeasured (job 4) |
 | Foundation | fully decommissioned (unchanged) |
-| `main`/`dev` | S135: PR #379 (`eaglehunt-ops#299` sweep, docs-only) opened against `dev` via `land`, merge pending (owner Class C). `main` still weeks behind, unpromoted |
+| `main`/`dev` | S136: PR #381 (MANIFEST.md trim) and PR #382 (backfill_container.py fix, DEC-0196) both merged to `dev`. `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged this session |
 | GitHub Releases | unchanged this session |
 | Tenant tree | unchanged this session — real `git` checkout since S129, `marvinctl pull` self-service |
-| Trackers | repo: #337 open (marvin's file to fix) · #370 CLOSED-worthy but left to the owner/marvin to close (physical siting question, job 5) · #373 open (DEC-0154's filed monitor question) · ops: #299 commented with PR #379 this session (closing condition, pending heartofgold's REPO-NOTICES 6/6) · #265/#110 open, correctly gated/deferred |
+| Trackers | repo: #337 open (marvin's file to fix) · #370 CLOSED-worthy but left to the owner/marvin to close (physical siting question, job 4) · #373 open (DEC-0154's filed monitor question) · ops: #306 commented — weewx's row addressed (PR #381) · #308 filed this session (marvinctl redaction gap, job 8) · #265/#110 open, correctly gated/deferred |
 
 ## Blockers
 
 1. **weewx process freezes — was 1.31/day median 240s (DEC-0088); S131's live read showed 4.03/day
-   AT RECORD MAX, plausibly confounded by that session's own ops-driven restarts** — now joined by
-   this session's own restart (DEC-0154). Root cause unproven either way — re-read after a quiet
-   window (job 1 above), still not done.
+   AT RECORD MAX, plausibly confounded by that session's own ops-driven restarts** — root cause
+   unproven either way, re-read after a quiet window still not done (job 1). ROADMAP's own S136
+   reconciliation explicitly declined to update the P0 line on this unconfirmed number.
 2. **RF-dead episode root cause unknown** (DEC-0081) — first clean post-fix baseline read taken
    S126 (100% mean, zero episodes observed yet); watch continues, re-read after a longer stretch.
 3. **ERR-0005** — unchanged.
-4. **`#373`** — monitor can't distinguish full outage from partial degradation (job 3).
+4. **`#373`** — monitor can't distinguish full outage from partial degradation (job 2).
 5. 6-hourly reception email watch — unchanged since S125.
 
 ## Model tier
 
-**Floor confirmed at Sonnet, no action needed.** Session inherited Fable 5.1 (desktop-app floor is
-inert — a prior session's escalation persisted, `AGENT-ECONOMY.md` §3); user switched to
-`claude-sonnet-5` mid-session, which is both a persisting floor change and the correct floor for
-this execution work. Nothing to restore going into S136.
+**Floor confirmed at Sonnet, no action needed.** Session ran entirely on Sonnet, no `/model`
+switch. Nothing to restore going into S137.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
-any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). Nothing new filed
-this session — the sweep came back clean.
+any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). **New this
+session (§3):** `marvinctl conf`'s redaction misses `server_url`-shaped keys, and the container's
+plain `python3` lacks `configobj` — use the weewx venv interpreter.
 
-_Last updated: 2026-09-09 (S135). Session summary: follow-up to the 2026-09-08 HeartOfGold
-bootstrap (weewx-rtldavis#378, `eaglehunt-ops#299`) — swept this repo for every reference to the
-old `marvin` build-repo path and old tracker file names (`STATE.md`/`DECISIONS.md`) left behind by
-the merge into `~/Projects/heartofgold`. Found exactly one stale reference (a discoverability
-pointer inside DEC-0118's dated, provenance-protected text in `docs/DECISIONS-FULL.md`) and added a
-one-line pointer note beside it rather than rewriting history; every other `marvin` mention in this
-repo already referred to the still-current host/tenant, not the retired repo. No living doc needed
-a change — the estate block (`CLAUDE.md`, `#378`) was already correct. PR #379 opened against
-`dev` via `land`; `eaglehunt-ops#299` commented with the PR number._
+_Last updated: 2026-09-09 (S136). Session summary: fixed `ops/backfill_container.py` to actually
+run self-service against marvin (DEC-0196) after finding it was broken as committed, not merely
+stale — root-caused why three separate incidents had reimplemented the same backfill ad hoc, then
+verified the fix live with `--dry-run` against the real running container. Trimmed `MANIFEST.md`
+for `eaglehunt-ops#306`'s estate-wide tier-file sweep via genuine rule-9 collapsing. Filed
+`eaglehunt-ops#308` for a `marvinctl conf` redaction gap found while verifying, and messaged
+heartofgold's + eaglehunt-ops's live sessions directly for mutual updates. Ran `docs/ROADMAP.md`'s
+own ~10-session reconciliation pass, due exactly this session — nothing stale found, tripwire
+reset to S146. Both PRs (#381, #382) merged; green gate clean throughout (496 passed/17 skipped,
+ruff/mypy clean)._
