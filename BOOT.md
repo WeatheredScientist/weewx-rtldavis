@@ -53,6 +53,9 @@ clean.**
 - **`docs/GOTCHAS.md` §3 gained two entries**: the `marvinctl conf` redaction gap above, and that
   the container's plain `python3` lacks `configobj` (weewx-venv's interpreter has it).
 - **Model tier: this session ran entirely on Sonnet, no escalation.** Nothing to restore.
+- **Both cross-repo replies landed after the S136 closeout merge, folded into jobs 2 and 8
+  below rather than restated here** — no mid-fix owed on `#308`; marvin's new pager on
+  `weewx-monitor.service` (job 2); `#306`'s residual gaps, deferred (job 8).
 
 ### ▶▶ S137 JOB LIST
 
@@ -62,7 +65,10 @@ clean.**
    subject of two full sessions' worth of carried watch (S135, S136) plus ROADMAP's own S136
    reconciliation explicitly declining to update the P0 line until this happens.
 2. **`#373`** — decide whether `weewx_monitor.py` needs a distinct alert class for a
-   full outage vs. partial degradation (filed S134/DEC-0154, not investigated further).
+   full outage vs. partial degradation (filed S134/DEC-0154, not investigated further). **Now
+   has adjacent context, not a fix:** `weewx-monitor.service` also got a box-wide crash pager
+   this session (`weewx-rtldavis#380`) — a separate signal (unit died) from what #373 is about
+   (the monitor's own RF/reception judgment), but worth reading together when designing #373.
 3. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337).
 4. **Whether reception at the dongle's new physical position (`5-1`) is actually better or worse
@@ -77,9 +83,10 @@ clean.**
    `docs/ARCHITECTURE.md` mount table still NAS-pathed (S30) · `CHANGELOG.md` archive rollup
    overdue — S135/S136 both still inline, past the ~3-session guideline (pre-existing debt,
    carried again, two sessions closer).
-8. **Check for a reply from heartofgold's session or eaglehunt-ops on `eaglehunt-ops#308`**
-   (the `marvinctl conf` redaction gap) — messaged directly S136, no reply landed before this
-   closeout; fold in whatever context comes back rather than re-asking.
+8. **`eaglehunt-ops#306`, deferred (owner's call, S136):** another `MANIFEST.md` rule-9 pass
+   (still 823 chars over cap per `boot-cap-check.sh`) and designing `BOOT.md`'s three missing
+   "universal" sections (`## Current state`, `## Files needed at session start`, `## Style`) —
+   both measured and logged on #306 by eaglehunt-ops S47, neither started here.
 
 ### Current state (S136 close)
 
@@ -87,14 +94,14 @@ clean.**
 |---|---|
 | Prod | marvin, `weewx.service` unaffected this session — no restarts, no incidents. `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986) since DEC-0147 |
 | InfluxDB | marvin, `weewx-influxdb.service` — unchanged this session |
-| weewx-monitor | unchanged this session — flock-based lock (PR #367) still live and stable; `#373`'s alert-class question still open |
+| weewx-monitor | flock-based lock (PR #367) still live and stable; now also has marvin's box-wide crash pager (`weewx-rtldavis#380`, heartofgold, needed a `t-weewx`-specific fix to actually page); `#373`'s own alert-class question still open (job 2) |
 | Reception | unchanged since DEC-0154's recovery; whether the new dongle position is better/worse than the old one is unmeasured (job 4) |
 | Foundation | fully decommissioned (unchanged) |
 | `main`/`dev` | S136: PR #381 (MANIFEST.md trim) and PR #382 (backfill_container.py fix, DEC-0196) both merged to `dev`. `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged this session |
 | GitHub Releases | unchanged this session |
 | Tenant tree | unchanged this session — real `git` checkout since S129, `marvinctl pull` self-service |
-| Trackers | repo: #337 open (marvin's file to fix) · #370 CLOSED-worthy but left to the owner/marvin to close (physical siting question, job 4) · #373 open (DEC-0154's filed monitor question) · ops: #306 commented — weewx's row addressed (PR #381) · #308 filed this session (marvinctl redaction gap, job 8) · #265/#110 open, correctly gated/deferred |
+| Trackers | repo: #337 open (marvin's file to fix) · #370 CLOSED-worthy but left to the owner/marvin to close (job 4) · #373 open (job 2) · #380 open (marvin's pager wiring, informational) · ops: #306 residual deferred (job 8) · #308 answered, no action owed · #265/#110 correctly gated/deferred |
 
 ## Blockers
 
@@ -129,4 +136,4 @@ for `eaglehunt-ops#306`'s estate-wide tier-file sweep via genuine rule-9 collaps
 heartofgold's + eaglehunt-ops's live sessions directly for mutual updates. Ran `docs/ROADMAP.md`'s
 own ~10-session reconciliation pass, due exactly this session — nothing stale found, tripwire
 reset to S146. Both PRs (#381, #382) merged; green gate clean throughout (496 passed/17 skipped,
-ruff/mypy clean)._
+ruff/mypy clean). Two cross-repo replies landed after and are folded into jobs 2/8 above._
