@@ -7533,6 +7533,11 @@ change the adopted gain (DEC-0115's 496 stands as the last *measured* value; 372
 provisionally, pending a real re-sweep). Does not touch InfluxDB's own location — it stays NAS-hosted
 for now; only the config pointing at it moved.
 
+> **2026-09-08 pointer:** the `marvin` repo named above no longer exists as a separate checkout — it
+> merged into the estate repo at `~/Projects/heartofgold` (weewx-rtldavis#378, ops#299).
+> `MARVIN-DEC-0062` now lives in `heartofgold/MARVIN-DECISIONS.md`. See CLAUDE.md's "Estate
+> context" block.
+
 ## DEC-0119 — ops#183's Influx outage: root cause was external, the backfill tool had two real bugs, and this repo's own alerter was blind the whole time
 
 **Status:** Accepted · **Date:** 2026-08-29 (S106) · **Relates to** DEC-0118 (the migration this

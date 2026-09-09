@@ -6,6 +6,25 @@ under [Pre-S16].
 
 ---
 
+## [S135] — 2026-09-09 — HeartOfGold rename sweep: repo-wide search for stale `marvin` repo/tracker references (`eaglehunt-ops#299`)
+
+- **Follow-up to the 2026-09-08 HeartOfGold bootstrap** (weewx-rtldavis#378): the marvin build repo
+  merged into the estate repo at `~/Projects/heartofgold` — `~/Projects/marvin` → `~/Projects/heartofgold`,
+  marvin's `STATE.md`/`DECISIONS.md` → `heartofgold/MARVIN-STATE.md`/`MARVIN-DECISIONS.md`, the NAS
+  mirror `marvin.git` → `heartofgold.git` (frozen at `a63bc5c` as archive). `ops#299`'s last comment
+  named the sweep of everything *else* pointing at the old names as the final open item — nobody
+  outside a weewx session can grep this repo.
+- **Full sweep result: one stale reference found**, everything else checked (`~/Projects/marvin`,
+  bare `marvin`+`STATE.md`/`DECISIONS.md` adjacency, `marvin.git`, `marvin`+`repo` phrasing, `marvin`
+  host-config paths) across every tracked file outside `ARCHIVE/` — every other `marvin` mention in
+  this repo is the host/tenant name, unchanged by the rename, not the old repo. `docs/DECISIONS-FULL.md`'s
+  DEC-0118 entry (dated, 2026-08-28/29 — provenance, not rewritten) named `` `marvin` repo,
+  `MARVIN-DEC-0062` `` as a discoverability path; added a one-line pointer note after the entry rather
+  than editing the historical text, per this session's own instructions.
+- **No living doc (`CLAUDE.md`, `CONSTANTS.md`, `MANIFEST.md`, `BOOT.md`, `README.md`, runbooks,
+  `ops/`/`scripts/`/`tests/` code and comments) carried a stale path** — the estate block landed
+  correctly at `#378` and nothing else in this repo had drifted.
+
 ## [S134] — 2026-09-08 — `#370` outage diagnosed + fixed (DEC-0154); `eaglehunt-ops#288` closed with `ops/tenant_mounts.py` (DEC-0155)
 
 - **`#370`/`#373` — the reception-outage crash loop diagnosed and fixed, not just tracked.** The
