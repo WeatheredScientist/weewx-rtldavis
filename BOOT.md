@@ -71,11 +71,11 @@ fixed; everything else in this repo already pointed correctly at `heartofgold`.*
 | weewx-monitor | unchanged this session — flock-based lock (PR #367) still live and stable; `#373`'s alert-class question still open (filed this session) |
 | Reception | **recovered 23:45:00 EDT 09-07** (DEC-0154); whether the new dongle position is better/worse than the old one is unmeasured (job 5) |
 | Foundation | fully decommissioned (unchanged) |
-| `main`/`dev` | S135: PR #<PR#> (`eaglehunt-ops#299` sweep, docs-only) opened against `dev` via `land`, merge pending (owner Class C). `main` still weeks behind, unpromoted |
+| `main`/`dev` | S135: PR #379 (`eaglehunt-ops#299` sweep, docs-only) opened against `dev` via `land`, merge pending (owner Class C). `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged this session |
 | GitHub Releases | unchanged this session |
 | Tenant tree | unchanged this session — real `git` checkout since S129, `marvinctl pull` self-service |
-| Trackers | repo: #337 open (marvin's file to fix) · #370 CLOSED-worthy but left to the owner/marvin to close (physical siting question, job 5) · #373 open (DEC-0154's filed monitor question) · ops: #299 commented with PR #<PR#> this session (closing condition, pending heartofgold's REPO-NOTICES 6/6) · #265/#110 open, correctly gated/deferred |
+| Trackers | repo: #337 open (marvin's file to fix) · #370 CLOSED-worthy but left to the owner/marvin to close (physical siting question, job 5) · #373 open (DEC-0154's filed monitor question) · ops: #299 commented with PR #379 this session (closing condition, pending heartofgold's REPO-NOTICES 6/6) · #265/#110 open, correctly gated/deferred |
 
 ## Blockers
 
@@ -109,5 +109,5 @@ the merge into `~/Projects/heartofgold`. Found exactly one stale reference (a di
 pointer inside DEC-0118's dated, provenance-protected text in `docs/DECISIONS-FULL.md`) and added a
 one-line pointer note beside it rather than rewriting history; every other `marvin` mention in this
 repo already referred to the still-current host/tenant, not the retired repo. No living doc needed
-a change — the estate block (`CLAUDE.md`, `#378`) was already correct. PR #<PR#> opened against
+a change — the estate block (`CLAUDE.md`, `#378`) was already correct. PR #379 opened against
 `dev` via `land`; `eaglehunt-ops#299` commented with the PR number._
