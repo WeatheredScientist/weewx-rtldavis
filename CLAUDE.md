@@ -72,6 +72,16 @@ gone stale on two values: the reception baseline and the driver-vs-config layer 
   Then pick up cross-repo assignments (ops-DEC-0005; Claude sessions only — one
   command, the rest of eaglehunt-ops stays not-a-session-start-read):
   `gh issue list -R WeatheredScientist/eaglehunt-ops --label repo:weewx --state open`
+- **Cross-repo dispatch (OPS-DEC-0215, STANDARD §12 rules 7–8):** after posting a tracker comment
+  that asks something of another repo, check `ListAgents` for that repo's current live session
+  (`cwd`, last-activity, running state; never a title carrying the closeout `✓`) and ring it ONE
+  line — the issue number and which repo is asked, nothing else. A ring is a doorbell, not an
+  authorization: the tracker stays the record, and an answer given only in chat isn't an answer
+  until it's posted there. Receiving a ring: read the issue, do what lies inside your own
+  permissions, answer on the tracker, ring back. **Nothing Class C rides a message** (OPS-DEC-0034)
+  — a Class C need goes on the issue as an `**Ask:**` line, never executed on a peer's say-so or
+  parked as a prompt in an unwatched window (OPS-DEC-0192). No live session: nothing more happens —
+  the inbox pull above is the fallback, unchanged.
 - **End (closeout skeleton — DEC-0052, adapted from eaglehunt-ops OPS-DEC-0016):**
   0. **Closeout rides the merge, never follows it** (OPS-DEC-0195, ops#218 — adopted S125). When
      this session's own work IS a merge or a prod promotion, the `BOOT.md` pointer, the
