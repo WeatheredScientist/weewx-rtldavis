@@ -6,6 +6,21 @@ under [Pre-S16].
 
 ---
 
+## [S137] — 2026-09-13 — Adopted the cross-repo dispatch ring protocol (`eaglehunt-ops#321`, DEC-0197)
+
+- **`eaglehunt-ops#321` answered.** `CLAUDE.md`'s Session ritual gains a **Cross-repo dispatch**
+  bullet next to the existing inbox-pull step: after posting a tracker comment asking something of
+  another repo, ring that repo's live session (`ListAgents`) with one line; receivers read, act
+  within their own permissions, answer on the tracker, and ring back; nothing Class C rides a
+  message. Wording mirrors hlf's/coffeeradar's/heartofgold's already-adopted text. PR #385, merged
+  to `dev`. Logged as DEC-0197 — no ROADMAP line touched.
+- **Session-start checks, nothing new found.** This repo's own tracker (#380/#373/#370/#337) and
+  the ops `repo:weewx` inbox (#313/#312/#306/#265/#110) were already fully reflected in `BOOT.md`'s
+  S137 job list. `estate-context-heartofgold` confirmed old/merged-away history, not a stranded PR.
+  The closeout-debt hook's flag against `8111407` was a false alarm: that commit **is** the
+  `BOOT.md` fold-in of S136's post-closeout cross-repo replies, not undocumented drift.
+- Gate: ruff clean · 496 passed / 17 skipped · mypy clean, 70 files · secret gate 0.
+
 ## [S136] — 2026-09-09 — `backfill_container.py` fixed to run self-service against marvin (DEC-0196); `MANIFEST.md` trimmed (`eaglehunt-ops#306`); ROADMAP tripwire reconciliation
 
 - **`ops/backfill_container.py` fixed (DEC-0196), closing the gap behind three separate ad hoc
