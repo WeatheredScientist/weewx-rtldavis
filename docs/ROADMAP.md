@@ -3,7 +3,15 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-09 (S136 — **scheduled full reconciliation, tripwire fired exactly on
+**Last updated:** 2026-09-14 (S138 — targeted line update per DEC-0057, not a full pass: the P0
+freeze-rate line's confound question is settled — DEC-0198's quiet-window re-read (`weewx.service`
+continuous since 09-07 23:42, zero restarts) found current rolling windows at 0 freezes/0.0th pct,
+and S131's 4.03/day "at record max" traced to that session's own 09-07 incident cluster; excluding
+it, the rate holds at ~1.51/day, confirming DEC-0088's 1.31/day. The line stays at DEC-0088's
+1.31/day, now reconfirmed rather than merely unrefuted. `BOOT.md` job 1 and the confound half of
+blocker 1 retired; the freeze *mechanism* itself (DEC-0068/DEC-0094) is untouched by this and
+stays open, no line here. Nothing else touched.)
+Prior: 2026-09-09 (S136 — **scheduled full reconciliation, tripwire fired exactly on
 time**: read every open P0–P3 item against `BOOT.md`/`DECISIONS.md`/`CHANGELOG.md` fresh this
 session rather than trusting the last pass. **Nothing stale found.** The P0 freeze-rate line
 stays at DEC-0088's 1.31/day on purpose: S131 read 4.03/day "at record max," but that reading is
@@ -460,6 +468,10 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       window holds 9 of 40 freezes vs 7.2 expected (P=0.29) — it explains nothing. The evening
       18:00–21:00 does carry signal (12 vs 5.0, P=0.0027), corroborating DEC-0068 rather than
       this row. Mechanism still unproven, so the gate's verdict is unchanged.**
+      **S138 (DEC-0198) re-reads clean after a genuinely quiet window (`weewx.service` up since
+      09-07 23:42, zero restarts): current rolling windows 0 freezes/0.0th pct; excluding the
+      09-07 incident day (S131's own confound while porting this script, DEC-0152), the rate
+      holds ~1.51/day, confirming DEC-0088. Mechanism still unproven — unchanged by this entry.**
       three times. **S83 (DEC-0092) adds a testable hypothesis, not a new number:** split the
       freeze timestamps by hour-of-day against the sibling tenant's nightly 00:10→~04:30
       maintenance window, which no prior analysis controlled for because nobody knew it ran. *Watchdog* — done (S63). *Metric freeze-aware* — **done

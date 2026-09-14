@@ -10574,3 +10574,46 @@ adoption across the five repos.
 
 Doc-only, no code change. Landed via PR #385 (`dev`); `**Answered:** weewx-rtldavis` posted on
 `eaglehunt-ops#321` linking it.
+
+## DEC-0198 — Freeze-rate re-read confirms DEC-0088's 1.31/day; S131's 4.03/day was that session's own confound
+
+**Status:** Accepted (measurement) · **Date:** 2026-09-14 (S138) · **confirms** DEC-0088 ·
+**retires** `BOOT.md` blocker 1 (freeze-rate half) · **relates to** DEC-0083, DEC-0085, DEC-0152
+
+### Context
+
+`BOOT.md` job 1 carried "re-run `ops/freeze_baseline.py` after a quiet stretch" since S135 —
+three sessions (S135, S136, S137) without a clean re-read, and ROADMAP.md's S136 reconciliation
+explicitly declined to update the P0 freeze-rate line on S131's unconfirmed 4.03/day "at record
+max" reading, pending exactly this.
+
+### What was checked first
+
+`marvinctl --tenant weewx unit weewx.service`, before trusting any measurement: the container has
+run continuously since 2026-09-07 23:42:48 EDT with zero restarts — a genuinely quiet window, not
+assumed. (ROADMAP's S136 text also named S134/S135 as adding further confounding restarts; the
+unit's own continuous-uptime record shows none has touched `weewx.service` since 09-07 23:42 —
+whatever those sessions restarted, it was not this unit. The direct measurement below supersedes
+the secondhand claim either way.)
+
+### The read
+
+`ops/freeze_baseline.py` over 2026-08-28 → 2026-09-14 (17.6 d, 24,750 per-minute archive rows):
+68 gaps >150s (5 RF-dead, 14 arm-swap, excluded first) leave 49 freezes. Rolling-window placement:
+current 24h/36h/48h/72h windows all read **0 freezes — 0.0th percentile of 351-399 windows,
+"unremarkable."**
+
+Of the 49, **24 cluster on 2026-09-07 14:15–22:21** — the exact day S131 ran, including one
+8580 s (2.4 h) outlier — which is also the day S131 ported this very script to `marvinctl`
+transport (DEC-0152). Excluding that one incident day: 25 freezes / ~16.6 d ≈ **1.51/day**,
+matching DEC-0088's 1.31/day and DEC-0083's 1.49/day within normal variation. Only one freeze
+since: 2026-09-11, isolated, 240 s.
+
+### Conclusion
+
+S131's 4.03/day "at record max" reading was that session's own incident/migration activity, not a
+real regression — exactly the confound `BOOT.md` job 1 was carried to check. DEC-0088's 1.31/day
+baseline holds. The deeper freeze *mechanism* stays unproven (DEC-0068/DEC-0094 — unchanged by
+this entry, a rate re-read, not a root-cause finding). `BOOT.md` blocker 1 reworded to drop the
+resolved confound and keep only the genuinely open mechanism question; ROADMAP.md's P0 line
+reconciled.
