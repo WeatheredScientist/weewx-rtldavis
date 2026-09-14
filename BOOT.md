@@ -56,7 +56,7 @@ S137-job-list items were touched — this was a fresh ask, not backlog work.
    coverage-beats-cap carry, see PR #387) — no further action expected, left open per OPS-DEC-0101
    unless a future pass finds a real instance-collapse. `#312`/`#313` fixed this session (PR #387).
 
-### Current state (S137 close)
+## Current state (S137 close)
 
 | Thing | State |
 |---|---|
@@ -93,6 +93,16 @@ switch. Nothing to restore going into S138.
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
 any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). No new entries
 this session.
+
+## Files needed at session start
+
+This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else. Everything else is pulled by name from
+`MANIFEST.md`, mid-session, when the task touches it. Full rationale: `CLAUDE.md`'s Documentation
+map (DEC-0063).
+
+## Style
+
+Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
 _Last updated: 2026-09-13 (S137). Session summary: answered `eaglehunt-ops#321` — adopted the
 owner's cross-repo dispatch ring protocol (OPS-DEC-0215) into `CLAUDE.md`'s Session ritual as a
