@@ -33,35 +33,28 @@ S137-job-list items were touched — this was a fresh ask, not backlog work.
 
 ### ▶▶ S138 JOB LIST
 
-1. **Re-run `ops/freeze_baseline.py` after a quiet stretch** (no ops-driven restarts in the
-   window) to check whether S131's AT-RECORD-MAX reading (4.03/day vs DEC-0083's ~1.49/day
-   baseline) holds or was an artifact of incident/deploy activity. Still not re-read — now three
-   full sessions' worth of carried watch (S135, S136, S137) plus ROADMAP's own S136 reconciliation
-   explicitly declining to update the P0 line until this happens.
-2. **`#373`** — decide whether `weewx_monitor.py` needs a distinct alert class for a
+1. **`#373`** — decide whether `weewx_monitor.py` needs a distinct alert class for a
    full outage vs. partial degradation (filed S134/DEC-0154, not investigated further). Adjacent
    context, not a fix: `weewx-monitor.service` also got a box-wide crash pager at S136
    (`weewx-rtldavis#380`) — a separate signal (unit died) from what #373 is about (the monitor's
    own RF/reception judgment), but worth reading together when designing #373.
-3. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
+2. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337).
-4. **Whether reception at the dongle's new physical position (`5-1`) is actually better or worse
+3. **Whether reception at the dongle's new physical position (`5-1`) is actually better or worse
    than the old `7-1.2` cluster is unmeasured** — DEC-0154 fixed the crash loop, not this open
    question from #370's own original ask; needs a longer `rxCheckPercent` read once enough windows
    accumulate.
-5. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`) exactly
+4. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`) exactly
    as S126 left them — none are due, none are blocked on anything weewx can do alone.
-6. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
+5. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
    repo's been dormant since 2023-12-22, don't chase it, just notice if it moves.
-7. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130 touched) ·
+6. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130 touched) ·
    `docs/ARCHITECTURE.md` mount table still NAS-pathed (S30) · `CHANGELOG.md` archive rollup
    overdue — S135/S136/S137 all still inline, well past the ~3-session guideline (pre-existing
    debt, carried forward again).
-8. **`eaglehunt-ops#306`, deferred (owner's call, S136), with its per-repo companions `#312`
-   (`BOOT.md` over cap) and `#313` (`MANIFEST.md` coverage gaps):** another `MANIFEST.md` rule-9
-   pass (still 823 chars over cap per `boot-cap-check.sh`) and designing `BOOT.md`'s three missing
-   "universal" sections (`## Current state`, `## Files needed at session start`, `## Style`) —
-   both measured and logged on #306 by eaglehunt-ops S47, none started here.
+7. **`eaglehunt-ops#306`'s residual MANIFEST.md cap overage** (still over its own 4000-char cap;
+   coverage-beats-cap carry, see PR #387) — no further action expected, left open per OPS-DEC-0101
+   unless a future pass finds a real instance-collapse. `#312`/`#313` fixed this session (PR #387).
 
 ## Current state (S137 close)
 
@@ -80,10 +73,10 @@ S137-job-list items were touched — this was a fresh ask, not backlog work.
 
 ## Blockers
 
-1. **weewx process freezes — was 1.31/day median 240s (DEC-0088); S131's live read showed 4.03/day
-   AT RECORD MAX, plausibly confounded by that session's own ops-driven restarts** — root cause
-   unproven either way, re-read after a quiet window still not done (job 1). ROADMAP's own S136
-   reconciliation explicitly declined to update the P0 line on this unconfirmed number.
+1. **weewx process freezes — rate confirmed 1.31/day median 240s (DEC-0088, reconfirmed DEC-0198
+   S138); root cause/mechanism still unproven** (DEC-0068/DEC-0094). S131's 4.03/day "at record
+   max" traced to that session's own 09-07 incident cluster, not a regression — no active watch on
+   the rate; re-derive only if a fresh elevated reading appears.
 2. **RF-dead episode root cause unknown** (DEC-0081) — first clean post-fix baseline read taken
    S126 (100% mean, zero episodes observed yet); watch continues, re-read after a longer stretch.
 3. **ERR-0005** — unchanged.
