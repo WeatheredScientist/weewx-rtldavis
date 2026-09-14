@@ -1125,6 +1125,30 @@ def wu_record_key(line):
     m = WU_RECORD_RE.search(line)
     return m.group(1) if m else line
 
+def classify_reception_alert(wu_period_counts):
+    """Is a sustained reception alert a FULL OUTAGE or mere degradation? (#373)
+
+    Two independent signals, either one sufficient -- cross-referenced rather
+    than trusted alone (the same shape ops/freeze_baseline.py's classify()
+    uses for RF-dead vs freeze): every window in the current sustain streak
+    saw literally zero packets, not just below WU_RF_MIN_PCT; or the driver's
+    OWN watchdog has already given up (WD['escalated'] -- a stall past
+    RESET_MAX_TRIES, or an immediate 'not running' exit). Either alone means
+    "nothing is coming back on its own without intervention"; a plain
+    below-threshold window with the driver still trying does not.
+    """
+    zero_windows = all(c == 0 for c in wu_period_counts[-WU_RF_SUSTAIN:])
+    escalated = WD['escalated']
+    if not (zero_windows or escalated):
+        return False, ''
+    reasons = []
+    if zero_windows:
+        reasons.append('zero packets in every recent window')
+    if escalated:
+        reasons.append('driver watchdog already escalated')
+    return True, '; '.join(reasons)
+
+
 def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
                             wu_in_alert, wu_alert_sent_at, wu_repeat_sent_at,
                             wu_hourly_buckets, now):
@@ -1160,23 +1184,29 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             wu_alert_sent_at = now
             wu_repeat_sent_at = now
             avg = (sum(wu_period_counts[-WU_RF_SUSTAIN:]) / (WU_RF_SUSTAIN * WU_RF_EXPECTED)) * 100
-            log(f"RECEPTION ALERT: {wu_bad_windows} consecutive windows below {WU_RF_MIN_PCT}%, avg {avg:.0f}%")
+            full_outage, reason = classify_reception_alert(wu_period_counts)
+            log(f"RECEPTION ALERT: {'FULL OUTAGE -- ' if full_outage else ''}"
+                f"{wu_bad_windows} consecutive windows below {WU_RF_MIN_PCT}%, avg {avg:.0f}%")
             episode_open(avg, now)
             send_email(
-                f"{STATION_NAME}: RF reception LOW",
-                f"WU-RF reception below {WU_RF_MIN_PCT}% for {wu_bad_windows} consecutive minutes.\n"
+                f"{STATION_NAME}: RF reception {'DOWN' if full_outage else 'LOW'}",
+                f"WU-RF reception below {WU_RF_MIN_PCT}% for {wu_bad_windows} consecutive minutes"
+                f"{f' ({reason})' if full_outage else ''}.\n"
                 f"Average over last {wu_bad_windows} windows: {avg:.0f}%\n"
                 f"Alert time: {datetime.now()}"
             )
         elif wu_in_alert and (now - wu_repeat_sent_at) >= REPEAT:
             wu_repeat_sent_at = now
             avg = (sum(wu_period_counts[-WU_RF_SUSTAIN:]) / (WU_RF_SUSTAIN * WU_RF_EXPECTED)) * 100
+            full_outage, reason = classify_reception_alert(wu_period_counts)
             episode_note_avg(avg)
             td = int(now - wu_alert_sent_at)
-            log(f"RECEPTION REPEAT: still low {avg:.0f}% after {td//60}min")
+            log(f"RECEPTION REPEAT: still {'FULL OUTAGE' if full_outage else 'low'} "
+                f"{avg:.0f}% after {td//60}min")
             send_email(
-                f"{STATION_NAME}: RF reception STILL LOW",
-                f"WU-RF reception still below {WU_RF_MIN_PCT}% — ongoing for {td//60}min.\n"
+                f"{STATION_NAME}: RF reception STILL {'DOWN' if full_outage else 'LOW'}",
+                f"WU-RF reception still below {WU_RF_MIN_PCT}% — ongoing for {td//60}min"
+                f"{f' ({reason})' if full_outage else ''}.\n"
                 f"Average over last {wu_bad_windows} windows: {avg:.0f}%\n"
                 f"As of: {datetime.now()}"
             )
