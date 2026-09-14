@@ -10617,3 +10617,59 @@ baseline holds. The deeper freeze *mechanism* stays unproven (DEC-0068/DEC-0094 
 this entry, a rate re-read, not a root-cause finding). `BOOT.md` blocker 1 reworded to drop the
 resolved confound and keep only the genuinely open mechanism question; ROADMAP.md's P0 line
 reconciled.
+
+## DEC-0199 — `weewx_monitor.py` gains a FULL OUTAGE reception alert class (#373)
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-14 (S138) · **closes** `#373` ·
+**extends** DEC-0081, DEC-0120 · **relates to** `#370`, DEC-0154
+
+### Context
+
+`#373` (filed S134/DEC-0154): during the 2026-09-07 22:31–23:42 EDT outage, `weewx_monitor.log`
+logged `WINDOW: 0/21 (0%)` and intermittent `DRIVER NOT RUNNING detected` for ~71 minutes — the
+same shape a much milder reception dip produces. `close_reception_window()`'s own alert class
+(`RECEPTION ALERT`/`STILL LOW`/email subject `RF reception LOW`) is a single below-`WU_RF_MIN_PCT`
+threshold with no severity gradient: a streak averaging 45% and a streak of literal silence read
+identically except for a number in the email body. A human or a future session skimming the log
+could not tell "getting worse" from "unaffected, still just degraded."
+
+Investigated first whether the gap was really here at all: the driver-*process* side already has
+distinct, escalating classes (DEC-0081/DEC-0120) — `watchdog_stall()` resets once then escalates,
+`watchdog_not_running()` escalates immediately, both via `send_unrecoverable_alert()`, a loud
+once-per-outage "manual intervention needed" email. That mechanism likely did fire during the
+09-07 incident. The actual gap is narrower than the issue's title suggests: it's the
+*reception-percentage* path's own alert class, not a missing escalation.
+
+### The change
+
+New `classify_reception_alert(wu_period_counts)` cross-references two independent signals, either
+sufficient alone — the same shape `ops/freeze_baseline.py`'s `classify()` uses for RF-dead vs.
+freeze (check an independent ground-truth signal, don't trust one derived metric):
+
+1. Every window in the current `WU_RF_SUSTAIN`-window streak saw literally zero packets (`all(c
+   == 0 ...)` over `wu_period_counts[-WU_RF_SUSTAIN:]`, data already being collected — no new
+   state).
+2. The driver's own watchdog has already given up (`WD['escalated']`) — a stall past
+   `RESET_MAX_TRIES`, or an immediate not-running exit.
+
+Either alone means nothing is coming back without intervention; a plain below-threshold window
+with the driver still trying does not. Wired into both the initial `RECEPTION ALERT` and the
+`REPEAT` path: log line gains a `FULL OUTAGE` prefix, email subject becomes `RF reception
+DOWN`/`STILL DOWN` instead of `LOW`/`STILL LOW`, and the body names which signal(s) fired (`zero
+packets in every recent window`, `driver watchdog already escalated`, or both). Recovery wording
+untouched — recovery is recovery regardless of how bad the alert was.
+
+### Verification
+
+10 new tests in `tests/test_reception_full_outage.py` — `close_reception_window()` had zero prior
+coverage. Covers: each signal independently, both together, one nonzero window in an otherwise
+dead streak not tripping the zero-windows path alone, the repeat path saying `STILL DOWN`, and
+recovery wording unaffected. Full suite 506 passed/17 skipped (up from 496 — the 10 new), ruff and
+mypy clean, secret gate clean. Landed via PR #389 (`dev`).
+
+### Scope
+
+Code change to `weewx_monitor.py` + tests only. **Not deployed to marvin by this entry** —
+`weewx_monitor.py` is a host-side daemon read directly off disk (`CONSTANTS.md`'s deploy-layers
+table): shipping this requires `marvinctl pull` followed by a deliberate `weewx-monitor.service`
+restart, tracked separately (`BOOT.md` job list) rather than assumed live.

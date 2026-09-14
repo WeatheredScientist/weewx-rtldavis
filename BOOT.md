@@ -33,26 +33,23 @@ S137-job-list items were touched — this was a fresh ask, not backlog work.
 
 ### ▶▶ S138 JOB LIST
 
-1. **`#373`** — decide whether `weewx_monitor.py` needs a distinct alert class for a
-   full outage vs. partial degradation (filed S134/DEC-0154, not investigated further). Adjacent
-   context, not a fix: `weewx-monitor.service` also got a box-wide crash pager at S136
-   (`weewx-rtldavis#380`) — a separate signal (unit died) from what #373 is about (the monitor's
-   own RF/reception judgment), but worth reading together when designing #373.
-2. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
-   `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337).
-3. **Whether reception at the dongle's new physical position (`5-1`) is actually better or worse
+1. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
+   `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337). Now also carries
+   `#373`'s fix (DEC-0199, PR #389) — both land on marvin together via `marvinctl pull` + a
+   deliberate `weewx-monitor.service` restart, neither live until then.
+2. **Whether reception at the dongle's new physical position (`5-1`) is actually better or worse
    than the old `7-1.2` cluster is unmeasured** — DEC-0154 fixed the crash loop, not this open
    question from #370's own original ask; needs a longer `rxCheckPercent` read once enough windows
    accumulate.
-4. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`) exactly
+3. Carry forward job 8's remaining untouched items (EnvironmentFile, `marvin-release.sh`) exactly
    as S126 left them — none are due, none are blocked on anything weewx can do alone.
-5. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
+4. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
    repo's been dormant since 2023-12-22, don't chase it, just notice if it moves.
-6. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130 touched) ·
+5. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130 touched) ·
    `docs/ARCHITECTURE.md` mount table still NAS-pathed (S30) · `CHANGELOG.md` archive rollup
    overdue — S135/S136/S137 all still inline, well past the ~3-session guideline (pre-existing
    debt, carried forward again).
-7. **`eaglehunt-ops#306`'s residual MANIFEST.md cap overage** (still over its own 4000-char cap;
+6. **`eaglehunt-ops#306`'s residual MANIFEST.md cap overage** (still over its own 4000-char cap;
    coverage-beats-cap carry, see PR #387) — no further action expected, left open per OPS-DEC-0101
    unless a future pass finds a real instance-collapse. `#312`/`#313` fixed this session (PR #387).
 
