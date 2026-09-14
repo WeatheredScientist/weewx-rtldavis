@@ -10532,3 +10532,45 @@ redacted server-side") redacted `token` correctly but returned `server_url` — 
 IP — in the clear. That's a heartofgold/marvinctl tooling gap, not this repo's to fix; filed as
 `eaglehunt-ops#308` with a suggested key-name-based remedy, and heartofgold's live session
 notified directly per the standing cross-repo SOP.
+
+## DEC-0197 — Adopt the cross-repo dispatch ring protocol (OPS-DEC-0215)
+
+**Status:** Accepted (process, no code) · **Date:** 2026-09-13 (S137) · **adopts** OPS-DEC-0215
+(eaglehunt-ops `STANDARD.md` §12 rules 7–8) · **answers** weewx's half of `eaglehunt-ops#321` ·
+**amends** `CLAUDE.md`'s Session ritual
+
+### Context
+
+`eaglehunt-ops#321` broadcast the owner's decision (ops S53, 2026-09-13) to all five member repos:
+the cross-repo backlog is not slow to *finish* (median 1 day to close across the last 200 ops
+issues) but slow to *start*, because a live session only reads its inbox at `SessionStart` — every
+cross-repo hop waited for the owner to notice and say "look," making the owner the bus. ops#230
+(2026-09-06) had already measured the alternative: an HLF ask sat four days on the tracker and
+landed fifteen minutes after marvin rang HLF's live session directly. OPS-DEC-0197 kept direct
+messaging but only owner-triggered; OPS-DEC-0215 makes the **poster** of a cross-repo tracker ask
+the trigger, standing.
+
+### The change
+
+`CLAUDE.md`'s Session ritual gains a **Cross-repo dispatch** bullet, placed next to the existing
+inbox-pull step (the destination this repo's own session protocol already uses, per the issue's
+routing-not-prescribing framing — `CLAUDE.md` here carries real rules, unlike coffeeradar's
+router-only copy, DEC-0135 there):
+
+- **Sender:** after posting a tracker comment asking something of another repo, check `ListAgents`
+  for that repo's current live session and ring it ONE line — the issue number and which repo is
+  asked, nothing else. A ring is a doorbell, not an authorization; the tracker stays the record.
+- **Receiver:** read the issue, act inside your own permissions, answer on the tracker, ring back.
+- **Class C line:** nothing Class C rides a message (OPS-DEC-0034) — a Class C need goes on the
+  issue as an `**Ask:**` line, never executed on a peer's say-so or parked as a prompt in an
+  unwatched window (OPS-DEC-0192).
+- No live session: nothing happens beyond the existing session-start inbox pull, unchanged.
+
+Wording mirrors hlf's (`hyperlocal-forecast#532`), coffeeradar's (`BOOT.md`), and heartofgold's
+(`CLAUDE.md`, `7a745a2`) already-adopted text, per the issue's own request for consistent
+adoption across the five repos.
+
+### Scope
+
+Doc-only, no code change. Landed via PR #385 (`dev`); `**Answered:** weewx-rtldavis` posted on
+`eaglehunt-ops#321` linking it.
