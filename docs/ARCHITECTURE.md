@@ -1,14 +1,18 @@
 # Architecture — weewx-rtldavis
 
 **Status:** Source of truth
-**Last updated:** 2026-07-04 (S17)
+**Last updated:** 2026-09-19 (S139) — re-verified against live marvin state after sitting untouched
+since S17; the deploy-layers table below is now a pointer to `CONSTANTS.md` rather than a second
+copy, per STANDARD rule 5 (a second copy is a defect — this one drifted to a stale NAS path across
+the DEC-0118 marvin move without anyone noticing until now).
 
 How the system is built. For the *data contract* consumers depend on, see INTERFACES.md.
 
 ## 1. The signal chain
 
 ```
-Davis 6263 VP2+ ISS  ──915 MHz FHSS──▶  RTL-SDR Blog v3 + inline LNA (bias-tee powered)
+Davis 6263 VP2+ ISS  ──915 MHz FHSS──▶  RTL-SDR Blog v3 (bias-tee-capable; LNA currently OUT,
+                                                          see CONSTANTS.md hardware timeline)
                                               │
                                               ▼
                         rtldavis (Go binary, /usr/local/bin/rtldavis)
@@ -19,7 +23,7 @@ Davis 6263 VP2+ ISS  ──915 MHz FHSS──▶  RTL-SDR Blog v3 + inline LNA (
                                          auto-appends -tf/-tr to the cmd line)
                                               │  LOOP packets (~2.5 s, METRICWX)
                                               ▼
-                                     WeeWX engine (5.3.1)
+                                     WeeWX engine (5.5.0, verified live 2026-09-19)
              ┌───────────────┬────────────────┼───────────────────┬──────────────────┐
              ▼               ▼                 ▼                   ▼                  ▼
      data_services    process_services   xtype_services   archive_services   restful_services
@@ -51,22 +55,21 @@ From `weewx.conf [Engine][Services]`:
 ## 3. Deployment: what's mounted vs baked
 
 The image is built from the `Dockerfile` (multistage Ubuntu 26.04 / Py 3.14, DEC-0002). At runtime the
-container **volume-mounts** the hot-iteration files over the baked ones (DEC-0004). The table below is
-**verified from the running container** (`docker inspect weewx-rtldavis-v2`, S30 2026-07-05), which is
-authoritative over the published `docker-compose.yml` example (they differ — see the ⚠️ note):
+container **volume-mounts** the hot-iteration files over the baked ones (DEC-0004).
 
-| Volume-mounted `:ro` (edit + clear-pyc + restart — NO rebuild) | Source path on NAS |
-|---|---|
-| `influx.py` | `/volume1/docker/weewx-rtldavis/influx.py` |
-| `loop_json_writer.py` | `/volume1/docker/weewx-rtldavis/loop_json_writer.py` |
-| `ogoxeUploader.py` | `weewx-data/bin/user/ogoxeUploader.py` |
-| `sortedcontainers/` (pip dep) | `/volume1/docker/weewx-rtldavis/sortedcontainers` |
+**The authoritative, currently-verified mount table lives in `CONSTANTS.md`'s "Deploy layers"
+section — deliberately not duplicated here (STANDARD rule 5).** A copy lived in this file through
+S138: it named NAS paths (`/volume1/docker/weewx-rtldavis/...`) that stopped being true at the
+DEC-0118 marvin move (2026-08-28/29) and nobody caught the drift for three weeks, because
+`CONSTANTS.md` had already been updated and this file hadn't. Check `CONSTANTS.md` for which layer
+wins in prod per file, current mount source paths, and the "decoy" files whose repo copy is not
+their real source.
 
 **Baked into the image (changing these requires an image REBUILD):**
 `rtldavis.py` (the driver), `dewpoint_service.py`, `owm.py`, `pressure_service.py`, `wcloud.py`,
 `windy.py`, `entrypoint.sh`.
 
-Plus bind mounts: `weewx-data/` → `/opt/weewx-data` (config, DB, skins) and `logs/` → `/var/log/weewx`.
+Plus bind mounts for config/DB/skins and logs — see `CONSTANTS.md` for current host paths.
 
 > ⚠️ **Driver is BAKED, not mounted — corrected S30 (2026-07-05).** The published `docker-compose.yml`
 > example *and* an earlier version of this table listed `rtldavis.py` as volume-mounted from
@@ -90,9 +93,13 @@ find /opt/weewx-venv -name "*.pyc" -path "*/user/*" -delete
 
 `Docker → entrypoint.sh (baked; changes need rebuild) → weewxd /data/weewx.conf`
 
-The live `entrypoint.sh` (v2.0.2): enables the RTL-SDR bias-tee for the inline LNA
-(`rtl_biast -b 1`), then launches `weewxd`. (The v2.0.1 GitHub copy pre-S16 still started `syslogd`
-and lacked the bias-tee — reconciled in S16.)
+`entrypoint.sh` reads `BIAS_TEE` (default `1`) and drives the RTL-SDR's bias-tee accordingly
+(`rtl_biast -b 1` / `-b 0`) before launching `weewxd`; the off-branch drives the tee off explicitly
+rather than relying on the power-on default, since tee state can survive a warm restart.
+**Live value is currently `BIAS_TEE=0`** (verified in the running container's env, 2026-09-19) — the
+LNA has been out of circuit since 2026-08-02 (DEC-0081/0083; see `CONSTANTS.md`'s hardware timeline).
+Re-check this directly (`marvinctl --tenant weewx inspect weewx-rtldavis-v2` → `Config.Env`) rather
+than trusting this line if the LNA is ever reinstalled.
 
 ## 5. Config vs image — what a change requires
 
@@ -126,10 +133,29 @@ backlogged; the `rw250-test` tag is a retired misnomer kept only for rollback.)*
   `strings`), so `-ppm`/`-fc` cannot be data-driven with the current binary — a source-rebuild
   investigation is backlogged (BACKLOG RF history).
 
-## 7. NAS-side (outside the container)
+## 7. Marvin-side (host, outside the container) — moved from the NAS at DEC-0118
 
-`weewx_monitor.py` runs as limited user `weewx-monitor` (RF reception tracking, WOW-BE threshold,
-daily summary email), sudo scoped to `usb_reset.sh`, credentials in gitignored `monitor.env`
-(DEC-0009). **`weewx_monitor.py` guards the dongle** — it carries `reset_dongle()`/`watchdog_stall()`
-alongside its alerting, and is the only thing that does; the standalone `usb_watchdog.sh` was a
-superseded predecessor, retired at S67 (DEC-0074). RF sweep + backfill tooling lives in `ops/`.
+`weewx_monitor.py` is a host-side daemon (not containerized), deployed as a real `dev` git checkout
+at the tenant root (`/srv/docker/weewx/`) — self-service via `marvinctl --tenant weewx pull` plus a
+**deliberate** `restart weewx-monitor.service` (a `pull` alone updates the on-disk file but not the
+running process; see `CONSTANTS.md`'s Release mechanics row). It runs as systemd unit
+`weewx-monitor.service` in `/weather.slice`, `User=t-weewx`/`Group=t-weewx` — **not** the NAS-era
+DSM-Task `weewx-monitor` user this section used to describe. Credentials
+(`ALERT_FROM`/`GMAIL_PASS`/`ALERT_TO`/`STATION_NAME`) live in gitignored `monitor.env` at the tenant
+root (DEC-0009).
+
+**`REMEDY_MODE=none` on marvin, on purpose** — the unit detects and escalates (RF reception,
+uploader alerting, input-staleness watchdog) but takes no automatic remedy action yet. The
+Foundation-era `usb_reset` remedy (`usb_reset.sh`, a driver unbind/rebind sudoers-scoped to a
+hardcoded Synology bus path) is still `weewx_monitor.py`'s own module-level default for other
+deployments, but is **not used on marvin**: its USB topology differs, and the script would either
+no-op or reset a different tenant's device (MARVIN-DEC-0051; see the unit file's own comment). The
+planned marvin remedy is a full container recreate (`restart_unit`, i.e. `weewx.service`'s own
+`docker run --rm` + `ExecStartPre=docker rm -f` cycle) via a path-scoped sudo grant
+(`sudo -n /usr/local/lib/marvin/marvin-own weewx restart weewx.service`, ops#274) — to be armed only
+once the unit has run clean through at least one full day including a log rotation and a deliberate
+restart (see the unit file's own comment for the exact bar).
+
+**`weewx_monitor.py` guards the dongle** — it carries `reset_dongle()`/`watchdog_stall()` alongside
+its alerting, and is the only thing that does; the standalone `usb_watchdog.sh` was a superseded
+predecessor, retired at S67 (DEC-0074). RF sweep + backfill tooling lives in `ops/`.
