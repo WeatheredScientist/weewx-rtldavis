@@ -12,41 +12,28 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S138 → S139)
+## ▶ Resume here (S139 → S140)
 
 ### What's settled (do not re-derive)
 
-**Four items landed: two answered a cross-session ask, two closed carried BOOT-job debt.**
+**S139 closed one job: `docs/ARCHITECTURE.md` re-verified against live marvin state (PR #392,
+job 5 from the S138 list).** Doc hadn't been touched since S17 (2026-07-04) and had drifted across
+the DEC-0118 marvin move — stale weewx version (5.3.1 → 5.5.0), stale LNA/bias-tee claim (LNA is
+out, `BIAS_TEE=0`), a NAS-pathed mount table duplicating `CONSTANTS.md`'s own (now a pointer,
+STANDARD rule 5), and a NAS-side monitor section describing a DSM-Task user that no longer exists.
+`CONSTANTS.md` itself checked out accurate — no changes needed there. Two rows stay flagged
+unverified (marvin host tool availability, `LOCAL_INFRA.md`'s marvin entry) — both need an
+interactive host shell or a secret-bearing file the read-guard rightly blocks.
 
-- **`eaglehunt-ops#306`/`#312`/`#313` fixed (PR #387).** `BOOT.md` gained its three missing
-  universal sections (`## Current state`, `## Files needed at session start`, `## Style`);
-  `MANIFEST.md` gained the coverage row for 9 repo-root WeeWX runtime modules. `#312`/`#313`
-  closed on the tracker with verified numbers. `MANIFEST.md`'s own cap stays over (4816 vs 4000
-  chars) — the new coverage row is required content; coverage-beats-cap per OPS-DEC-0101, same
-  call S136 made on this file. `#306` commented, left open on that basis. `eaglehunt-ops#265`'s
-  trigger re-confirmed unfired (no version cut pending).
-- **DEC-0198: freeze-rate re-read confirms DEC-0088's 1.31/day (PR #388).** Checked
-  `weewx.service`'s uptime first (continuous since 09-07 23:42:48 EDT, zero restarts) before
-  trusting the re-measurement. Current rolling windows: 0 freezes, 0.0th pct. S131's 4.03/day
-  traced to that session's own 09-07 incident cluster (24 of 49 freezes, one 8580s outlier) —
-  excluding it, ~1.51/day, matching baseline. Blocker 1 reworded; ROADMAP P0 line reconciled.
-- **DEC-0199: `#373` closed — FULL OUTAGE reception alert class (PR #389/#390).** The
-  driver-process side already had distinct escalating classes (DEC-0081/DEC-0120), so the real
-  gap was narrower than the issue's title. New `classify_reception_alert()` cross-references two
-  independent signals (all-zero windows, or `WD['escalated']`), either sufficient alone — same
-  shape as `freeze_baseline.py`'s RF-dead classification. 10 new tests (zero prior coverage on
-  `close_reception_window()`). **Not yet deployed to marvin** (job 1).
-- **`eaglehunt-ops#326`/`#320` answered** via cross-session ring: probed the new `marvinctl
-  notify-log weewx.service` verb (clean, "no page recorded" shape), posted verbatim, rang back.
-- **`CHANGELOG.md`'s archive rollup done** (debt carried since ~S128): S115–S135 moved verbatim to
-  `CHANGELOG-ARCHIVE.md`, header-count-verified lossless (120 before, 120 after, no dupes). Only
-  S138/S137/S136 stay inline now.
-- **Session-start checks, nothing new.** `estate-context-heartofgold`/`-2` re-confirmed
-  stale/local-only again; the closeout-debt hook fired three more times, same harmless shape each
-  time — **a BOOT.md-touching PR's own merge commit always trips this FYI once, right after; not
-  evidence of missed work.**
+**S139 ended without running its own closeout (`ops#218` closeout debt — the hook flagged it at
+S140 start).** No live/concurrent session was found holding the work; recovered here at S140 start
+per the repo's own recovery path: `CHANGELOG.md` gained the missing S139 entry, this pointer is
+rewritten in its place. This session does not write S139's own done-marker — its absence is the
+honest record. Nothing else from S139 needs recovery: PR #392 was the only change, gate was green
+before merge (per its own CI), and no DEC-worthy design call was made (a doc re-verify, not a
+decision).
 
-### ▶▶ S139 JOB LIST
+### ▶▶ S140 JOB LIST
 
 1. **Marvin's own follow-through, not weewx's action item, just watch for it:** re-vendor
    `weewx-monitor.service` from the merged `REMEDY_SYSTEMCTL` fix (issue #337) — now also carries
@@ -60,14 +47,13 @@ is a **separate repo** — don't make dashboard changes here.
    as S126 left them — none are due, none are blocked on anything weewx can do alone.
 4. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) for a maintainer reply** —
    repo's been dormant since 2023-12-22, don't chase it, just notice if it moves.
-5. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130 touched) ·
-   `docs/ARCHITECTURE.md` mount table still NAS-pathed (S30) — the other half of the old doc-debt
-   line; the `CHANGELOG.md` archive rollup half is now done (see above).
-6. **`eaglehunt-ops#306`'s residual `MANIFEST.md` cap overage** (still over its own 4000-char cap;
+5. **`eaglehunt-ops#306`'s residual `MANIFEST.md` cap overage** (still over its own 4000-char cap;
    coverage-beats-cap carry) — no further action expected unless a future pass finds a real
    instance-collapse to make.
+6. `CONSTANTS.md` infra re-verify (S105-era, still stale outside what S129/S130/S139 touched) — the
+   `docs/ARCHITECTURE.md` half of the old doc-debt line is now done (S139); this is the remainder.
 
-## Current state (S138 close)
+## Current state (S139 close)
 
 | Thing | State |
 |---|---|
@@ -76,11 +62,11 @@ is a **separate repo** — don't make dashboard changes here.
 | weewx-monitor | flock-based lock (PR #367) still live and stable; carries both the `REMEDY_SYSTEMCTL` fix and DEC-0199, neither vendored to marvin yet (job 1) |
 | Reception | unchanged since DEC-0154's recovery; whether the new dongle position is better/worse than the old one is unmeasured (job 2) |
 | Foundation | fully decommissioned (unchanged) |
-| `main`/`dev` | S138: PRs #387/#388/#389/#390 merged to `dev` (tier-file conformance, DEC-0198, DEC-0199 + writeup). `main` still weeks behind, unpromoted |
+| `main`/`dev` | S139: PR #392 merged to `dev` (`docs/ARCHITECTURE.md` re-verify). `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged this session |
 | GitHub Releases | unchanged this session |
 | Tenant tree | unchanged this session — real `git` checkout since S129, `marvinctl pull` self-service |
-| Trackers | repo: #337 open (job 1) · #370 CLOSED-worthy, left to owner/marvin (job 2) · #373 CLOSED (DEC-0199) · #380 open (marvin's pager, informational) · ops: #306 residual (job 6) · #312/#313/#265/#326/#320/#308/#321 answered |
+| Trackers | repo: #337 open (job 1) · #370 CLOSED-worthy, left to owner/marvin (job 2) · #373 CLOSED (DEC-0199) · #380 open (marvin's pager, informational) · ops: #306 residual (job 5) · #265/#110 open, both deferred-trigger, unfired · #312/#313/#326/#320/#308/#321 answered |
 
 ## Blockers
 
@@ -117,11 +103,10 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-09-14 (S138). Session summary: answered two cross-session asks from ops
-(`eaglehunt-ops#306`/`#312`/`#313`/`#265` — tier-file conformance, PR #387; `eaglehunt-ops#326`/
-`#320` — notify-log probe); closed two carried BOOT-job items (DEC-0198 freeze-rate re-read, PR
-#388; DEC-0199 `#373` full-outage alert class, PR #389/#390); rolled `CHANGELOG.md`'s ~10-session
-archive debt (S115→S135 to `CHANGELOG-ARCHIVE.md`, lossless per header-count check). Four PRs
-merged to `dev`, all green before merge, none touched `main`. Green gate clean throughout (506
-passed/17 skipped, ruff/mypy clean, secret gate 0). One process gap noted honestly rather than
-smoothed over: `#373`'s design decision should have prompted a tier-escalation call and didn't._
+_Last updated: 2026-09-20 (S140, recovering S139's closeout debt per `ops#218`). S139 summary:
+`docs/ARCHITECTURE.md` re-verified against live marvin state (BOOT job 5), PR #392 merged to `dev`,
+`main` untouched. S139 ended without running its own closeout; no live session was found holding
+that work, so S140 recovered it at session start — `CHANGELOG.md` gained the missing entry, this
+pointer rewritten, S139's own done-marker deliberately not written. Repo tracker: only #380 open
+(informational). Ops `repo:weewx` inbox: #265/#110, both deferred-trigger, neither fired — no
+action due._

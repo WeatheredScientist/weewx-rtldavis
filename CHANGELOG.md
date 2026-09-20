@@ -6,6 +6,23 @@ under [Pre-S16].
 
 ---
 
+## [S139] — 2026-09-19 — `docs/ARCHITECTURE.md` re-verified against live marvin state (BOOT job 5)
+
+- Doc hadn't been touched since S17 (2026-07-04) and had drifted across the DEC-0118 marvin move:
+  stale weewx version (5.3.1 → 5.5.0, verified live), stale LNA/bias-tee claim (LNA is out,
+  `BIAS_TEE=0`), a NAS-pathed mount table duplicating (and out of sync with) `CONSTANTS.md`'s own
+  table, and a NAS-side monitor section describing a DSM-Task user that no longer exists. Section
+  3's mount table is now a pointer to `CONSTANTS.md` instead of a second copy (STANDARD rule 5).
+  Section 7 rewritten for `weewx_monitor.py`'s current shape: `weewx-monitor.service`,
+  `User=t-weewx`, `REMEDY_MODE=none`, and why `usb_reset.sh` doesn't apply on marvin's topology.
+  `CONSTANTS.md` itself checked out accurate on everything verifiable — no changes needed there.
+  Two rows stay flagged unverified (marvin host tool availability, `LOCAL_INFRA.md`'s marvin
+  entry) — both need either an interactive host shell or reading a secret-bearing file the
+  read-guard rightly blocks. PR #392.
+- Closeout ran late (this entry + the `BOOT.md` pointer rewrite land at S140's session start,
+  per `ops#218`'s "closeout debt" recovery path — the session that did the work ended without
+  running its own closeout).
+
 ## [S138] — 2026-09-14 — Tier-file conformance (`eaglehunt-ops#312`/`#313`); freeze-rate re-read confirms DEC-0088 (DEC-0198); `#373`'s full-outage alert class (DEC-0199)
 
 - **`eaglehunt-ops#312`/`#313` fixed.** `BOOT.md` gained its three missing universal sections
