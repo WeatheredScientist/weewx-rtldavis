@@ -10771,3 +10771,77 @@ should read UV 0, including through the code-1 runs. A fraction in a dark row wo
 examined, and so would any exact 0.02/0.04, which can only mean the line isn't loaded. **Find the
 code before touching the window; never widen it into a threshold.** HLF will separately confirm
 dark hours reach the `weewx` bucket as 0 (ops#343; HLF rung 2026-09-27).
+
+---
+
+## DEC-0201 — Config backups live in `weewx-data/conf-archive/` (0700); the live conf stays 0600
+
+**Status:** Accepted (applied on marvin) · **Date:** 2026-09-27 (S142) · **applies** DEC-0012,
+DEC-0047 · **relates** DEC-0147 · **corrects** `CONSTANTS.md`'s NAS-overlay rows (MARVIN-DEC-0134)
+· **follow-up** `eaglehunt-ops#348`
+
+### Context
+
+In a `marvinctl ls` of `weewx-data`, S141 found that dated `weewx.conf` backups had built up beside
+the live conf over five months of sessions. They are copies of a credential-bearing file (DEC-0047's
+class). S142 re-checked two premises read-only before deciding what to do:
+
+- **The NAS is out of the picture.** `CONSTANTS.md` still described `/volume1/docker/weewx-rtldavis/`
+  as an NFS overlay of marvin's export. It no longer is. MARVIN-DEC-0134 retired the export on
+  2026-09-05, and S142 measured the result: `nfs-server` is disabled and inactive on marvin, the path
+  is gone from the NAS, the NAS has no NFS client mounts, and Container Manager and the
+  `/volume1/docker` weather trees were removed (archived owner-only first).
+- **On marvin, the 0750 tenant root does not limit who can read `weewx-data`.** dockerd resolves
+  bind-mount sources as root, so a container that mounts `weewx-data` sees it from the mount point
+  down, whatever the parent's mode. S142 inspected every container on marvin:
+  - `weewx-rtldavis-v2` and `weewx-influxdb` run as t-weewx.
+  - `hyperlocal-forecast-api` (995:985) mounts only `weewx-data/archive`.
+  - The dashboard's `eh-proxy` (994:984, dashboard DEC-0307) mounts **all of `weewx-data`**
+    read-only, to read two files (`loop-data.txt`, `current.json`). It reads as *other*: no userns
+    remap, no added capabilities.
+
+So file mode is the only boundary between another tenant's container and everything
+credential-bearing in `weewx-data`. The prod image's weewx 5.5.0 also has a mechanism that breaks
+that boundary on its own. `weecfg.save()` is what every conf-rewriting `weectl` command uses. It
+renames the old conf to `weewx.conf.<YYYYMMDDHHMMSS>` (`weeutil.move_with_timestamp`), then writes the
+new live conf with `shutil.copyfile`, which creates it at the process umask (0644).
+
+### Decision (owner, S142)
+
+1. **Backups of `weewx.conf`, and any other credential-bearing snapshot, live in
+   `weewx-data/conf-archive/`** (dir 0700, files 0600, owned t-weewx). They never sit in the
+   `weewx-data` top level. This was chosen over `chmod 0600` in place. Both protect equally today,
+   but archiving takes the files out of the listing another tenant sees, and it survives a later mode
+   slip on any single file.
+2. **The archive goes inside `weewx-data`, not at the tenant root.** The tenant key reaches the tree
+   only through the container's own mounts (`marvinctl exec` as 996), so a root-level folder would
+   need the owner route. It would also add nothing. The one case it covers beyond a 0700 dir, a
+   foreign container running as root, exposes the live conf anyway.
+3. **The live conf stays 0600.** After any `weectl` run that rewrites it, `chmod 0600` the live conf
+   and move the timestamped copy into `conf-archive/`. This is written into the `CONSTANTS.md`
+   live-config table and `GOTCHAS.md` §3. It is a rule, not a mechanical guard. A mode check in
+   `weewx_monitor.py` would be the mechanical version, and it is left for a later design discussion.
+4. **Narrowing `eh-proxy`'s mount is outside weewx's lane.** It is filed as `eaglehunt-ops#348`
+   for the dashboard and marvin. Single-file bind mounts don't work, because both files are written
+   by atomic rename and a single-file mount pins the old inode. The workable shape is a feed
+   subdirectory that the proxy mounts at the same `/weewx-data` target.
+5. **Credential rotation is the owner's call, separate from this entry.** The specifics are in the
+   gitignored local-infra doc (DEC-0012).
+
+### Apply
+
+At 2026-09-27 19:13:58 EDT, `marvinctl --tenant weewx exec weewx-rtldavis-v2 -- sh` ran as 996:986
+with the script on stdin. It moved 27 `weewx.conf.*` backups and one pre-S13 zip into
+`conf-archive/`. The script pinned the exact file list and aborted on any drift, leaving everything
+unmoved. A dry run against a scratch tree covered five cases: the clean run, an unlisted file, a
+missing file, a re-run, and a stray zip. The live conf wasn't touched, mtimes were kept, and
+`weewx.service` wasn't restarted.
+
+### Verification
+
+- **Host-side `marvinctl ls`:** `conf-archive` is 0700 t-weewx, no `weewx.conf.*` or `.zip` is left
+  in the top level, the live conf is 0600, and the loop feed was fresh at 19:14.
+- **Names-only sweep of `weewx-data` for world-readable files:** only stock skin/util configs, code
+  (including old driver and uploader copies in `bin/user/`), the loop feed, and archive DB backups
+  remain. Credential-shaped literal assignments counted zero in all of them except two third-party
+  extension-installer defaults, both placeholder-shaped.

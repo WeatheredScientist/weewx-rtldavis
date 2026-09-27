@@ -81,6 +81,12 @@ alone did not catch.
   were the *old*-address grep never replaced by the intended check, not proof the repoint failed.
   Never chain a verification read after a mutation with `&&`; run it as its own separate step so it
   executes regardless of the mutation's exit code, and read ITS output, not the absence of an error.
+- **In a git worktree, `check_secrets.sh` silently skips its personal-identifier check** (S142).
+  The patterns live in the gitignored `scripts/.identifiers`, and gitignored files don't follow a
+  worktree. The script then runs only its IP and credential checks, still exits 0, and prints
+  nothing. CI never has the file either. Before any commit from a worktree, run
+  `cp <main checkout>/scripts/.identifiers scripts/` (it stays gitignored). Then positive-control
+  the identifier check itself: a planted private IP only proves the IP check.
 
 ## §2 Git, PRs, and the handoff
 
@@ -204,6 +210,12 @@ alone did not catch.
   ineffective — `weewx.sdb`'s t-hlf read (MARVIN-DEC-0139) would have vanished hours after it was
   granted. Use `chmod u+w` (owner bits only) or set `g=` deliberately; check with `stat -c %a` — the
   group triad shows the mask, and a trailing `+` on `ls -l` means an ACL is present.
+- **Any `weectl` command that rewrites `weewx.conf` silently loosens it** (S142, DEC-0201). This
+  includes extension install/uninstall and station reconfigure/upgrade. `weecfg.save()` renames the
+  old conf to `weewx.conf.<YYYYMMDDHHMMSS>` beside the live one, then writes the new live conf with
+  `shutil.copyfile`, which creates it at the process umask (0644), not the 0600 it had. Both land in
+  `weewx-data`, which another tenant's container mounts and reads as *other*. After any such run,
+  `chmod 0600` the live conf and move the timestamped copy into `conf-archive/`.
 - **A SIGKILL'd root container can leave a root-owned hot `weewx.sdb-journal` that its non-root
   successor cannot open** (S126, DEC-0147): SQLite refuses to play back a hot journal it can't open
   read-write (`SQLITE_CANTOPEN`), so the DB open fails outright. On any uid transition, cut over as
