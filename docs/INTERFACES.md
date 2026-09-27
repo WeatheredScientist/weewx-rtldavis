@@ -91,6 +91,12 @@ not this repo's.
 - A field absent from the cache — never yet seen this run, **or expired** — is simply omitted;
   consumers must treat any field as possibly-missing. **A missing field means "no current value,"
   never "value unchanged."**
+- **`radiation` and `UV` read 0 in the dark because of config, not the driver (DEC-0080, DEC-0200).**
+  Each diode sensor's dark floor decodes to a small fixed code: radiation 1.758 W/m², UV 0.04 or
+  sometimes 0.02. `weewx.conf.example`'s `StdCalibrate` lines zero exactly those codes, and that
+  happens before every surface in this document (loop JSON, archive, InfluxDB, uploads). A
+  deployment without those lines emits the raw floor. On this station, rows written before each
+  line was applied still carry it: radiation before 2026-08-11, UV before 2026-09-27 17:40 ET.
 
 **Fields** (`packet_key → output_key`):
 

@@ -6,6 +6,30 @@ under [Pre-S16].
 
 ---
 
+## [S141] — 2026-09-27 — UV diode-floor correction: DEC-0080's exact-code zero extended to UV's two dark codes (DEC-0200, `eaglehunt-ops#343`)
+
+- **Checked in with ops on `#343`.** The thread had closed 23 s after the owner put the UV fix on
+  weewx. Posted the measurement and asked ops to confirm there was no later stand-down call
+  ([comment](https://github.com/WeatheredScientist/eaglehunt-ops/issues/343#issuecomment-5860016912)),
+  then rang the ops session.
+- **Measured before designing (prod archive, 08-12 → 09-27).** UV's dark floor is two codes, not
+  one: `uv_raw 2` (0.04) in 96.9% of rows, `uv_raw 1` (0.02) in 2.5%, in runs of minutes, and never
+  0 or 3. The same pass re-verified DEC-0080's solar floor as clean: one code, with `sr_raw 2` only at
+  twilight.
+- **The owner chose the two-code exact window**
+  `UV = UV if UV is None else (0 if 0.01 < UV < 0.05 else UV)` over the thread's one-code line.
+  `weewx.conf.example` carries it. The new `tests/test_diode_floor_corrections.py` pins both
+  diode-floor lines under weewx 5.5's own `StdCalibrate` eval semantics (10 tests,
+  positive-controlled).
+- **Applied live 2026-09-27 17:39:57 ET.** A container dry-run came first. The owner approved the
+  Class C root-route `sed` over the live conf and the tenant-root `.rx-baseline`; the mint was refused
+  once and succeeded on the ladder's retry. `weewx.service` restarted at 17:40:18 and booted clean.
+  The dark-hours-read-0 check is still pending (`BOOT.md` job 1).
+- Docs: DEC-0200; a `CONSTANTS.md` live-config deviations row; `docs/INTERFACES.md` now says the
+  radiation/UV dark floors are zeroed by config, with this station's apply dates.
+- Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files · secret gate 0
+  (positive-controlled).
+
 ## [S139] — 2026-09-19 — `docs/ARCHITECTURE.md` re-verified against live marvin state (BOOT job 5)
 
 - Doc hadn't been touched since S17 (2026-07-04) and had drifted across the DEC-0118 marvin move:
@@ -61,45 +85,3 @@ under [Pre-S16].
   current `dev`); the closeout-debt hook's repeated flag was the same harmless shape each time —
   a BOOT.md-content commit and its own merge commit landing "after" it.
 - Gate: ruff clean · 506 passed / 17 skipped · mypy clean, 71 files · secret gate 0.
-
-## [S137] — 2026-09-13 — Adopted the cross-repo dispatch ring protocol (`eaglehunt-ops#321`, DEC-0197)
-
-- **`eaglehunt-ops#321` answered.** `CLAUDE.md`'s Session ritual gains a **Cross-repo dispatch**
-  bullet next to the existing inbox-pull step: after posting a tracker comment asking something of
-  another repo, ring that repo's live session (`ListAgents`) with one line; receivers read, act
-  within their own permissions, answer on the tracker, and ring back; nothing Class C rides a
-  message. Wording mirrors hlf's/coffeeradar's/heartofgold's already-adopted text. PR #385, merged
-  to `dev`. Logged as DEC-0197 — no ROADMAP line touched.
-- **Session-start checks, nothing new found.** This repo's own tracker (#380/#373/#370/#337) and
-  the ops `repo:weewx` inbox (#313/#312/#306/#265/#110) were already fully reflected in `BOOT.md`'s
-  S137 job list. `estate-context-heartofgold` confirmed old/merged-away history, not a stranded PR.
-  The closeout-debt hook's flag against `8111407` was a false alarm: that commit **is** the
-  `BOOT.md` fold-in of S136's post-closeout cross-repo replies, not undocumented drift.
-- Gate: ruff clean · 496 passed / 17 skipped · mypy clean, 70 files · secret gate 0.
-
-## [S136] — 2026-09-09 — `backfill_container.py` fixed to run self-service against marvin (DEC-0196); `MANIFEST.md` trimmed (`eaglehunt-ops#306`); ROADMAP tripwire reconciliation
-
-- **`ops/backfill_container.py` fixed (DEC-0196), closing the gap behind three separate ad hoc
-  incident workarounds** (DEC-0151, DEC-0153, the ERR-0009 attempt near DEC-0155). It was broken
-  as committed — a never-filled `INFLUX_ORG` placeholder, a dead compose-network hostname, and a
-  read-write connection against the live production archive. Now reads
-  `server_url`/`org`/`bucket`/`token` straight from the container's own mounted `weewx.conf` via
-  `configobj` (the token never crosses a transcript), connects read-only, and requires
-  `--start`/`--end` instead of defaulting to stale one-off incident dates. Verified live with
-  `--dry-run` against the real running container — 870 records correctly batched, zero writes.
-  `ops/backfill_influx.py` unchanged in behavior, docstring only. PR #382.
-- **`MANIFEST.md` trimmed for `eaglehunt-ops#306`'s estate-wide tier-file sweep**: collapsed the
-  one real rule-9 violation (`CHANGES-FROM-UPSTREAM.md`'s 9 enumerated filenames → a class
-  description), dropped the header's stale S94-specific size arithmetic in favor of pointing at
-  `boot-cap-check.sh`, and fixed a stale "NAS-side daemon" reference for `weewx_monitor.py` found
-  in passing. Residual size is a coverage-beats-cap case per OPS-DEC-0101, not further
-  compressible without cutting real load-when guidance. PR #381.
-- **Incidental finding, filed not fixed:** `marvinctl conf`'s server-side redaction catches
-  `token` but not `server_url` — a real marvin LAN IP reached this session's transcript while
-  verifying the above. Filed as `eaglehunt-ops#308`; heartofgold's live session notified directly
-  per the standing cross-repo SOP.
-- **`docs/ROADMAP.md`'s own ~10-session reconciliation tripwire fired exactly on time (due "by
-  S136").** Full pass: nothing stale found. The P0 freeze-rate line deliberately still reads
-  DEC-0088's 1.31/day — S131's 4.03/day reading stays unconfirmed and un-DEC'd pending a
-  quiet-window re-read (`BOOT.md` job 1), so it belongs in `BOOT.md`, not here. P3's
-  INTERFACES.md line re-verified current through DEC-0093. Next check: S146.
