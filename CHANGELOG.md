@@ -24,7 +24,8 @@ under [Pre-S16].
 - **Applied live 2026-09-27 17:39:57 ET.** A container dry-run came first. The owner approved the
   Class C root-route `sed` over the live conf and the tenant-root `.rx-baseline`; the mint was refused
   once and succeeded on the ladder's retry. `weewx.service` restarted at 17:40:18 and booted clean.
-  The dark-hours-read-0 check is still pending (`BOOT.md` job 1).
+  First dusk verified the same evening: UV read 0.0 from 18:29 with solar ~16 W/m², where it
+  read 0.04 before the fix. The full-overnight check is `BOOT.md` job 1.
 - Docs: DEC-0200; a `CONSTANTS.md` live-config deviations row; `docs/INTERFACES.md` now says the
   radiation/UV dark floors are zeroed by config, with this station's apply dates.
 - Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files · secret gate 0

@@ -22,7 +22,8 @@ should extend to UV. Measurement showed UV's dark floor is **two** codes, not on
 (0.04) in ~97% of dark minutes and `uv_raw 1` (0.02) in ~3%, in runs; never 0 or 3. The owner chose
 the two-code exact window `UV = UV if UV is None else (0 if 0.01 < UV < 0.05 else UV)`. It is in the
 live conf, the tenant-root `.rx-baseline`, and `weewx.conf.example`, and is pinned by
-`tests/test_diode_floor_corrections.py`. History is not rewritten. **DEC-0080 was re-verified clean
+`tests/test_diode_floor_corrections.py`. History is not rewritten. **First dusk verified:** UV read
+0.0 from 18:29 with solar ~16 W/m² (0.04 before the fix). **DEC-0080 was re-verified clean
 in the same pass:** the solar floor is one code, and `sr_raw 2` appears only at twilight.
 
 **ops#343 check-in.** Ops closed the thread and withdrew its weewx ask 23 s after the owner put the
@@ -37,11 +38,13 @@ live.
 
 ### ▶▶ S142 JOB LIST
 
-1. **DEC-0200 dark-hours-read-0 verification.** Query archive rows with `radiation = 0` after
-   2026-09-27 17:41 ET for any `0 < UV < 0.05`; expect none. If one appears, find its code before
-   touching the window, and never widen it into a threshold. Also confirm Windy and WOW went back
-   to publishing: each 429'd once at 17:41, the first record after the restart. HLF will separately
-   confirm dark hours reach the `weewx` bucket as 0 (ops#343).
+1. **DEC-0200 full-overnight verification.** First dusk was already verified at S141: UV read 0.0
+   from 18:29 at ~16 W/m². Query archive rows with `radiation = 0` after 2026-09-27 17:41 ET for any
+   `0 < UV < 0.05`; expect none. **A twilight fraction such as 18:28's 0.0141 is expected**: it's a
+   transition minute averaging zeroed readings with readings ≥ 0.06. A dark fraction, or any exact
+   0.02/0.04, needs its minute examined. Find the code before touching the window; never widen it.
+   Windy/WOW's one post-restart 429 each already recovered by 18:36. HLF will separately confirm the
+   `weewx` bucket (ops#343, rung).
 2. **ops#343 follow-through.** Record ops's answer to the stand-down question, and check that the
    ops §1 row gets amended. Both are ops's to do; weewx only watches.
 3. **`#394` (surface the ISS low-battery flag `bat_iss`).** Owner-filed 2026-09-20, `tier:mid`,

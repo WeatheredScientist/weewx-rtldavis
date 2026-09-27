@@ -10758,9 +10758,16 @@ again (0.24 at 17:41:41). The first post-restart minute (17:41) archived UV/radi
 (partial interval before the ISS rotation resynced). Windy and WOW each returned one 429 on that
 record, a restart-induced post-interval reset.
 
-### Verification pending
+### Verification
 
-Dark-hours-read-0: the first evening transition after the apply should archive UV 0, not 0.02/0.04,
-once solar drops below ~35 W/m². Check archive rows with `radiation = 0` after 2026-09-27 17:41 for
-any `0 < UV < 0.05`. **If one appears, find its code before touching the window; never widen it into
-a threshold.** HLF will independently confirm dark hours reach the `weewx` bucket as 0 (ops#343).
+**First dusk verified the same evening.** UV archived 0.08 through 18:27, then **0.0 from 18:29
+onward** while solar was still ~16 W/m²; before the fix those minutes read 0.04. The one fractional
+value, 0.0141 at 18:28, is the **transition minute**: 0.08 readings averaged with zeroed ones. Post-fix,
+a LOOP value can only be 0 or ≥ 0.06, so an archive fraction in (0, 0.05) is always a minute that mixes
+the two. That happens at the edge of every dusk and dawn and is expected, not a dark code.
+
+**Still pending (`BOOT.md`): a full overnight.** Every `radiation = 0` row after 2026-09-27 17:41
+should read UV 0, including through the code-1 runs. A fraction in a dark row would need its minute
+examined, and so would any exact 0.02/0.04, which can only mean the line isn't loaded. **Find the
+code before touching the window; never widen it into a threshold.** HLF will separately confirm
+dark hours reach the `weewx` bucket as 0 (ops#343; HLF rung 2026-09-27).
