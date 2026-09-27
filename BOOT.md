@@ -27,10 +27,9 @@ live conf, the tenant-root `.rx-baseline`, and `weewx.conf.example`, and is pinn
 in the same pass:** the solar floor is one code, and `sr_raw 2` appears only at twilight.
 
 **ops#343 check-in.** Ops closed the thread and withdrew its weewx ask 23 s after the owner put the
-fix on weewx. S141 posted the measurement there and asked ops to confirm there was no later
-stand-down call; the owner's in-session approval is the go-ahead either way. Ops'
-`CONSTANTS.md` §1 "Diode dark floors" row now reads wrong in two places ("UV `uv_raw=2`", "left raw
-by choice"). Amending it is ops's job, and it was asked for on the thread.
+fix on weewx. S141 posted the measurement there. Ops answered at 5:34 PM ET: there was no later owner
+call, and its close was its own inference, now retracted. Ops **reopened #343 with `repo:weewx` so
+weewx closes it after HLF's InfluxDB confirm** (job 2), and corrected its §1 row to `uv_raw` 1–2.
 
 **The S140 list's job 1 was already done at S139:** `#337` closed 2026-09-19, and marvin's
 `weewx_monitor.py` sha equals `dev`'s tip (restarted 2026-09-18 23:13 ET). DEC-0199's alert class is
@@ -45,8 +44,10 @@ live.
    0.02/0.04, needs its minute examined. Find the code before touching the window; never widen it.
    Windy/WOW's one post-restart 429 each already recovered by 18:36. HLF will separately confirm the
    `weewx` bucket (ops#343, rung).
-2. **ops#343 follow-through.** Record ops's answer to the stand-down question, and check that the
-   ops §1 row gets amended. Both are ops's to do; weewx only watches.
+2. **Close ops#343 once HLF confirms** that dark UV reaches the `weewx` bucket as 0. Ops reopened the
+   issue with `repo:weewx` for exactly this (5:34 PM ET). Close it with a comment, never bare.
+   Ops has already confirmed there was no later owner stand-down call. Its §1 row now says
+   `uv_raw` 1–2, and ops will name DEC-0200 in it (rung 2026-09-27).
 3. **`#394` (surface the ISS low-battery flag `bat_iss`).** Owner-filed 2026-09-20, `tier:mid`,
    untriaged. Starts with the issue's own question: is `bat_iss` archived or surfaced anywhere yet?
 4. **Reception at the dongle's new position (`5-1`) vs the old `7-1.2` cluster is unmeasured.**
@@ -69,7 +70,7 @@ live.
 | Reception | unchanged since DEC-0154's recovery; new-position comparison unmeasured (job 4) |
 | `main`/`dev` | S141: DEC-0200 PR to `dev`. `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged |
-| Trackers | repo: #394 open (job 3) · #380 open (marvin's pager, informational) · ops: #343 closed, weewx comment awaiting ops (job 2) · #265/#110 deferred-trigger, unfired · #306 residual (job 7) · #344 macOS LAN heads-up (worked around, MARVIN-DEC-0179) |
+| Trackers | repo: #394 open (job 3) · #380 open (marvin's pager, informational) · ops: #343 reopened `repo:weewx`, weewx closes it after HLF's confirm (job 2) · #265/#110 deferred-trigger, unfired · #306 residual (job 7) · #344 macOS LAN heads-up (worked around, MARVIN-DEC-0179) |
 
 ## Blockers
 
