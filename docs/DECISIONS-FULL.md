@@ -10673,3 +10673,101 @@ Code change to `weewx_monitor.py` + tests only. **Not deployed to marvin by this
 `weewx_monitor.py` is a host-side daemon read directly off disk (`CONSTANTS.md`'s deploy-layers
 table): shipping this requires `marvinctl pull` followed by a deliberate `weewx-monitor.service`
 restart, tracked separately (`BOOT.md` job list) rather than assumed live.
+
+## DEC-0200 — UV diode-floor correction: DEC-0080's exact-code zero, extended to two UV codes
+
+**Status:** Accepted (config change, applied) · **Date:** 2026-09-27 (S141) · **extends** DEC-0080 ·
+**applies** DEC-0070 · **answers** `eaglehunt-ops#343`
+
+### Context
+
+`eaglehunt-ops#343` (HLF DEC-0235's UV verification): dark-hour UV reached InfluxDB as 0.04, and
+nothing in the estate corrected it. The dashboard only appeared to, because it rounds to one decimal
+at display time. The owner's physics (ops `CONSTANTS.md` §1, "Diode dark floors"): the solar and UV
+sensors are diodes with a base voltage at zero irradiance, so the dark reading is a fixed level.
+**Zero it at the source; never subtract it**, since it is not an additive offset. The thread's
+proposed line zeroed `uv_raw=2` (0.04) alone, by analogy with DEC-0080's single solar code. Ops
+closed the thread and withdrew its ask 23 s after the owner (via HLF, 5:23:32 PM ET) put the fix on
+weewx. The owner started this session for it.
+
+### Measurement (read-only, prod archive, 2026-08-12 → 09-27)
+
+The driver decodes UV as `uv_raw / 50.0` (`rtldavis.py`, message type 4), so a LOOP packet can
+only carry multiples of 0.02. Across the 30,101 dark sensor rows (`radiation = 0`):
+
+| archive UV | code | rows | share |
+|---|---|---|---|
+| 0.04 | `uv_raw 2` | 29,175 | 96.9% |
+| 0.02 | `uv_raw 1` | 758 | 2.5% |
+| 0.021–0.039 | minutes averaging codes 1 and 2 (~6 UV readings/min) | 167 | 0.6% |
+| 0.08 | one pre-sunset row (09-21 18:36) | 1 | — |
+
+- **Codes 0 and 3 never appear in dark sensor data.** The only dark 0.0 rows are ERR-0008's five
+  WU-backfilled rows (`interval = 15`).
+- **Code 1 comes in runs of minutes** (e.g. 09-26 21:58–22:03), with no temperature trend: 1.0–4.9%
+  of the rows in each 5 °F bin from 45 to 80 °F. It is still one base voltage. It just sits near the
+  1/2 quantization edge, so it can read as either code.
+- **UV holds code 2 through twilight** until solar reaches ~35 W/m², then steps to 0.06 (09-26,
+  07:15 → 07:20).
+- **DEC-0080 re-verified clean.** All 10,990 non-null 00–04 h rows have radiation 0. `sr_raw 2`
+  (3.516) shows only at 06–08 h and 17–20 h, i.e. real twilight. The solar floor really is one
+  code; the UV floor is not.
+- Davis spec sheet DS6490 (Rev. H): UV index resolution 0.1, accuracy ±5% of full scale (±0.8
+  index), 150 mV per index. Codes 1–2 (≈3–6 mV) are finer than the sensor's own rated resolution.
+
+### Decision (owner, S141)
+
+Zero exactly codes 1 and 2. This follows DEC-0080's pre-registered rule for a second code showing
+up in the dark: extend per-code, never a loose threshold:
+
+    UV = UV if UV is None else (0 if 0.01 < UV < 0.05 else UV)
+
+- **Two-code exact window.** The only representable LOOP values inside it are 0.02 and 0.04. 0 passes
+  through unchanged, and 0.06 and above are untouched. It is still exact-code zeroing, never a
+  subtraction. The one-code line (`0.03 < UV < 0.05`) was put to the owner and rejected: it leaves
+  ~3% of dark minutes at 0.02 or a fraction of it.
+- **Accepted cost.** A genuine twilight 0.02/0.04 reads 0, which is below the sensor's rated
+  resolution.
+- **Same layer, same three homes as DEC-0080.** (1) The live `weewx.conf` on marvin (the mount wins
+  in prod, DEC-0046). (2) `weewx.conf.rx-baseline` at the tenant root (a campaign
+  `restore_baseline` would otherwise wipe it; this is DEC-0080's lesson). (3) `weewx.conf.example`,
+  the versioned public artifact, now pinned by `tests/test_diode_floor_corrections.py`, which
+  evaluates both lines the way weewx 5.5's `StdCalibrate` does (`eval` with `{'math': math}`,
+  `option_as_list(value)[0]`) over every code the driver can emit. It asserts UV zeroes exactly
+  {1, 2} and radiation exactly {1}, and that neither expression contains a comma, which ConfigObj
+  would split and truncate. Positive-controlled: the one-code window fails with `{2} == {1, 2}`, and a
+  comma mutation fails 5 of 10.
+- **History is not rewritten** (DEC-0080 precedent). Rows before the apply keep 0.02/0.04 on dark
+  hours; the step change at the apply is accepted. HLF zeroes the dark code in its own verification
+  records and scores UV skill on daylight only, so it needs nothing retroactive from weewx.
+- **Scope.** LOOP packets only (weewx 5.5: with no directive, archive corrections are skipped for
+  software-generated records), so one line reaches the archive, InfluxDB (`influx.py` coerces with
+  `float()`), the loop JSON and every uploader, the same path DEC-0080 proved.
+
+### Apply
+
+Dry-run first, inside the prod container: the exact `sed` on a temp copy of the live conf. `diff`
+showed only the two inserted lines; ConfigObj parse + `compile` passed for all three corrections;
+the copy was deleted. Then, owner-approved (Class C, root route), at **2026-09-27 17:39:57 ET**:
+`ssh marvin-sudo "runuser -u t-weewx -- sed -i -e '/^ *radiation = …/a\ …comment' -e '/^ *radiation
+= …/a\ …UV line' <live weewx.conf> <tenant-root weewx.conf.rx-baseline>"`. Both files were
+verified by redacted read (`marvinctl conf … StdCalibrate`), and mode `0600 t-weewx` was preserved.
+`marvinctl --tenant weewx restart weewx.service` ran at 17:40:18. weewxd 5.5.0 was up and in the
+main packet loop at 17:40:20 with no `StdCalibrate` or other startup errors, and loop UV was flowing
+again (0.24 at 17:41:41). The first post-restart minute (17:41) archived UV/radiation as NULL
+(partial interval before the ISS rotation resynced). Windy and WOW each returned one 429 on that
+record, a restart-induced post-interval reset.
+
+### Verification
+
+**First dusk verified the same evening.** UV archived 0.08 through 18:27, then **0.0 from 18:29
+onward** while solar was still ~16 W/m²; before the fix those minutes read 0.04. The one fractional
+value, 0.0141 at 18:28, is the **transition minute**: 0.08 readings averaged with zeroed ones. Post-fix,
+a LOOP value can only be 0 or ≥ 0.06, so an archive fraction in (0, 0.05) is always a minute that mixes
+the two. That happens at the edge of every dusk and dawn and is expected, not a dark code.
+
+**Still pending (`BOOT.md`): a full overnight.** Every `radiation = 0` row after 2026-09-27 17:41
+should read UV 0, including through the code-1 runs. A fraction in a dark row would need its minute
+examined, and so would any exact 0.02/0.04, which can only mean the line isn't loaded. **Find the
+code before touching the window; never widen it into a threshold.** HLF will separately confirm
+dark hours reach the `weewx` bucket as 0 (ops#343; HLF rung 2026-09-27).
