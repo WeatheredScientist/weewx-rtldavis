@@ -87,6 +87,10 @@ alone did not catch.
   nothing. CI never has the file either. Before any commit from a worktree, run
   `cp <main checkout>/scripts/.identifiers scripts/` (it stays gitignored). Then positive-control
   the identifier check itself: a planted private IP only proves the IP check.
+- **`weewx.log` timestamps are ISO, not syslog** (S143). Lines start `2026-09-27 22:56:51,582` in
+  local time, not `Sep 27 22:56:51`. A post-restart "any errors since?" filter written in the syslog
+  shape matches nothing and reads as a clean restart. Count INFO lines through the same window
+  first; a positive count is what makes the ERROR zero mean something.
 
 ## §2 Git, PRs, and the handoff
 
@@ -147,7 +151,9 @@ alone did not catch.
   re-spell it (`Write`/`Edit` instead of a shell heredoc). **The `ssh nas` alias is genuinely
   read-only at the KEY level** (forced command, ops#82) — a refusal there is server-side, not a
   Claude guard, and is not the signal to start the mint dance; `ssh nas-admin` is the mutation-capable
-  alias that actually triggers the Class C hook.
+  alias that actually triggers the Class C hook. **S143:** `ssh -G marvin-weewx`, a local config
+  lookup that never connects, trips the marvin ssh block too. Read `HostName` from `~/.ssh/config`
+  with `awk` instead.
 - **`secret-read-guard.sh` trips every NAS `scp` deploy** (S81/S82/S82b) — settled fallback: hand the
   owner the single command, saying explicitly it runs on the Mac. It also blocks reads of any
   secret-bearing config; the `command` prefix must **lead** the whole command to bypass it, and
@@ -241,7 +247,10 @@ alone did not catch.
 - **The container's plain `python3` lacks `configobj`** (and presumably other weewx deps) — only
   importable via `/opt/weewx-venv/bin/python3`, the venv weewx itself runs from (S136). A one-off
   script piped into `marvinctl exec ... -- python3` fails with `ModuleNotFoundError` on anything
-  weewx depends on; use the venv interpreter's full path instead.
+  weewx depends on; use the venv interpreter's full path instead. **Then open the conf with
+  `interpolation=False`, as weewx does** (S143, re-hit because §3 went unread). ConfigObj's default
+  interpolation makes `.dict()` on the live conf raise `MissingInterpolationOption: asctime`, from
+  the `[Logging]` formatter's `%(asctime)s`.
 
 ## §4 Liveness and deployment — proving a thing is actually running
 

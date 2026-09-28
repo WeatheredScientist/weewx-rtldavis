@@ -12,65 +12,71 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S142 → S143)
+## ▶ Resume here (S143 → S144)
 
 ### What's settled (do not re-derive)
 
-**S142 moved every `weewx.conf` backup out of the `weewx-data` top level (DEC-0201).** They now sit
-in `weewx-data/conf-archive/` (dir 0700, files 0600), live on marvin since 2026-09-27 19:13:58 ET.
-- **Why:** `weewx-data` is bind-mounted whole into the dashboard's `eh-proxy` (994:984), which reads
-  it as *other*. File mode is the only boundary there.
-- **How:** owner-approved, one `marvinctl exec` as t-weewx. The live conf was untouched and there
-  was no restart.
-- **Standing rule:** after any `weectl` run that rewrites the conf, `chmod 0600` it and archive the
-  timestamped copy. `weecfg.save()` loosens it (`GOTCHAS.md` §3).
-- **NAS side re-verified clean.** The export was retired 2026-09-05 (MARVIN-DEC-0134), and
-  `CONSTANTS.md`'s stale overlay/Docker/rollback-host rows are corrected.
-- Specifics are in the gitignored local-infra doc. Rotation is the owner's end-of-run call.
+**S143 moved the loop feed into `weewx-data/feed/` (DEC-0202, `eaglehunt-ops#348` step 1).** It has
+been live on marvin since 2026-09-27 22:58 ET.
+- `[LoopJsonWriter]` `path`/`current_path` point at `feed/` in the live conf **and** the tenant-root
+  `weewx.conf.rx-baseline`. Both are 0600, and the pre-edit copies are in `conf-archive/`.
+- The top-level `loop-data.txt` and `current.json` are now relative symlinks into `feed/`, so
+  `eh-proxy`'s current whole-dir mount still reads live data. They are temporary; job 1 deletes
+  them.
+- Rules for `feed/` (from marvin S54) are in `CONSTANTS.md`'s deviations table. Never delete or
+  recreate it while eh-proxy runs, and only rename files into it.
+- Verified: eh-proxy served `/loopdata` 200 at 1.4 s old right after the swap. `weewx.log` showed
+  0 errors against 101 INFO lines since the restart.
 
-**DEC-0200 (S141) is confirmed on the InfluxDB side.** HLF S349 read the `weewx` bucket at UV
-exactly 0 from 18:30 ET (0.065 at 18:20 was the last daylight bin). `eaglehunt-ops#343` is closed
-with a comment. Only the archive-side overnight check is left (job 1).
+**S142's DEC-0201 is merged** (PR #396, squash `0d79daf`): conf backups live in `conf-archive/`, and
+the live conf stays 0600. **DEC-0200 is confirmed on the InfluxDB side** (HLF S349). Only its
+archive-side overnight check is left (job 2).
 
-### ▶▶ S143 JOB LIST
+### ▶▶ S144 JOB LIST
 
-1. **DEC-0200 full-overnight archive verification.** Query archive rows with `radiation = 0` after
+1. **`eaglehunt-ops#348` step 4: delete the two symlinks.** Do it only after marvin's flip (step 2)
+   and the dashboard's check (step 3) are posted on #348.
+   - Confirm the flip yourself first: `marvinctl --tenant weewx inspect eh-proxy` must show the
+     source `…/weewx-data/feed` at `/weewx-data` (it read the whole `weewx-data` at S143 close).
+   - Then, in one `marvinctl exec … -- sh`, `test -L` each name and `rm` only those two. Never
+     touch `feed/` itself.
+   - Re-read `/loopdata` through eh-proxy, post on #348, and ring marvin and the dashboard. If the
+     flip hasn't happened, do nothing: the symlinks are harmless.
+2. **DEC-0200 full-overnight archive verification.** Query archive rows with `radiation = 0` after
    2026-09-27 17:41 ET for any `0 < UV < 0.05`; expect none.
    - **A twilight fraction such as 18:28's 0.0141 is expected.** It's a transition minute that
      averages zeroed readings with readings ≥ 0.06.
+   - **Expect a NULL or partial row around 22:57.** S143's restart caused it, the same as 17:41.
+     It is not a DEC-0200 failure.
    - A dark fraction, or any exact 0.02/0.04, needs its minute examined. Find the code before
      touching the window; never widen it.
-2. **`eaglehunt-ops#348` — narrowing `eh-proxy`'s mount (dashboard + marvin own it).** weewx's
-   part comes only when they're ready: point `[LoopJsonWriter]` `path`/`current_path` at
-   `weewx-data/feed/`. That's a live-conf edit plus a restart, cut over in one window with marvin's
-   mount change. Never do it alone; `eh-proxy` would read a dead file.
 3. **`#394` (surface the ISS low-battery flag `bat_iss`).** Owner-filed 2026-09-20, `tier:mid`,
-   untriaged. Starts with the issue's own question: is `bat_iss` archived or surfaced anywhere yet?
+   untriaged. Start with the issue's own question: is `bat_iss` archived or surfaced anywhere yet?
 4. **Reception at the dongle's new position (`5-1`) vs the old `7-1.2` cluster is unmeasured.**
-   DEC-0154 fixed the crash loop, not this. Needs a longer `rxCheckPercent` read.
+   DEC-0154 fixed the crash loop, not this. It needs a longer `rxCheckPercent` read.
 5. Carry forward job 8's remaining items (EnvironmentFile, `marvin-release.sh`) exactly as S126 left
    them. None are due.
 6. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7)** for a maintainer reply
    (repo dormant since 2023-12-22). Don't chase it.
 7. `eaglehunt-ops#306`'s residual `MANIFEST.md` cap overage: coverage beats the cap, so no action
    unless a real instance-collapse turns up.
-8. **`CONSTANTS.md` infra re-verify, the remainder.** S142 re-verified the NAS rows. The marvin rows
-   (e.g. host tool availability) are still S105-era. `docs/CONVENTIONS.md`'s "Project root (NAS)"
-   row names the retired path.
+8. **`CONSTANTS.md` infra re-verify, the remainder.** The marvin rows (e.g. host tool availability)
+   are still S105-era. The NAS rows were re-verified at S142. `CONVENTIONS.md`'s stale infra copy is
+   gone as of S143, replaced by a pointer.
 9. Optional, owner route only: one tenant-root tidy that isn't reachable by any other tenant (see
    the local-infra doc). Do it only if a root-route window opens anyway.
 
-## Current state (S142 close)
+## Current state (S143 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986). `weewx.service` untouched this session (up since 2026-09-27 17:40:18 ET, DEC-0200). `weewx-data` now has `conf-archive/` (0700) and no loose conf backups |
+| Prod | marvin, `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986). `weewx.service` restarted 2026-09-27 22:56:50 ET for DEC-0202. `weewx-data` has `feed/` (0755, the loop feed), two temporary top-level symlinks into it, and `conf-archive/` (0700) |
 | InfluxDB | marvin, `weewx-influxdb.service`, unchanged. Dark UV arrives as 0 (confirmed by HLF) |
-| weewx-monitor | sha = `dev` tip, running since 2026-09-18 23:13 ET; carries the `REMEDY_SYSTEMCTL` fix + DEC-0199 |
+| weewx-monitor | unchanged, running since 2026-09-18 23:13 ET; carries the `REMEDY_SYSTEMCTL` fix + DEC-0199 |
 | Reception | unchanged since DEC-0154's recovery; new-position comparison unmeasured (job 4) |
-| `main`/`dev` | S142: DEC-0201 PR to `dev`. `main` still weeks behind, unpromoted |
+| `main`/`dev` | S143: DEC-0202 docs PR to `dev`, on top of #396. `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged |
-| Trackers | repo: #394 open (job 3) · #380 open (marvin's pager, informational) · ops: #348 filed (job 2) · #343 closed · #347 answered (Estate context block re-adopted, 09-27 text) · #265/#110 deferred-trigger, unfired · #306 residual (job 7) · #344 macOS LAN heads-up (worked around, MARVIN-DEC-0179) |
+| Trackers | repo: #394 open (job 3) · #380 open (marvin's pager, informational) · ops: #348 step 1 done, waiting on marvin's flip (job 1) · #347 answered, #396 merged so heartofgold can tick weewx's row · #265/#110 deferred-trigger, unfired · #306 residual (job 7) · #344 macOS LAN (worked around; this desktop session reached marvin) |
 
 ## Blockers
 
@@ -84,17 +90,19 @@ with a comment. Only the archive-side overnight check is left (job 1).
 
 ## Model tier
 
-**The whole session ran on Opus 5.5, flagged at the start as fitting.** The work was a security
-investigation, a design call (DEC-0201) and an attended prod change. No `/model` switch was made
-in-session. **Desktop app:** the model persists for later sessions, so the next *execution* session
-(e.g. job 1's query) should switch back to Sonnet by hand.
+**The whole session ran on Opus 5.5, flagged at the start as fitting #348's attended prod change**
+(a live-conf edit, a restart, and a cross-repo contract). No `/model` switch was made in-session.
+**Desktop app:** the model persists into later sessions. Jobs 1 and 2 are execution, so the next
+session should switch back to Sonnet by hand.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
-any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). **Two new this
-session:** §1, in a worktree `check_secrets.sh` silently skips its identifier check; §3, a `weectl`
-conf rewrite silently loosens `weewx.conf`.
+any NAS, marvin or campaign task (§3) · judging a component live, dead, or shipped (§4). **Read §3
+before the marvin task, not after:** S143 re-hit its configobj entry by skipping it. **New this
+session:**
+- §1: `weewx.log` timestamps are ISO, so a syslog-shaped window filter is a false zero.
+- §3: `ssh -G` trips the marvin guard, and ConfigObj needs `interpolation=False`.
 
 ## Files needed at session start
 
@@ -106,7 +114,6 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-09-27 (S142). Conf backups archived out of the shared `weewx-data` top level
-(DEC-0201), exposure verified read-only first. `CONSTANTS.md` NAS rows corrected. `eh-proxy` mount
-narrowing filed to ops. DEC-0200 confirmed on the InfluxDB side by HLF, and `ops#343` closed. The
-overnight archive check is job 1._
+_Last updated: 2026-09-27 (S143). #396 merged. `eaglehunt-ops#348` step 1 is live: the loop feed is
+in `weewx-data/feed/` behind temporary symlinks (DEC-0202). marvin's flip is next, then weewx deletes
+the symlinks (job 1). The DEC-0200 overnight archive check is job 2._

@@ -1,26 +1,16 @@
 # Conventions — weewx-rtldavis
 
 **Status:** Source of truth (how we operate)
-**Last updated:** 2026-07-28 (S55)
+**Last updated:** 2026-09-27 (S143)
 
 The hard-won operational rules. PRINCIPLES = why; DECISIONS = what; this = how.
 
 ## Infra constants
 
-| Thing | Value |
-|-------|-------|
-| NAS | `<NAS_HOST>` — Synology DS918+ · `<NAS_IP>` · SSH port **`<SSH_PORT>`** · user `<NAS_USER>` |
-| SSH / SCP | `ssh -p <SSH_PORT> <NAS_USER>@<NAS_IP>` · `scp -P <SSH_PORT> -O` (capital `-P`, `-O` for the legacy protocol) |
-| Real values | gitignored `docs/LOCAL_INFRA.md` (this repo is public — placeholders only in committed docs, DEC-0012) |
-| Docker binary | `/usr/local/bin/docker` (no sudo needed; not on the default PATH) |
-| Container | `weewx-rtldavis-v2` · **prod runs `:v2.0.11`** (rollback: `:v2.0.10`) |
-| Published image | **`:v2.0.11` + `:latest`** — matches prod, no drift (S55c). |
-| Driver location | **BAKED** in the image venv (`site-packages/user/rtldavis.py`) — *not* `weewx-data/bin/user/`. Never bind-mount it (DEC-0031); a driver change needs a rebuild. |
-| Project root (NAS) | `/volume1/docker/weewx-rtldavis/` |
-| Live config | `.../weewx-data/weewx.conf` (bind-mounted; gain/ppm edits need only a restart) |
-| Container venv user files | `/opt/weewx-venv/lib/python3.14/site-packages/user/` |
-| Loop-JSON output | `/opt/weewx-data/loop-data.txt` (in container) |
-| Missing NAS tools | no `bc`, `tmux`, `screen` — use bash integer arithmetic and `nohup` |
+**These live in `CONSTANTS.md`, stated once (STANDARD rule 5).** The table that stood here had not
+been updated since S55. When S143 retired it, it still named the NAS as the prod host and `:v2.0.11`
+as the prod image. `CLAUDE.md`'s copy went the same way at S60. Real values stay only in the
+gitignored local-infra doc (DEC-0012).
 
 ## Command hygiene
 

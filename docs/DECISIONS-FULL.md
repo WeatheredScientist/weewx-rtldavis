@@ -10845,3 +10845,98 @@ missing file, a re-run, and a stray zip. The live conf wasn't touched, mtimes we
   (including old driver and uploader copies in `bin/user/`), the loop feed, and archive DB backups
   remain. Credential-shaped literal assignments counted zero in all of them except two third-party
   extension-installer defaults, both placeholder-shaped.
+
+---
+
+## DEC-0202 — The loop feed moves into `weewx-data/feed/`; the old names become temporary relative symlinks
+
+**Status:** Accepted (weewx's step applied on marvin; marvin's mount flip pending) · **Date:**
+2026-09-27 (S143) · **follows** DEC-0201 · **applies** DEC-0070, DEC-0080 (two copies of one
+setting) · **relates** DEC-0093 · `eaglehunt-ops#348` step 1 of 4
+
+### Context
+
+DEC-0201 found that the dashboard's `eh-proxy` (994:984) bind-mounts all of `weewx-data` and reads
+only two files from it: `loop-data.txt` and `current.json`. Narrowing the mount was filed as
+`eaglehunt-ops#348`. A feed subdirectory is the only shape that works, because a single-file bind pins
+the inode that `loop_json_writer.py`'s atomic rename replaces. S142's plan cut weewx's config change
+and marvin's mount change over together in one window, since either one alone leaves the proxy
+reading a dead file.
+
+On 2026-09-27 the dashboard (S316) measured `server.js`: two fixed reads, nothing else under
+`/weewx-data`, and no dashboard code change needed. It also offered a way out of the synchronized
+window. weewx moves first and leaves relative symlinks at the old names. Under the old
+whole-directory mount they resolve inside the proxy's container, so it keeps reading live data until
+marvin flips the mount on its own schedule. marvin (S54) took that sequence and added two standing
+rules for `feed/`.
+
+### Decision
+
+1. **weewx accepts the symlink transition.** It removes the one hard constraint in S142's plan, the
+   synchronized two-repo window. The only stale window left is weewx's own restart.
+2. **The new location is a live-config deviation, not a new code default.** `loop_json_writer.py`
+   keeps its stock defaults (`/opt/weewx-data/loop-data.txt`, `/opt/weewx-data/current.json`),
+   which is what a public install writes and what `INTERFACES.md` documents. This deployment adds a
+   `[LoopJsonWriter]` section setting `path` and `current_path` under `feed/`.
+3. **Both config copies carry the section:** the live `weewx.conf` and the tenant-root
+   `weewx.conf.rx-baseline`. A campaign `restore_baseline` copies the baseline over the live conf.
+   Without the section, that silently puts the writer back at the top level, which after marvin's
+   flip is a file the proxy no longer sees (DEC-0080's shape).
+4. **The symlinks go in after the restart, never before.** Until the running writer is on the new
+   paths, its `os.replace()` onto `loop-data.txt` would replace a symlink with a regular file. Each
+   swap is atomic (`ln -s` to a temporary name, then `mv -T` over the old file), so the proxy never
+   sees either name missing.
+5. **Standing rules for `feed/`, from marvin S54:**
+   - Never delete or recreate the directory while `eh-proxy` runs. A directory bind pins the
+     directory's inode, the single-file bug one level up. Files are only renamed into it.
+   - It must exist before marvin flips the mount. Otherwise dockerd creates it root:root, and the
+     writer (996:986) can't write there.
+   - It stays 0755 and the two files stay `o+r`. That is the dashboard's one requirement: uid 994
+     reads as *other*.
+
+### Apply
+
+All times ET, 2026-09-27.
+
+- **Dry run** inside the prod container on a private `/tmp` copy of the live conf, parsed with the
+  venv interpreter and ConfigObj with `interpolation=False`, as weewx opens it. Result: exactly one
+  new top-level section, every other section identical, 5 lines added and 0 removed. The copy was
+  removed. (The first two attempts failed harmlessly on the two `GOTCHAS.md` §3 traps: bare
+  `python3` has no configobj, and default interpolation. The first had no cleanup trap and left the
+  copy in the container's private `/tmp`; the second's trap removed it.)
+- **22:54:57**, `weewx.conf.rx-baseline` at the tenant root, which is outside the container's
+  mounts: owner-approved Class C root route, `ssh marvin-sudo 'runuser -u t-weewx -- sh -s' <
+  script`. The file was backed up into `conf-archive/`, the section appended, 0600 t-weewx kept,
+  +5/−0.
+- **22:56:28**, as 996:986 via `marvinctl exec`: `feed/` created 0755, the live conf backed up into
+  `conf-archive/` and appended, 0600 kept, +5/−0, re-parsed clean. Both scripts aborted on drift
+  (an existing `feed/` or section).
+- **22:56:50**, `marvinctl --tenant weewx restart weewx.service`. weewxd logged `LoopJsonWriter:
+  writing to /opt/weewx-data/feed/loop-data.txt every packet and /opt/weewx-data/feed/current.json
+  every 60 s` at 22:56:51. The first packet landed in `feed/` about 106 s after the restart.
+- **22:58:37**, both top-level names swapped atomically: `loop-data.txt -> feed/loop-data.txt` and
+  `current.json -> feed/current.json`. No `.tmp` or `.lnk` leftovers.
+
+### Verification
+
+- **Through `eh-proxy` on the LAN at 22:58:54:** `/loopdata` 200 with `dateTime` 1.4 s old;
+  `/current` 200 (the first-packet snapshot). The baseline before the change was 200 at 0.8 s and
+  200 at 9.9 s.
+- **`weewx.log` since 22:56:** 0 ERROR, 0 CRITICAL, 0 tracebacks, against 101 INFO lines in the same
+  window. The INFO count is the positive control. A first pass filtered on the syslog date shape and
+  returned a false zero (`GOTCHAS.md` §1).
+- **Modes:** `feed/` 0755 996:986; both files 0644 996:986; the live conf and the baseline 0600;
+  both pre-edit copies 0600 in `conf-archive/`. `marvinctl conf` reads the section back from the
+  baseline.
+
+### Remaining (`eaglehunt-ops#348`) and rollback
+
+- **Step 2, marvin:** flip `eh-proxy`'s mount to `weewx-data/feed`, gate first. The same gesture
+  pins `--user 994:984`, fixes the unit header and adds the box pager.
+- **Step 3, dashboard:** `/loopdata` and `/current` fresh, no `ENOENT`, `sky-history` appending.
+- **Step 4, weewx:** delete the two symlinks. Until then they are harmless, since nothing but the
+  proxy reads the top-level names.
+- **Rollback before step 2:** restore both conf copies from `conf-archive/` and restart. The
+  writer's first rename onto each old name replaces its symlink with a regular file. **After step
+  2, a rollback needs marvin too**, because the narrowed proxy would read `feed/` files that no
+  longer update.
