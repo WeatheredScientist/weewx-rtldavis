@@ -6,6 +6,40 @@ under [Pre-S16].
 
 ---
 
+## [S144] — 2026-09-28 — DEC-0200 verified overnight; #394's ISS battery flag surfaced by the monitor and cleaned at the source (DEC-0203); `CONSTANTS.md` marvin rows re-verified
+
+- **DEC-0200 verified (job 1).** 733 of 734 dark archive rows from 09-27 17:41 to 09-28 12:32 ET
+  read UV 0. The other is the partial first record of S143's restart (22:59, after two minutes with
+  no rows). None fell in (0, 0.05), and none was an exact 0.02 or 0.04. The same query flags all 747
+  dark rows of the pre-fix night (positive control). Recorded in DEC-0200's own row and body.
+- **#394 triaged, designed with the owner, and built (job 2, DEC-0203).** `txBatteryStatus` was
+  archived and shipped to InfluxDB and WeatherCloud, but shown nowhere. All 10 of its historical flips
+  were corrupt frames at outage onsets, not the battery.
+  - `weewx_monitor.py`: each 6-hourly RF email gains an `ISS battery:` line. A one-shot low-battery
+    email fires at 5 or more flagged minutes with healthy reception in one block, and re-arms after a
+    clear block. No archived minute would ever have tripped it.
+  - `rtldavis.py`: a co-rejected frame now drops its battery flags, and message types
+    0x0/0x1/0xB/0xD/0xF condemn a frame like a bounds failure. 9 of the 10 flips now drop at the
+    source. It also closes the 09-22 phantom-gust and 09-25 baseline-poisoning paths.
+  - 16 new tests. Pre-fix, 4 fail on their own assertions, and mutations of the gate, the latch and
+    the key set are each caught. Gates: ruff clean, pytest 532 passed and 17 skipped, mypy clean over
+    73 files. The secret scan is clean, with its identifier, IP and credential checks each
+    positive-controlled.
+  - Mid-decision, the owner was quoted "8 of 10" for the driver fix, a count that treated delta
+    trips as proof. The corrected tally (6 by bounds, 9 with the message-type proof) went back to
+    the owner before any code. The trap is now in `GOTCHAS.md` §1.
+  - In a PR to `dev` from `s144-dec0200-394-battery`, not deployed. The monitor deploys
+    self-service after the merge; the driver needs v2.0.17.
+- **Reception at the new USB port (job 3): no change.** It averaged 99.9% at both `7-1.2` (3.9 days)
+  and `5-1` (20.5 days), with every hour within ±0.4 points. The move was missing from
+  `CONSTANTS.md`'s hardware timeline and is now added.
+- **`CONSTANTS.md` marvin rows re-verified (job 7).** The tenant root, both containers' user, image
+  and mounts, and the rollback images all match. Three stale rows were corrected: releases retag
+  `:marvin-live` rather than use `set-image` (its deploy dir is empty), marvin is the build host,
+  and `:v2.0.14` is still present. The host-tools row is moot for this tenant. The local-infra-doc
+  row stays unverified, since the read guard blocks it, correctly.
+- lheijst/rtldavis#7 still has no reply (job 5). Jobs 4, 6 and 8 carry forward unchanged.
+
 ## [S143] — 2026-09-27 — The loop feed moves into `weewx-data/feed/`, and `eh-proxy` now mounts only that (`eaglehunt-ops#348` complete, DEC-0202); PR #396 merged
 
 - **PR #396 merged** (S142's DEC-0201 and handoff) as squash `0d79daf` at 22:30 ET. S142's worktree
@@ -76,28 +110,3 @@ under [Pre-S16].
   row); `GOTCHAS.md` §1 and §3; `BOOT.md`. S138's entry rolled to `CHANGELOG-ARCHIVE.md`.
 - Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files · secret gate 0, with the IP
   and identifier checks each positive-controlled.
-
-## [S141] — 2026-09-27 — UV diode-floor correction: DEC-0080's exact-code zero extended to UV's two dark codes (DEC-0200, `eaglehunt-ops#343`)
-
-- **Checked in with ops on `#343`.** The thread had closed 23 s after the owner put the UV fix on
-  weewx. Posted the measurement and asked ops to confirm there was no later stand-down call
-  ([comment](https://github.com/WeatheredScientist/eaglehunt-ops/issues/343#issuecomment-5860016912)),
-  then rang the ops session.
-- **Measured before designing (prod archive, 08-12 → 09-27).** UV's dark floor is two codes, not
-  one: `uv_raw 2` (0.04) in 96.9% of rows, `uv_raw 1` (0.02) in 2.5%, in runs of minutes, and never
-  0 or 3. The same pass re-verified DEC-0080's solar floor as clean: one code, with `sr_raw 2` only at
-  twilight.
-- **The owner chose the two-code exact window**
-  `UV = UV if UV is None else (0 if 0.01 < UV < 0.05 else UV)` over the thread's one-code line.
-  `weewx.conf.example` carries it. The new `tests/test_diode_floor_corrections.py` pins both
-  diode-floor lines under weewx 5.5's own `StdCalibrate` eval semantics (10 tests,
-  positive-controlled).
-- **Applied live 2026-09-27 17:39:57 ET.** A container dry-run came first. The owner approved the
-  Class C root-route `sed` over the live conf and the tenant-root `.rx-baseline`; the mint was refused
-  once and succeeded on the ladder's retry. `weewx.service` restarted at 17:40:18 and booted clean.
-  First dusk verified the same evening: UV read 0.0 from 18:29 with solar ~16 W/m², where it
-  read 0.04 before the fix. The full-overnight check is `BOOT.md` job 1.
-- Docs: DEC-0200; a `CONSTANTS.md` live-config deviations row; `docs/INTERFACES.md` now says the
-  radiation/UV dark floors are zeroed by config, with this station's apply dates.
-- Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files · secret gate 0
-  (positive-controlled).

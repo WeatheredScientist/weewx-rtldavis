@@ -91,6 +91,16 @@ alone did not catch.
   local time, not `Sep 27 22:56:51`. A post-restart "any errors since?" filter written in the syslog
   shape matches nothing and reads as a clean restart. Count INFO lines through the same window
   first; a positive count is what makes the ERROR zero mean something.
+- **An archive record's timestamp is the END of its interval** (S144). The record stamped 22:40
+  holds the packets of 22:39:00–22:40:00, so its log evidence is in `22:39:xx`. S144 fetched log
+  windows starting at each flagged record's own minute. It reported "nothing in the minute" for two
+  events whose corrupt frame sat at 22:39:51 and 21:09:35, and quoted a wrong tally to the owner
+  mid-decision. Fetch from the minute *before* the label. A freeze also writes a record late: the
+  22:40 record landed at 22:44:28, so read the `Added record` line, not the clock.
+- **`boot-cap-check.sh` with no argument checks eaglehunt-ops' own `BOOT.md`, not this one** (S144).
+  It printed a plausible WARN about a BOOT twice this repo's size. Run it as
+  `bash ~/Projects/eaglehunt-ops/checks/boot-cap-check.sh "$PWD/BOOT.md"`, and confirm the resume
+  pointer it quotes is this repo's session.
 
 ## §2 Git, PRs, and the handoff
 
@@ -232,7 +242,9 @@ alone did not catch.
   becomes two remote tokens — even when the pattern arrives as one already-whitespace-containing
   argv element from a script's own subprocess call (no shell involved); use `.` as a regex
   stand-in for the literal space (`rtldavis.process.stalled`), and split an OR across two
-  signatures into two greps, since the alternation itself would need a space. Exit code 1 from
+  signatures into two greps, since the alternation itself would need a space. **It refuses a
+  bracket expression too** (S144: `2026-09-27.22:5[6-9]` has no space, yet it drew the same
+  "single whitespace-free token" error); grep a wider prefix and narrow locally. Exit code 1 from
   `grep` means EITHER zero matches OR a missing path — indistinguishable by exit code alone, only
   by whether stderr says "does not exist"; treat both as zero lines unless the distinction actually
   matters. `ls <dir>` takes no glob and no flags (`ls -1 file*` fails outright) — always full

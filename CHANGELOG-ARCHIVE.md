@@ -7,6 +7,31 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S141] — 2026-09-27 — UV diode-floor correction: DEC-0080's exact-code zero extended to UV's two dark codes (DEC-0200, `eaglehunt-ops#343`)
+
+- **Checked in with ops on `#343`.** The thread had closed 23 s after the owner put the UV fix on
+  weewx. Posted the measurement and asked ops to confirm there was no later stand-down call
+  ([comment](https://github.com/WeatheredScientist/eaglehunt-ops/issues/343#issuecomment-5860016912)),
+  then rang the ops session.
+- **Measured before designing (prod archive, 08-12 → 09-27).** UV's dark floor is two codes, not
+  one: `uv_raw 2` (0.04) in 96.9% of rows, `uv_raw 1` (0.02) in 2.5%, in runs of minutes, and never
+  0 or 3. The same pass re-verified DEC-0080's solar floor as clean: one code, with `sr_raw 2` only at
+  twilight.
+- **The owner chose the two-code exact window**
+  `UV = UV if UV is None else (0 if 0.01 < UV < 0.05 else UV)` over the thread's one-code line.
+  `weewx.conf.example` carries it. The new `tests/test_diode_floor_corrections.py` pins both
+  diode-floor lines under weewx 5.5's own `StdCalibrate` eval semantics (10 tests,
+  positive-controlled).
+- **Applied live 2026-09-27 17:39:57 ET.** A container dry-run came first. The owner approved the
+  Class C root-route `sed` over the live conf and the tenant-root `.rx-baseline`; the mint was refused
+  once and succeeded on the ladder's retry. `weewx.service` restarted at 17:40:18 and booted clean.
+  First dusk verified the same evening: UV read 0.0 from 18:29 with solar ~16 W/m², where it
+  read 0.04 before the fix. The full-overnight check is `BOOT.md` job 1.
+- Docs: DEC-0200; a `CONSTANTS.md` live-config deviations row; `docs/INTERFACES.md` now says the
+  radiation/UV dark floors are zeroed by config, with this station's apply dates.
+- Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files · secret gate 0
+  (positive-controlled).
+
 ## [S139] — 2026-09-19 — `docs/ARCHITECTURE.md` re-verified against live marvin state (BOOT job 5)
 
 - Doc hadn't been touched since S17 (2026-07-04) and had drifted across the DEC-0118 marvin move:

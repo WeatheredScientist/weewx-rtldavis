@@ -428,14 +428,36 @@ SENSOR_QC_DEFAULTS = {
 # its same-frame siblings can be trusted either. The 2026-07-27 phantom 39 mph
 # gust (ERR-0004) rode a frame whose own humidity decoded to 144.9%: humidity
 # was rejected, the wind byte sailed through and became the interval's gust
-# max on every external network. Diagnostics (battery flags, supercap_volt,
-# solar_power, freqError telemetry, pct_good) are deliberately NOT in this
-# set -- they describe the link/station, not the weather.
+# max on every external network. Link diagnostics (freqError telemetry,
+# pct_good) are deliberately NOT in this set -- the receiver measures them,
+# so they describe the link, not the frame's contents.
 FRAME_WEATHER_KEYS = (
     'temperature', 'humidity', 'wind_speed', 'wind_dir', 'wind_speed_ec',
     'wind_speed_raw', 'uv', 'solar_radiation', 'rain_rate',
     'temp_1', 'temp_2', 'humid_1', 'humid_2',
 )
+
+# DEC-0203 (#394): the battery-low flag is bit 3 of the condemned frame's own
+# byte 0, so it is exactly as corrupt as its weather siblings -- unlike
+# pct_good/freqError above, it was decoded from the frame, not measured by
+# the receiver. All 10 archived ISS low-battery flips (08-30 -> 09-25) were
+# single minutes at a freeze or reception-collapse onset, 9 of them carrying
+# a bounds or message-type proof. Nulled with the weather keys on
+# co-rejection; a clean frame's flag flows untouched. (supercap_volt and
+# solar_power are decoded from the frame too and still survive -- DEC-0203
+# records that gap rather than widening this change.)
+FRAME_BATTERY_KEYS = (
+    'bat_iss', 'bat_anemometer', 'bat_th_1', 'bat_th_2', 'bat_leaf_soil',
+)
+
+# DEC-0203: set by parse_raw when the iss/anemometer/temp_hum dispatch meets a
+# message type no Davis transmitter sends (0x0, 0x1, 0xB, 0xD, 0xF -- every
+# type they do send has its own branch, including the undecoded 0x3 and 0xC).
+# A CRC-valid frame carrying one is multi-bit corrupt: the same positive proof
+# as an out-of-spec value, so _data_to_packet co-rejects on it. Every prod log
+# marvin holds (08-29 -> 09-28) had 8 such frames, each one at a glitch.
+# Driver-internal: no sensor_map entry reads it, so it never reaches a packet.
+IMPOSSIBLE_MSG_TYPE_KEY = 'msg_type_impossible'
 
 
 class SensorQC(object):
@@ -1509,6 +1531,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # rides the same 8-byte frame -- so null them all and move no
             # baselines. A delta trip never triggers this: a large step can
             # be genuine weather; an impossible value cannot.
+            proofs = []
             for qc_key in self._sensor_qc.limits:
                 qc_reason = self._sensor_qc.check_bounds(
                     qc_key, data.get(qc_key))
@@ -1518,12 +1541,21 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                            "RF glitch, not weather; DEC-0029)" %
                            (qc_key, data[qc_key], qc_reason))
             if frame_corrupt:
-                nulled = [k for k in FRAME_WEATHER_KEYS
+                proofs.append('bounds')
+            # DEC-0203: a message type no transmitter sends is the same kind
+            # of proof -- parse_raw has already logged which type it was.
+            if data.get(IMPOSSIBLE_MSG_TYPE_KEY) is not None:
+                frame_corrupt = True
+                proofs.append('message-type')
+            if frame_corrupt:
+                # The frame's own battery bit goes with it (DEC-0203).
+                nulled = [k for k in FRAME_WEATHER_KEYS + FRAME_BATTERY_KEYS
                           if data.get(k) is not None]
                 for k in nulled:
                     data[k] = None             # null-on-rejection, DEC-0006
-                logerr("frame failed bounds proof -- co-rejecting same-frame "
-                       "fields: %s (DEC-0054)" % ', '.join(sorted(nulled)))
+                logerr("frame failed %s proof -- co-rejecting same-frame "
+                       "fields: %s (DEC-0054)" %
+                       (' + '.join(proofs), ', '.join(sorted(nulled))))
             else:
                 for qc_key in self._sensor_qc.limits:
                     if data.get(qc_key) is None:
@@ -2308,8 +2340,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         dbg_parse(2, "rain_count_raw=0x%02x value=%s" %
                                   (rain_count_raw, rain_count))
             else:
-                # unknown message type
+                # A type no Davis transmitter sends: proof the frame is
+                # corrupt, so _data_to_packet co-rejects it (DEC-0203).
                 logerr("unknown message type 0x%01x" % message_type)
+                data[IMPOSSIBLE_MSG_TYPE_KEY] = message_type
 
         elif data['channel'] == self.channels['leaf_soil']:
             # leaf and soil station
