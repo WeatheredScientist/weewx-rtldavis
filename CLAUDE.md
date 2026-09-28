@@ -134,10 +134,13 @@ gone stale on two values: the reception baseline and the driver-vs-config layer 
   shared-counter idea in DEC-0013. The governed era runs **S16 → S17 → S18 → S19 → S20 → S21 → S22 →
   S23 → …**; pre-S16 history is reconstructed/approximate.
 
-## Estate context — 2026-09-08
+## Estate context — 2026-09-27
 Home IT estate repo of record is `~/Projects/heartofgold`: docs, policies, ADRs, runbooks, CHANGELOG, inventory.
-This repo owns its image build and dev compose only. Production deployment on marvin — pinned tags,
-named volumes, systemd slice / io.weight — is owned by heartofgold/compose/weewx/ (ADR-0005).
+This repo owns its image build and dev compose only. Production deployment on marvin — the systemd units,
+slice and tenant manifest — is owned by heartofgold/host/: etc/systemd/system/ (this tenant's units and slice)
+plus etc/marvin/tenants.d/weewx.conf (ADR-0005; the ADR names the one current exception). The live image
+pin is on the box, not in git: /etc/marvin/deploy.d/weewx/ for units that adopted `marvinctl set-image`,
+a tenant-owned floating tag otherwise — read with `marvinctl cat`, never edited by hand.
 Do not add production deployment config here. Handoffs for this repo stay in this repo.
 If a session here changes what runs on marvin or how, add a heartofgold/CHANGELOG.md line, same session.
 marvin's own tracker and decisions live at heartofgold/MARVIN-STATE.md and heartofgold/MARVIN-DECISIONS.md.

@@ -70,7 +70,7 @@ with a comment. Only the archive-side overnight check is left (job 1).
 | Reception | unchanged since DEC-0154's recovery; new-position comparison unmeasured (job 4) |
 | `main`/`dev` | S142: DEC-0201 PR to `dev`. `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged |
-| Trackers | repo: #394 open (job 3) · #380 open (marvin's pager, informational) · ops: #348 filed (job 2) · #343 closed · #265/#110 deferred-trigger, unfired · #306 residual (job 7) · #344 macOS LAN heads-up (worked around, MARVIN-DEC-0179) |
+| Trackers | repo: #394 open (job 3) · #380 open (marvin's pager, informational) · ops: #348 filed (job 2) · #343 closed · #347 answered (Estate context block re-adopted, 09-27 text) · #265/#110 deferred-trigger, unfired · #306 residual (job 7) · #344 macOS LAN heads-up (worked around, MARVIN-DEC-0179) |
 
 ## Blockers
 

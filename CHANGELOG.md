@@ -27,6 +27,10 @@ under [Pre-S16].
   in the gitignored local-infra doc, and rotation is the owner's separate call.
 - **DEC-0200 confirmed on the InfluxDB side** (HLF S349): the `weewx` bucket reads UV exactly 0
   from 18:30 ET. `eaglehunt-ops#343` closed with a comment (S141's job 2).
+- **`eaglehunt-ops#347` answered (owner-approved in chat).** `CLAUDE.md`'s Estate context block
+  was re-adopted verbatim from heartofgold's 2026-09-27 app block (MARVIN-DEC-0180), with
+  `<service>` = `weewx`. The deployment record is now `heartofgold/host/` (the units plus
+  `tenants.d/weewx.conf`), not the deleted `compose/weewx/`. The image pin stays on the box.
 - **The secret gate's identifier check was silently skipped in this worktree** (its gitignored
   pattern file doesn't follow a worktree). The file was copied in, and the check was then run live
   and positive-controlled (`GOTCHAS.md` §1).
