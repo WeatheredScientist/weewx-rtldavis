@@ -12,42 +12,38 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S141 → S142)
+## ▶ Resume here (S142 → S143)
 
 ### What's settled (do not re-derive)
 
-**S141 shipped DEC-0200: UV's diode dark floor is zeroed at the source. It is live on marvin
-(2026-09-27 17:39:57 ET).** `eaglehunt-ops#343` asked whether DEC-0080's exact-code solar zero
-should extend to UV. Measurement showed UV's dark floor is **two** codes, not one: `uv_raw 2`
-(0.04) in ~97% of dark minutes and `uv_raw 1` (0.02) in ~3%, in runs; never 0 or 3. The owner chose
-the two-code exact window `UV = UV if UV is None else (0 if 0.01 < UV < 0.05 else UV)`. It is in the
-live conf, the tenant-root `.rx-baseline`, and `weewx.conf.example`, and is pinned by
-`tests/test_diode_floor_corrections.py`. History is not rewritten. **First dusk verified:** UV read
-0.0 from 18:29 with solar ~16 W/m² (0.04 before the fix). **DEC-0080 was re-verified clean
-in the same pass:** the solar floor is one code, and `sr_raw 2` appears only at twilight.
+**S142 moved every `weewx.conf` backup out of the `weewx-data` top level (DEC-0201).** They now sit
+in `weewx-data/conf-archive/` (dir 0700, files 0600), live on marvin since 2026-09-27 19:13:58 ET.
+- **Why:** `weewx-data` is bind-mounted whole into the dashboard's `eh-proxy` (994:984), which reads
+  it as *other*. File mode is the only boundary there.
+- **How:** owner-approved, one `marvinctl exec` as t-weewx. The live conf was untouched and there
+  was no restart.
+- **Standing rule:** after any `weectl` run that rewrites the conf, `chmod 0600` it and archive the
+  timestamped copy. `weecfg.save()` loosens it (`GOTCHAS.md` §3).
+- **NAS side re-verified clean.** The export was retired 2026-09-05 (MARVIN-DEC-0134), and
+  `CONSTANTS.md`'s stale overlay/Docker/rollback-host rows are corrected.
+- Specifics are in the gitignored local-infra doc. Rotation is the owner's end-of-run call.
 
-**ops#343 check-in.** Ops closed the thread and withdrew its weewx ask 23 s after the owner put the
-fix on weewx. S141 posted the measurement there. Ops answered at 5:34 PM ET: there was no later owner
-call, and its close was its own inference, now retracted. Ops **reopened #343 with `repo:weewx` so
-weewx closes it after HLF's InfluxDB confirm** (job 2), and corrected its §1 row to `uv_raw` 1–2.
+**DEC-0200 (S141) is confirmed on the InfluxDB side.** HLF S349 read the `weewx` bucket at UV
+exactly 0 from 18:30 ET (0.065 at 18:20 was the last daylight bin). `eaglehunt-ops#343` is closed
+with a comment. Only the archive-side overnight check is left (job 1).
 
-**The S140 list's job 1 was already done at S139:** `#337` closed 2026-09-19, and marvin's
-`weewx_monitor.py` sha equals `dev`'s tip (restarted 2026-09-18 23:13 ET). DEC-0199's alert class is
-live.
+### ▶▶ S143 JOB LIST
 
-### ▶▶ S142 JOB LIST
-
-1. **DEC-0200 full-overnight verification.** First dusk was already verified at S141: UV read 0.0
-   from 18:29 at ~16 W/m². Query archive rows with `radiation = 0` after 2026-09-27 17:41 ET for any
-   `0 < UV < 0.05`; expect none. **A twilight fraction such as 18:28's 0.0141 is expected**: it's a
-   transition minute averaging zeroed readings with readings ≥ 0.06. A dark fraction, or any exact
-   0.02/0.04, needs its minute examined. Find the code before touching the window; never widen it.
-   Windy/WOW's one post-restart 429 each already recovered by 18:36. HLF will separately confirm the
-   `weewx` bucket (ops#343, rung).
-2. **Close ops#343 once HLF confirms** that dark UV reaches the `weewx` bucket as 0. Ops reopened the
-   issue with `repo:weewx` for exactly this (5:34 PM ET). Close it with a comment, never bare.
-   Ops has already confirmed there was no later owner stand-down call. Its §1 row now says
-   `uv_raw` 1–2, and ops will name DEC-0200 in it (rung 2026-09-27).
+1. **DEC-0200 full-overnight archive verification.** Query archive rows with `radiation = 0` after
+   2026-09-27 17:41 ET for any `0 < UV < 0.05`; expect none.
+   - **A twilight fraction such as 18:28's 0.0141 is expected.** It's a transition minute that
+     averages zeroed readings with readings ≥ 0.06.
+   - A dark fraction, or any exact 0.02/0.04, needs its minute examined. Find the code before
+     touching the window; never widen it.
+2. **`eaglehunt-ops#348` — narrowing `eh-proxy`'s mount (dashboard + marvin own it).** weewx's
+   part comes only when they're ready: point `[LoopJsonWriter]` `path`/`current_path` at
+   `weewx-data/feed/`. That's a live-conf edit plus a restart, cut over in one window with marvin's
+   mount change. Never do it alone; `eh-proxy` would read a dead file.
 3. **`#394` (surface the ISS low-battery flag `bat_iss`).** Owner-filed 2026-09-20, `tier:mid`,
    untriaged. Starts with the issue's own question: is `bat_iss` archived or surfaced anywhere yet?
 4. **Reception at the dongle's new position (`5-1`) vs the old `7-1.2` cluster is unmeasured.**
@@ -58,19 +54,23 @@ live.
    (repo dormant since 2023-12-22). Don't chase it.
 7. `eaglehunt-ops#306`'s residual `MANIFEST.md` cap overage: coverage beats the cap, so no action
    unless a real instance-collapse turns up.
-8. `CONSTANTS.md` infra re-verify, the S105-era remainder that S129/S130/S139 didn't touch.
+8. **`CONSTANTS.md` infra re-verify, the remainder.** S142 re-verified the NAS rows. The marvin rows
+   (e.g. host tool availability) are still S105-era. `docs/CONVENTIONS.md`'s "Project root (NAS)"
+   row names the retired path.
+9. Optional, owner route only: one tenant-root tidy that isn't reachable by any other tenant (see
+   the local-infra doc). Do it only if a root-route window opens anyway.
 
-## Current state (S141 close)
+## Current state (S142 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986). **`weewx.service` restarted 2026-09-27 17:40:18 ET to load DEC-0200** (config only, image unchanged). Clean boot |
-| InfluxDB | marvin, `weewx-influxdb.service`, unchanged. From 17:40 ET on, dark UV arrives as 0 |
+| Prod | marvin, `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986). `weewx.service` untouched this session (up since 2026-09-27 17:40:18 ET, DEC-0200). `weewx-data` now has `conf-archive/` (0700) and no loose conf backups |
+| InfluxDB | marvin, `weewx-influxdb.service`, unchanged. Dark UV arrives as 0 (confirmed by HLF) |
 | weewx-monitor | sha = `dev` tip, running since 2026-09-18 23:13 ET; carries the `REMEDY_SYSTEMCTL` fix + DEC-0199 |
 | Reception | unchanged since DEC-0154's recovery; new-position comparison unmeasured (job 4) |
-| `main`/`dev` | S141: DEC-0200 PR to `dev`. `main` still weeks behind, unpromoted |
+| `main`/`dev` | S142: DEC-0201 PR to `dev`. `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged |
-| Trackers | repo: #394 open (job 3) · #380 open (marvin's pager, informational) · ops: #343 reopened `repo:weewx`, weewx closes it after HLF's confirm (job 2) · #265/#110 deferred-trigger, unfired · #306 residual (job 7) · #344 macOS LAN heads-up (worked around, MARVIN-DEC-0179) |
+| Trackers | repo: #394 open (job 3) · #380 open (marvin's pager, informational) · ops: #348 filed (job 2) · #343 closed · #347 answered (Estate context block re-adopted, 09-27 text) · #265/#110 deferred-trigger, unfired · #306 residual (job 7) · #344 macOS LAN heads-up (worked around, MARVIN-DEC-0179) |
 
 ## Blockers
 
@@ -84,16 +84,17 @@ live.
 
 ## Model tier
 
-**The whole session ran on Opus 5.5, flagged at the start as fitting:** a design call (DEC-0200) plus
-an attended prod config change. No `/model` switch was made in-session. **Desktop app:** the
-model persists for later sessions, so the next *execution* session (e.g. job 1's verification
-query) should switch back to Sonnet by hand.
+**The whole session ran on Opus 5.5, flagged at the start as fitting.** The work was a security
+investigation, a design call (DEC-0201) and an attended prod change. No `/model` switch was made
+in-session. **Desktop app:** the model persists for later sessions, so the next *execution* session
+(e.g. job 1's query) should switch back to Sonnet by hand.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
-any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). No new entries
-this session.
+any NAS or campaign task (§3) · judging a component live, dead, or shipped (§4). **Two new this
+session:** §1, in a worktree `check_secrets.sh` silently skips its identifier check; §3, a `weectl`
+conf rewrite silently loosens `weewx.conf`.
 
 ## Files needed at session start
 
@@ -105,7 +106,7 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-09-27 (S141). DEC-0200 (UV diode-floor two-code zero) designed from a
-prod-archive measurement, owner-approved, and applied live at 17:39:57 ET with a clean restart.
-DEC-0080 re-verified clean. `eaglehunt-ops#343` check-in posted and ops rung. The dark-hours
-verification is job 1._
+_Last updated: 2026-09-27 (S142). Conf backups archived out of the shared `weewx-data` top level
+(DEC-0201), exposure verified read-only first. `CONSTANTS.md` NAS rows corrected. `eh-proxy` mount
+narrowing filed to ops. DEC-0200 confirmed on the InfluxDB side by HLF, and `ops#343` closed. The
+overnight archive check is job 1._
