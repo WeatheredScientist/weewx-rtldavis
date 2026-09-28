@@ -16,33 +16,27 @@ is a **separate repo** — don't make dashboard changes here.
 
 ### What's settled (do not re-derive)
 
-**S143 moved the loop feed into `weewx-data/feed/` (DEC-0202, `eaglehunt-ops#348` step 1).** It has
-been live on marvin since 2026-09-27 22:58 ET.
+**S143 moved the loop feed into `weewx-data/feed/`, and `eh-proxy` now mounts only that
+(DEC-0202).** `eaglehunt-ops#348` finished in one night, with all four steps done and no
+synchronized window.
 - `[LoopJsonWriter]` `path`/`current_path` point at `feed/` in the live conf **and** the tenant-root
   `weewx.conf.rx-baseline`. Both are 0600, and the pre-edit copies are in `conf-archive/`.
-- The top-level `loop-data.txt` and `current.json` are now relative symlinks into `feed/`, so
-  `eh-proxy`'s current whole-dir mount still reads live data. They are temporary; job 1 deletes
-  them.
+- marvin flipped `eh-proxy`'s bind to `weewx-data/feed` at 23:20:56 ET (MARVIN-DEC-0183), and the
+  dashboard's check passed. weewx removed the temporary top-level symlinks at 23:26:57, so neither
+  feed name remains in `weewx-data`'s top level.
 - Rules for `feed/` (from marvin S54) are in `CONSTANTS.md`'s deviations table. Never delete or
-  recreate it while eh-proxy runs, and only rename files into it.
-- Verified: eh-proxy served `/loopdata` 200 at 1.4 s old right after the swap. `weewx.log` showed
-  0 errors against 101 INFO lines since the restart.
+  recreate it while eh-proxy runs, and only rename files into it. A rollback now needs marvin's
+  mount reverted in the same window.
+- Verified after the last step: eh-proxy served `/loopdata` 200 at 0.2 s old. `weewx.log` showed
+  0 errors against 27 INFO lines.
 
 **S142's DEC-0201 is merged** (PR #396, squash `0d79daf`): conf backups live in `conf-archive/`, and
 the live conf stays 0600. **DEC-0200 is confirmed on the InfluxDB side** (HLF S349). Only its
-archive-side overnight check is left (job 2).
+archive-side overnight check is left (job 1).
 
 ### ▶▶ S144 JOB LIST
 
-1. **`eaglehunt-ops#348` step 4: delete the two symlinks.** Do it only after marvin's flip (step 2)
-   and the dashboard's check (step 3) are posted on #348.
-   - Confirm the flip yourself first: `marvinctl --tenant weewx inspect eh-proxy` must show the
-     source `…/weewx-data/feed` at `/weewx-data` (it read the whole `weewx-data` at S143 close).
-   - Then, in one `marvinctl exec … -- sh`, `test -L` each name and `rm` only those two. Never
-     touch `feed/` itself.
-   - Re-read `/loopdata` through eh-proxy, post on #348, and ring marvin and the dashboard. If the
-     flip hasn't happened, do nothing: the symlinks are harmless.
-2. **DEC-0200 full-overnight archive verification.** Query archive rows with `radiation = 0` after
+1. **DEC-0200 full-overnight archive verification.** Query archive rows with `radiation = 0` after
    2026-09-27 17:41 ET for any `0 < UV < 0.05`; expect none.
    - **A twilight fraction such as 18:28's 0.0141 is expected.** It's a transition minute that
      averages zeroed readings with readings ≥ 0.06.
@@ -50,33 +44,33 @@ archive-side overnight check is left (job 2).
      It is not a DEC-0200 failure.
    - A dark fraction, or any exact 0.02/0.04, needs its minute examined. Find the code before
      touching the window; never widen it.
-3. **`#394` (surface the ISS low-battery flag `bat_iss`).** Owner-filed 2026-09-20, `tier:mid`,
+2. **`#394` (surface the ISS low-battery flag `bat_iss`).** Owner-filed 2026-09-20, `tier:mid`,
    untriaged. Start with the issue's own question: is `bat_iss` archived or surfaced anywhere yet?
-4. **Reception at the dongle's new position (`5-1`) vs the old `7-1.2` cluster is unmeasured.**
+3. **Reception at the dongle's new position (`5-1`) vs the old `7-1.2` cluster is unmeasured.**
    DEC-0154 fixed the crash loop, not this. It needs a longer `rxCheckPercent` read.
-5. Carry forward job 8's remaining items (EnvironmentFile, `marvin-release.sh`) exactly as S126 left
+4. Carry forward job 8's remaining items (EnvironmentFile, `marvin-release.sh`) exactly as S126 left
    them. None are due.
-6. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7)** for a maintainer reply
+5. **Watch [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7)** for a maintainer reply
    (repo dormant since 2023-12-22). Don't chase it.
-7. `eaglehunt-ops#306`'s residual `MANIFEST.md` cap overage: coverage beats the cap, so no action
+6. `eaglehunt-ops#306`'s residual `MANIFEST.md` cap overage: coverage beats the cap, so no action
    unless a real instance-collapse turns up.
-8. **`CONSTANTS.md` infra re-verify, the remainder.** The marvin rows (e.g. host tool availability)
+7. **`CONSTANTS.md` infra re-verify, the remainder.** The marvin rows (e.g. host tool availability)
    are still S105-era. The NAS rows were re-verified at S142. `CONVENTIONS.md`'s stale infra copy is
    gone as of S143, replaced by a pointer.
-9. Optional, owner route only: one tenant-root tidy that isn't reachable by any other tenant (see
+8. Optional, owner route only: one tenant-root tidy that isn't reachable by any other tenant (see
    the local-infra doc). Do it only if a root-route window opens anyway.
 
 ## Current state (S143 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986). `weewx.service` restarted 2026-09-27 22:56:50 ET for DEC-0202. `weewx-data` has `feed/` (0755, the loop feed), two temporary top-level symlinks into it, and `conf-archive/` (0700) |
+| Prod | marvin, `v2.0.16` as `:marvin-live`, weewx 5.5.0, gain 372, runs as `t-weewx` (996:986). `weewx.service` restarted 2026-09-27 22:56:50 ET for DEC-0202. `weewx-data` has `feed/` (0755, the loop feed, the only part `eh-proxy` mounts) and `conf-archive/` (0700) |
 | InfluxDB | marvin, `weewx-influxdb.service`, unchanged. Dark UV arrives as 0 (confirmed by HLF) |
 | weewx-monitor | unchanged, running since 2026-09-18 23:13 ET; carries the `REMEDY_SYSTEMCTL` fix + DEC-0199 |
-| Reception | unchanged since DEC-0154's recovery; new-position comparison unmeasured (job 4) |
-| `main`/`dev` | S143: DEC-0202 docs PR to `dev`, on top of #396. `main` still weeks behind, unpromoted |
+| Reception | unchanged since DEC-0154's recovery; new-position comparison unmeasured (job 3) |
+| `main`/`dev` | S143: #396, #397 (DEC-0202 plus closeout) and #348's completion follow-up, all to `dev`. `main` still weeks behind, unpromoted |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged |
-| Trackers | repo: #394 open (job 3) · #380 open (marvin's pager, informational) · ops: #348 step 1 done, waiting on marvin's flip (job 1) · #347 answered, #396 merged so heartofgold can tick weewx's row · #265/#110 deferred-trigger, unfired · #306 residual (job 7) · #344 macOS LAN (worked around; this desktop session reached marvin) |
+| Trackers | repo: #394 open (job 2) · #380 open (marvin's pager, informational) · ops: #348 complete, all four steps (ops can close) · #347 answered, #396 merged so heartofgold can tick weewx's row · #265/#110 deferred-trigger, unfired · #306 residual (job 6) · #344 macOS LAN (worked around; this desktop session reached marvin) |
 
 ## Blockers
 
@@ -92,8 +86,8 @@ archive-side overnight check is left (job 2).
 
 **The whole session ran on Opus 5.5, flagged at the start as fitting #348's attended prod change**
 (a live-conf edit, a restart, and a cross-repo contract). No `/model` switch was made in-session.
-**Desktop app:** the model persists into later sessions. Jobs 1 and 2 are execution, so the next
-session should switch back to Sonnet by hand.
+**Desktop app:** the model persists into later sessions. Job 1 is execution, so the next session
+should switch back to Sonnet by hand. The exception is #394's triage (job 2), which is design work.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -114,6 +108,6 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-09-27 (S143). #396 merged. `eaglehunt-ops#348` step 1 is live: the loop feed is
-in `weewx-data/feed/` behind temporary symlinks (DEC-0202). marvin's flip is next, then weewx deletes
-the symlinks (job 1). The DEC-0200 overnight archive check is job 2._
+_Last updated: 2026-09-27 (S143). #396 merged. `eaglehunt-ops#348` is complete: the loop feed lives
+in `weewx-data/feed/`, the only part `eh-proxy` mounts (DEC-0202). The DEC-0200 overnight archive
+check is job 1._

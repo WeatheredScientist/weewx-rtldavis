@@ -26,7 +26,7 @@ Both paths are configurable (`[LoopJsonWriter]` `path` and `current_path`). The 
 what a stock install writes. **A consumer that bind-mounts these files must mount their directory,
 not the files.** Every write replaces a file by rename, and a single-file bind pins the original
 inode, so the consumer would read a frozen file forever. This project's own deployment writes both
-files into `weewx-data/feed/`, a directory holding nothing else, so the eh-proxy can mount that
+files into `weewx-data/feed/`, a directory holding nothing else, and the eh-proxy mounts that
 directory alone (DEC-0202).
 
 **`current.json` is a cold-load SNAPSHOT on its own slower cadence, not a second live feed

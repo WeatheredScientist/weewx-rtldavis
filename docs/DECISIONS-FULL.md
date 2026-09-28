@@ -10850,9 +10850,9 @@ missing file, a re-run, and a stray zip. The live conf wasn't touched, mtimes we
 
 ## DEC-0202 — The loop feed moves into `weewx-data/feed/`; the old names become temporary relative symlinks
 
-**Status:** Accepted (weewx's step applied on marvin; marvin's mount flip pending) · **Date:**
-2026-09-27 (S143) · **follows** DEC-0201 · **applies** DEC-0070, DEC-0080 (two copies of one
-setting) · **relates** DEC-0093 · `eaglehunt-ops#348` step 1 of 4
+**Status:** Accepted (applied on marvin; `eaglehunt-ops#348` complete, 2026-09-27 23:26:57 ET) ·
+**Date:** 2026-09-27 (S143) · **follows** DEC-0201 · **applies** DEC-0070, DEC-0080 (two copies of
+one setting) · **relates** DEC-0093, MARVIN-DEC-0183 · `eaglehunt-ops#348` steps 1 and 4 of 4
 
 ### Context
 
@@ -10929,14 +10929,18 @@ All times ET, 2026-09-27.
   both pre-edit copies 0600 in `conf-archive/`. `marvinctl conf` reads the section back from the
   baseline.
 
-### Remaining (`eaglehunt-ops#348`) and rollback
+### Completion (`eaglehunt-ops#348`, the same night) and rollback
 
-- **Step 2, marvin:** flip `eh-proxy`'s mount to `weewx-data/feed`, gate first. The same gesture
-  pins `--user 994:984`, fixes the unit header and adds the box pager.
-- **Step 3, dashboard:** `/loopdata` and `/current` fresh, no `ENOENT`, `sky-history` appending.
-- **Step 4, weewx:** delete the two symlinks. Until then they are harmless, since nothing but the
-  proxy reads the top-level names.
-- **Rollback before step 2:** restore both conf copies from `conf-archive/` and restart. The
-  writer's first rename onto each old name replaces its symlink with a regular file. **After step
-  2, a rollback needs marvin too**, because the narrowed proxy would read `feed/` files that no
-  longer update.
+- **Step 2, marvin, 23:20:56 ET (MARVIN-DEC-0183):** `eh-proxy`'s mount flipped to
+  `weewx-data/feed`. A gate ran first: both files read as 994:984 through a bind of `feed/`. The
+  same gesture pinned `--user 994:984`, fixed the unit header and added the box pager.
+- **Step 3, dashboard, 23:22:** PASS. `/loopdata` and `/current` returned 200 and fresh on prod
+  and dev, and `/current` advanced 64 s between fetches, so renames are visible through the
+  directory bind. No `ENOENT`.
+- **Step 4, weewx, 23:26:57:** both symlinks removed as t-weewx via `marvinctl exec`. Each was
+  checked to be exactly `feed/<name>` before its `rm`, and `feed/` was untouched. Through eh-proxy
+  at 23:27:04, `/loopdata` returned 200 at 0.2 s old and `/current` 200 at 14.3 s. `weewx.log`
+  showed 0 ERROR and 0 CRITICAL against 27 INFO lines.
+- **Rollback now needs marvin too.** The narrowed proxy sees only `feed/`, so moving the writer
+  back to the top level means restoring both conf copies from `conf-archive/`, restarting, and
+  reverting marvin's mount in the same window.

@@ -6,7 +6,7 @@ under [Pre-S16].
 
 ---
 
-## [S143] — 2026-09-27 — The loop feed moves into `weewx-data/feed/` behind temporary symlinks (`eaglehunt-ops#348` step 1, DEC-0202); PR #396 merged
+## [S143] — 2026-09-27 — The loop feed moves into `weewx-data/feed/`, and `eh-proxy` now mounts only that (`eaglehunt-ops#348` complete, DEC-0202); PR #396 merged
 
 - **PR #396 merged** (S142's DEC-0201 and handoff) as squash `0d79daf` at 22:30 ET. S142's worktree
   and branches were removed, along with the stale `claude/pensive-borg-1958f0` (its one commit
@@ -23,8 +23,12 @@ under [Pre-S16].
     relative symlinks into `feed/`.
   - Right after, eh-proxy served `/loopdata` 200 at 1.4 s old. There were 0 ERROR, CRITICAL or
     tracebacks since the restart, against 101 INFO lines.
-  - The result is posted on #348 and marvin was rung. Still to come: marvin's flip, the dashboard's
-    check, and then weewx deletes the symlinks (steps 2–4).
+- **`eaglehunt-ops#348` finished the same night.** marvin flipped `eh-proxy`'s mount to `feed/` at
+  23:20:56 ET (MARVIN-DEC-0183), and the dashboard's check passed at 23:22. weewx removed the two
+  symlinks at 23:26:57 as t-weewx, leaving `feed/` untouched. Afterwards eh-proxy served `/loopdata`
+  200 at 0.2 s old, with 0 errors against 27 INFO lines. Each step was posted on #348 and rung to
+  the other two repos. The #396 merge was also posted on `eaglehunt-ops#347`, so heartofgold can
+  tick weewx's row.
 - **Docs:**
   - DEC-0202.
   - `CONSTANTS.md`: the Loop-JSON and compat-path rows, plus a new live-config deviation row
