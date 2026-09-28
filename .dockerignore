@@ -1,0 +1,18 @@
+# Build-context ALLOWLIST (S144): exclude everything, then let back in only the Dockerfile's COPY
+# sources. On marvin the build context is the tenant root, a live checkout that also holds
+# weewx-data/ (the archive, and conf backups with credentials), influxdb/ and logs/, and a plain
+# `docker build` would hand all of it to the daemon. Adding a COPY source to the Dockerfile means
+# adding it here too: tests/test_dockerignore.py fails until you do, and so does the build.
+*
+!Dockerfile
+!patch
+!requirements.txt
+!logging.additions
+!dewpoint_service.py
+!pressure_service.py
+!owm.py
+!windy.py
+!wcloud.py
+!influx.py
+!rtldavis.py
+!entrypoint.sh
