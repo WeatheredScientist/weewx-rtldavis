@@ -211,6 +211,18 @@ RF_TX_PER_MIN = float(os.environ.get('RF_TX_PER_MIN', 60.0 / 2.8125))
 # Env-overridable (e.g. RF_REPORT_INTERVAL_HOURS in monitor.env).
 RF_REPORT_INTERVAL_HOURS = max(1, min(24, int(os.environ.get('RF_REPORT_INTERVAL_HOURS', 6))))
 
+# --- ISS low-battery flag (#394, DEC-0203) ---
+# The driver archives the ISS's battery-low bit as txBatteryStatus, and weewx keeps
+# the LAST packet's value for each minute. Through 2026-09-28 it was set in exactly
+# 10 archived minutes, every one a lone minute at a freeze or reception-collapse
+# onset (rxCheckPercent 2-19%): corrupt frames, not a battery. A weak battery sets
+# the bit on every packet it sends, so it shows in minute after minute of healthy
+# reception. The alert therefore counts only minutes whose own reception was
+# healthy, and needs several of them in one reporting block. Checked with the
+# RF reception summary, every RF_REPORT_INTERVAL_HOURS.
+BATTERY_HEALTHY_RX_PCT  = 50  # a minute counts only if its rxCheckPercent >= this
+BATTERY_LOW_MIN_MINUTES = 5   # healthy flagged minutes in one block that mean "low"
+
 # --- PID guard ---
 # '--test-alert' bypasses the guard entirely: it sends one test email and exits,
 # and must NOT touch the running monitor's pidfile.
@@ -1109,6 +1121,101 @@ def format_reception_summary(summary, label):
     return "\n".join(lines)
 
 
+def summarize_battery_rows(rows):
+    """Count one block's ISS battery-low minutes (#394). ROWS are (dateTime,
+    rxCheckPercent, txBatteryStatus). A minute with no flag value carries no
+    battery information and is skipped. Returns None when no row carries a flag
+    at all (nothing to report), else a dict:
+      healthy         -- minutes with rxCheckPercent >= BATTERY_HEALTHY_RX_PCT
+      flagged_healthy -- of those, how many carry the flag
+      flagged_other   -- flagged minutes with collapsed or NULL reception: the
+                         corrupt-frame class, reported but never alerted on
+      low             -- flagged_healthy reached BATTERY_LOW_MIN_MINUTES"""
+    healthy = flagged_healthy = flagged_other = 0
+    seen = False
+    for _ts, rx, flag in rows:
+        if flag is None:
+            continue
+        seen = True
+        good = rx is not None and rx >= BATTERY_HEALTHY_RX_PCT
+        if good:
+            healthy += 1
+        if flag > 0:
+            if good:
+                flagged_healthy += 1
+            else:
+                flagged_other += 1
+    if not seen:
+        return None
+    return {'healthy': healthy, 'flagged_healthy': flagged_healthy,
+            'flagged_other': flagged_other,
+            'low': flagged_healthy >= BATTERY_LOW_MIN_MINUTES}
+
+
+def db_battery_summary(start_ts, end_ts, db_path=None):
+    """Read txBatteryStatus + rxCheckPercent for [START_TS, END_TS) from the archive
+    DB (read-only) and return summarize_battery_rows() of it, or None. Any DB error
+    is logged and swallowed, like db_reception_summary(): a battery line is never
+    worth the monitor dying for."""
+    db_path = db_path or ARCHIVE_DB
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        try:
+            rows = con.execute(
+                "SELECT dateTime, rxCheckPercent, txBatteryStatus FROM archive "
+                "WHERE dateTime >= ? AND dateTime < ? ORDER BY dateTime",
+                (start_ts, end_ts)).fetchall()
+        finally:
+            con.close()
+    except Exception as e:
+        log(f"DB BATTERY SUMMARY ERROR: {e}")
+        return None
+    return summarize_battery_rows(rows)
+
+
+def format_battery_line(b):
+    """One line for the RF reception email: OK / watch / LOW, plus any flagged
+    minutes the healthy-reception gate set aside."""
+    if b['low']:
+        line = (f"ISS battery: LOW -- flag set in {b['flagged_healthy']} of {b['healthy']} "
+                f"healthy-reception minutes")
+    elif b['flagged_healthy']:
+        line = (f"ISS battery: watch -- flag set in {b['flagged_healthy']} of {b['healthy']} "
+                f"healthy-reception minutes (alert at {BATTERY_LOW_MIN_MINUTES})")
+    else:
+        line = f"ISS battery: OK -- flag clear in all {b['healthy']} healthy-reception minutes"
+    if b['flagged_other']:
+        line += (f"; {b['flagged_other']} more flagged minute(s) with collapsed reception "
+                 f"set aside (corrupt-frame class, #394)")
+    return line
+
+
+def battery_alert_decision(b, alerted):
+    """Hysteresis for the one-shot low-battery email: (send_now, alerted_after).
+    Fires once when a block reads LOW, re-arms only after a fully clear block, and
+    a 'watch' block (a few flagged minutes) changes nothing. A dying cell that
+    flags at night and clears by day therefore re-alerts about once a day."""
+    if b is None:
+        return False, alerted
+    if b['low']:
+        return (not alerted), True
+    if b['flagged_healthy'] == 0:
+        return False, False
+    return False, alerted
+
+
+def send_battery_alert(b, label):
+    body = (f"The ISS set its battery-low flag in {b['flagged_healthy']} of {b['healthy']} "
+            f"minutes with healthy reception, {label}.\n\n"
+            f"A lone flagged minute is usually a corrupt frame at a reception collapse "
+            f"(#394). This many, with reception healthy, is the ISS reporting its own "
+            f"supply: replace the ISS battery (the CR123A lithium cell on the SIM board).\n\n"
+            f"Checked every {RF_REPORT_INTERVAL_HOURS} h with the RF reception summary. "
+            f"This alert fires once and re-arms after a block with the flag clear.")
+    log(f"BATTERY LOW: {format_battery_line(b)} ({label})")
+    send_email(f"{STATION_NAME}: ISS battery low", body)
+
+
 def wu_record_key(line):
     """Dedup key for a 'Wunderground-RF ... Published' line — the record epoch.
 
@@ -1235,6 +1342,7 @@ def main():
     wu_first_seen     = False
     wu_hourly_buckets = {}
     wu_report_start   = period_floor(time.time(), RF_REPORT_INTERVAL_HOURS)
+    battery_alerted   = False   # #394 one-shot latch; a restart re-arms it
 
     # S82b (#180): pick up an episode a previous monitor process left open.
     # wu_in_alert is re-derived from the restored onset (the two are the same
@@ -1396,11 +1504,18 @@ def main():
                 log(f"RECEPTION SUMMARY (WU-scrape fallback): sending for {label}")
             else:
                 body = None
+            # #394: the ISS battery flag rides the same block, from the same archive.
+            battery = db_battery_summary(wu_report_start, block)
+            if body and battery:
+                body += "\n\n" + format_battery_line(battery)
             if body:
                 # Logged, not just emailed (ops#257 limb 3): the email-only path meant
                 # this summary was unreachable by any ad-hoc tenant read.
                 log(body)
                 send_email(f"{STATION_NAME}: RF Reception — {label}", body)
+            send_now, battery_alerted = battery_alert_decision(battery, battery_alerted)
+            if send_now:
+                send_battery_alert(battery, label)
             wu_hourly_buckets = {}
             wu_report_start   = block
 

@@ -358,6 +358,9 @@ The included `weewx_monitor.py` runs on the NAS host (outside Docker) and:
 - Repeats alerts every 2 hours for ongoing outages
 - Tracks WU Rapidfire RF reception quality — alerts when packet reception drops below threshold
 - Sends a daily email summary of RF reception by hour
+- Reports the ISS battery-low flag in each reception summary, and emails once when the flag is set
+  across several minutes of healthy reception (a lone flagged minute during a reception collapse is
+  a corrupt frame, not the battery)
 
 ### RF Reception Monitoring
 

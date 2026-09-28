@@ -10766,11 +10766,19 @@ value, 0.0141 at 18:28, is the **transition minute**: 0.08 readings averaged wit
 a LOOP value can only be 0 or ≥ 0.06, so an archive fraction in (0, 0.05) is always a minute that mixes
 the two. That happens at the edge of every dusk and dawn and is expected, not a dark code.
 
-**Still pending (`BOOT.md`): a full overnight.** Every `radiation = 0` row after 2026-09-27 17:41
-should read UV 0, including through the code-1 runs. A fraction in a dark row would need its minute
-examined, and so would any exact 0.02/0.04, which can only mean the line isn't loaded. **Find the
-code before touching the window; never widen it into a threshold.** HLF will separately confirm
-dark hours reach the `weewx` bucket as 0 (ops#343; HLF rung 2026-09-27).
+**Full overnight verified (S144, 2026-09-28).** A read-only query of the prod archive (`mode=ro`,
+via `marvinctl exec` with the venv interpreter) covered 2026-09-27 17:41 → 09-28 12:32 ET: 1,130
+one-minute rows, 734 of them dark (`radiation = 0`). **733 read UV 0 and one is NULL. None falls in
+(0, 0.05), none is an exact 0.02 or 0.04, and none reads ≥ 0.05.** Positive control: the same query
+over the pre-fix night (09-26 17:41 → 09-27 07:30) flags all 747 of its dark rows (737 at 0.04, 8 at
+0.02, 2 fractional). Dawn produced no in-window fraction at all. UV held 0 through the solar twilight
+code (`sr_raw 2`, 07:01–07:18) up to ~14 W/m², mixed to 0.061 at 07:26, and read 0.08 from 07:27.
+The lone NULL (22:59) comes from S143's DEC-0202 restart, not this line. weewxd reached its packet
+loop at 22:56:51, but no LOOP packet reached it until after 22:58:00, so 22:57 and 22:58 have no rows
+and 22:59 is the partial first record (`rxCheckPercent` NULL too, 54% at 23:00). Windy and WOW each
+returned one 429 on it, as at 17:41. A UV-only NULL is routine anyway: 93 in the two weeks before.
+HLF S349 confirmed the InfluxDB side the same evening (ops#343, closed), so DEC-0200 is verified end
+to end. A future dark code is still extended per-code, never by widening the window.
 
 ---
 
@@ -10944,3 +10952,114 @@ All times ET, 2026-09-27.
 - **Rollback now needs marvin too.** The narrowed proxy sees only `feed/`, so moving the writer
   back to the top level means restoring both conf copies from `conf-archive/`, restarting, and
   reverting marvin's mount in the same window.
+
+---
+
+## DEC-0203 — #394: the monitor surfaces the ISS battery flag, gated on healthy reception; co-rejection takes the frame's battery bit, and an impossible message type counts as proof
+
+**Status:** Accepted (code in a PR to `dev`; not deployed) · **Date:** 2026-09-28 (S144) ·
+**extends** DEC-0054 · **refines** DEC-0054 §4 · **answers** #394
+
+### Context
+
+#394 (owner, 2026-09-20) asked for a practical signal that the ISS battery needs replacing, and
+started from its own question: is `bat_iss` archived or surfaced anywhere yet?
+
+- **Archived: yes.** The default sensor map sends `bat_iss` to `txBatteryStatus`, present on every
+  archive row since 2026-05-19. weewx 5.5's accumulator keeps each minute's last value
+  (`extractor = last`).
+- **Shipped but never shown.** InfluxDB receives it (the live `[[Influx]]` section sets no
+  `obs_to_upload`, so `most` applies), and WeatherCloud receives it as `bat01`. It is not in the
+  loop JSON (a fixed field list), the monitor, or the dashboard.
+
+### Measurement (read-only; prod archive and `weewx.log`, 2026-05-19 → 09-28)
+
+- `txBatteryStatus` read 1 in exactly **10 of 184,717 rows**, all since 2026-08-30, and none in the
+  3.5 months at Foundation. Each is a lone minute.
+- **Every one sits at a freeze or reception-collapse onset.** Its `rxCheckPercent` was 2–19% against
+  60–100% around it. Either the next two or more minutes are missing, or the record was written about
+  4 minutes late (09-21's 21:10 record at 21:13:50, 09-24's 22:40 at 22:44:28: DEC-0088's freezes).
+- What the log shows in each flagged minute:
+
+| Evidence in the minute | Events |
+|---|---|
+| Bounds co-rejection (DEC-0054) | 6 |
+| Impossible message type, no bounds failure | 3 |
+| Temperature delta trip only (64.2 °C from 22.8 °C, inside the sensor spec) | 1 |
+
+- **`unknown message type` fired 8 times across every rotated log marvin holds (08-29 → 09-28):**
+  three of 0x0, two of 0xB, and one each of 0x1, 0xD and 0xF. Every one was a glitch, with a 39–111
+  mph wind riding the frame. The 09-22 06:05 frame (type 0x1) slipped under the delta cap as an
+  11 mph gust, which `dewpoint_service` flagged as the ERR-0004 signature. On 09-25 at 01:44, the
+  delta check rejected a type-0x0 frame's 80.5 m/s wind but resynced the baseline to it, so the
+  genuine 3.1 m/s reading at 01:48:32 was rejected too.
+- **No flip was the battery.** A weak cell sets the bit on every packet, so it would show in minute
+  after minute of healthy reception. None has: 0 of 184,717 minutes carry the flag with
+  `rxCheckPercent` ≥ 50.
+- Aside: `supplyVoltage` (the driver's `supercap_volt`, message type 2) is populated in about 26% of
+  rows. It is bimodal (~2.84 V and ~1.03 V) and switches near 00–01 h and 07–08 h, which does not look
+  like a discharge curve. It stays out of scope, as the issue asked.
+
+### Decision (owner, S144)
+
+The owner chose "monitor + driver fix". After the corrected tally (6 of 10 flips drop by the bounds
+proof alone, 9 of 10 with a message-type proof), the owner also chose the wider proof. An earlier
+"8 of 10" had counted delta trips as proof, which DEC-0054 does not.
+
+1. **Monitor (`weewx_monitor.py`).** Each RF report block (6 h), it reads `txBatteryStatus` and
+   `rxCheckPercent` from the archive, read-only. A minute counts only if its own reception is healthy
+   (`BATTERY_HEALTHY_RX_PCT = 50`), and 5 healthy flagged minutes in a block
+   (`BATTERY_LOW_MIN_MINUTES`) mean LOW.
+   - The RF reception email gains one line: OK, watch, or LOW. Flagged minutes with collapsed
+     reception are listed as set aside.
+   - A LOW block sends a one-shot "ISS battery low" email. It re-arms only after a fully clear block,
+     so a cell that flags by night and clears by day re-alerts about once a day.
+   - The latch lives in memory, so a monitor restart re-arms it.
+2. **Driver: a condemned frame loses its battery flags** (refines DEC-0054 §4). `FRAME_BATTERY_KEYS`
+   are nulled along with `FRAME_WEATHER_KEYS`. §4's "diagnostics describe the link" holds for
+   `pct_good` and `freqError`, which the receiver measures. It does not hold for a bit decoded from
+   the corrupt frame itself. A clean frame's flag flows untouched, so a real weak battery still
+   reaches the archive.
+3. **Driver: a message type no Davis transmitter sends is proof** (extends DEC-0054's trigger).
+   These are 0x0, 0x1, 0xB, 0xD and 0xF; every type the transmitters do send has its own branch,
+   including the undecoded 0x3 and 0xC. The criterion is DEC-0054's own (a value the transmitter
+   cannot emit), with zero parameters.
+   - `parse_raw` marks the frame (`msg_type_impossible`, driver-internal, never in a packet), and
+     `_data_to_packet` co-rejects it.
+   - The log line names the proof: `frame failed message-type proof -- co-rejecting …`. The
+     bounds-only text is unchanged.
+   - Co-rejection also stops the corrupt wind from becoming the delta baseline (the 09-25 case).
+
+**Not changed, and recorded:**
+- Supercap and solar power are decoded from the frame too, and they still survive a co-rejection.
+  No consumer reads them, and the owner's scope named the battery bit.
+- The 09-11 flip (a delta trip, with no proof in the frame) still reaches the archive. The monitor's
+  gate covers it.
+- The monitor thresholds are constants, not env knobs.
+- The driver banner stays `0.20+ws.5`, as it has through every driver change since S73.
+
+### Tests
+
+- `tests/test_sensor_qc.py`: `test_co_rejection_nulls_only_weather_fields` asserted that a
+  condemned frame's battery flag survives. That assertion is inverted here, per the S40 lesson.
+  - New tests: a clean frame's flag flows; a coverage guard ensures every `bat_*` sensor-map value
+    is co-rejectable; `parse_raw` marks exactly 0/1/B/D/F.
+  - Replays: 09-22 06:05 (the phantom gust and its flag are nulled) and 09-25 01:44 (no baseline
+    poisoning), plus the QC-disabled path, which stays untouched.
+  - Pre-fix run: `HEAD`'s driver with only the two new names shimmed in, so behavior alone was under
+    test. 4 tests failed, each on its own assertion.
+  - Mutation: dropping `bat_th_2` from `FRAME_BATTERY_KEYS` fails the coverage guard.
+- `tests/test_battery_flag_monitor.py`:
+  - The 10 real flag minutes never alert, and ten collapsed-reception flags in one block never alert
+    either. Removing the healthy gate fails 5 tests.
+  - It also covers the threshold boundary, the hysteresis sequence (breaking the latch fails it), a
+    temp `.sdb` round-trip, and a missing DB or column returning None.
+
+### Deploy
+
+- **Monitor:** after the merge, `marvinctl --tenant weewx pull`, then `restart
+  weewx-monitor.service` (self-service; see `CONSTANTS.md`'s deploy-layers table). Verify that the
+  sha matches `dev`'s tip, the start time follows the file's mtime, and the `Remedy armed:` line
+  appears. The next 6-hourly RF email should carry the `ISS battery:` line.
+- **Driver:** the baked layer, so it needs a v2.0.17 image build and cutover (owner's go). The
+  `vX.Y.Z` tag and GitHub release ride that promotion.
