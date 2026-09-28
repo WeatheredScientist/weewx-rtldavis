@@ -6,6 +6,40 @@ under [Pre-S16].
 
 ---
 
+## [S143] — 2026-09-27 — The loop feed moves into `weewx-data/feed/` behind temporary symlinks (`eaglehunt-ops#348` step 1, DEC-0202); PR #396 merged
+
+- **PR #396 merged** (S142's DEC-0201 and handoff) as squash `0d79daf` at 22:30 ET. S142's worktree
+  and branches were removed, along with the stale `claude/pensive-borg-1958f0` (its one commit
+  landed as PR #338 on 2026-09-05).
+- **`eaglehunt-ops#348` step 1 applied, owner-approved.** The dashboard (S316) and marvin (S54)
+  agreed on a symlink transition that needs no synchronized window.
+  - `[LoopJsonWriter]` `path`/`current_path` now point at `/opt/weewx-data/feed/` in the live conf
+    and in the tenant-root `weewx.conf.rx-baseline`. The baseline went through the owner root route
+    as t-weewx at 22:54:57 ET. The live conf went as 996 via `marvinctl exec` at 22:56:28, after a
+    dry run. Both stay 0600, and the pre-edit copies are in `conf-archive/`.
+  - `feed/` was created at 0755. weewx restarted at 22:56:50, and the writer's startup line names
+    the feed paths. The first packet landed about 106 s later.
+  - At 22:58:37 the top-level `loop-data.txt` and `current.json` were swapped atomically for
+    relative symlinks into `feed/`.
+  - Right after, eh-proxy served `/loopdata` 200 at 1.4 s old. There were 0 ERROR, CRITICAL or
+    tracebacks since the restart, against 101 INFO lines.
+  - The result is posted on #348 and marvin was rung. Still to come: marvin's flip, the dashboard's
+    check, and then weewx deletes the symlinks (steps 2–4).
+- **Docs:**
+  - DEC-0202.
+  - `CONSTANTS.md`: the Loop-JSON and compat-path rows, plus a new live-config deviation row
+    carrying marvin's two `feed/` rules.
+  - `docs/INTERFACES.md`: the paths are configurable, and a consumer must bind the directory, not
+    the files.
+  - `docs/CONVENTIONS.md`: its S55-era infra table, a stale second copy that still named the NAS as
+    prod, is now a pointer to `CONSTANTS.md` (BOOT job 8's CONVENTIONS item).
+  - `docs/GOTCHAS.md` §1: `weewx.log` timestamps are ISO, so a syslog-shaped window filter reads as
+    a false zero.
+  - `docs/GOTCHAS.md` §3: `ssh -G` trips the marvin guard, and ConfigObj needs
+    `interpolation=False`. The second was re-hit because §3 went unread before the marvin task.
+- Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files (fresh cache) · secret gate 0 on the
+  staged files, positive-controlled (identifier, private-IP and credential plants each exit 1).
+
 ## [S142] — 2026-09-27 — Config backups moved out of the shared `weewx-data` top level into a 0700 `conf-archive/` (DEC-0201); `CONSTANTS.md` NAS rows corrected
 
 - **Premises re-checked read-only first.**
@@ -63,20 +97,3 @@ under [Pre-S16].
   radiation/UV dark floors are zeroed by config, with this station's apply dates.
 - Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files · secret gate 0
   (positive-controlled).
-
-## [S139] — 2026-09-19 — `docs/ARCHITECTURE.md` re-verified against live marvin state (BOOT job 5)
-
-- Doc hadn't been touched since S17 (2026-07-04) and had drifted across the DEC-0118 marvin move:
-  stale weewx version (5.3.1 → 5.5.0, verified live), stale LNA/bias-tee claim (LNA is out,
-  `BIAS_TEE=0`), a NAS-pathed mount table duplicating (and out of sync with) `CONSTANTS.md`'s own
-  table, and a NAS-side monitor section describing a DSM-Task user that no longer exists. Section
-  3's mount table is now a pointer to `CONSTANTS.md` instead of a second copy (STANDARD rule 5).
-  Section 7 rewritten for `weewx_monitor.py`'s current shape: `weewx-monitor.service`,
-  `User=t-weewx`, `REMEDY_MODE=none`, and why `usb_reset.sh` doesn't apply on marvin's topology.
-  `CONSTANTS.md` itself checked out accurate on everything verifiable — no changes needed there.
-  Two rows stay flagged unverified (marvin host tool availability, `LOCAL_INFRA.md`'s marvin
-  entry) — both need either an interactive host shell or reading a secret-bearing file the
-  read-guard rightly blocks. PR #392.
-- Closeout ran late (this entry + the `BOOT.md` pointer rewrite land at S140's session start,
-  per `ops#218`'s "closeout debt" recovery path — the session that did the work ended without
-  running its own closeout).

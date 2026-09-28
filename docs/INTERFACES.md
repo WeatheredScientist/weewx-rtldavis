@@ -22,6 +22,13 @@ Written by `loop_json_writer.py` (a WeeWX `data_service`, DEC-0005) to
 only the path differs. `loop-data.txt` is served to the dashboard's ongoing polling at `/loopdata`
 by the eh-proxy (which lives in the dashboard's deployment, not this repo).
 
+Both paths are configurable (`[LoopJsonWriter]` `path` and `current_path`). The defaults above are
+what a stock install writes. **A consumer that bind-mounts these files must mount their directory,
+not the files.** Every write replaces a file by rename, and a single-file bind pins the original
+inode, so the consumer would read a frozen file forever. This project's own deployment writes both
+files into `weewx-data/feed/`, a directory holding nothing else, so the eh-proxy can mount that
+directory alone (DEC-0202).
+
 **`current.json` is a cold-load SNAPSHOT on its own slower cadence, not a second live feed
 (DEC-0093, S85).** It exists for a boot fetch — so a first-time visitor doesn't see em-dashes before
 the polling loop's first response lands (Cold-load Fix B, DEC-0051) — and is rewritten **at most
