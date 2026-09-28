@@ -17,6 +17,14 @@ docker pull weatheredscientist/weewx-rtldavis:v2.0.16   # or :latest
 ```
 Pin a version tag (`:v2.0.16`) for reproducible deploys; `:latest` always tracks the newest release.
 
+> **v2.0.17 (source release, 2026-09-28; not yet on Docker Hub, where v2.0.16 below is still
+> current):** the decode filter now also treats a message type no Davis transmitter sends as
+> proof of a corrupt frame, and a corrupt frame's battery-low bit is discarded along with its
+> weather fields. Before this, corrupt frames at reception collapses produced one-minute false
+> ISS low-battery readings and, occasionally, a phantom wind gust. The host monitor also reports
+> the ISS battery flag in each reception summary, and emails once when the flag persists across
+> healthy reception. Driver still reports `0.20+ws.5`.
+>
 > **Current version:** v2.0.16 — **upgrade if you are on any earlier tag.**
 > **New in v2.0.15–v2.0.16:** two data-accuracy fixes to the reception-quality metric, both
 > confirmed live in production. The Go demodulator was double-decoding a fraction of legitimate

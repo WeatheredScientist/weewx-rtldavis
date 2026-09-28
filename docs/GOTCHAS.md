@@ -243,8 +243,9 @@ alone did not catch.
   argv element from a script's own subprocess call (no shell involved); use `.` as a regex
   stand-in for the literal space (`rtldavis.process.stalled`), and split an OR across two
   signatures into two greps, since the alternation itself would need a space. **It refuses a
-  bracket expression too** (S144: `2026-09-27.22:5[6-9]` has no space, yet it drew the same
-  "single whitespace-free token" error); grep a wider prefix and narrow locally. Exit code 1 from
+  bracket expression and a `|` too, and so does `exec-ro`'s argv** (S144: `2026-09-27.22:5[6-9]`
+  and `A|B` have no space, yet both drew the same "single whitespace-free token" error). Grep a
+  wider prefix and narrow locally, or run one pattern per call. Exit code 1 from
   `grep` means EITHER zero matches OR a missing path — indistinguishable by exit code alone, only
   by whether stderr says "does not exist"; treat both as zero lines unless the distinction actually
   matters. `ls <dir>` takes no glob and no flags (`ls -1 file*` fails outright) — always full

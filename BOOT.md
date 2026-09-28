@@ -16,58 +16,55 @@ is a **separate repo** — don't make dashboard changes here.
 
 ### What's settled (do not re-derive)
 
-**#394 is designed, built and tested as DEC-0203, in S144's PR to `dev` (branch
-`s144-dec0200-394-battery`), not deployed.** Every one of `txBatteryStatus`'s 10 archived flips was
-a corrupt frame at an outage onset, not the battery.
-- **Monitor half:** each 6-hourly RF email gains an `ISS battery:` line. A one-shot low-battery
-  email fires at 5 or more flagged minutes with healthy reception (≥ 50%) in one block.
-- **Driver half:** a co-rejected frame drops its battery flags, and message types
-  0x0/0x1/0xB/0xD/0xF condemn a frame like a bounds failure (9 of 10 flips drop at the source).
+**v2.0.17 has run in prod since 2026-09-28 13:32:39 ET (DEC-0204).**
+- It carries DEC-0203's driver half, so a co-rejected frame drops its battery flags and message
+  types 0x0/0x1/0xB/0xD/0xF condemn a frame. It also carries S126's GPLv3 notice (#327).
+- It was the first build from the tenant root itself, behind the new `.dockerignore` allowlist, and
+  was verified against v2.0.16 by baked-file sha before the cutover.
+- It is tagged `v2.0.17` on `f255efb`, with a GitHub release. It is not on Docker Hub
+  (`eaglehunt-ops#265`).
 
-**DEC-0200 is verified end to end:** all 733 non-NULL dark archive rows since the apply read UV 0,
-and HLF confirmed the InfluxDB side. **Reception at USB port `5-1` equals `7-1.2`** (99.9% at both);
-that watch is closed. **`CONSTANTS.md`'s marvin rows are re-verified.** A release is `build` →
-`tag …:marvin-live` → `restart`, not `set-image`. S143's DEC-0202 feed move stands.
+**The monitor has run DEC-0203's battery gate since 13:21:52 ET.** Each 6-hourly RF email carries
+an `ISS battery:` line, and a one-shot low-battery email fires at 5 or more flagged minutes with
+healthy reception in a block. `REMEDY_MODE=none` is unchanged.
+
+**Also settled in S144:** DEC-0200 is verified end to end. Reception at USB port `5-1` equals
+`7-1.2`. `CONSTANTS.md`'s marvin rows are re-verified; a release is pull → build → `exec-ro` verify
+→ tag `:marvin-live` → restart.
 
 ### ▶▶ S145 JOB LIST
 
-1. **Once the owner merges S144's PR, deploy DEC-0203's monitor half (self-service).** Run
-   `marvinctl --tenant weewx pull`, then `restart weewx-monitor.service`.
-   - Verify the on-disk sha matches `dev`'s tip, the start time follows the file's mtime, and the
-     `Remedy armed:` line appears.
-   - The next 6-hourly RF email (00/06/12/18 ET) should carry `ISS battery: OK …`.
-   - Then comment on #394 and close it with that evidence (never a bare close). The driver half
-     rides job 2.
-2. **v2.0.17, DEC-0203's driver half: an attended prod cutover, so it needs the owner's go.**
-   - First bump the Dockerfile's version comment (it still says v2.0.14) in a PR.
-   - Then `pull`, `marvinctl build /srv/docker/weewx -t weatheredscientist/weewx-rtldavis:v2.0.17`,
-     `tag … :marvin-live`, and `restart weewx.service`. Expect a short outage plus hop re-acquisition,
-     about 2 min at S143.
-   - Verify: the banner, a clean boot, and later a `frame failed message-type proof` line if one
-     turns up.
-   - The `vX.Y.Z` tag, GitHub release, `prod-baseline` promotion and README "From v2.0.17" note ride
-     it (`CONVENTIONS.md`). The Hub push stays `eaglehunt-ops#265`'s question.
-3. **Freeze lead (Blocker 1), measure only when next working freezes.** Every corrupt-frame flip was
-   the last thing logged before a ~4-minute silence (e.g. 21:09:35 → 21:13:50). The reverse rate
-   (how many freezes a corrupt frame precedes) is unmeasured.
-4. Carry forward S126's job-8 items (EnvironmentFile, `marvin-release.sh`), none due. Watch
-   [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) without chasing it (no reply as
-   of S144). `eaglehunt-ops#306`'s residual needs no action. The local-infra doc's marvin entry is
-   unverified (the read guard blocks the check).
-5. Optional, owner route only: one tenant-root tidy that isn't reachable by any other tenant (see
-   the local-infra doc). Do it only if a root-route window opens anyway.
+1. **Confirm the monitor's first `ISS battery:` line**, due in the 18:00 ET RF report. It is logged
+   as well as emailed: `marvinctl --tenant weewx grep ISS.battery
+   /srv/docker/weewx/logs/weewx_monitor.log`. Expect `OK -- flag clear in all N healthy-reception
+   minutes`. A `frame failed message-type proof` line in `weewx.log` confirms the driver half live
+   whenever a glitch arrives (8 in 31 days).
+2. **Regenerate the dupgate patch against upstream `main.go`.** v2.0.17's build log shows #327's
+   notice hunk applying "with fuzz 2". A comment is harmless, but a drifting patch is not; the next
+   build should apply it cleanly.
+3. **Freeze lead (Blocker 1), measure only when next working freezes.** Every corrupt-frame battery
+   flip was the last thing logged before a ~4-minute silence (e.g. 21:09:35 → 21:13:50). The reverse
+   rate (how many freezes a corrupt frame precedes) is unmeasured.
+4. **`dev` → `main` promotion, the owner's call on timing.** `main` is still v2.0.13
+   (`prod-baseline-20260811`); v2.0.14 through v2.0.17 have run unpromoted (DEC-0114's "once it
+   proves out").
+5. Carry forward S126's job-8 items (EnvironmentFile, `marvin-release.sh`), none due. Watch
+   [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) without chasing it.
+   `eaglehunt-ops#306`'s residual needs no action. The local-infra doc's marvin entry is unverified,
+   since the read guard blocks the check. The owner-route tenant-root tidy is optional, only if a
+   root window opens anyway.
 
 ## Current state (S144 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `v2.0.16` as `:marvin-live` (the unit's floating tag, `--pull=never`), weewx 5.5.0, gain 372, runs as `t-weewx` (996:986). Up since 2026-09-27 22:56:50 ET. `:v2.0.15`/`:v2.0.14` present locally for rollback |
-| InfluxDB | marvin, `weewx-influxdb.service`, unchanged. Dark UV arrives as 0 (HLF) |
-| weewx-monitor | unchanged, running since 2026-09-18 23:13 ET; DEC-0203's battery line not deployed yet (job 1) |
-| Reception | 99.9% mean at USB port `5-1` (unchanged from `7-1.2`) |
-| `main`/`dev` | S144's PR to `dev`: DEC-0200 verified, DEC-0203 code and tests, `CONSTANTS.md` corrections. `main` is still weeks behind, unpromoted |
-| Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · unchanged |
-| Trackers | repo: #394 addressed in S144's PR (close after job 1) · #380 marvin's pager, informational · ops: #343, #347, #348 closed · #265/#110 deferred-trigger, unfired · #306 residual · #344 macOS LAN (worked around; this desktop session reached marvin again) |
+| Prod | marvin, **`v2.0.17`** as `:marvin-live` (image `621710f7…`) since 2026-09-28 13:32:39 ET, weewx 5.5.0, gain 372, `t-weewx` (996:986). `:v2.0.16`/`:v2.0.15`/`:v2.0.14` local for rollback (retag + restart) |
+| InfluxDB | marvin, `weewx-influxdb.service`, unchanged |
+| weewx-monitor | restarted 2026-09-28 13:21:52 ET onto DEC-0203's battery gate (sha `8a07efd7…` = `dev`); `REMEDY_MODE=none` |
+| Reception | 99.9% mean at USB port `5-1` |
+| `main`/`dev` | `dev` = `f255efb` plus S144's records PR. `main` is still v2.0.13, unpromoted (job 4) |
+| Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · v2.0.17 not pushed (`eaglehunt-ops#265`) |
+| Trackers | repo: #394 closed S144 with the deploy evidence · #380 marvin's pager, informational · ops: #343/#347/#348 closed · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN (this desktop session reached marvin) |
 
 ## Blockers
 
@@ -81,10 +78,9 @@ that watch is closed. **`CONSTANTS.md`'s marvin rows are re-verified.** A releas
 
 ## Model tier
 
-**S144 ran on Opus 5.5**, persisted from S143 and flagged in the first reply. Job 1 was execution;
-#394's triage and design, the bulk of the session, was frontier work. No `/model` switch was made.
-**Desktop app:** the model persists. Job 1 next session is execution (Sonnet). Job 2 is an attended
-prod cutover, which calls for Opus 5.
+**S144 ran on Opus 5.5 throughout**, persisted from S143 and flagged in the first reply. #394's
+design and the attended v2.0.17 cutover were frontier work. No `/model` switch was made.
+**Desktop app:** the model persists. S145's jobs 1 and 2 are execution (Sonnet).
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -92,8 +88,9 @@ prod cutover, which calls for Opus 5.
 any NAS, marvin or campaign task (§3) · judging a component live, dead, or shipped (§4). **Read §3
 before the marvin task, not after.** **New this session:**
 - §1: an archive record's timestamp is the *end* of its interval, so its log evidence sits in the
-  minute before. Missing that produced a wrong tally mid-decision.
-- §3: `marvinctl grep` refuses bracket expressions, with a misleading "whitespace" error.
+  minute before.
+- §1: `boot-cap-check.sh` with no argument checks eaglehunt-ops' BOOT; pass `"$PWD/BOOT.md"`.
+- §3: `marvinctl grep` and `exec-ro` refuse `[…]` and `|` with a misleading "whitespace" error.
 
 ## Files needed at session start
 
@@ -105,5 +102,5 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-09-28 (S144). DEC-0200 verified overnight. #394 built as DEC-0203, in S144's PR
-to `dev` and not deployed: the monitor half is job 1, the driver half (v2.0.17) job 2._
+_Last updated: 2026-09-28 (S144). v2.0.17 in prod (DEC-0204). The monitor runs DEC-0203's battery
+gate. #394 closed. Job 1 confirms the first `ISS battery:` line at 18:00 ET._

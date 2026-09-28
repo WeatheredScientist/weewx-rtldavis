@@ -6,7 +6,7 @@ under [Pre-S16].
 
 ---
 
-## [S144] — 2026-09-28 — DEC-0200 verified overnight; #394's ISS battery flag surfaced by the monitor and cleaned at the source (DEC-0203); `CONSTANTS.md` marvin rows re-verified
+## [S144] — 2026-09-28 — DEC-0200 verified overnight; #394's ISS battery flag surfaced by the monitor and cleaned at the source (DEC-0203); v2.0.17 in prod (DEC-0204); `CONSTANTS.md` marvin rows re-verified
 
 - **DEC-0200 verified (job 1).** 733 of 734 dark archive rows from 09-27 17:41 to 09-28 12:32 ET
   read UV 0. The other is the partial first record of S143's restart (22:59, after two minutes with
@@ -28,8 +28,20 @@ under [Pre-S16].
   - Mid-decision, the owner was quoted "8 of 10" for the driver fix, a count that treated delta
     trips as proof. The corrected tally (6 by bounds, 9 with the message-type proof) went back to
     the owner before any code. The trap is now in `GOTCHAS.md` §1.
-  - In a PR to `dev` from `s144-dec0200-394-battery`, not deployed. The monitor deploys
-    self-service after the merge; the driver needs v2.0.17.
+  - PR #399 merged at 13:21 ET (`1dd3026`). The monitor was deployed self-service at 13:21:52
+    (sha matches `dev`); its first `ISS battery:` line is due in the 18:00 RF report.
+- **v2.0.17 built and cut over, on the owner's go at each prod step (DEC-0204).**
+  - PR #400 (`f255efb`) added a `.dockerignore` allowlist, since marvin's build verb is a plain
+    `docker build` of the tenant root, which also holds the archive, conf backups and InfluxDB
+    data. It added a test pinning the list to the Dockerfile and a v2.0.17 version comment.
+  - Built on marvin from the tenant root with a 217 kB context. Checked against v2.0.16 by the
+    sha of every baked file, only `rtldavis.py` (now `dev`'s) and the Go binary differ; the
+    binary differs because of S126's GPLv3 notice (same `go1.26.0`).
+  - Cutover at 13:32:38 by retagging `:marvin-live` and restarting. It booted clean, and the
+    first record came at 13:34.
+  - Tagged `v2.0.17` on `f255efb`, with a GitHub release. Not pushed to Docker Hub
+    (`eaglehunt-ops#265`).
+  - #394 closed with the deploy evidence.
 - **Reception at the new USB port (job 3): no change.** It averaged 99.9% at both `7-1.2` (3.9 days)
   and `5-1` (20.5 days), with every hour within ±0.4 points. The move was missing from
   `CONSTANTS.md`'s hardware timeline and is now added.
