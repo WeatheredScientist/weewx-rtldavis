@@ -10957,7 +10957,7 @@ All times ET, 2026-09-27.
 
 ## DEC-0203 — #394: the monitor surfaces the ISS battery flag, gated on healthy reception; co-rejection takes the frame's battery bit, and an impossible message type counts as proof
 
-**Status:** Accepted (code in a PR to `dev`; not deployed) · **Date:** 2026-09-28 (S144) ·
+**Status:** Accepted (deployed 2026-09-28: the monitor at 13:21:52 ET, the driver in v2.0.17 at 13:32:39 ET, DEC-0204) · **Date:** 2026-09-28 (S144) ·
 **extends** DEC-0054 · **refines** DEC-0054 §4 · **answers** #394
 
 ### Context
@@ -11063,3 +11063,75 @@ proof alone, 9 of 10 with a message-type proof), the owner also chose the wider 
   appears. The next 6-hourly RF email should carry the `ISS battery:` line.
 - **Driver:** the baked layer, so it needs a v2.0.17 image build and cutover (owner's go). The
   `vX.Y.Z` tag and GitHub release ride that promotion.
+- **Both done the same session (S144):** the monitor at 13:21:52 ET, and the driver as v2.0.17 at
+  13:32:39 ET. The as-run record is DEC-0204.
+
+---
+
+## DEC-0204 — v2.0.17: DEC-0203's driver half, built from the tenant-root checkout behind a build-context allowlist, verified against v2.0.16, and deployed
+
+**Status:** Accepted (deployed 2026-09-28 13:32:39 ET) · **Date:** 2026-09-28 (S144) · **ships**
+DEC-0203 · **follows** DEC-0138's verify-before-cutover shape · **applies** MARVIN-DEC-0109/0116 (the
+floating `:marvin-live` tag)
+
+### Context
+
+DEC-0203's driver half is baked into the image (DEC-0031), so it needed a release. This was the
+first build since the tenant root became a `dev` checkout (S129, DEC-0150). v2.0.15 and v2.0.16 were
+built from separately extracted trees (DEC-0136, DEC-0138). marvin's `build` verb runs
+`docker build -t <tag> -- <path>` with no filtering (heartofgold's `marvin-own`). The tenant root
+holds `weewx-data/` (the archive, and conf backups with credentials), `influxdb/` and `logs/`
+alongside the source, and the repo had no `.dockerignore`.
+
+### Decision (owner's go at each prod step, S144)
+
+1. **Build from the tenant root, behind a `.dockerignore` allowlist.** It excludes `*`, then
+   re-admits only the Dockerfile's COPY sources. `tests/test_dockerignore.py` pins the list to the
+   Dockerfile; dropping `wcloud.py` fails it. This went in PR #400, together with the Dockerfile's
+   version comment, which had read v2.0.14 since v2.0.14.
+2. **Release path:** `marvinctl pull` → `build /srv/docker/weewx -t …:v2.0.17` → verify the image
+   with `exec-ro` → `tag …:v2.0.17 …:marvin-live` → `restart weewx.service`. There is no
+   `set-image`: the unit runs the floating own-tag (`CONSTANTS.md` corrected this session).
+3. **Tag `v2.0.17` on the built commit, `f255efb`** (`dev`). It is not pushed to Docker Hub; that
+   stays `eaglehunt-ops#265`'s question.
+
+### As-run (2026-09-28, ET)
+
+- **The monitor half went first.** #399 merged at 13:21:05 (`1dd3026`). `marvinctl pull` took the
+  tenant root from `c887aec` (S138) to it; none of the 20 changed files is bind-mounted. The monitor
+  restarted at 13:21:52, after the file's 13:21:36 mtime. Its sha `8a07efd7…` matches `dev`, and the
+  log shows `Remedy armed: no automatic remedy (REMEDY_MODE=none)`.
+- **Build.** #400 merged at 13:27:23 (`f255efb`) and was pulled. BuildKit transferred a 217 kB
+  context, so the allowlist held, and no step was cached; the build returned RC 0 and produced image
+  `621710f7…`. `weectl`'s "Logging error" traces during the build are the container's missing
+  `/dev/log`, which is benign.
+- **Verified before the cutover, with `exec-ro` sha256 of every baked file against v2.0.16.** Only
+  two files differ:
+  - `rtldavis.py` went from `57bf0dc7…` to `090e5700…`, which is `dev`'s.
+  - `/usr/local/bin/rtldavis` differs because S126's GPLv3 §5(a) notice (#327, merged after
+    v2.0.16's build) shifts `main.go`'s line numbers. Both binaries embed `go1.26.0`, and upstream's
+    `src.tgz` last changed 2026-01-03.
+  - weewx is 5.5.0, and `rtldavis -h` lists `-dupwindow`.
+  - The build log shows the notice hunk applied "with fuzz 2". It is harmless as a comment, but it
+    is a drifting patch (`BOOT.md` follow-up).
+- **Cutover.** `:marvin-live` was retagged to v2.0.17 (`check-image`: `621710f7…`), and
+  `weewx.service` restarted at 13:32:38. The container was up at 13:32:39 on `621710f7…`, running
+  `996:986`, with a running driver sha of `090e5700…`.
+  - weewxd 5.5.0 booted clean: 61 INFO and 0 ERROR/CRITICAL/traceback before the first record. The
+    banner reads `0.20+ws.5`, unchanged by design. The loop writer targets `feed/`.
+  - The first record was 13:34:00, written at 13:34:15. 13:33 has no row (hop re-acquisition), and
+    13:34 is the partial first record with `rxCheckPercent` NULL. The only errors since the restart
+    are Windy's and WOW's 429 on that record, the known restart pattern.
+  - 13:35 read 58% while reception ramped back up, and 13:36–13:38 read 100%. The monitor's
+    13:36:55 window spanning the restart read 67%, still `[OK]` with 0 bad windows, so no
+    alert fired.
+  - It was the first `weewx.service` restart since `ops#351` folded weewx's systemd drop-ins at
+    13:04 the same day, and it came up clean.
+- **Rollback:** `marvinctl tag weatheredscientist/weewx-rtldavis:v2.0.16
+  weatheredscientist/weewx-rtldavis:marvin-live`, then restart. `:v2.0.16` (`1a9daeb6…`) is still
+  local.
+
+### Not yet observed
+
+- A live `frame failed message-type proof` line. That needs a glitch, and there were 8 in 31 days.
+- The monitor's first `ISS battery:` line, due in the 18:00 ET RF report.
