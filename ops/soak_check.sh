@@ -48,17 +48,17 @@ LOGDIR=/srv/docker/weewx/logs
 ARCHIVE_DB=/srv/docker/weewx/weewx-data/archive/weewx.sdb
 VENV_PY=/opt/weewx-venv/bin/python3
 # Anchored at line start so version numbers in the Dockerfile's prose cannot match.
-# The v2.0.17 literal is only the fallback for a script copied out of its checkout.
+# The v2.0.18 literal is only the fallback for a script copied out of its checkout.
 _stamp="$(grep -m1 -oE '^# weewx-rtldavis v[0-9]+(\.[0-9]+)+' "$(dirname "$0")/../Dockerfile" 2>/dev/null | sed 's/.* //')"
 if [ -n "${EXPECT_IMAGE:-}" ]; then EXPECT_SRC="EXPECT_IMAGE"
 elif [ -n "$_stamp" ]; then EXPECT_SRC="Dockerfile stamp"
 else EXPECT_SRC="built-in fallback"
 fi
-EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:${_stamp:-v2.0.17}}"
+EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:${_stamp:-v2.0.18}}"
 # The DEC-0031 canary. Unlike EXPECT_IMAGE it reads no stamp: this is what prod is
 # running NOW, not what the repo is on, so a deploy that changes the driver banner
 # (DRIVER_VERSION in rtldavis.py) must bump it.
-EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.5}"
+EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.6}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }
