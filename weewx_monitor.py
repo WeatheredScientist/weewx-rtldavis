@@ -10,6 +10,7 @@ import sys
 import re
 import sqlite3
 import fcntl
+from collections import deque
 from email.mime.text import MIMEText
 from datetime import datetime
 
@@ -1232,7 +1233,7 @@ def wu_record_key(line):
     m = WU_RECORD_RE.search(line)
     return m.group(1) if m else line
 
-def classify_reception_alert(wu_period_counts):
+def classify_reception_alert(recent_counts):
     """Is a sustained reception alert a FULL OUTAGE or mere degradation? (#373)
 
     Two independent signals, either one sufficient -- cross-referenced rather
@@ -1243,8 +1244,12 @@ def classify_reception_alert(wu_period_counts):
     RESET_MAX_TRIES, or an immediate 'not running' exit). Either alone means
     "nothing is coming back on its own without intervention"; a plain
     below-threshold window with the driver still trying does not.
+
+    RECENT_COUNTS is the rolling record of the last WU_RF_SUSTAIN window counts,
+    never the 5-minute period list, which main() empties on its own cadence
+    (#403).
     """
-    zero_windows = all(c == 0 for c in wu_period_counts[-WU_RF_SUSTAIN:])
+    zero_windows = all(c == 0 for c in recent_counts[-WU_RF_SUSTAIN:])
     escalated = WD['escalated']
     if not (zero_windows or escalated):
         return False, ''
@@ -1258,11 +1263,23 @@ def classify_reception_alert(wu_period_counts):
 
 def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
                             wu_in_alert, wu_alert_sent_at, wu_repeat_sent_at,
-                            wu_hourly_buckets, now):
-    """Close a 60s reception window. Returns updated state tuple."""
+                            wu_hourly_buckets, now, wu_recent_counts=None):
+    """Close a 60s reception window. Returns updated state tuple.
+
+    WU_RECENT_COUNTS is the rolling record of the last WU_RF_SUSTAIN window counts,
+    a deque(maxlen=WU_RF_SUSTAIN) that main() owns and never empties. FULL OUTAGE
+    classification and the alert averages read it, not wu_period_counts. That list
+    is emptied every WU_RF_LOG_INTERVAL for the RECEPTION: line, so its "last five
+    windows" depended on where in the 5-minute cycle the alert fell (#403). A
+    caller that never empties wu_period_counts may omit the record."""
     try:
         pct = wu_pct(wu_window_count)
         wu_period_counts.append(wu_window_count)
+        if wu_recent_counts is None:
+            wu_recent_counts = deque(wu_period_counts, maxlen=WU_RF_SUSTAIN)
+        else:
+            wu_recent_counts.append(wu_window_count)
+        recent = list(wu_recent_counts)[-WU_RF_SUSTAIN:]
         log(f"WINDOW: {wu_window_count}/{WU_RF_EXPECTED} ({pct:.0f}%)")
 
         # Store in hourly bucket
@@ -1290,8 +1307,8 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             wu_in_alert = True
             wu_alert_sent_at = now
             wu_repeat_sent_at = now
-            avg = (sum(wu_period_counts[-WU_RF_SUSTAIN:]) / (WU_RF_SUSTAIN * WU_RF_EXPECTED)) * 100
-            full_outage, reason = classify_reception_alert(wu_period_counts)
+            avg = wu_pct(sum(recent) / len(recent))
+            full_outage, reason = classify_reception_alert(recent)
             log(f"RECEPTION ALERT: {'FULL OUTAGE -- ' if full_outage else ''}"
                 f"{wu_bad_windows} consecutive windows below {WU_RF_MIN_PCT}%, avg {avg:.0f}%")
             episode_open(avg, now)
@@ -1304,8 +1321,8 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             )
         elif wu_in_alert and (now - wu_repeat_sent_at) >= REPEAT:
             wu_repeat_sent_at = now
-            avg = (sum(wu_period_counts[-WU_RF_SUSTAIN:]) / (WU_RF_SUSTAIN * WU_RF_EXPECTED)) * 100
-            full_outage, reason = classify_reception_alert(wu_period_counts)
+            avg = wu_pct(sum(recent) / len(recent))
+            full_outage, reason = classify_reception_alert(recent)
             episode_note_avg(avg)
             td = int(now - wu_alert_sent_at)
             log(f"RECEPTION REPEAT: still {'FULL OUTAGE' if full_outage else 'low'} "
@@ -1334,6 +1351,7 @@ def main():
     wu_window_start   = time.time()
     wu_window_epochs  = set()   # unique record epochs seen this window (DEC-0024)
     wu_period_counts  = []
+    wu_recent_counts  = deque(maxlen=WU_RF_SUSTAIN)   # #403: the 5-min log flush never empties it
     wu_period_start   = time.time()
     wu_bad_windows    = 0
     wu_in_alert       = False
@@ -1376,6 +1394,7 @@ def main():
             wu_window_start  = now
             wu_window_epochs = set()
             wu_period_counts = []
+            wu_recent_counts.clear()
             wu_period_start  = now
             wu_bad_windows   = 0
             wu_first_seen    = False
@@ -1456,6 +1475,7 @@ def main():
             wu_window_start   = now
             wu_window_epochs  = set()
             wu_period_counts  = []
+            wu_recent_counts.clear()
             wu_period_start   = now
             wu_bad_windows    = 0
             wu_first_seen     = False
@@ -1468,7 +1488,7 @@ def main():
              wu_hourly_buckets) = close_reception_window(
                 len(wu_window_epochs), wu_period_counts, wu_bad_windows,
                 wu_in_alert, wu_alert_sent_at, wu_repeat_sent_at,
-                wu_hourly_buckets, now)
+                wu_hourly_buckets, now, wu_recent_counts)
             wu_window_start = wu_window_start + WU_RF_WINDOW
             wu_window_epochs = set()
             # S62: judge the pending reset now that a fresh window has closed,
@@ -1480,7 +1500,7 @@ def main():
         # --- Reception: log 5-min summary ---
         if wu_first_seen and (now - wu_period_start) >= WU_RF_LOG_INTERVAL:
             if wu_period_counts:
-                avg = (sum(wu_period_counts) / len(wu_period_counts) / WU_RF_EXPECTED) * 100
+                avg = wu_pct(sum(wu_period_counts) / len(wu_period_counts))
                 maintained = "OK" if avg >= WU_RF_MIN_PCT else "LOW"
                 log(f"RECEPTION: {avg:.0f}% avg over last {len(wu_period_counts)} windows "
                     f"[{maintained}] (bad windows: {wu_bad_windows})")
