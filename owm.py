@@ -90,5 +90,6 @@ class OWMThread(RESTThread):
         if record_m.get('heatindex') is not None:
             data['heat_index'] = round(record_m['heatindex'], 1)
         if record_m.get('hourRain') is not None:
-            data['rain_1h'] = round(record_m['hourRain'], 2)
+            # to_METRIC rain is centimeters; the Stations API takes millimeters (#405).
+            data['rain_1h'] = round(record_m['hourRain'] * 10, 2)
         return json.dumps([data]), 'application/json'
