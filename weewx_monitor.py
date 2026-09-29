@@ -102,7 +102,14 @@ CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 #
 # Every mode keeps the SAME escalation discipline (RESET_MAX_TRIES, the verify
 # window, one email per outage). Only the action in the middle changes.
-REMEDY_MODE = os.environ.get('REMEDY_MODE', 'usb_reset')
+#
+# Exactly these three strings are accepted, in lowercase. Anything else (a typo,
+# 'NONE', 'systemd', an empty value) is logged at startup and treated as 'none'
+# (#404). The dispatch used to fall through to the USB reset for it, so a bad
+# value ran the one remedy the marvin unit forbids while the log denied it.
+REMEDY_MODES = ('usb_reset', 'restart_unit', 'none')
+_remedy_mode_env = os.environ.get('REMEDY_MODE', 'usb_reset')
+REMEDY_MODE = _remedy_mode_env if _remedy_mode_env in REMEDY_MODES else 'none'
 REMEDY_UNIT = os.environ.get('REMEDY_UNIT', 'weewx.service')
 # How to invoke systemctl. marvin's tenant runs unprivileged, so this is the
 # seam where a deployment supplies whatever it is actually allowed to use
@@ -254,6 +261,11 @@ def log(msg):
     with open(LOG, 'a') as f:
         f.write(line + '\n')
         f.flush()
+
+# The REMEDY_MODE check above runs before log() exists, so its verdict is reported here.
+if REMEDY_MODE != _remedy_mode_env:
+    log(f"REMEDY_MODE={_remedy_mode_env!r} is not one of {', '.join(REMEDY_MODES)}; "
+        f"treating it as none: no automatic remedy will run (#404)")
 
 def send_email(subject, body):
     try:
@@ -674,6 +686,17 @@ def campaign_inhibited():
     return os.path.exists(CAMPAIGN_INHIBIT)
 
 
+def remedy_target():
+    """The function REMEDY_MODE dispatches to, or None when the mode takes no action.
+
+    The one place a mode becomes an operation (#404). reset_dongle() runs what this
+    returns and remedy_action() describes it, so the log and the action cannot
+    disagree. Anything that is not an action mode ('none', or a value that somehow
+    got past the import check) maps to None, never to a reset. Looked up at call
+    time so a test can replace do_reset or do_restart_unit."""
+    return {'usb_reset': do_reset, 'restart_unit': do_restart_unit}.get(REMEDY_MODE)
+
+
 def remedy_action():
     """Human name of the action REMEDY_MODE will actually take.
 
@@ -681,10 +704,12 @@ def remedy_action():
     logs named an operation that had stopped happening, and a reader reasoning
     from them reasons about the wrong mechanism. Now that the action is
     mode-selected, a single hardcoded string would be that defect by
-    construction."""
-    if REMEDY_MODE == 'restart_unit':
+    construction. It asks remedy_target() what will run, so it names the operation
+    that is dispatched whatever REMEDY_MODE holds (#404)."""
+    target = remedy_target()
+    if target is do_restart_unit:
         return f'{REMEDY_SYSTEMCTL} restart {REMEDY_UNIT}'
-    if REMEDY_MODE == 'usb_reset':
+    if target is do_reset:
         return f'{USB_RESET_ACTION} via {USB_RESET_SCRIPT}'
     return 'no automatic remedy (REMEDY_MODE=none)'
 
@@ -743,7 +768,8 @@ def reset_dongle(last_reset, notify=True):
         log(f"SKIP remedy: campaign inhibit present ({CAMPAIGN_INHIBIT}); "
             f"would have run {remedy_action()}")
         return last_reset
-    if REMEDY_MODE == 'none':
+    target = remedy_target()
+    if target is None:
         log("SKIP remedy: REMEDY_MODE=none; detection and escalation only")
         return last_reset
     if now - last_reset < RESET_CD:
@@ -751,7 +777,6 @@ def reset_dongle(last_reset, notify=True):
         return last_reset
     log(f"REMEDY: {remedy_action()}")
     import threading
-    target = do_restart_unit if REMEDY_MODE == 'restart_unit' else do_reset
     t = threading.Thread(target=target, kwargs={'notify': notify}, daemon=True)
     t.start()
     return time.time()
