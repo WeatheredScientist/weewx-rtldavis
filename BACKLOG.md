@@ -333,7 +333,7 @@ failed resets currently produce no further action.
   finding shipped immediately as DEC-0127. The rest, staged (full detail in the S112 transcript;
   jobs 3–5 in `BOOT.md`):
   - **Session A — mechanical version/doc sync (Sonnet):** README + Docker Hub banner stuck at
-    v2.0.12/ws.4/weewx 5.4 vs live v2.0.14/ws.5/5.5.0; `influx.py` ws.1→ws.2 refs; no GitHub
+    v2.0.12/ws.4/weewx 5.4 vs live v2.0.14/ws.5/5.5.0; `influx.py` ws.1→ws.2 refs (done S145); no GitHub
     release tag past v2.0.11 while README/SECURITY point at Releases as version truth; CHANGELOG
     has no per-release notes a puller can find; `weewx.conf.example` version stamp + superseded
     `fetch_interval=3600` (adopted: 300); ARCHITECTURE false "last updated" stamp, removed-LNA and
