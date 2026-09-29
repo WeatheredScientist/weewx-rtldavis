@@ -11208,3 +11208,81 @@ redundant.
 
 #412 and #414 are baked: v2.0.18. #413 is the host daemon: `pull` then a deliberate restart, plus a
 heartofgold CHANGELOG line. `EXPECT_DRIVER` in `soak_check.sh` moves to ws.6 at that deploy.
+
+## DEC-0206 — v2.0.18: DEC-0205's driver and uploader fixes built from the tenant-root checkout, verified against v2.0.17, and deployed after the monitor's #413; #408 recorded as deliberate; the OWM and Windy rain history logged as ERR-0010
+
+**Status:** Accepted (deployed 2026-09-29: the monitor at 09:31:16 ET, the image at 16:37:37 ET) ·
+**Date:** 2026-09-29 (S146) · **ships** DEC-0205's baked and host halves · **follows** DEC-0204's
+release shape · **applies** MARVIN-DEC-0109/0116 (the floating `:marvin-live` tag)
+
+### Context
+
+DEC-0205 fixed ten high findings on `dev` and left the deploy to S146: #412 (driver, ws.6) and #414
+(uploaders) are baked into the image, #413 is the host monitor. The owner's go was taken at each prod
+step, as in DEC-0204.
+
+### Decision
+
+1. **Same release path as DEC-0204:** `marvinctl pull` → `build /srv/docker/weewx -t …:v2.0.18` →
+   verify with `exec-ro` → `tag …:v2.0.18 …:marvin-live` → `restart weewx.service`. The monitor half
+   went first, as in S144.
+2. **The canaries move at the deploy, not before.** PR #419 carried the Dockerfile stamp
+   (v2.0.17 → v2.0.18) and `soak_check.sh`'s `EXPECT_DRIVER` (ws.5 → ws.6) plus its no-Dockerfile
+   fallback image, and was the last thing merged before the pull (`ops#147` item 6: a bump made in
+   anticipation reads a healthy station red).
+3. **#408 is deliberate.** With `[[Wunderground]]` configured, as here, `StdWunderground.__init__`
+   (weewx 5.5.0 `restx.py`) starts its own Wunderground-PWS and -RF threads and binds the same
+   events, so calling it from `OgoxeUploader` would run a second set next to the real service and bind
+   `new_archive_record` twice. The class builds the one `AmbientThread` it needs. Recorded in
+   `CHANGES-FROM-UPSTREAM.md` and the file header. Derived from reading the code, not tested by
+   running the alternative; the original author's reason is still unrecorded.
+4. **#405 gets an errata entry, ERR-0010.** OWM's `rain_1h` was 10× low and Windy's `precip` the
+   wrong window as well as the wrong unit, since 2026-05-21 (git date; the first live post is not
+   established). The archive and InfluxDB were never affected; the third-party series cannot be
+   corrected. Logged per ERR-0009's precedent of recording an unrecoverable gap.
+5. **The ROADMAP tripwire ran (due S146):** four lines moved, a P0.7 opened for the audit, next
+   check S156. See the file's own guardrail section.
+
+### As-run (2026-09-29, ET)
+
+- **Merge and pull.** #419 merged at 09:30:39 (`4fd9039`). `marvinctl pull` took the tenant root from
+  `7d06cbf` (S144) to it, 31 files. The only bind-mounted file among them is `influx.py`, a comment
+  change; the running container keeps its old inode until it is recreated.
+- **Monitor.** On-disk sha `5cd09917…` = `dev`'s, mtime 09:31:07. Restarted 09:31:16 (`8a07efd7…`
+  before). The log shows `Remedy armed: no automatic remedy (REMEDY_MODE=none)` and no
+  `is not one of` line, so #404's validation accepted the live value. It ran clean for seven hours,
+  and the 12:00 summary carried `ISS battery: OK`. Across the later cutover it logged two 19%
+  windows (16:38, 16:39) and one `[LOW]` five-window average (52%, 16:41), with `bad windows: 0`
+  and no alert.
+- **Build.** `marvinctl build /srv/docker/weewx -t …:v2.0.18` ran 09:31:33 to 09:31:46, exit 0. The
+  context was 169 kB (BuildKit sends the delta). Steps 1–17 were cached: the Go binary, the venv and
+  `pressure_service.py` reused v2.0.17's layers. Every layer from `COPY owm.py` down re-executed, and
+  the minimal stage's `apt-get` re-ran, so its system packages are whatever Ubuntu 26.04 served that
+  morning. Image `7feeda50…`.
+- **Verified before the cutover.** `exec-ro` sha256 of 224 baked files against `:v2.0.17`
+  (`/opt/weewx-venv/…/user`, `/opt/weewx-data`, `/usr/local/{bin,lib}`, `/entrypoint.sh`,
+  `/etc/modprobe.d`, plus `python3`, `rtl_biast`, `rtl_sdr`, libusb). Exactly four differ, each equal
+  to `dev`@`4fd9039`'s file: `rtldavis.py` (`090e5700…` → `1cfd41f2…`), `owm.py` (`6d88f904…` →
+  `60b8593d…`), `windy.py` (`b52c1dac…` → `96074cd2…`), and `influx.py` (`3ad0a5e5…` → `23f21235…`,
+  comment only). The Go binary, the baked config, the entrypoint, python3 and libusb are identical.
+  Five files whose names carry `%` or `@` (skin templates, a systemd template) were left out because
+  `exec-ro` refuses those characters in an argument.
+- **Cutover.** The build sat seven hours before the owner's go. Re-checked at 16:37:19: prod healthy,
+  `dev` unchanged at `4fd9039`. `:marvin-live` retagged to `:v2.0.18` at 16:37:01 (`check-image`:
+  `7feeda50…` for both). `weewx.service` restarted 16:37:37; the container was up at 16:37:38 as
+  `996:986` on `7feeda50…`, banner `driver version is 0.20+ws.6`.
+- **After.** In the first four minutes: 129 INFO lines, 0 WARNING, 0 ERROR/CRITICAL/traceback.
+  `soak_check.sh`: 19 passed, 0 warnings, 0 failures, with the image read from the Dockerfile stamp
+  and the `0.20+ws.6` canary green. The archive has no 16:38 or 16:39 row (a two-minute gap while
+  the hop re-acquired), 16:40 is the partial first record with `rxCheckPercent` NULL, and **16:41
+  reads 100.0**. The equivalent record after v2.0.17's cutover read 58% (S144). One observation
+  each, so suggestive only; #402's cold-start test is the proof.
+- **Rollback:** `marvinctl tag weatheredscientist/weewx-rtldavis:v2.0.17
+  weatheredscientist/weewx-rtldavis:marvin-live`, then restart. `:v2.0.17` (`621710f7…`) is local.
+
+### Not yet observed
+
+- The OWM and Windy rain fix live: it needs rain, and 0 × 10 = 0 (ERR-0010).
+- A `frame failed message-type proof` line (DEC-0203's driver half), which needs a glitch.
+- Whether the dupgate patch still applies clean: the build reused the cached patch layer, so its log
+  neither confirmed nor refuted S145's finding (offset 0, fuzz 0 on the laptop's tools).

@@ -3,7 +3,7 @@
 An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](https://weewx.com/) plus a **patched** version of Luc Heijst's [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver. It intercepts a Davis Vantage station off the air with an RTL-SDR USB dongle and uploads to multiple weather services — no proprietary Davis hardware required.
 
 > **This is not stock upstream.** The driver shipped here is a fork of rtldavis v0.20 and reports
-> itself as `0.20+ws.5`. It carries a rain-counter glitch filter, a decode-layer sensor plausibility
+> itself as `0.20+ws.6` (`ws.5` in the v2.0.16 image on Docker Hub). It carries a rain-counter glitch filter, a decode-layer sensor plausibility
 > filter, and five bug fixes that do not exist upstream — see
 > **[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)** for every divergence, why it is there, and
 > whether it is headed upstream.
@@ -17,8 +17,14 @@ docker pull weatheredscientist/weewx-rtldavis:v2.0.16   # or :latest
 ```
 Pin a version tag (`:v2.0.16`) for reproducible deploys; `:latest` always tracks the newest release.
 
-> **v2.0.17 (source release, 2026-09-28; not yet on Docker Hub, where v2.0.16 below is still
-> current):** the decode filter now also treats a message type no Davis transmitter sends as
+> **v2.0.18 (source release, 2026-09-29; not yet on Docker Hub, where v2.0.16 below is still
+> current):** the first record after every driver start or counter reset no longer misreads
+> `rxCheckPercent` (the slot baseline was one packet off at seeding), and the OpenWeatherMap and
+> Windy uploaders now send rain in millimeters. Both had sent centimeters, 10× low, since they were
+> written, and Windy also sent one minute's rain instead of the last hour's. Driver now reports
+> `0.20+ws.6`.
+>
+> **v2.0.17 (source release, 2026-09-28; not yet on Docker Hub):** the decode filter now also treats a message type no Davis transmitter sends as
 > proof of a corrupt frame, and a corrupt frame's battery-low bit is discarded along with its
 > weather fields. Before this, corrupt frames at reception collapses produced one-minute false
 > ISS low-battery readings and, occasionally, a phantom wind gust. The host monitor also reports
@@ -91,7 +97,7 @@ own image on top, pins a Python wheel, or compiles against system libraries is b
 change. Hence `v1.0-ubuntu22` (Ubuntu 22.04 / Python 3.10) → `v2.0-ubuntu26` (Ubuntu 26.04 /
 Python 3.14). Patch releases within a major are ordinary fixes and features.
 
-**The driver version — `0.20+ws.5`.** This is a
+**The driver version — `0.20+ws.6`.** This is a
 [PEP 440 local version identifier](https://peps.python.org/pep-0440/#local-version-identifiers),
 the Python-native way to say "upstream's release, plus our local patches":
 
@@ -99,11 +105,11 @@ the Python-native way to say "upstream's release, plus our local patches":
 |------|---------|
 | `0.20` | **upstream's** version — Luc Heijst's rtldavis v0.20. Ours to point at, not to claim. It moves only if we rebase onto a new upstream release. |
 | `ws` | **W**eathered**S**cientist — this fork's maintainer, matching the GitHub org and Docker Hub namespace. |
-| `N` | our patch level on top of that upstream release (`5` in the current releases). It rises with every behavior change, per rule 1 below. |
+| `N` | our patch level on top of that upstream release (`6` from v2.0.18; `5` from v2.0.13 through v2.0.17). It rises with every behavior change, per rule 1 below. |
 
 Releases v2.0.14 through v2.0.17 each changed the driver without a bump, so they all report `ws.5`;
-`dev` is at `ws.6` (the slot-count fix from issue #402 plus items 14-18 of
-[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)), which ships with the next image.
+v2.0.18 reports `ws.6` (the slot-count fix from issue #402 plus items 14-18 of
+[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)).
 
 Two rules follow, and we hold ourselves to both:
 
@@ -112,7 +118,7 @@ Two rules follow, and we hold ourselves to both:
    in the log. (Until 2026-07-13 this driver logged a bare `0.20` while carrying a rain filter and
    five bug fixes — anyone debugging from those logs was misled. That is the mistake this rule
    exists to prevent.)
-2. **Each patched file carries its own `ws.N`.** `rtldavis.py` is at `ws.5` while `influx.py` is at
+2. **Each patched file carries its own `ws.N`.** `rtldavis.py` is at `ws.6` while `influx.py` is at
    `ws.2`, because they are different upstream works with different patch lineages. A shared counter
    would imply changes that never happened.
 

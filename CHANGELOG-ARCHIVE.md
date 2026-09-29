@@ -7,6 +7,44 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S143] — 2026-09-27 — The loop feed moves into `weewx-data/feed/`, and `eh-proxy` now mounts only that (`eaglehunt-ops#348` complete, DEC-0202); PR #396 merged
+
+- **PR #396 merged** (S142's DEC-0201 and handoff) as squash `0d79daf` at 22:30 ET. S142's worktree
+  and branches were removed, along with the stale `claude/pensive-borg-1958f0` (its one commit
+  landed as PR #338 on 2026-09-05).
+- **`eaglehunt-ops#348` step 1 applied, owner-approved.** The dashboard (S316) and marvin (S54)
+  agreed on a symlink transition that needs no synchronized window.
+  - `[LoopJsonWriter]` `path`/`current_path` now point at `/opt/weewx-data/feed/` in the live conf
+    and in the tenant-root `weewx.conf.rx-baseline`. The baseline went through the owner root route
+    as t-weewx at 22:54:57 ET. The live conf went as 996 via `marvinctl exec` at 22:56:28, after a
+    dry run. Both stay 0600, and the pre-edit copies are in `conf-archive/`.
+  - `feed/` was created at 0755. weewx restarted at 22:56:50, and the writer's startup line names
+    the feed paths. The first packet landed about 106 s later.
+  - At 22:58:37 the top-level `loop-data.txt` and `current.json` were swapped atomically for
+    relative symlinks into `feed/`.
+  - Right after, eh-proxy served `/loopdata` 200 at 1.4 s old. There were 0 ERROR, CRITICAL or
+    tracebacks since the restart, against 101 INFO lines.
+- **`eaglehunt-ops#348` finished the same night.** marvin flipped `eh-proxy`'s mount to `feed/` at
+  23:20:56 ET (MARVIN-DEC-0183), and the dashboard's check passed at 23:22. weewx removed the two
+  symlinks at 23:26:57 as t-weewx, leaving `feed/` untouched. Afterwards eh-proxy served `/loopdata`
+  200 at 0.2 s old, with 0 errors against 27 INFO lines. Each step was posted on #348 and rung to
+  the other two repos. The #396 merge was also posted on `eaglehunt-ops#347`, so heartofgold can
+  tick weewx's row.
+- **Docs:**
+  - DEC-0202.
+  - `CONSTANTS.md`: the Loop-JSON and compat-path rows, plus a new live-config deviation row
+    carrying marvin's two `feed/` rules.
+  - `docs/INTERFACES.md`: the paths are configurable, and a consumer must bind the directory, not
+    the files.
+  - `docs/CONVENTIONS.md`: its S55-era infra table, a stale second copy that still named the NAS as
+    prod, is now a pointer to `CONSTANTS.md` (BOOT job 8's CONVENTIONS item).
+  - `docs/GOTCHAS.md` §1: `weewx.log` timestamps are ISO, so a syslog-shaped window filter reads as
+    a false zero.
+  - `docs/GOTCHAS.md` §3: `ssh -G` trips the marvin guard, and ConfigObj needs
+    `interpolation=False`. The second was re-hit because §3 went unread before the marvin task.
+- Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files (fresh cache) · secret gate 0 on the
+  staged files, positive-controlled (identifier, private-IP and credential plants each exit 1).
+
 ## [S142] — 2026-09-27 — Config backups moved out of the shared `weewx-data` top level into a 0700 `conf-archive/` (DEC-0201); `CONSTANTS.md` NAS rows corrected
 
 - **Premises re-checked read-only first.**

@@ -6,6 +6,30 @@ under [Pre-S16].
 
 ---
 
+## [S146] — 2026-09-29 — v2.0.18 in prod (DEC-0206): DEC-0205's driver and uploader fixes, the monitor's #413 restarted; ROADMAP full pass; ERR-0010; a wrong INTERFACES claim corrected
+
+- **Deployed, the owner's go at each prod step (DEC-0206).** #419 (Dockerfile stamp, `soak_check.sh`
+  canaries) merged 09:30 ET and was pulled. The monitor restarted 09:31:16 (`Remedy armed: … none`,
+  clean for seven hours). The image built in 13 s on BuildKit's cache (09:31:33 to 09:31:46) and was
+  verified by `exec-ro` sha256 of 224 baked files against v2.0.17: exactly four differ, each equal to
+  `dev`@`4fd9039`. Cutover 16:37:37: banner `0.20+ws.6`, 129 INFO and 0 errors in four minutes, soak
+  19/0/0, first real record 100% (16:38 and 16:39 missing while the hop re-acquired).
+- **Tagged `v2.0.18` on `4fd9039` with a GitHub release.** Not on Docker Hub (`eaglehunt-ops#265`).
+  #402 to #405 closed with deploy evidence; #421 filed for the secret gate's four detector holes.
+- **Records.** #408 recorded as deliberate (the parent init would start a second set of Wunderground
+  threads). ERR-0010 logs OWM's 10× low `rain_1h` and Windy's wrong-window `precip` since 2026-05-21.
+  ROADMAP tripwire ran: four lines moved, P0.7 opened, next check S156.
+- **INTERFACES.md was wrong and is corrected.** It said the archive's `pressure` and `altimeter`
+  columns go NULL (DEC-0091). They are derived by `StdWXCalculate` from the sea-level `barometer`
+  and populated in 99.5% of rows. Found while answering `eaglehunt-ops#357` (HLF's `bar_absolute`
+  ask); the design is not started, and the reply on the tracker gives two shapes. The stale comment
+  in `pressure_service.py` waits for that work, since editing it changes the baked file.
+- **Other tracker.** `eaglehunt-ops#360` answered for weewx (cap-drop, no-new-privileges and
+  `nosuid,nodev` are all fine; two gaps named).
+- Closeout: DEC-0206; GOTCHAS gains eight traps (§1 ×3, §2 ×3, §3 ×2); S143 rolled to the archive.
+  S145's seven worktrees and fourteen local branches removed after each was checked against its
+  merged PR. heartofgold's CHANGELOG row pushed (`ebe2a59`).
+
 ## [S145] — 2026-09-28/29 — Code audit (DEC-0205): 39 findings, the ten high ones fixed on seven PRs; driver to 0.20+ws.6 (unreleased)
 
 - **Audit.** Six read-only reviewers (Sonnet ×5 by file set, Haiku ×1 cross-ref) over the whole tree
@@ -71,41 +95,3 @@ under [Pre-S16].
   and `:v2.0.14` is still present. The host-tools row is moot for this tenant. The local-infra-doc
   row stays unverified, since the read guard blocks it, correctly.
 - lheijst/rtldavis#7 still has no reply (job 5). Jobs 4, 6 and 8 carry forward unchanged.
-
-## [S143] — 2026-09-27 — The loop feed moves into `weewx-data/feed/`, and `eh-proxy` now mounts only that (`eaglehunt-ops#348` complete, DEC-0202); PR #396 merged
-
-- **PR #396 merged** (S142's DEC-0201 and handoff) as squash `0d79daf` at 22:30 ET. S142's worktree
-  and branches were removed, along with the stale `claude/pensive-borg-1958f0` (its one commit
-  landed as PR #338 on 2026-09-05).
-- **`eaglehunt-ops#348` step 1 applied, owner-approved.** The dashboard (S316) and marvin (S54)
-  agreed on a symlink transition that needs no synchronized window.
-  - `[LoopJsonWriter]` `path`/`current_path` now point at `/opt/weewx-data/feed/` in the live conf
-    and in the tenant-root `weewx.conf.rx-baseline`. The baseline went through the owner root route
-    as t-weewx at 22:54:57 ET. The live conf went as 996 via `marvinctl exec` at 22:56:28, after a
-    dry run. Both stay 0600, and the pre-edit copies are in `conf-archive/`.
-  - `feed/` was created at 0755. weewx restarted at 22:56:50, and the writer's startup line names
-    the feed paths. The first packet landed about 106 s later.
-  - At 22:58:37 the top-level `loop-data.txt` and `current.json` were swapped atomically for
-    relative symlinks into `feed/`.
-  - Right after, eh-proxy served `/loopdata` 200 at 1.4 s old. There were 0 ERROR, CRITICAL or
-    tracebacks since the restart, against 101 INFO lines.
-- **`eaglehunt-ops#348` finished the same night.** marvin flipped `eh-proxy`'s mount to `feed/` at
-  23:20:56 ET (MARVIN-DEC-0183), and the dashboard's check passed at 23:22. weewx removed the two
-  symlinks at 23:26:57 as t-weewx, leaving `feed/` untouched. Afterwards eh-proxy served `/loopdata`
-  200 at 0.2 s old, with 0 errors against 27 INFO lines. Each step was posted on #348 and rung to
-  the other two repos. The #396 merge was also posted on `eaglehunt-ops#347`, so heartofgold can
-  tick weewx's row.
-- **Docs:**
-  - DEC-0202.
-  - `CONSTANTS.md`: the Loop-JSON and compat-path rows, plus a new live-config deviation row
-    carrying marvin's two `feed/` rules.
-  - `docs/INTERFACES.md`: the paths are configurable, and a consumer must bind the directory, not
-    the files.
-  - `docs/CONVENTIONS.md`: its S55-era infra table, a stale second copy that still named the NAS as
-    prod, is now a pointer to `CONSTANTS.md` (BOOT job 8's CONVENTIONS item).
-  - `docs/GOTCHAS.md` §1: `weewx.log` timestamps are ISO, so a syslog-shaped window filter reads as
-    a false zero.
-  - `docs/GOTCHAS.md` §3: `ssh -G` trips the marvin guard, and ConfigObj needs
-    `interpolation=False`. The second was re-hit because §3 went unread before the marvin task.
-- Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files (fresh cache) · secret gate 0 on the
-  staged files, positive-controlled (identifier, private-IP and credential plants each exit 1).

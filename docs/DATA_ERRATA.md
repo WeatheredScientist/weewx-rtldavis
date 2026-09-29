@@ -571,6 +571,39 @@ ERR-0007; the third, ERR-0008's 09-07 reception outage, closed this session; the
 WU-side gap were independently re-verified in this repo before writing this entry, per this repo's
 own standing rule not to accept a peer session's report unchecked.
 
+## ERR-0010 — 2026-05-21 → 2026-09-29 16:37 EDT, OpenWeatherMap and Windy rain sent in the wrong unit (Windy also the wrong window)
+
+**Window:** from the day `owm.py` and `windy.py` were first written (2026-05-21, per git; the first
+live post is not established) to the v2.0.18 cutover at 2026-09-29 16:37:37 EDT (DEC-0206) ·
+**Logged:** 2026-09-29 (S146) · **Found by** the S145 code audit (#405, DEC-0205), by reading the
+code. No consumer reported it.
+
+**What was wrong.** Both uploaders convert the record with `weewx.units.to_METRIC`, whose rain group
+is centimeters, and sent that number where the service wants millimeters.
+
+- **OpenWeatherMap** `rain_1h` (the last hour, in mm) carried the hour's rain in cm: **10× low**.
+- **Windy** `precip` (the last hour, in mm) carried `rain`, one archive interval's accumulation
+  (one minute), in cm: the wrong window on top of the wrong unit. A steady 6 mm/h shower sent 0.01
+  where 6 was correct.
+
+**Correction attempted — none possible.** Both series live at the third parties, and the rewrite
+that would matter is theirs to make, not ours.
+
+- **local-archive:** ✅ never affected. The uploaders convert a copy of the record for their own wire
+  format; `rain` in `weewx.sdb` was never touched.
+- **influxdb:** ✅ never affected (`influx.py` is a separate uploader that shares no code with these two).
+- **external:** ⛔ not correctable. What we sent is what OpenWeatherMap and Windy hold, for the whole
+  window. Their rain history for this station should be read as unusable.
+
+**Lesson:** `test_owm_post_body.py` stubbed `to_METRIC` as the identity function, so the conversion
+the bug lived in was never exercised, and `windy.py` had no tests at all. A stubbed unit conversion
+cannot catch a unit error. #414 converts `hourRain` × 10 in both uploaders and the tests now use the
+real conversion.
+
+**Fixed:** #414, live in v2.0.18 since 2026-09-29 16:37 ET. **Not yet observed live:** the first
+rain after the cutover should read in millimeters at both services. A dry day proves nothing
+(0 × 10 = 0); the real-conversion tests are the evidence until then.
+
 ---
 
 ## DISC-0001 — `rxCheckPercent` steps ~73% → ~99% at the DEC-0135 deploy (not an error)

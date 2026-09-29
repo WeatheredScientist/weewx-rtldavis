@@ -110,6 +110,20 @@ alone did not catch.
   `patch/rtldavis-dupgate.patch` at offset 0, fuzz 0 against the current upstream tarball, while GNU
   `patch` in the v2.0.17 build log reported fuzz 2 on the same hunk. Judge a patch's drift by the
   build's own tool, not the laptop's.
+- **A green build log from a cached run says nothing about the layers it reused (S146).** v2.0.18
+  built in 13 s: steps 1–17 were `CACHED`, including the upstream tarball fetch and the dupgate
+  patch, so its log neither confirmed nor refuted S145's "applies clean" finding. The image was
+  proven by hashing its files against the previous image, not by the log. Count the `CACHED` lines
+  before reading a build log as evidence about a step.
+- **A documented "null" was checked at one layer and asserted for three (S146).** INTERFACES.md said
+  the archive's `pressure` and `altimeter` columns "go NULL from the v2.0.14 deploy onward". The
+  test had only looked at the driver's loop packet. `[StdWXCalculate]` (`prefer_hardware`) derives
+  both from the sea-level `barometer`, so 10,002 of 10,055 archive rows over 7 days are populated.
+  HLF found it by reading the Influx bucket. Before writing that a value is absent, read it at every
+  surface named (loop packet, archive, InfluxDB, uploads) with a positive count.
+- **zsh expands a word that starts with `=` as a command path (S146).** `echo =====` (a separator
+  in a multi-part command) fails with `= not found` and aborts the rest of that command. Use
+  `printf -- '--- title\n'`.
 
 ## §2 Git, PRs, and the handoff
 
@@ -169,6 +183,17 @@ alone did not catch.
 - **PR and issue bodies come from a real file (S145).** `gh pr edit --body "$(cat <<EOF …)"`,
   heredocs on stdin and `$(...)` substitutions are all invisible to the comment guard, which fails
   closed (OPS-DEC-0216). Write the body with the Write tool and pass `--body-file <path>`.
+- **`secret-read-guard.sh` scans heredoc bodies, and prose can trip it (S146).** A python heredoc that
+  only wrote DEC text was blocked for the conf's file name plus the word `cut` ("cut over"), read as
+  an emit verb on a secret-bearing file. Nothing was written. Write documentation prose with the
+  Edit or Write tools; the guard stays armed and never sees it.
+- **A go can arrive hours after the question (S146).** The v2.0.18 build was verified at 09:32 and the
+  owner's go came at 16:37. Everything checked before the question is stale by then: re-read the
+  image tag, `dev`'s tip and prod health immediately before the mutation, and say what was
+  re-checked.
+- **Deleting a squash-merged local branch:** `git branch -d` refuses (the commits are not ancestors of
+  `dev`). Compare `gh pr view N --json headRefOid` with `git rev-parse <branch>` first; when they
+  match, every commit is inside the merged PR and `-D` is safe.
 
 ## §3 NAS and campaign operations
 
@@ -261,7 +286,11 @@ alone did not catch.
   stand-in for the literal space (`rtldavis.process.stalled`), and split an OR across two
   signatures into two greps, since the alternation itself would need a space. **It refuses a
   bracket expression and a `|` too, and so does `exec-ro`'s argv** (S144: `2026-09-27.22:5[6-9]`
-  and `A|B` have no space, yet both drew the same "single whitespace-free token" error). Grep a
+  and `A|B` have no space, yet both drew the same "single whitespace-free token" error). **S146
+  adds `{}`, `%` and `@`**: `find … -exec sha256sum {} +` and paths like `NOAA-%Y.txt.tmpl` or
+  `weewx@.service` all fail that way, with rc 3 and a message that names the wrong cause. To hash
+  an image, list with a plain `find`, drop the odd names, and pass the rest as `sha256sum`'s
+  arguments (220 files went through in one call). Grep a
   wider prefix and narrow locally, or run one pattern per call. Exit code 1 from
   `grep` means EITHER zero matches OR a missing path — indistinguishable by exit code alone, only
   by whether stderr says "does not exist"; treat both as zero lines unless the distinction actually
@@ -281,6 +310,13 @@ alone did not catch.
   `interpolation=False`, as weewx does** (S143, re-hit because §3 went unread). ConfigObj's default
   interpolation makes `.dict()` on the live conf raise `MissingInterpolationOption: asctime`, from
   the `[Logging]` formatter's `%(asctime)s`.
+- **The auto-mode classifier denies some `marvinctl exec` reads of the running weewx container (S146,
+  ops#360).** `exec weewx-rtldavis-v2 -- python3 -` fed a script, and `exec … -- cat /proc/1/status`,
+  were both refused as a containment escape, and `exec-ro influxdb:2.7.12 -- find /` as credential
+  exploration. `find` over the container's own bind directories passed, as did `exec-ro` on our own
+  image, whose `--cap-drop ALL` plus no-new-privileges shape is the evidence that matters for a flag
+  question. A denial covers the outcome, so do not reach the same read by another route: measure what
+  the allowed path gives, and name the gap in the reply.
 
 ## §4 Liveness and deployment — proving a thing is actually running
 

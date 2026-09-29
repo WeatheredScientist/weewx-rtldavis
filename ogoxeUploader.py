@@ -31,6 +31,9 @@
 #               calls super().__init__, so StdWunderground.__init__ never runs and
 #               this class starts no Wunderground threads of its own. Already in
 #               the file when it entered this repo (first commit 253cbcf).
+#               Deliberate (#408, S146): with [[Wunderground]] configured, the
+#               parent init would start a second set of Wunderground threads and
+#               bind new_archive_record twice; this class builds its own thread.
 #   2026-07-05  rewrote two comments (above the debug log and above archive_queue)
 #               that contradicted each other about where server_url comes from.
 #   2026-09-29  removed trailing whitespace from two upstream lines (the comment
