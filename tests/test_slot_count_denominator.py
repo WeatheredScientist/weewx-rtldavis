@@ -21,8 +21,15 @@ These tests drive the real _update_stats / _update_summaries / _reset_stats
 against the four synthetic cases from #317, the counter-reset guard, and a
 randomized invariant sweep.
 
+#402: the #317 cases seed prev_pkt_ts by hand, which hid an off-by-one at
+seeding. The first packet after a start or a counter reset sat in `count`
+while its slot never sat in the delta, and the skipped first archive boundary
+never moved prev_pkt_ts. The cold-start section below drives the per-packet
+path on a fake clock instead.
+
 Run:  python3 -m pytest tests/   OR   python3 tests/test_slot_count_denominator.py
 """
+import contextlib
 import os
 import random
 import sys
@@ -73,6 +80,7 @@ _wlog = _mod("weeutil.logger")
 _weeutil.weeutil, _weeutil.logger = _wu, _wlog
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import rtldavis  # noqa: E402
 from rtldavis import RtldavisDriver  # noqa: E402
 
 LOOP_TIME = 2.8125  # loop_times[4] -- our own receiver's transmitter (DIP ID 5, S119/#313)
@@ -87,6 +95,20 @@ def _make_driver():
     d.stats['activeTrIds'][0] = 4
     d._save_pct_good_per_transmitter = False
     return d
+
+
+@contextlib.contextmanager
+def _fake_clock():
+    """Point rtldavis's time.time() at a settable clock (#402). It restores
+    itself rather than using the monkeypatch fixture, so the __main__ runner
+    below can still call every test with no arguments."""
+    clock = [0.0]
+    real = rtldavis.time
+    rtldavis.time = types.SimpleNamespace(time=lambda: clock[0])
+    try:
+        yield clock
+    finally:
+        rtldavis.time = real
 
 
 def _close_period(d, count, span_s, t0):
@@ -181,7 +203,11 @@ def test_count_never_exceeds_max_count_across_jittered_periods():
     """For any sequence of accepted-packet timestamps on the 2.8125s lattice,
     with archive events firing at arbitrary jitter around each 60s boundary,
     count[i] <= max_count[i] must hold every period -- the property that
-    makes rxCheckPercent > 100% impossible by construction."""
+    makes rxCheckPercent > 100% impossible by construction.
+
+    #402: packets go through the real _update_stats. This loop used to copy
+    the seeding inline, bug included, and passed only because seed 317 drops
+    a packet in the first period; 68 of seeds 0-199 did not."""
     rng = random.Random(317)  # deterministic
     d = _make_driver()
     t = 1_000_000.0
@@ -190,31 +216,143 @@ def test_count_never_exceeds_max_count_across_jittered_periods():
     d.stats['last_ts'] = int(t)
 
     slot = LOOP_TIME
-    for _period in range(500):
-        # Advance by ~60s of real slots (occasionally drop a slot, simulating
-        # a missed packet), landing the archive event at a jittered instant.
-        span = 60.0 + rng.uniform(-1.0, 1.0)
-        n_slots = round(span / slot)
-        packets_this_period = 0
-        elapsed = 0.0
-        while elapsed + slot <= span:
-            elapsed += slot
-            if rng.random() > 0.05:  # 95% reception -- occasional drop
-                pkt_t = t + elapsed
-                if d.stats['prev_pkt_ts'][0] == 0.0:
-                    d.stats['prev_pkt_ts'][0] = pkt_t
-                d.stats['last_pkt_ts'][0] = pkt_t
-                d.stats['curr_cnt'][0] += 1
-                packets_this_period += 1
-        t += span
-        d.stats['last_ts'] = int(t) - int(round(span))  # matches _established_driver's convention
-        RtldavisDriver._update_summaries(d)
-        if d.stats['count'][0] > 0:
-            assert d.stats['count'][0] <= d.stats['max_count'][0], (
-                "count exceeded max_count -- rxCheckPercent > 100%% became "
-                "possible again (period %d, n_slots=%d, packets=%d)"
-                % (_period, n_slots, packets_this_period))
-        RtldavisDriver._reset_stats(d)
+    with _fake_clock() as clock:
+        for _period in range(500):
+            # Advance by ~60s of real slots (occasionally drop a slot, simulating
+            # a missed packet), landing the archive event at a jittered instant.
+            span = 60.0 + rng.uniform(-1.0, 1.0)
+            n_slots = round(span / slot)
+            packets_this_period = 0
+            elapsed = 0.0
+            while elapsed + slot <= span:
+                elapsed += slot
+                if rng.random() > 0.05:  # 95% reception -- occasional drop
+                    clock[0] = t + elapsed
+                    RtldavisDriver._update_stats(
+                        d, d.stats['curr_cnt'][0] + 1, 0, 0, 0)
+                    packets_this_period += 1
+            t += span
+            clock[0] = t
+            RtldavisDriver._update_summaries(d)
+            if d.stats['count'][0] > 0:
+                assert d.stats['count'][0] <= d.stats['max_count'][0], (
+                    "count exceeded max_count -- rxCheckPercent > 100%% became "
+                    "possible again (period %d, n_slots=%d, packets=%d)"
+                    % (_period, n_slots, packets_this_period))
+            RtldavisDriver._reset_stats(d)
+
+
+# ── Cold start and counter reset, through the real _update_stats (#402) ─────
+# DATA lines arrive at exact loop-period spacing (the ISS clock is exact,
+# S115), and each archive boundary runs the same two calls
+# new_archive_record makes.
+
+T0 = 1_000_000.0  # driver start
+
+
+def _go_lines(first_line, n, first_count=2, missed=()):
+    """(arrival time, cumulative count) of the DATA lines a Go child emits
+    over n slots from first_line, skipping the slot indexes in `missed`.
+
+    Go counts every packet it accepts but emits none during its init phase,
+    and one transmitter's first packet is what ends init (main.go). So the
+    first emitted line already carries count 2. first_count=1 is the simpler
+    model the S145 audit simulated; both must read exactly."""
+    lines = []
+    count = first_count
+    for k in range(n):
+        if k in missed:
+            continue
+        lines.append((first_line + k * LOOP_TIME, count))
+        count += 1
+    return lines
+
+
+def _run(lines, boundaries):
+    """Cold-start a driver and feed it `lines` and archive `boundaries` in
+    time order. Returns (pct_good, count, max_count) per boundary, or None
+    where the period produced no value, so no rxCheckPercent is written."""
+    d = _make_driver()
+    events = sorted([(t, False, c) for t, c in lines] +
+                    [(b, True, 0) for b in boundaries])
+    out = []
+    with _fake_clock() as clock:
+        for t, is_boundary, cnt in events:
+            clock[0] = t
+            if not is_boundary:
+                RtldavisDriver._update_stats(d, cnt, 0, 0, 0)
+                continue
+            RtldavisDriver._update_summaries(d)
+            pct = d.stats['pct_good'][0]
+            out.append(None if pct is None else
+                       (pct, d.stats['count'][0], d.stats['max_count'][0]))
+            RtldavisDriver._reset_stats(d)
+    return out
+
+
+FULL = (100.0, 21, 21)  # 21 lines over 21 slots: a fully received period
+
+
+def test_cold_start_seed_after_the_skipped_first_boundary_reads_100_pct():
+    """Go's US init takes about 128 s (DEC-0136), so the first line nearly
+    always lands after the first archive boundary, which computes nothing.
+    Before #402 a 4-line first period read 133% and a full one 104.8%, or
+    167% and 109.5% with Go's count-2 first line."""
+    boundaries = [T0 + 20 + 60 * k for k in range(5)]
+    cases = (
+        (T0 + 131.0, [None, None, (100.0, 3, 3), FULL, FULL]),
+        (T0 + 140.8125, [None, None, None, FULL, FULL]),
+    )
+    for first_line, expected in cases:
+        for first_count in (2, 1):
+            out = _run(_go_lines(first_line, 60, first_count), boundaries)
+            assert out == expected, (first_line - T0, first_count, out)
+
+
+def test_cold_start_seed_before_the_skipped_first_boundary_reads_100_pct():
+    """A child that syncs inside the first archive period (EU init is about
+    16 s). The skipped boundary moved last_cnt but not prev_pkt_ts, so before
+    #402 the next delta spanned both periods: 21/34 = 61.8%."""
+    boundaries = [T0 + 50 + 60 * k for k in range(3)]
+    for first_count in (2, 1):
+        out = _run(_go_lines(T0 + 12.8125, 56, first_count), boundaries)
+        assert out == [None, FULL, FULL], (first_count, out)
+
+
+def test_first_period_after_a_counter_reset_reads_100_pct():
+    """A hot swap respawns the child and its counter restarts. The boundary
+    that sees the counter go backward is skipped and clears the baseline;
+    before #402 the period after it read 22/21 = 104.8%."""
+    boundaries = [T0 + 50 + 60 * k for k in range(5)]
+    swap = T0 + 130.0
+    for first_count in (2, 1):
+        old = [ln for ln in _go_lines(T0 + 12.8125, 60, first_count)
+               if ln[0] < swap]
+        new = _go_lines(T0 + 150.5, 50, first_count)
+        out = _run(old + new, boundaries)
+        assert out == [None, FULL, None, FULL, FULL], (first_count, out)
+
+
+def test_a_period_holding_only_the_seed_writes_no_rxcheckpercent():
+    """One line spans no slots, so there is nothing to measure. That period
+    must produce no value at all, rather than 100% or 200%, and the period
+    after it must still read exactly."""
+    boundaries = [T0 + 20 + 60 * k for k in range(4)]
+    for first_count in (2, 1):
+        out = _run(_go_lines(T0 + 138.5, 22, first_count), boundaries)
+        assert out == [None, None, None, FULL], (first_count, out)
+
+
+def test_a_missed_slot_in_the_first_period_is_still_counted():
+    """Positive control: the fix must not force the first period to 100%.
+    One slot missed after the seed reads exactly 20 of 21. Before #402 the
+    over-count hid it: 22/21 = 104.8%."""
+    boundaries = [T0 + 20 + 60 * k for k in range(5)]
+    out = _run(_go_lines(T0 + 140.8125, 43, missed=(10,)), boundaries)
+    assert out[:3] == [None, None, None]
+    assert out[3][1:] == (20, 21)
+    assert out[3][0] == pytest.approx(100.0 * 20 / 21)
+    assert out[4] == FULL
 
 
 if __name__ == '__main__':
