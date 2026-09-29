@@ -1,7 +1,7 @@
 # Changes from upstream
 
 **Status:** Source of truth for what this project changed in code it did not write.
-**Last updated:** 2026-09-28 (S145)
+**Last updated:** 2026-09-29 (S145)
 
 This project is a Docker distribution of a **modified** Davis/rtldavis receiver stack. It is not
 stock upstream, and several of the files it ships are other people's work with our patches on top.
@@ -212,6 +212,9 @@ weewx 5.2 `restx.py`).
 |---|--------|------|-----|
 | 1 | Misleading debug log | 2026-07-05 | `log.debug` reported `_ambient_dict.get('server_url')`, a key that is never set — the URL is the hardcoded `OGOXE_API_URL` constant — so it always logged `None`. Now logs the URL actually used. |
 | 2 | SPDX tag | 2026-07-05 | Added `SPDX-License-Identifier`. |
+| 3 | `__init__` calls `StdService.__init__`, not `super().__init__` | 2026-07-04 | Upstream's constructor (`ogoxe/weewx-ogoxe`, checked at `f69b103`) calls `super(OgoxeUploader, self).__init__`, which reaches `StdWunderground.__init__`. Ours calls `weewx.engine.StdService.__init__` directly, so that step never runs. `StdWunderground.__init__` reads `[StdRESTful][[Wunderground]]` and, when it is configured, starts Wunderground archive and RapidFire threads (weewx 5.5.0 `restx.py`); skipping it means this class starts none of its own. The line was already in the file when it entered this repo (first commit `253cbcf`, which captured the production copy), so the date is when it was first recorded, not necessarily when it was made. Reason not recorded; tracked in [#408](https://github.com/WeatheredScientist/weewx-rtldavis/issues/408). |
+| 4 | Two comments rewritten | 2026-07-05 | The comments above the debug log and above `self.archive_queue` contradicted each other about where `server_url` comes from (`get_site_dict` versus the hardcoded `OGOXE_API_URL`). Both now say the constant. Comments only; no code changed. |
+| 5 | Trailing whitespace | 2026-09-29 | Removed from two upstream lines (the comment ending `restx.py` in the header and the `log.info` call for the loaded configuration), because the repo's pre-commit hook strips it from any file it touches. No behavior change. |
 
 ## `wcloud.py`
 
