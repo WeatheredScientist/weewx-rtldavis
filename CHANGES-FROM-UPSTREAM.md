@@ -1,7 +1,7 @@
 # Changes from upstream
 
 **Status:** Source of truth for what this project changed in code it did not write.
-**Last updated:** 2026-09-06 (S126)
+**Last updated:** 2026-09-29 (S145)
 
 This project is a Docker distribution of a **modified** Davis/rtldavis receiver stack. It is not
 stock upstream, and several of the files it ships are other people's work with our patches on top.
@@ -51,8 +51,8 @@ suffix: upstream's base version, `+ws`, our revision.
 
 | File | Upstream version | Ours |
 |------|------------------|------|
-| `rtldavis.py` | `0.20` | `0.20+ws.5` |
-| `influx.py` | `0.20` | `0.20+ws.1` |
+| `rtldavis.py` | `0.20` | `0.20+ws.6` on `dev`, unreleased (v2.0.13 through v2.0.17 report `0.20+ws.5`) |
+| `influx.py` | `0.20` | `0.20+ws.2` |
 
 The suffix sorts after the base version and is unambiguous about its parent. `rtldavis.py` also logs
 `(fork of lheijst 0.20, patched by WeatheredScientist -- not stock upstream)` at startup, which
@@ -64,10 +64,11 @@ you see it, the baked driver is the one running).
 ## `rtldavis.py`
 
 Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 2025-12-20
-`re.compile` deprecation patch). Delta: **+1204 / −166 lines** (1422 → 2460 lines), recounted
-2026-09-04 (S123) — includes DEC-0135's driver-side repeat counters (`dedup_key`, `repeat_count`,
-`duplicate`) and #317's slot-count `rxCheckPercent` denominator (PR #319), both landed since the
-prior S97 count (**+815 / −149**, 1422 → 2088 lines).
+`re.compile` deprecation patch). Delta: **+1239 / −167 lines** (1422 → 2494 lines), recounted
+2026-09-28 (S145) at `7d06cbf` — includes hot swap (item 17), DEC-0135's driver-side repeat counters
+(`dedup_key`, `repeat_count`), #317's slot-count `rxCheckPercent` denominator (PR #319) and the
+widened co-rejection of item 18, all landed since the prior S97 count (**+815 / −149**, 1422 →
+2088 lines).
 
 The baseline is not vendored here — the Dockerfile fetches it at build time — so recount it rather
 than trusting this number:
@@ -211,6 +212,9 @@ weewx 5.2 `restx.py`).
 |---|--------|------|-----|
 | 1 | Misleading debug log | 2026-07-05 | `log.debug` reported `_ambient_dict.get('server_url')`, a key that is never set — the URL is the hardcoded `OGOXE_API_URL` constant — so it always logged `None`. Now logs the URL actually used. |
 | 2 | SPDX tag | 2026-07-05 | Added `SPDX-License-Identifier`. |
+| 3 | `__init__` calls `StdService.__init__`, not `super().__init__` | 2026-07-04 | Upstream's constructor (`ogoxe/weewx-ogoxe`, checked at `f69b103`) calls `super(OgoxeUploader, self).__init__`, which reaches `StdWunderground.__init__`. Ours calls `weewx.engine.StdService.__init__` directly, so that step never runs. `StdWunderground.__init__` reads `[StdRESTful][[Wunderground]]` and, when it is configured, starts Wunderground archive and RapidFire threads (weewx 5.5.0 `restx.py`); skipping it means this class starts none of its own. The line was already in the file when it entered this repo (first commit `253cbcf`, which captured the production copy), so the date is when it was first recorded, not necessarily when it was made. Reason not recorded; tracked in [#408](https://github.com/WeatheredScientist/weewx-rtldavis/issues/408). |
+| 4 | Two comments rewritten | 2026-07-05 | The comments above the debug log and above `self.archive_queue` contradicted each other about where `server_url` comes from (`get_site_dict` versus the hardcoded `OGOXE_API_URL`). Both now say the constant. Comments only; no code changed. |
+| 5 | Trailing whitespace | 2026-09-29 | Removed from two upstream lines (the comment ending `restx.py` in the header and the `log.info` call for the loaded configuration), because the repo's pre-commit hook strips it from any file it touches. No behavior change. |
 
 ## `wcloud.py`
 
@@ -246,7 +250,7 @@ The goal is for this list to get **shorter**. Standing policy:
 | windDir branch bug | `lheijst/weewx-rtldavis` | Not yet offered |
 | `NameError` on unknown channel | `lheijst/weewx-rtldavis` | Not yet offered |
 | `rxCheckPercent` dead metric | `lheijst/weewx-rtldavis` | Not yet offered |
-| Outside-temperature sign + `0xFF8` sentinel | `lheijst/weewx-rtldavis` | Not yet offered — belongs alongside [#22](https://github.com/lheijst/weewx-rtldavis/pull/22); bites every cold-climate user, so it is the strongest remaining candidate |
+| Outside-temperature sign + `0xFF8` sentinel | `lheijst/weewx-rtldavis` | [PR #23](https://github.com/lheijst/weewx-rtldavis/pull/23) OPEN since 2026-07-28 (S55), the companion to [#22](https://github.com/lheijst/weewx-rtldavis/pull/22); bites every cold-climate user |
 | `e.read()` / TLS / `KeyError` fixes | `david-lutz/weewx-influx2` | **[PR #1](https://github.com/david-lutz/weewx-influx2/pull/1) OPEN** since 2026-07-13 (S38) — that repo's first-ever PR, and it has been quiet since 2023 |
 
 Whatever is not upstreamed stays here, with a reason. That is the point of the inventory.

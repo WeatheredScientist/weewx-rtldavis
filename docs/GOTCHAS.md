@@ -102,6 +102,15 @@ alone did not catch.
   `bash ~/Projects/eaglehunt-ops/checks/boot-cap-check.sh "$PWD/BOOT.md"`, and confirm the resume
   pointer it quotes is this repo's session.
 
+- **A subagent's zero is a claim (S145).** A Haiku cross-referencer reported "0 issue citations in
+  code" and "no DEC ids missing from the index"; a hand grep found 29 distinct issue numbers and 2
+  out-of-index ids (both legitimately prefixed). Same rule as every other look-like tool: positive-
+  control a zero, an empty, or an all-match before relaying it.
+- **`patch` fuzz is tool-dependent (S145).** Apple's `patch` and `git apply` applied
+  `patch/rtldavis-dupgate.patch` at offset 0, fuzz 0 against the current upstream tarball, while GNU
+  `patch` in the v2.0.17 build log reported fuzz 2 on the same hunk. Judge a patch's drift by the
+  build's own tool, not the laptop's.
+
 ## §2 Git, PRs, and the handoff
 
 - **`gh pr merge`'s output is never trustworthy either way** — silent/empty stdout can mean success,
@@ -152,6 +161,14 @@ alone did not catch.
   `eaglehunt-ops#370`/`#373`. The trap: writing about a cross-repo coordination thread primes "ops"
   as the mental default even when the actual issue lives here. Grep for the number across whichever
   repos are in play before citing it, don't trust which repo felt right in the moment.
+
+- **`gh issue create` in a shell loop: never split fields on `:` (S145).** Titles carry colons, so
+  `${var%:*}` mangled ten titles and read the last word as the label; every create failed on "label
+  not found" and nothing was filed. Use `|` (or a here-doc table) as the delimiter and check the
+  created list before re-running, or you file duplicates.
+- **PR and issue bodies come from a real file (S145).** `gh pr edit --body "$(cat <<EOF …)"`,
+  heredocs on stdin and `$(...)` substitutions are all invisible to the comment guard, which fails
+  closed (OPS-DEC-0216). Write the body with the Write tool and pass `--body-file <path>`.
 
 ## §3 NAS and campaign operations
 

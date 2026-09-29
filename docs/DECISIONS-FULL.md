@@ -10623,6 +10623,11 @@ reconciled.
 **Status:** Accepted (executed, verified) · **Date:** 2026-09-14 (S138) · **closes** `#373` ·
 **extends** DEC-0081, DEC-0120 · **relates to** `#370`, DEC-0154
 
+**Amended 2026-09-29 (S145, DEC-0205):** #403 found that the classifier and the alert averages read
+`wu_period_counts`, which the 300 s RECEPTION log flush empties, so the classification and the average
+depended on phase and "no new state" did not hold. PR #413 adds a rolling record of the last
+`WU_RF_SUSTAIN` windows that the flush never touches.
+
 ### Context
 
 `#373` (filed S134/DEC-0154): during the 2026-09-07 22:31–23:42 EDT outage, `weewx_monitor.log`
@@ -11135,3 +11140,71 @@ alongside the source, and the repo had no `.dockerignore`.
 
 - A live `frame failed message-type proof` line. That needs a glitch, and there were 8 in 31 days.
 - The monitor's first `ISS battery:` line, due in the 18:00 ET RF report.
+
+## DEC-0205 — S145 code audit: tiered parallel review, ten high findings filed and fixed on seven branches, DEC-0199 superseded in part, driver to ws.6
+
+**Status:** Accepted (PRs #412–#418 squash-merged to `dev` 2026-09-29 on the owner's go; deploy is S146) ·
+**Date:** 2026-09-29 (S145) · **supersedes in part** DEC-0199 · **extends** DEC-0137 (#402),
+DEC-0039/DEC-0144 (#409) · **relates to** DEC-0014 (No-Rewrite), DEC-0027 (no formatter)
+
+### Context
+
+v2.0.17 had just shipped (DEC-0204). The owner asked for an audit of the whole tree for
+inconsistencies, misattributions, and missed chances at clearer code, run with parallel agents tiered
+by the work. No code had been reviewed end to end since the S24 review (`docs/CODE_REVIEW_S24.md`).
+
+### Method
+
+Six read-only reviewers, one per file set: `rtldavis.py` (diffed against the stock upstream tarball),
+`weewx_monitor.py`, the other runtime modules (diffed against their upstream baselines), the ops and
+build harness, `tests/`, and a Haiku cross-referencer for DEC, issue, version and host strings. Sonnet
+for the five judgment reviews, Haiku for the mechanical one. The main thread (Fable 5.1) verified
+every high finding directly before filing it, and redid the cross-referencer's two zero results by
+hand: 29 issue numbers and 88 DEC ids all resolve (the two out-of-index ids are correctly prefixed
+`OPS-DEC-0188` and "dashboard DEC-0266"). Fixes ran as seven agents in isolated worktrees, one branch
+each, Opus for the driver numerics and Sonnet for the rest, each under a shared brief: smallest change,
+test first, all four gates green before every commit, no push. The combined tree was merged on a
+scratch branch and gated in both collection orders before any PR opened.
+
+### Findings fixed (high)
+
+| Issue | Finding | PR |
+|---|---|---|
+| #402 | slot-count denominator off by one at seeding; first record after any start or reset misread | #412 |
+| #403 | FULL OUTAGE classifier and alert average read a list emptied every 300 s; phase-dependent | #413 |
+| #404 | any unrecognized `REMEDY_MODE` ran the USB reset while logging "no automatic remedy" | #413 |
+| #405 | OWM and Windy sent rain in centimeters where both APIs take millimeters (10× low) | #414 |
+| #406 | `ws.N` unmoved since 2026-08-11 through five behavior changes; README table and influx figure stale | #412, docs PR |
+| #407 | `soak_check.sh` default image `:v2.0.16` flagged healthy v2.0.17 prod | #417 |
+| #408 | OgoXe `StdService.__init__` divergence absent from the 5(a) notice and inventory | docs PR |
+| #409 | secret gate: several pattern classes had no planted control; identifier check silent when the list is absent | #415 |
+| #410 | `test_reception_pct.py` asserted nothing; `test_input_staleness.py` asserted `or True` | #413 |
+| #411 | suite passed only in alphabetical order; 25 of 30 shuffles failed | #416 |
+| ops#358 | the gate test planted private-range addresses that also appear in the private estate repos (private issue) | #415 |
+
+### Decisions
+
+1. **A subagent's zero is a claim.** The cross-referencer's "0 issue citations" and "no missing DEC
+   ids" were both false; hand grep found 29 and 2. Positive-control any zero, clean, or all-match
+   result from delegated look-like work before relaying it (GOTCHAS §1).
+2. **Controls per class.** Every pattern alternate and allow-list alternate in `check_secrets.sh`
+   carries a planted control, and the claim is proven by mutation, not by a green run. This is the
+   seventh time the gate was found blind (DEC-0039, DEC-0045, DEC-0076, DEC-0084, S142 and now).
+3. **DEC-0199 superseded in part.** Its "no new state" did not hold; a rolling record is the state.
+4. **Version honesty restored.** `DRIVER_VERSION` is `0.20+ws.6` on `dev`; README says so as pending,
+   since the published images report ws.5. README rule 1 stands as written.
+5. **Records ride the PRs.** This closeout (BOOT, CHANGELOG, this row) rides the docs PR, per
+   OPS-DEC-0195.
+
+### Not fixed here
+
+The 29 medium and low items in `docs/CODE_REVIEW_S145.md`; the detector holes the mutation pass
+exposed (quoted key names never scanned; `SECRET_KEY`/`private_key`/`access_key` missed; allow terms
+applied per line); the OgoXe divergence's reason (not recorded anywhere; owner's call); an errata
+decision for the rain history at OWM and Windy; the 27 per-file weewx stubs the conftest now makes
+redundant.
+
+### Deploy
+
+#412 and #414 are baked: v2.0.18. #413 is the host daemon: `pull` then a deliberate restart, plus a
+heartofgold CHANGELOG line. `EXPECT_DRIVER` in `soak_check.sh` moves to ws.6 at that deploy.

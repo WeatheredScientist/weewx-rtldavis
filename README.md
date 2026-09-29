@@ -99,7 +99,11 @@ the Python-native way to say "upstream's release, plus our local patches":
 |------|---------|
 | `0.20` | **upstream's** version — Luc Heijst's rtldavis v0.20. Ours to point at, not to claim. It moves only if we rebase onto a new upstream release. |
 | `ws` | **W**eathered**S**cientist — this fork's maintainer, matching the GitHub org and Docker Hub namespace. |
-| `4` | our patch level on top of that upstream release. |
+| `N` | our patch level on top of that upstream release (`5` in the current releases). It rises with every behavior change, per rule 1 below. |
+
+Releases v2.0.14 through v2.0.17 each changed the driver without a bump, so they all report `ws.5`;
+`dev` is at `ws.6` (the slot-count fix from issue #402 plus items 14-18 of
+[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)), which ships with the next image.
 
 Two rules follow, and we hold ourselves to both:
 
@@ -109,7 +113,7 @@ Two rules follow, and we hold ourselves to both:
    five bug fixes — anyone debugging from those logs was misled. That is the mistake this rule
    exists to prevent.)
 2. **Each patched file carries its own `ws.N`.** `rtldavis.py` is at `ws.5` while `influx.py` is at
-   `ws.1`, because they are different upstream works with different patch lineages. A shared counter
+   `ws.2`, because they are different upstream works with different patch lineages. A shared counter
    would imply changes that never happened.
 
 **We never renumber into upstream's space.** Bumping the driver to `0.21` would collide with a
