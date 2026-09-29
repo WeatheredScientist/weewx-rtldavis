@@ -17,14 +17,20 @@
 #   ops/soak_check.sh              # check since the container started
 #   ops/soak_check.sh 3600         # check only the last N seconds
 #
-# EXPECT_IMAGE names the VERSIONED tag actually deployed RIGHT NOW (e.g. v2.0.16),
-# but is compared by IMAGE ID, never by string: marvin's deploy flow
-# (`marvinctl set-image`) runs the live container under a local alias tag
-# ("marvin-live" today), so `Config.Image` never reads back a versioned tag at all
-# post-move — a straight string compare would fail permanently, on a healthy
-# station, forever (ops#287's own finding). Bump EXPECT_IMAGE as part of the
-# deploy, never before and never after — same rule as always, just resolved
-# through `marvinctl check-image` instead of a string match.
+# EXPECT_IMAGE names the VERSIONED tag that should be running (e.g. v2.0.17). It is
+# compared by IMAGE ID, never by string. This tenant deploys by retagging the
+# floating own-tag `marvin-live` to the built version tag, then restarting
+# (DEC-0204). It does not use `marvinctl set-image`, so `Config.Image` never reads
+# back a versioned tag. A string compare would fail forever on a healthy station
+# (ops#287's own finding); `marvinctl check-image` resolves the tag instead.
+#
+# The default is the release stamp in the Dockerfile beside this script, its
+# "# weewx-rtldavis vX.Y.Z" header, so a deploy needs no hand bump here. The hand
+# bump was missed at v2.0.17 and flagged a healthy station red (#407). The stamp is
+# what the checkout is on, so a checkout out of step with prod reports the gap:
+# WARN if its image is not built yet, FAIL if it is built but not live. Without a
+# Dockerfile or a stamp the literal fallback below applies, and the output says so.
+# Set EXPECT_IMAGE to pin a tag explicitly; it always wins.
 #
 # Transport is `marvinctl --tenant weewx` (ops#287) — NAS-ssh reached nothing real
 # since DEC-0118 moved the tenant to marvin. Each check that used to be one remote
@@ -41,9 +47,17 @@ MONITOR_UNIT=weewx-monitor.service
 LOGDIR=/srv/docker/weewx/logs
 ARCHIVE_DB=/srv/docker/weewx/weewx-data/archive/weewx.sdb
 VENV_PY=/opt/weewx-venv/bin/python3
-EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:v2.0.16}"
-# The DEC-0031 canary. Same rule as EXPECT_IMAGE above: this is what prod is
-# running NOW, not what the repo is on.
+# Anchored at line start so version numbers in the Dockerfile's prose cannot match.
+# The v2.0.17 literal is only the fallback for a script copied out of its checkout.
+_stamp="$(grep -m1 -oE '^# weewx-rtldavis v[0-9]+(\.[0-9]+)+' "$(dirname "$0")/../Dockerfile" 2>/dev/null | sed 's/.* //')"
+if [ -n "${EXPECT_IMAGE:-}" ]; then EXPECT_SRC="EXPECT_IMAGE"
+elif [ -n "$_stamp" ]; then EXPECT_SRC="Dockerfile stamp"
+else EXPECT_SRC="built-in fallback"
+fi
+EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:${_stamp:-v2.0.17}}"
+# The DEC-0031 canary. Unlike EXPECT_IMAGE it reads no stamp: this is what prod is
+# running NOW, not what the repo is on, so a deploy that changes the driver banner
+# (DRIVER_VERSION in rtldavis.py) must bump it.
 EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.5}"
 
 pass=0; fail=0; warn=0
@@ -102,12 +116,12 @@ echo
 [ "$STATE" = "running" ] && ok "container running" || bad "container running" "state=$STATE"
 if EXPECT_ID="$(mc check-image "$EXPECT_IMAGE")" && [ -n "$EXPECT_ID" ]; then
   if [ "$IMAGE_ID" = "$EXPECT_ID" ]; then
-    ok "image is the expected build" "$EXPECT_IMAGE"
+    ok "image is the expected build" "$EXPECT_IMAGE (from $EXPECT_SRC)"
   else
-    bad "IMAGE MISMATCH" "running $IMAGE_ID, want $EXPECT_IMAGE ($EXPECT_ID) — is the baked driver the one you built? (DEC-0031)"
+    bad "IMAGE MISMATCH" "running $IMAGE_ID, want $EXPECT_IMAGE ($EXPECT_ID, from $EXPECT_SRC) — is the baked driver the one you built? (DEC-0031)"
   fi
 else
-  note "cannot resolve EXPECT_IMAGE locally" "$EXPECT_IMAGE not present as a local image — bump it as part of the deploy"
+  note "cannot resolve EXPECT_IMAGE locally" "$EXPECT_IMAGE (from $EXPECT_SRC) not present as a local image — build it, or set EXPECT_IMAGE to the deployed tag"
 fi
 [ "$RESTARTS" = "0" ] && ok "no container restarts" || note "container has restarted" "count=$RESTARTS"
 
