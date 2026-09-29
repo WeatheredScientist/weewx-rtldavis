@@ -40,7 +40,7 @@
 #
 #   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
 #   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
-#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.5'
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.6'
 #   so the difference is visible in the logs. Bugs here are ours, not upstream's.
 #
 #   Changes, with the date each was recorded in git. Entries dated 2026-07-04
@@ -103,9 +103,23 @@
 #               which never trips the 150s watchdog because hop packets reset
 #               it). Ends the effective-vs-ineffective USB-reset ambiguity that
 #               consumed S67-S73.
+#   2026-08-19  #219: shutdown reap, AsyncReader EOF spin, get_stderr 10 s cap.
+#   2026-08-19  #220: every battery-low frame was dropped whole at dispatch.
+#   2026-08-19  #221: four divide-by-zero/negative-shift crashes guarded.
+#   2026-08-19  #222: wind and rain_count channel gates; duplicate channels refused.
+#   2026-08-20  #226: default stanza, cmd split, version gate, show-packets fixes.
+#   2026-08-20  #225: freqError rotation, v12 freqError, pct_good storage fixes.
+#   2026-08-20  #225: SensorQC bounds extended to temp_1/2, humid_1/2, rain_rate.
+#   2026-08-21  #233: shutdown() also kills the child via its own Popen handle.
+#   2026-08-26  opt-in -gain/-ex hot swap via a validated control file (DEC-0117).
+#   2026-09-03  a re-sent unchanged payload is suppressed and counted (DEC-0135).
+#   2026-09-03  rxCheckPercent counts ISS slots, not wall-clock periods (#317).
+#   2026-09-28  co-rejection: battery flags, impossible message types (DEC-0203).
+#   2026-09-29  #402: first rxCheckPercent after a start or reset was off by one.
+#   2026-09-29  #406: ws.5 -> ws.6; the 2026-08-19 to 09-28 entries shipped as ws.5.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
-#   These fixes are offered upstream; this fork exists to ship them in the meantime.
+#   Some of these fixes are offered upstream; this fork ships them in the meantime.
 #
 #-------
 
@@ -202,10 +216,11 @@ def logerr(msg):
 
 DRIVER_NAME = 'Rtldavis'
 # Fork of Luc Heijst's rtldavis v0.20. The '+ws.N' suffix is a PEP 440 local
-# version identifier: upstream base 0.20, WeatheredScientist revision 1. Never
+# version identifier: upstream base 0.20, WeatheredScientist revision N. N goes
+# up with every behavior change to this file (README rule 1, #406). Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.5'
+DRIVER_VERSION = '0.20+ws.6'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
@@ -1675,6 +1690,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     # last counter reset -- seed the baseline to this packet
                     # too, so the denominator starts counting from here.
                     self.stats['prev_pkt_ts'][i] = now
+                    # #402: the count baseline starts at this packet too.
+                    # Otherwise it sits in `count` while its slot never sits
+                    # in the delta. At startup its count also includes
+                    # packets Go counted but never emitted during init.
+                    self.stats['last_cnt'][i] = new_cnt[i]
                 self.stats['last_pkt_ts'][i] = now
             self.stats['curr_cnt'][i] = new_cnt[i]
 
@@ -1715,6 +1735,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # jitter (up to +5 pts). The ISS clock is exact, so
                         # round() has no ambiguity, and count[i] <= max_count[i]
                         # holds by construction: one accepted packet per slot.
+                        # That needs `count` and the delta to start from the
+                        # same packet, which the seed and the skipped first
+                        # boundary now keep (#402).
                         delta = self.stats['last_pkt_ts'][i] - self.stats['prev_pkt_ts'][i]
                         self.stats['max_count'][i] = round(delta / self.stats['loop_times'][x])
                         self.stats['prev_pkt_ts'][i] = self.stats['last_pkt_ts'][i]
@@ -1733,10 +1756,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # post-reset packet instead of spanning the reset.
                         self.stats['prev_pkt_ts'][i] = 0.0
                         self.stats['last_pkt_ts'][i] = 0.0
-                    # count[i] == 0: genuinely no packets this period (RF-dead),
-                    # not a reset. Leave last_pkt_ts/prev_pkt_ts untouched so
-                    # the next period's delta spans the full gap once
-                    # reception resumes -- max_count grows to match.
+                    # count[i] == 0: no packets past the baseline this period
+                    # (RF-dead, or only the seed, #402), not a reset. Leave
+                    # last_pkt_ts/prev_pkt_ts untouched so the next period's
+                    # delta spans the full gap once reception resumes --
+                    # max_count grows to match.
             # if there is a total
             # NOTE (S24, DEC-0024 review H2): this was previously also gated on
             # `self.stats['pct_good_all'] is not None`, but _init_stats and
@@ -1754,6 +1778,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     x = self.stats['activeTrIds'][i]
                     logdbg("ARCHIVE_STATS: station %d: max_count= %4d count=%4d missed=%4d pct_good=%6.2f" %
                         (i+1, self.stats['max_count'][i], self.stats['count'][i], self.stats['missed'][i], self.stats['pct_good'][i]))
+        else:
+            # #402: the first boundary after startup computes nothing, but
+            # _reset_stats still moves last_cnt up to it. Move the slot
+            # baseline with it, or the next delta spans two periods while
+            # its count spans one.
+            for i in range(0, 4):
+                self.stats['prev_pkt_ts'][i] = self.stats['last_pkt_ts'][i]
 
     def new_archive_record(self, event):
         logdbg("new_archive_record")
