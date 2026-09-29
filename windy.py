@@ -75,8 +75,10 @@ class WindyThread(RESTThread):
             params['winddir'] = '%.0f' % record_m['windDir']
         if record_m.get('barometer') is not None:
             params['pressure'] = '%.0f' % (record_m['barometer'] * 100)
-        if record_m.get('rain') is not None:
-            params['precip'] = '%.2f' % record_m['rain']
+        if record_m.get('hourRain') is not None:
+            # Windy wants the last hour in millimeters. to_METRIC rain is centimeters,
+            # and 'rain' covers only one archive interval (#405).
+            params['precip'] = '%.2f' % (record_m['hourRain'] * 10)
         if record_m.get('UV') is not None:
             params['uv'] = '%.1f' % record_m['UV']
         if record_m.get('radiation') is not None:

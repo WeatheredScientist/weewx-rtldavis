@@ -9,10 +9,13 @@
 #   - a private-range LAN IP/subnet written as bare prose, known or not (DEC-0144)
 #
 # ---------------------------------------------------------------------------
-# READ THIS BEFORE TOUCHING THE ALLOW-LIST. Four bug classes have already shipped
+# READ THIS BEFORE TOUCHING THE ALLOW-LIST. Seven bug classes have already shipped
 # here, each of which made the gate GREEN WHILE CATCHING NOTHING. Every one of them
 # is now a planted payload in scripts/test_check_secrets.sh — the literals live
-# THERE, where they execute, not here, where they would merely be prose (DEC-0040):
+# THERE, where they execute, not here, where they would merely be prose (DEC-0040).
+# Classes 1-4 are written up below. Classes 5-7 are documented where their detector
+# is defined: 5 is the `pass` key plus the quoted app-password literal (S68), 6 the
+# unquoted app password (S76, DEC-0084), 7 a private-range LAN address as prose (DEC-0144).
 #
 #   1. `grep -viE` (case-INSENSITIVE allow-list). Its [A-Z] terms then matched
 #      lowercase code, so the ALL_CAPS-constant rule swallowed nearly every
@@ -53,6 +56,16 @@
 #
 #       scripts/test_check_secrets.sh        <-- RUN IT AFTER ANY CHANGE HERE
 #
+# "EVERY CLASS HAS A PLANTED PAYLOAD" WAS ITSELF UNVERIFIED (S145, #409). A mutation
+# pass — delete one alternate from a scratch copy of this file, re-run the test,
+# expect it to go red — found that `passcode`, the bare `key` alternate, the quoted
+# app-password shape, most private-range sub-ranges, most allow-list alternates and the
+# whole identifier check could each be deleted with every control still green. Each now
+# has a planted control. Two kinds of deletion still stay green, and no control can kill
+# them: `api_?secret` is redundant with the unanchored `secret`, and six allow alternates
+# are inert (see INERT ALTERNATES below). When you add or change an alternate, delete it
+# in a scratch copy and confirm the test goes red.
+#
 # ---------------------------------------------------------------------------
 set -u
 status=0
@@ -65,20 +78,49 @@ files=("$@")
 # --- Personal / infra identifiers that must never be committed ---
 # The patterns themselves are private (naming them here would leak them in this
 # PUBLIC script), so they live in the GITIGNORED scripts/.identifiers file (one
-# extended-regex per line). If that file is absent (CI, a fork, another user),
-# the identifier check is skipped — there is nothing owner-specific to catch.
+# extended-regex per line). If that file is absent (CI, a fork, another user, and
+# every git WORKTREE, which never checks out a gitignored file), the identifier check
+# is skipped, and since S145 (#409) it says so on stderr instead of staying silent.
+# Two switches, both read from the environment (the pre-commit hook inherits it):
+#   CHECK_SECRETS_REQUIRE_IDENTIFIERS=1  exit 2 unless the list is present and holds a
+#       pattern. The owner opts in on a machine that has the file; CI must not, it
+#       has none. Unset, empty and 0 all mean "skip if absent", as before. Any other
+#       value counts as on: a typo makes the gate stricter, never quieter.
+#   CHECK_SECRETS_IDENT_FILE=<path>      read the list from here instead. The test
+#       plants a synthetic list this way, so the check has a control that does not
+#       depend on the private file.
+# A list that is not a valid regex is fatal in either mode: grep would exit 2 with no
+# output, and the per-file scan below would read that as "no hits".
+# Exit codes: 1 = a finding, 2 = the gate could not run as configured.
 # No broad email regex: upstream author attribution (Keffer, Heijst, Skahan,
 # OgoXe) is legitimate in a public repo.
-ident_file="$(dirname "$0")/.identifiers"
+ident_file="${CHECK_SECRETS_IDENT_FILE:-$(dirname "$0")/.identifiers}"
 ident_re=""
 if [ -f "$ident_file" ]; then
   ident_re="$(grep -vE '^[[:space:]]*(#|$)' "$ident_file" | paste -sd '|' -)"
 fi
+require_ident=0
+case "${CHECK_SECRETS_REQUIRE_IDENTIFIERS:-}" in ''|0) ;; *) require_ident=1 ;; esac
+if [ -z "$ident_re" ]; then
+  if [ "$require_ident" -eq 1 ]; then
+    echo "SECRET-SCAN: CHECK_SECRETS_REQUIRE_IDENTIFIERS is set but the identifier list is missing or empty: $ident_file" >&2
+    echo "  A git worktree does not carry the gitignored list; copy scripts/.identifiers in from the main checkout." >&2
+    exit 2
+  fi
+  echo "SECRET-SCAN: note: identifier check SKIPPED (no patterns in $ident_file)." >&2
+else
+  printf '' | grep -E "$ident_re" >/dev/null 2>&1
+  if [ $? -eq 2 ]; then
+    echo "SECRET-SCAN: $ident_file is not a valid extended-regex list; the identifier check cannot run." >&2
+    exit 2
+  fi
+fi
 
 # --- What looks like a secret: KEY <sep> VALUE, value 8+ credential-ish chars ---
 # `_key` is shared by the detector AND by every POSITIONED allow term below, so
-# an allow can only ever fire against the key the detector actually matched —
-# never against some other word that happens to appear later on the line.
+# an allow term must sit right after a credential key — not float anywhere on the line.
+# It is still tested per LINE, not per match: on a line with two assignments, an
+# allowed first one excuses a literal second one. Measured S145 (#409), not fixed.
 _key='(password|passcode|pass|PASS|api_?key|api_?secret|token|secret|[^A-Za-z_]key)'
 _assign="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=-]{8,}'
 
@@ -184,6 +226,15 @@ _private_ip='(^|[^0-9.])(10\.[0-9x]{1,3}\.[0-9x]{1,3}\.[0-9x]{1,3}|172\.(1[6-9]|
 #   FOO_BAR                         an ALL_CAPS *underscored* constant REFERENCE.
 #     The underscore does the real work: `= INFLUX_TOKEN` is a reference, while
 #     `= REALSECRETVALUE` is a bare literal and is NOT allowed.
+# INERT ALTERNATES (S145, #409). The detector only fires on 8+ value characters, and
+# an allow term only matters on a line the detector fired on. `${`, the two empty-quote
+# forms and `input(` can never start such a value, so on their own assignment they never
+# fire; their one remaining effect is to excuse a literal elsewhere on the same line.
+# `None` and `-1` fire only when the value merely BEGINS with the token, so no natural
+# line exercises them. A bare `getenv(` is the same, and its control is a helper name
+# starting with it. All stay as documented intent; a green GOOD line for one of them is
+# not coverage. `os.getenv(...)` is flagged, not excused: the value must begin with the
+# token. The test marks such lines (inert).
 _val='(YOUR_|your_|\$\{|os\.environ|getenv|sys\.argv|argv|input\(|""|'"''"'|None|-1\b|self\.|options\.|[A-Za-z_][A-Za-z_0-9]*\.get\(|(site|config|stn)_dict|[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\b)'
 allow_value="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?'"$_val"
 
