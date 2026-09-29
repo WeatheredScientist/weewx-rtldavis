@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -92,6 +93,7 @@ S="$SCEN_DIR"
 case "$verb" in
   inspect) cat "$S/inspect.json" ;;
   check-image)
+    printf '%s\n' "$1" >> "$S/check_image_asked.txt"
     [ -f "$S/check_image_missing" ] && exit 1
     cat "$S/check_image_id.txt" ;;
   logs) cat "$S/container_logs.txt" ;;
@@ -230,8 +232,10 @@ def build_scenario(
     return scen
 
 
-def run_soak(tmp_path: Path, expect_image: str = "weatheredscientist/weewx-rtldavis:v2.0.16",
-            **overrides) -> str:
+def run_soak(tmp_path: Path, expect_image: str | None = "weatheredscientist/weewx-rtldavis:v2.0.16",
+            script: Path = SCRIPT, **overrides) -> str:
+    """expect_image=None leaves EXPECT_IMAGE unset, so the script derives its own
+    default; `script` can be a copy laid out beside a fixture Dockerfile (#407)."""
     scen = build_scenario(tmp_path, **overrides)
 
     bindir = tmp_path / "bin"
@@ -247,11 +251,13 @@ def run_soak(tmp_path: Path, expect_image: str = "weatheredscientist/weewx-rtlda
     env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
     env["HOME"] = str(home)
     env["SCEN_DIR"] = str(scen)
-    env["EXPECT_IMAGE"] = expect_image
+    env.pop("EXPECT_IMAGE", None)  # never inherit the operator's own pin into a test
+    if expect_image is not None:
+        env["EXPECT_IMAGE"] = expect_image
     env["EXPECT_DRIVER"] = overrides.get("drv_ver", "0.20+ws.5")
 
     return subprocess.run(
-        ["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60
+        ["bash", str(script)], env=env, capture_output=True, text=True, timeout=60
     ).stdout
 
 
@@ -335,6 +341,90 @@ def test_unresolvable_expect_image_warns_instead_of_lying(tmp_path):
     out = run_soak(tmp_path, check_image_id=None)
     assert "cannot resolve EXPECT_IMAGE locally" in out
     assert "IMAGE MISMATCH" not in out
+
+
+# --- #407: the default expectation follows the Dockerfile's release stamp -----
+
+IMAGE_REPO = "weatheredscientist/weewx-rtldavis"
+
+# A stamped Dockerfile with decoys: prose naming other versions, one BEFORE the
+# stamp, so a parser that takes the first version-looking token is caught.
+STAMPED = (
+    "# layered on v1.0.0 of something else\n"
+    "# weewx-rtldavis v9.8.7\n"
+    "# Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x\n"
+    "FROM ubuntu:26.04 AS base\n"
+    "# hole left open by v2.0.5.\n"
+)
+
+
+def script_beside_dockerfile(tmp_path: Path, dockerfile: str | None) -> Path:
+    """Copy the script to <tree>/ops/ with `dockerfile` as <tree>/Dockerfile, the
+    layout the repo and the tenant checkout share; None leaves the file out."""
+    ops = tmp_path / "tree" / "ops"
+    ops.mkdir(parents=True)
+    copy = ops / "soak_check.sh"
+    shutil.copy2(SCRIPT, copy)
+    if dockerfile is not None:
+        (ops.parent / "Dockerfile").write_text(dockerfile)
+    return copy
+
+
+def asked_tag(tmp_path: Path) -> str:
+    """The tag the script last asked `marvinctl check-image` to resolve."""
+    return (tmp_path / "scenario" / "check_image_asked.txt").read_text().split()[-1]
+
+
+def test_default_expectation_follows_the_dockerfile_stamp(tmp_path):
+    """The bug: a hand-bumped default stayed at v2.0.16 after v2.0.17 deployed and
+    flagged a healthy station red. With no EXPECT_IMAGE the stamp is the tag."""
+    script = script_beside_dockerfile(tmp_path, STAMPED)
+    out = run_soak(tmp_path, expect_image=None, script=script)
+    assert asked_tag(tmp_path) == f"{IMAGE_REPO}:v9.8.7"
+    assert "Dockerfile stamp" in line_for(out, "image is the expected build")
+    assert "IMAGE MISMATCH" not in out
+
+
+def test_explicit_expect_image_beats_the_dockerfile_stamp(tmp_path):
+    script = script_beside_dockerfile(tmp_path, STAMPED)
+    out = run_soak(tmp_path, expect_image=f"{IMAGE_REPO}:v1.2.3", script=script)
+    assert asked_tag(tmp_path) == f"{IMAGE_REPO}:v1.2.3"
+    assert "from EXPECT_IMAGE" in line_for(out, "image is the expected build")
+
+
+def test_stamped_release_that_is_not_running_is_still_a_mismatch(tmp_path):
+    """POSITIVE CONTROL: deriving the default must not switch the canary off. The
+    stamped release resolves to a different image than the one running."""
+    script = script_beside_dockerfile(tmp_path, STAMPED)
+    out = run_soak(tmp_path, expect_image=None, script=script,
+                   image_id="sha256:running", check_image_id="sha256:built")
+    assert "IMAGE MISMATCH" in out
+    assert "v9.8.7" in line_for(out, "IMAGE MISMATCH")
+
+
+@pytest.mark.parametrize("dockerfile", [
+    None,                                       # the script copied out on its own
+    "FROM ubuntu:26.04 AS base\n",              # a Dockerfile with no stamp
+    "# weewx-rtldavis vNext\nFROM scratch\n",   # a stamp that is not a version
+], ids=["no-dockerfile", "no-stamp", "malformed-stamp"])
+def test_unreadable_stamp_falls_back_to_a_versioned_tag(tmp_path, dockerfile):
+    script = script_beside_dockerfile(tmp_path, dockerfile)
+    out = run_soak(tmp_path, expect_image=None, script=script)
+    repo, _, version = asked_tag(tmp_path).partition(":")
+    assert repo == IMAGE_REPO
+    assert re.fullmatch(r"v\d+(\.\d+)+", version), version
+    assert "built-in fallback" in line_for(out, "image is the expected build")
+
+
+def test_the_repos_own_dockerfile_stamp_is_derivable(tmp_path):
+    """Pins the parse to the real file. Reformatting the Dockerfile header would
+    otherwise drop the script to its fallback with no red test to say so."""
+    text = (REPO / "Dockerfile").read_text()
+    stamp = re.search(r"^# weewx-rtldavis (v\d+(?:\.\d+)+)", text, re.M)
+    assert stamp, "the Dockerfile no longer carries a '# weewx-rtldavis vX.Y.Z' header"
+    out = run_soak(tmp_path, expect_image=None)
+    assert asked_tag(tmp_path) == f"{IMAGE_REPO}:{stamp.group(1)}"
+    assert "Dockerfile stamp" in line_for(out, "image is the expected build")
 
 
 # --- the restart-loop detector (S95, #245) ------------------------------------
