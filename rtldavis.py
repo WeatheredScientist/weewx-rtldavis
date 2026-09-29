@@ -1675,6 +1675,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     # last counter reset -- seed the baseline to this packet
                     # too, so the denominator starts counting from here.
                     self.stats['prev_pkt_ts'][i] = now
+                    # #402: the count baseline starts at this packet too.
+                    # Otherwise it sits in `count` while its slot never sits
+                    # in the delta. At startup its count also includes
+                    # packets Go counted but never emitted during init.
+                    self.stats['last_cnt'][i] = new_cnt[i]
                 self.stats['last_pkt_ts'][i] = now
             self.stats['curr_cnt'][i] = new_cnt[i]
 
@@ -1715,6 +1720,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # jitter (up to +5 pts). The ISS clock is exact, so
                         # round() has no ambiguity, and count[i] <= max_count[i]
                         # holds by construction: one accepted packet per slot.
+                        # That needs `count` and the delta to start from the
+                        # same packet, which the seed and the skipped first
+                        # boundary now keep (#402).
                         delta = self.stats['last_pkt_ts'][i] - self.stats['prev_pkt_ts'][i]
                         self.stats['max_count'][i] = round(delta / self.stats['loop_times'][x])
                         self.stats['prev_pkt_ts'][i] = self.stats['last_pkt_ts'][i]
@@ -1733,10 +1741,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # post-reset packet instead of spanning the reset.
                         self.stats['prev_pkt_ts'][i] = 0.0
                         self.stats['last_pkt_ts'][i] = 0.0
-                    # count[i] == 0: genuinely no packets this period (RF-dead),
-                    # not a reset. Leave last_pkt_ts/prev_pkt_ts untouched so
-                    # the next period's delta spans the full gap once
-                    # reception resumes -- max_count grows to match.
+                    # count[i] == 0: no packets past the baseline this period
+                    # (RF-dead, or only the seed, #402), not a reset. Leave
+                    # last_pkt_ts/prev_pkt_ts untouched so the next period's
+                    # delta spans the full gap once reception resumes --
+                    # max_count grows to match.
             # if there is a total
             # NOTE (S24, DEC-0024 review H2): this was previously also gated on
             # `self.stats['pct_good_all'] is not None`, but _init_stats and
@@ -1754,6 +1763,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     x = self.stats['activeTrIds'][i]
                     logdbg("ARCHIVE_STATS: station %d: max_count= %4d count=%4d missed=%4d pct_good=%6.2f" %
                         (i+1, self.stats['max_count'][i], self.stats['count'][i], self.stats['missed'][i], self.stats['pct_good'][i]))
+        else:
+            # #402: the first boundary after startup computes nothing, but
+            # _reset_stats still moves last_cnt up to it. Move the slot
+            # baseline with it, or the next delta spans two periods while
+            # its count spans one.
+            for i in range(0, 4):
+                self.stats['prev_pkt_ts'][i] = self.stats['last_pkt_ts'][i]
 
     def new_archive_record(self, event):
         logdbg("new_archive_record")
