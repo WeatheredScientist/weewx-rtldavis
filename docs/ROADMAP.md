@@ -3,7 +3,20 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-14 (S138 — targeted line update per DEC-0057, not a full pass: the P0
+**Last updated:** 2026-09-29 (S146 — **scheduled full reconciliation, tripwire fired exactly on
+time**: every open P0–P3 item read against `BOOT.md`/`DECISIONS.md`/`CHANGELOG.md` fresh, plus
+DEC-0196 through DEC-0205 classed one by one. **Four lines moved.** (1) The P0 freeze item gained
+S144's lead (corrupt CRC-valid frames sit at outage onsets), marked a lead; the rate and the
+unproven mechanism are unchanged. (2) P1's arc gained v2.0.17's corruption class (DEC-0203: a
+battery flag and an impossible message type now condemn a frame). (3) P2's slot-count paragraph
+gained #402, a third `rxCheckPercent` artifact (the first record after any start or reset), fixed
+in ws.6 and shipped as v2.0.18. (4) A new P0.7 records the S145 code audit (DEC-0205): ten high
+findings fixed and shipped, 29 medium/low items open in `docs/CODE_REVIEW_S145.md`. P3's
+INTERFACES line gained DEC-0200 and DEC-0202, both of which edited that file after S136, and now
+names ops#357's open `bar_absolute` ask. Classed as tooling or incident response, no line:
+DEC-0196, DEC-0197, DEC-0199, DEC-0201. DEC-0198 was already here (S138). Everything else diffed
+clean: P2's header and campaign rows, the DB-lock row, closed P1.8. Next check: S156.)
+Prior: 2026-09-14 (S138 — targeted line update per DEC-0057, not a full pass: the P0
 freeze-rate line's confound question is settled — DEC-0198's quiet-window re-read (`weewx.service`
 continuous since 09-07 23:42, zero restarts) found current rolling windows at 0 freezes/0.0th pct,
 and S131's 4.03/day "at record max" traced to that session's own 09-07 incident cluster; excluding
@@ -120,11 +133,24 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S146** (~10 sessions out). If the session counter is
-  at or past S146 and this line still says S146, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106, S116, S126 and S136 did (diff every open/pending item
-  here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S136, 2026-09-09** — tripwire fired exactly on time. **Nothing stale
+- **Next scheduled reconciliation check: by S156** (~10 sessions out). If the session counter is
+  at or past S156 and this line still says S156, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136 and S146 did (diff every
+  open/pending item here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
+- Last full reconciliation: **S146, 2026-09-29** — tripwire fired exactly on time. **Four lines
+  were behind and are fixed; nothing else stale.** The pass also classed every DEC since S136
+  (DEC-0196 to DEC-0205) instead of trusting the banner. Moved: the P0 freeze item (S144's lead,
+  labeled a lead: the reverse rate is unmeasured, so neither the 1.31/day figure nor "mechanism
+  unproven" changes); P1's arc (v2.0.17, DEC-0203 — P1 had stopped at v2.0.11); P2's
+  slot-count paragraph (#402, the third `rxCheckPercent` artifact, fixed in ws.6 / v2.0.18); a
+  new P0.7 for the S145 audit, since it is the same shape as P0.6 and its 29 open items are a
+  queue. P3's INTERFACES line was two DECs behind: `git log -- docs/INTERFACES.md` shows DEC-0200
+  (dark-floor note) and DEC-0202 (configurable feed paths) landed there after S136, and both are
+  contract, not infra terminology. Verified current, no change: P2's header and campaign rows,
+  the DB-lock row, `receiveWindow` (closed), P1.8 (closed). Tooling or incident response, no
+  line, by the same call DEC-0119/DEC-0143/DEC-0144 got: DEC-0196 (backfill tool), DEC-0197
+  (dispatch ring), DEC-0199 (FULL OUTAGE alert class), DEC-0201 (conf-archive).
+- Prior full reconciliation: **S136, 2026-09-09** — tripwire fired exactly on time. **Nothing stale
   found.** The P0 freeze line deliberately still reads DEC-0088's 1.31/day: S131's 4.03/day
   "record max" reading remains unconfirmed (restart-confounded, watched in `BOOT.md` job 1, not
   DEC-settled), and this guardrail's whole point is to not carry a provisional number as if
@@ -298,6 +324,16 @@ Ranked findings in `docs/CODE_REVIEW_S24.md`; all fixes landed with regression t
 incremental read (S28). See CHANGELOG-ARCHIVE `[S24]`, `[S25]`, `[S28]`. Driver fixes shipped in
 v2.0.3 (S30/S32).
 
+## P0.7 — Code audit + fixes (S145–S146) — ✅ high findings fixed and shipped; 29 medium/low open
+Whole-tree audit at `7d06cbf` (DEC-0205): six read-only reviewers, 39 findings, every high one
+re-verified by the main thread before filing. The ten high items (#402–#411, `eaglehunt-ops#358`)
+are fixed (PRs #412–#418) and **shipped**: the monitor's fixes (#413) went live with a restart on
+2026-09-29 09:31 ET, and the driver and uploader fixes (#412, #414) as the v2.0.18 image at
+16:37 ET (DEC-0206). The 29 medium/low items are the open cleanup queue in
+`docs/CODE_REVIEW_S145.md`: unordered, not scheduled; the secret gate's four detector holes are
+#421. Same shape as P0.6 above
+(`docs/CODE_REVIEW_S24.md`).
+
 ## P1 — Data integrity & Sensor-QC hardening (S18–S55c) — ✅ DONE, watch-only
 One continuous arc, not several separate efforts: RF/decode corruption that passes CRC has produced
 impossible values (rain, wind, humidity, temperature) since S18, and each release below closed one
@@ -324,6 +360,13 @@ here.
   `0xFF8` flag-nibble leak.
 - **Cap-16 tuning → v2.0.11** (S55c): DEC-0056, decided on an evidence pass (R1/R2); monitor
   tripwire verified live end-to-end.
+- **Battery-flag co-rejection → v2.0.17** (S144): DEC-0203/DEC-0204 — a co-rejected frame now takes
+  its battery-low bit with it, and a message type no Davis transmitter sends (0x0, 0x1, 0xB, 0xD,
+  0xF) condemns a frame outright. Corrupt frames at reception collapses had produced one-minute
+  false ISS low-battery readings and, occasionally, a phantom gust. The monitor now reports the ISS
+  battery flag in each 6-hourly reception summary and emails once when it persists across healthy
+  reception; four reports have read `OK -- flag clear`. Not yet seen live: a `frame failed
+  message-type proof` line (it needs a glitch; 8 in 31 days, none since the cutover).
 
 **Still open — ordinary watches, not a new arc.** Current status (co-rejecting grep, humidity-spike
 signature DEC-0044, first-frost test of the signed-decode negative branch, DEC-0056's
@@ -584,6 +627,14 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       (0/360 over 100%, DEC-0139) — `#317` closed. `docs/DATA_ERRATA.md`'s `DISC-0001` carries
       this as a second boundary. `v2.0.16` promoted to `main` the same session (`prod-baseline-
       20260904`); Docker Hub push still pending (`ops#265`).
+      **S146 (DEC-0205/DEC-0206) — a third artifact, closed: #402.** The slot baseline sat one
+      packet off at seeding, so the first record after every start or reset misread (22 packets
+      over 21 slots read 104.8%, a short period 133%, the record after a skipped boundary about
+      half). The S145 audit found it by reading; the tests had seeded the baseline directly
+      instead of driving a cold start. Fixed in `0.20+ws.6`, live as v2.0.18 since 2026-09-29
+      16:37 ET. The first real record after that restart read 100%, where the equivalent record
+      after v2.0.17's read 58%: one observation each, so suggestive only; the cold-start test is
+      the proof.
 - [x] ~~**Deploy the escalating watchdog (DEC-0065) to the NAS**~~ — **DONE** and genuinely live; it
       handled every stall on 2026-08-06 within seconds. ⚠️ **But the evidence originally cited here
       was the wrong kind, and S67 corrected it (DEC-0074).** "Matches the repo tip byte-for-byte,
@@ -699,6 +750,12 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       Ruled out already: NAS-wide stall, the S37 stdout wedge,
       CPU-quota throttling, `pressure_service`. Upstream hit this and worked around it without
       diagnosing it (`get_stderr()`'s 10 s cap).
+      **S144 (DEC-0203) adds a lead, not a finding:** every corrupt-frame battery flip in the
+      sample was the last thing logged before a ~4-minute silence (09-21 21:09:35, its record
+      landing at 21:13:50; 09-24's 22:40 record landing at 22:44:28, both DEC-0088 freezes). The
+      reverse rate, how many freezes a corrupt frame precedes, is unmeasured, so neither the
+      1.31/day rate nor "mechanism unproven" moves. Measure it when the next working freeze lands
+      (`BOOT.md`).
 - [x] ~~**P0 — make the campaign metric freeze-aware**~~ — **CLOSED by DEC-0069 (S66).** Two parts,
       and the larger one was a *resolution* problem, not a freeze problem: `harvest()` read the
       monitor's **5-minute** `RECEPTION:` aggregate, where one frozen minute drags a whole bucket
@@ -759,8 +816,16 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
 - [ ] Harden INTERFACES.md as the stable contract; document it well enough for a non-Davis WeeWX or
       CumulusMX producer to satisfy it. (Partial progress, and more than this line used to claim:
       DEC-0032's `rain_qc` flag, DEC-0086's `barometer_inHg` WeatherLink-passthrough provenance,
-      DEC-0091's `barometer_fetch_epoch` + honest-null pressure/altimeter, and DEC-0093's
-      `current.json` cadence decoupling are all documented there. **Corrected S97:** this line
+      DEC-0091's `barometer_fetch_epoch` + the driver's null pressure/altimeter keys, and DEC-0093's
+      `current.json` cadence decoupling are all documented there, as are (found behind at S146, by
+      `git log -- docs/INTERFACES.md`) DEC-0200's UV dark-floor note and DEC-0202's rule that the
+      feed paths are configurable and a consumer must bind their directory, not the files.
+      **Corrected S146:** this line and INTERFACES.md said the archive's pressure/altimeter columns
+      "go NULL" (DEC-0091); they are weewx-derived from the sea-level value and populated in 99.5%
+      of rows, found when HLF read the bucket. The doc now says so.
+      **Open ask, design not started (S146):** `eaglehunt-ops#357` wants WeatherLink's
+      `bar_absolute` published as a measured station pressure beside the passthrough
+      `barometer_inHg`, for HLF's barometer verification frame. **Corrected S97:** this line
       previously also claimed DEC-0053's station-identity finding was documented — it was not; only
       DEC-0053's cache-bounding finding (Finding 1) had actually made it into the doc. §2 now carries
       the missing station-identity/series-key trap (Finding 2), closing that gap for real. Finding 3

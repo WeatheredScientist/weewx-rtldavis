@@ -84,13 +84,25 @@ not this repo's.
   ever succeeded this run. Consumers wanting a staleness gate compare it to `dateTime` (both are
   epoch seconds); `barometer_inHg` itself still expires from the feed at 2 × `fetch_interval` as
   above.
-- **`pressure` and `altimeter` are honest nulls, not backfilled (S82b, #144; lands with v2.0.14).**
+- **`pressure` and `altimeter` are not backfilled from the sea-level value, and they are not
+  measured either: weewx derives them (S82b, #144, lands with v2.0.14; corrected S146).**
   The fetched sea-level value used to also backfill the internal `pressure` (station) and
   `altimeter` loop-packet keys — different quantities, so the archive's station-pressure column
-  carried sea-level numbers at this site's elevation (hlf#302). Per DEC-0006 they now stay null
-  (the ISS never transmits them), and the **archive columns go NULL from the v2.0.14 deploy
-  onward**. Neither key was ever part of this published loop-JSON contract; archive readers
-  (hyperlocal-forecast) get honest absence instead of a mislabeled value.
+  carried sea-level numbers at this site's elevation (hlf#302). Per DEC-0006 the driver now leaves
+  both keys null (the ISS never transmits them), and that holds for the loop packet.
+  **The archive and InfluxDB columns are not NULL, though.** The live conf carries
+  `[StdWXCalculate][[Calculations]] pressure = prefer_hardware` and `altimeter = prefer_hardware`,
+  so with no hardware value weewx computes both. `pressure` is `PressureCooker.pressure` (weewx
+  5.5.0, `wxxtypes.py`): the fetched sea-level `barometer` run backward through a reduction formula
+  using the station altitude, the current temperature, the temperature 12 hours earlier from the
+  archive, and humidity. `altimeter` is then computed from that `pressure`. Measured 2026-09-29:
+  10,002 of the last 7 days' 10,055 archive rows carry both (29.46 inHg station pressure against a
+  30.04 sea-level `barometer` at this elevation). The magnitude is right for a station pressure,
+  but the value is WeatherLink's own temperature-dependent reduction reversed, not an independent
+  reading of a sensor, so do not treat it as a measurement. Neither key was ever part of this
+  published loop-JSON contract. (S82b's text here said the archive columns "go NULL from the
+  v2.0.14 deploy onward"; it had been checked against the loop packet, never against the archive.
+  `eaglehunt-ops#357` is the open ask for a measured station pressure, `bar_absolute`.)
 
   Past its TTL a field is **omitted rather than frozen**, and the writer logs a `WARNING` naming the
   field. Before S48 the cache was unbounded, so a dead or SensorQC-rejected sensor emitted its last
