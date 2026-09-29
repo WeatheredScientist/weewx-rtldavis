@@ -17,7 +17,7 @@ number held here.
 | `BACKLOG.md` — open ideas · durable RF findings · standing watches · long-term direction | RF work, anything horizon-scale, or whether a watch has fired |
 | `docs/CONVENTIONS.md` — git workflow, secrets, the exact gates and the only interpreter with the tooling | before any gate; before any commit |
 | `docs/GOTCHAS.md` — how tools and signals mislead; §-indexed | before trusting any tool's zero/empty/green (§1); a PR/merge or handoff write (§2); any NAS/campaign task (§3); judging a component live or shipped (§4). New traps land here, never in `BOOT.md` |
-| `docs/PRINCIPLES.md` — durable intent · `docs/ASSESSMENT.md` — governance anchor | weighing a new decision. ASSESSMENT is a dated S23 audit, pre-DEC-0063 |
+| `docs/PRINCIPLES.md` — durable intent · `docs/ASSESSMENT.md` — governance anchor · `docs/CODE_REVIEW_S145.md` — the S145 audit's 39 findings with fix status | weighing a new decision; picking the next cleanup (29 medium/low items open). ASSESSMENT is a dated S23 audit, pre-DEC-0063 |
 | `docs/UPSTREAM-THREADS.md` — the four open upstream threads, and the etiquette | replying upstream, or checking whether one moved |
 
 ## Technical

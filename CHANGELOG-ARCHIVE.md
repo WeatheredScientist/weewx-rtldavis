@@ -7,6 +7,39 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S142] — 2026-09-27 — Config backups moved out of the shared `weewx-data` top level into a 0700 `conf-archive/` (DEC-0201); `CONSTANTS.md` NAS rows corrected
+
+- **Premises re-checked read-only first.**
+  - The NAS overlay that `CONSTANTS.md` described was retired on 2026-09-05 (MARVIN-DEC-0134).
+    `nfs-server` is disabled on marvin, the NAS path is gone, and there are no NFS client mounts.
+    `/volume1/docker` holds only DSM system folders, and its `#recycle` is empty.
+  - On marvin, a sweep of every container's mounts found the dashboard's `eh-proxy` (994:984)
+    mounting all of `weewx-data`. File mode is the only boundary there.
+- **Applied 2026-09-27 19:13:58 EDT, owner-approved.** One `marvinctl exec` as t-weewx moved 27
+  `weewx.conf.*` backups and a pre-S13 zip into `weewx-data/conf-archive/` (dir 0700, files 0600).
+  The script pinned the file list and aborted on any drift; it was dry-run in five cases first. The
+  live conf was untouched and there was no restart. A names-only sweep afterwards found nothing else
+  credential-shaped in reach.
+- **Found a recurrence path in weewx 5.5.** `weecfg.save()`, which every conf-rewriting `weectl`
+  command uses, parks `weewx.conf.<timestamp>` beside the live conf and rewrites the live conf at
+  umask 0644. The re-chmod-and-archive rule is now in `CONSTANTS.md` and `GOTCHAS.md` §3.
+- **Filed `eaglehunt-ops#348`** for the dashboard and marvin: narrow `eh-proxy`'s mount to a feed
+  subdir. Single-file binds won't work, because atomic renames pin a stale inode. The specifics are
+  in the gitignored local-infra doc, and rotation is the owner's separate call.
+- **DEC-0200 confirmed on the InfluxDB side** (HLF S349): the `weewx` bucket reads UV exactly 0
+  from 18:30 ET. `eaglehunt-ops#343` closed with a comment (S141's job 2).
+- **`eaglehunt-ops#347` answered (owner-approved in chat).** `CLAUDE.md`'s Estate context block
+  was re-adopted verbatim from heartofgold's 2026-09-27 app block (MARVIN-DEC-0180), with
+  `<service>` = `weewx`. The deployment record is now `heartofgold/host/` (the units plus
+  `tenants.d/weewx.conf`), not the deleted `compose/weewx/`. The image pin stays on the box.
+- **The secret gate's identifier check was silently skipped in this worktree** (its gitignored
+  pattern file doesn't follow a worktree). The file was copied in, and the check was then run live
+  and positive-controlled (`GOTCHAS.md` §1).
+- Docs: DEC-0201; `CONSTANTS.md` (NAS rows re-verified against live state, plus a new live-config
+  row); `GOTCHAS.md` §1 and §3; `BOOT.md`. S138's entry rolled to `CHANGELOG-ARCHIVE.md`.
+- Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files · secret gate 0, with the IP
+  and identifier checks each positive-controlled.
+
 ## [S141] — 2026-09-27 — UV diode-floor correction: DEC-0080's exact-code zero extended to UV's two dark codes (DEC-0200, `eaglehunt-ops#343`)
 
 - **Checked in with ops on `#343`.** The thread had closed 23 s after the owner put the UV fix on

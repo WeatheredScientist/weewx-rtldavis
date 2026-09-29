@@ -6,6 +6,25 @@ under [Pre-S16].
 
 ---
 
+## [S145] — 2026-09-28/29 — Code audit (DEC-0205): 39 findings, the ten high ones fixed on seven PRs; driver to 0.20+ws.6 (unreleased)
+
+- **Audit.** Six read-only reviewers (Sonnet ×5 by file set, Haiku ×1 cross-ref) over the whole tree
+  at `7d06cbf`; every high finding re-verified by the main thread before filing. Record:
+  `docs/CODE_REVIEW_S145.md`. Two subagent false zeros caught by hand (GOTCHAS §1).
+- **Filed.** #402 driver slot-count seed off by one · #403 monitor FULL OUTAGE phase dependence ·
+  #404 an unknown `REMEDY_MODE` runs the USB reset · #405 OWM/Windy rain in cm, not mm · #406 ws.N
+  stagnant since 2026-08-11 · #407 soak_check image default stale · #408 OgoXe init divergence
+  undocumented · #409 secret gate lacks a control per class · #410 vacuous tests · #411 order-dependent
+  suite · `eaglehunt-ops#358` (private) planted addresses.
+- **Fixed, PRs open (owner merges).** #412 driver (ws.6, 14 header entries) · #413 monitor · #414
+  uploaders · #415 gate (63 → 160 controls; mutation kills 35 → 101 of 110) · #416 `tests/conftest.py`
+  · #417 soak_check · the docs PR (README table, influx ws.2, inventory recount +1239/−167, lheijst#23
+  status, OgoXe notice, this closeout). Combined tree: 591 passed / 17 skipped in both orders.
+- **S144 job 1 done:** `ISS battery: OK` in three 6-hourly reports. **Job 2 moot:** the dupgate patch
+  applies clean (offset 0, fuzz 0) to today's tarball.
+- Closeout: DEC-0205 logged; DEC-0199 amended; `MANIFEST.md` row for the review record; GOTCHAS §1/§2
+  gain four traps.
+
 ## [S144] — 2026-09-28 — DEC-0200 verified overnight; #394's ISS battery flag surfaced by the monitor and cleaned at the source (DEC-0203); v2.0.17 in prod (DEC-0204); `CONSTANTS.md` marvin rows re-verified
 
 - **DEC-0200 verified (job 1).** 733 of 734 dark archive rows from 09-27 17:41 to 09-28 12:32 ET
@@ -89,36 +108,3 @@ under [Pre-S16].
     `interpolation=False`. The second was re-hit because §3 went unread before the marvin task.
 - Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files (fresh cache) · secret gate 0 on the
   staged files, positive-controlled (identifier, private-IP and credential plants each exit 1).
-
-## [S142] — 2026-09-27 — Config backups moved out of the shared `weewx-data` top level into a 0700 `conf-archive/` (DEC-0201); `CONSTANTS.md` NAS rows corrected
-
-- **Premises re-checked read-only first.**
-  - The NAS overlay that `CONSTANTS.md` described was retired on 2026-09-05 (MARVIN-DEC-0134).
-    `nfs-server` is disabled on marvin, the NAS path is gone, and there are no NFS client mounts.
-    `/volume1/docker` holds only DSM system folders, and its `#recycle` is empty.
-  - On marvin, a sweep of every container's mounts found the dashboard's `eh-proxy` (994:984)
-    mounting all of `weewx-data`. File mode is the only boundary there.
-- **Applied 2026-09-27 19:13:58 EDT, owner-approved.** One `marvinctl exec` as t-weewx moved 27
-  `weewx.conf.*` backups and a pre-S13 zip into `weewx-data/conf-archive/` (dir 0700, files 0600).
-  The script pinned the file list and aborted on any drift; it was dry-run in five cases first. The
-  live conf was untouched and there was no restart. A names-only sweep afterwards found nothing else
-  credential-shaped in reach.
-- **Found a recurrence path in weewx 5.5.** `weecfg.save()`, which every conf-rewriting `weectl`
-  command uses, parks `weewx.conf.<timestamp>` beside the live conf and rewrites the live conf at
-  umask 0644. The re-chmod-and-archive rule is now in `CONSTANTS.md` and `GOTCHAS.md` §3.
-- **Filed `eaglehunt-ops#348`** for the dashboard and marvin: narrow `eh-proxy`'s mount to a feed
-  subdir. Single-file binds won't work, because atomic renames pin a stale inode. The specifics are
-  in the gitignored local-infra doc, and rotation is the owner's separate call.
-- **DEC-0200 confirmed on the InfluxDB side** (HLF S349): the `weewx` bucket reads UV exactly 0
-  from 18:30 ET. `eaglehunt-ops#343` closed with a comment (S141's job 2).
-- **`eaglehunt-ops#347` answered (owner-approved in chat).** `CLAUDE.md`'s Estate context block
-  was re-adopted verbatim from heartofgold's 2026-09-27 app block (MARVIN-DEC-0180), with
-  `<service>` = `weewx`. The deployment record is now `heartofgold/host/` (the units plus
-  `tenants.d/weewx.conf`), not the deleted `compose/weewx/`. The image pin stays on the box.
-- **The secret gate's identifier check was silently skipped in this worktree** (its gitignored
-  pattern file doesn't follow a worktree). The file was copied in, and the check was then run live
-  and positive-controlled (`GOTCHAS.md` §1).
-- Docs: DEC-0201; `CONSTANTS.md` (NAS rows re-verified against live state, plus a new live-config
-  row); `GOTCHAS.md` §1 and §3; `BOOT.md`. S138's entry rolled to `CHANGELOG-ARCHIVE.md`.
-- Gate: ruff clean · 516 passed / 17 skipped · mypy clean, 72 files · secret gate 0, with the IP
-  and identifier checks each positive-controlled.

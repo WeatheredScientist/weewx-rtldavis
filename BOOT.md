@@ -12,85 +12,86 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S144 → S145)
+## ▶ Resume here (S145 → S146)
 
 ### What's settled (do not re-derive)
 
-**v2.0.17 has run in prod since 2026-09-28 13:32:39 ET (DEC-0204).**
-- It carries DEC-0203's driver half, so a co-rejected frame drops its battery flags and message
-  types 0x0/0x1/0xB/0xD/0xF condemn a frame. It also carries S126's GPLv3 notice (#327).
-- It was the first build from the tenant root itself, behind the new `.dockerignore` allowlist, and
-  was verified against v2.0.16 by baked-file sha before the cutover.
-- It is tagged `v2.0.17` on `f255efb`, with a GitHub release. It is not on Docker Hub
-  (`eaglehunt-ops#265`).
+**v2.0.17 has run in prod since 2026-09-28 13:32:39 ET (DEC-0204); S145 changed nothing on marvin.**
+DEC-0203's monitor gate is verified live: the 6-hourly reports read `ISS battery: OK -- flag clear in
+all 355/360/360 healthy-reception minutes` (S144's job 1, done).
 
-**The monitor has run DEC-0203's battery gate since 13:21:52 ET.** Each 6-hourly RF email carries
-an `ISS battery:` line, and a one-shot low-battery email fires at 5 or more flagged minutes with
-healthy reception in a block. `REMEDY_MODE=none` is unchanged.
+**S145 was a code audit, DEC-0205.** Six read-only reviewers covered the whole tree at `7d06cbf` and
+found 39 items. The ten high ones are filed as #402–#411 (plus `eaglehunt-ops#358`, private) and
+fixed on seven branches, now PRs #412–#417 and the docs PR carrying this file. The combined tree is
+green: 591 tests in both collection orders, ruff, mypy, secret gate, 160 planted gate controls (was
+63). The 29 medium/low items live in `docs/CODE_REVIEW_S145.md`. `patch/rtldavis-dupgate.patch`
+applies at offset 0, fuzz 0 to today's upstream tarball, so S144's job 2 is moot unless the next
+build log disagrees.
 
-**Also settled in S144:** DEC-0200 is verified end to end. Reception at USB port `5-1` equals
-`7-1.2`. `CONSTANTS.md`'s marvin rows are re-verified; a release is pull → build → `exec-ro` verify
-→ tag `:marvin-live` → restart.
+### ▶▶ S146 JOB LIST
 
-### ▶▶ S145 JOB LIST
+1. **Merge the seven S145 PRs** (owner). They merge cleanly in any order, verified on a scratch
+   integration: #412 driver (ws.6, a release), #413 monitor (host daemon), #414 uploaders (baked),
+   #415 secret gate, #416 tests conftest, #417 soak_check, plus the docs PR. Each title names the
+   issues it closes.
+2. **Release v2.0.18** per `CONSTANTS.md` Release mechanics: #412's seed fix and ws.6 banner, #414's
+   rain units. At the same deploy set `ops/soak_check.sh`'s `EXPECT_DRIVER` to `0.20+ws.6` (its image
+   default now reads the Dockerfile stamp). `git tag -a v2.0.18` + `gh release create` ride the
+   promotion (CONVENTIONS).
+3. **Deploy the monitor** (#413): `marvinctl --tenant weewx pull`, then a deliberate
+   `restart weewx-monitor.service`; verify the `Remedy armed:` line and sha = `dev`; add the
+   heartofgold CHANGELOG line (estate rule).
+4. **ROADMAP tripwire fires this session** (due S146): run the full reconciliation pass. S145 shipped
+   no roadmap line.
+5. **Owner decisions the fixers left**: (a) #408 — OgoXe's `StdService.__init__` row says "reason
+   not recorded"; mark it deliberate or restore upstream's call. (b) #405 — OWM and Windy rain has
+   published 10× low since 2026-05-21; ERR entry or not. (c) File the gate's detector holes from
+   #415's mutation pass as a `tier:mid` issue: quoted key names unscanned, `SECRET_KEY` /
+   `private_key` / `access_key` missed, allow terms applied per line. (d) Put
+   `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the owner's shell profile, never in CI.
+6. **Inbox**: `eaglehunt-ops#357` (repo:weewx, tier:mid) asks for WeatherLink `bar_absolute` in the
+   loop feed for HLF's barometer check. Unread at S145.
+7. Carry forward: freeze lead (blocker 1), measure when next working freezes; `dev` → `main`
+   promotion (`main` is v2.0.13), owner's timing; S126's job-8 items, the lheijst/rtldavis#7 watch,
+   ops#306's residual, the local-infra marvin entry: none due.
 
-1. **Confirm the monitor's first `ISS battery:` line**, due in the 18:00 ET RF report. It is logged
-   as well as emailed: `marvinctl --tenant weewx grep ISS.battery
-   /srv/docker/weewx/logs/weewx_monitor.log`. Expect `OK -- flag clear in all N healthy-reception
-   minutes`. A `frame failed message-type proof` line in `weewx.log` confirms the driver half live
-   whenever a glitch arrives (8 in 31 days).
-2. **Regenerate the dupgate patch against upstream `main.go`.** v2.0.17's build log shows #327's
-   notice hunk applying "with fuzz 2". A comment is harmless, but a drifting patch is not; the next
-   build should apply it cleanly.
-3. **Freeze lead (Blocker 1), measure only when next working freezes.** Every corrupt-frame battery
-   flip was the last thing logged before a ~4-minute silence (e.g. 21:09:35 → 21:13:50). The reverse
-   rate (how many freezes a corrupt frame precedes) is unmeasured.
-4. **`dev` → `main` promotion, the owner's call on timing.** `main` is still v2.0.13
-   (`prod-baseline-20260811`); v2.0.14 through v2.0.17 have run unpromoted (DEC-0114's "once it
-   proves out").
-5. Carry forward S126's job-8 items (EnvironmentFile, `marvin-release.sh`), none due. Watch
-   [lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) without chasing it.
-   `eaglehunt-ops#306`'s residual needs no action. The local-infra doc's marvin entry is unverified,
-   since the read guard blocks the check. The owner-route tenant-root tidy is optional, only if a
-   root window opens anyway.
-
-## Current state (S144 close)
+## Current state (S145 close)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, **`v2.0.17`** as `:marvin-live` (image `621710f7…`) since 2026-09-28 13:32:39 ET, weewx 5.5.0, gain 372, `t-weewx` (996:986). `:v2.0.16`/`:v2.0.15`/`:v2.0.14` local for rollback (retag + restart) |
+| Prod | marvin, **`v2.0.17`** as `:marvin-live` (image `621710f7…`) since 2026-09-28 13:32:39 ET, weewx 5.5.0, gain 372, `t-weewx` (996:986). `:v2.0.16`/`:v2.0.15`/`:v2.0.14` local for rollback. Unchanged in S145 |
 | InfluxDB | marvin, `weewx-influxdb.service`, unchanged |
-| weewx-monitor | restarted 2026-09-28 13:21:52 ET onto DEC-0203's battery gate (sha `8a07efd7…` = `dev`); `REMEDY_MODE=none` |
+| weewx-monitor | sha = `dev`@`7d06cbf` (`8a07efd7…`), `REMEDY_MODE=none`, battery gate verified; #413 pending (job 3) |
 | Reception | 99.9% mean at USB port `5-1` |
-| `main`/`dev` | `dev` = `f255efb` plus S144's records PR. `main` is still v2.0.13, unpromoted (job 4) |
+| `main`/`dev` | `dev` = `7d06cbf`; seven S145 PRs open against it. `main` is still v2.0.13, unpromoted (job 7) |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · v2.0.17 not pushed (`eaglehunt-ops#265`) |
-| Trackers | repo: #394 closed S144 with the deploy evidence · #380 marvin's pager, informational · ops: #343/#347/#348 closed · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN (this desktop session reached marvin) |
+| Trackers | repo: #402–#411 open, each with a PR; #380 informational · ops: #358 new (private, owner ask) · #357 new, unread (job 6) · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN (this desktop session reached marvin) |
 
 ## Blockers
 
-1. **weewx process freezes — rate confirmed 1.31/day median 240s (DEC-0088, reconfirmed DEC-0198
-   S138); root cause/mechanism still unproven** (DEC-0068/DEC-0094). S144 lead: corrupt CRC-valid
-   frames sit at outage onsets (job 3).
-2. **RF-dead episode root cause unknown** (DEC-0081). First clean post-fix baseline read was taken
-   at S126 (100% mean, no episodes yet); the watch continues.
-3. **ERR-0005** — unchanged.
-4. 6-hourly reception email watch — unchanged since S125.
+Unchanged from S144: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at outage onsets),
+2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email watch. Nothing new.
 
 ## Model tier
 
-**S144 ran on Opus 5.5 throughout**, persisted from S143 and flagged in the first reply. #394's
-design and the attended v2.0.17 cutover were frontier work. No `/model` switch was made.
-**Desktop app:** the model persists. S145's jobs 1 and 2 are execution (Sonnet).
+**S145 ran on Fable 5.1 throughout** (a corpus audit is long-horizon judgment; declared in the first
+reply). Subagents: Sonnet ×5 and Haiku ×1 as reviewers; Opus ×1 and Sonnet ×6 as fixers, each in an
+isolated worktree. No `/model` switch. **Desktop app:** the model persists. S146's jobs 1–3 are
+execution (Sonnet).
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
 any NAS, marvin or campaign task (§3) · judging a component live, dead, or shipped (§4). **Read §3
 before the marvin task, not after.** **New this session:**
-- §1: an archive record's timestamp is the *end* of its interval, so its log evidence sits in the
-  minute before.
-- §1: `boot-cap-check.sh` with no argument checks eaglehunt-ops' BOOT; pass `"$PWD/BOOT.md"`.
-- §3: `marvinctl grep` and `exec-ro` refuse `[…]` and `|` with a misleading "whitespace" error.
+- §1: a Haiku cross-referencer reported zero issue citations in code and zero missing DEC ids. Both
+  were false zeros (29 and 2 by hand). A subagent's zero is a claim.
+- §1: `patch` fuzz is tool-dependent. Apple patch and `git apply` saw offset 0, fuzz 0 where GNU
+  patch in the build log said fuzz 2.
+- §2: `gh issue create` in a shell loop must not split fields on `:`; titles carry colons. Ten issues
+  failed with mangled labels before the delimiter changed.
+- §2: `gh pr edit` and `gh issue comment` bodies must come from a real file via `--body-file`; the
+  comment guard fails closed on heredocs and substitutions (OPS-DEC-0216).
 
 ## Files needed at session start
 
@@ -102,5 +103,5 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-09-28 (S144). v2.0.17 in prod (DEC-0204). The monitor runs DEC-0203's battery
-gate. #394 closed. Job 1 confirms the first `ISS battery:` line at 18:00 ET._
+_Last updated: 2026-09-29 (S145). Audit DEC-0205; #402–#411 filed and fixed; PRs #412–#417 plus
+the docs PR open. Job 1 merges, job 2 is v2.0.18, and the ROADMAP tripwire fires at S146._
