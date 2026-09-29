@@ -88,13 +88,13 @@ bad=(
   'GMAIL_PASS=abcd efgh ijkl mnop'                               # (hole 29) unquoted, env-style
   # --- hole class 7 (DEC-0144): a private-range LAN IP/subnet as bare prose ---
   # None of these are KEY=VALUE shaped, which is exactly why they slipped through
-  # every rule above -- proven blind before the fix (`printf 'NAS on 192.168.127.5\n'
+  # every rule above -- proven blind before the fix (`printf 'NAS on 192.168.211.37\n'
   # | check_secrets.sh -` exited 0). Real instances: DEC-0127 (BOOT.md, full
   # history rewrite) and DEC-0144 (this fix's own trigger).
-  'NAS on 192.168.127.5, laptop on 192.168.1.42'                 # (hole 30) full IPs, mid-sentence
-  'Mac on `192.168.1.x`, NAS on `192.168.127.x`'                 # (hole 31) the exact DEC-0127/0144 shape
-  'server_url = http://10.0.4.12:8086'                           # (hole 32) 10/8, in a config value
-  'bridge sits at 172.20.0.1 on the host'                        # (hole 33) 172.16/12
+  'NAS on 192.168.211.37, laptop on 192.168.211.52'                 # (hole 30) full IPs, mid-sentence
+  'Mac on `192.168.211.x`, NAS on `10.77.140.x`'                 # (hole 31) the exact DEC-0127/0144 shape
+  'server_url = http://10.77.140.23:8086'                           # (hole 32) 10/8, in a config value
+  'bridge sits at 172.19.240.9 on the host'                        # (hole 33) 172.16/12
 )
 
 # --- must PASS (exit zero) ------------------------------------------------------
