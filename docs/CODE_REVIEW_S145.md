@@ -1,6 +1,6 @@
 # Code review — S145 audit, dev @ 7d06cbf (v2.0.17 in prod), 2026-09-28
 
-**Status:** items 1–9, 33 and 34 (the HIGH set) are fixed in PRs #412–#417 and the docs PR, filed as
+**Status:** items 1–9, 33 and 34 (the HIGH set) are fixed in PRs #412–#418, merged to `dev` 2026-09-29, filed as
 #402–#411 (item 5 as `eaglehunt-ops#358`, private). Items 10–32 and 35–39 are open; pick from here.
 Predecessor: `docs/CODE_REVIEW_S24.md`. Decision record: DEC-0205.
 

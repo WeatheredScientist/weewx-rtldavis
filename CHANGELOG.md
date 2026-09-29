@@ -16,10 +16,11 @@ under [Pre-S16].
   stagnant since 2026-08-11 · #407 soak_check image default stale · #408 OgoXe init divergence
   undocumented · #409 secret gate lacks a control per class · #410 vacuous tests · #411 order-dependent
   suite · `eaglehunt-ops#358` (private) planted addresses.
-- **Fixed, PRs open (owner merges).** #412 driver (ws.6, 14 header entries) · #413 monitor · #414
+- **Fixed and merged to `dev` 2026-09-29 (owner's go, squash, each behind green checks).** #412 driver (ws.6, 14 header entries) · #413 monitor · #414
   uploaders · #415 gate (63 → 160 controls; mutation kills 35 → 101 of 110) · #416 `tests/conftest.py`
   · #417 soak_check · the docs PR (README table, influx ws.2, inventory recount +1239/−167, lheijst#23
   status, OgoXe notice, this closeout). Combined tree: 591 passed / 17 skipped in both orders.
+  Issues #406–#411 closed at merge; #402–#405 stay open until v2.0.18 and the monitor restart.
 - **S144 job 1 done:** `ISS battery: OK` in three 6-hourly reports. **Job 2 moot:** the dupgate patch
   applies clean (offset 0, fuzz 0) to today's tarball.
 - Closeout: DEC-0205 logged; DEC-0199 amended; `MANIFEST.md` row for the review record; GOTCHAS §1/§2

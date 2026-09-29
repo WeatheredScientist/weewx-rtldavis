@@ -11143,7 +11143,7 @@ alongside the source, and the repo had no `.dockerignore`.
 
 ## DEC-0205 — S145 code audit: tiered parallel review, ten high findings filed and fixed on seven branches, DEC-0199 superseded in part, driver to ws.6
 
-**Status:** Accepted (PRs #412–#417 and the docs PR open at S145 close; the merge is the owner's) ·
+**Status:** Accepted (PRs #412–#418 squash-merged to `dev` 2026-09-29 on the owner's go; deploy is S146) ·
 **Date:** 2026-09-29 (S145) · **supersedes in part** DEC-0199 · **extends** DEC-0137 (#402),
 DEC-0039/DEC-0144 (#409) · **relates to** DEC-0014 (No-Rewrite), DEC-0027 (no formatter)
 
