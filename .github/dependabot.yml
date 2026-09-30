@@ -7,6 +7,9 @@ version: 2
 updates:
   - package-ecosystem: "pip"
     directory: "/"
+    # `main` is production truth and trails `dev` (DEC-0011); the default base would open
+    # every bump against it (PR #420 did). Bumps land on `dev` like any other change.
+    target-branch: "dev"
     schedule:
       interval: "weekly"
     labels:

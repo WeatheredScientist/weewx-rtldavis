@@ -51,8 +51,15 @@ answering `eaglehunt-ops#357`.
    `weewx-influxdb.service`, ring weewx first and keep the restart out of any image cutover. Two
    measurements stay open because the classifier denied them: the running weewx container's own
    `/proc` caps and the influxdb image's setuid list (GOTCHAS §3).
-4. **PR #420** (Dependabot, weewx 5.5.0 → 5.5.2 in `requirements.txt`): unread. A baked change, so it
-   would be v2.0.19 and needs a DEC-0011 test strategy (there is no dev receiver).
+4. **weewx 5.5.0 → 5.5.2 (v2.0.19, the S147 branch `s147-weewx-5.5.2`; PR #420 is superseded by
+   it, close #420 with a pointer once it lands).** Read and tested: `ops/weewx_bump_check.sh` passes
+   on 5.5.2 and fails on 5.5.0 (the control). The one prod-visible change: with `rapidfire` and
+   `archive_post` both on (our live `[[Wunderground]]`), 5.5.0 posted the rapidfire thread to the
+   archive URL and 5.5.2 posts it to `rtupdate.wunderground.com`. **Release steps left, all the
+   owner's gestures at each prod step:** the release commit (Dockerfile stamp v2.0.19, soak canaries,
+   README base-image line, ARCHITECTURE line 26, CONSTANTS release rows), `marvinctl build`, cutover,
+   then watch the log for `Wunderground-RF` lines and confirm WU still shows the station. The Docker
+   Hub push stays `eaglehunt-ops#265`.
 5. **`dev` → `main` promotion**, the owner's timing. `main` is v2.0.13; v2.0.14 to v2.0.18 have run
    unpromoted.
 6. **Watches, no action:** OWM and Windy rain in millimeters (needs rain; a dry day proves nothing,
