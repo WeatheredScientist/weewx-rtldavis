@@ -34,10 +34,9 @@ answering `eaglehunt-ops#357`.
 
 ### ▶▶ S148 JOB LIST
 
-1. **Confirm the S147 PR (#423's `rx_experiment.sh` non-root fix) merged into `dev`**
-   (`gh pr list` finds it; the merge is the owner's). Then **the first campaign is the end-to-end
-   test** of an arm swap as `t-weewx` through `marvin-own`; run it attended, and note the result on
-   #423. The monitor's credential file is now `/etc/marvin/env.d/weewx/`, and the tenant-root
+1. **The first campaign is the end-to-end test** of an arm swap as `t-weewx` through `marvin-own`
+   (#423's fix is on `dev` as #424 but has never run a swap; pull it onto marvin first). Run it
+   attended, and note the result on #423. The monitor's credential file is now `/etc/marvin/env.d/weewx/`, and the tenant-root
    `monitor.env` is a root-owned symlink that must stay one.
 2. **`eaglehunt-ops#357`, `bar_absolute`: the design needs the owner's call and a Fable 5.1
    session** (a cross-repo contract change). The tracker reply gives (A) feed `bar_absolute` in as
@@ -46,13 +45,15 @@ answering `eaglehunt-ops#357`.
    the two does it read?). First step of any build: one WeatherLink fetch to confirm this station's
    response carries `bar_absolute`, credentials never printed. Fix `pressure_service.py`'s stale
    "archive columns go NULL" comment in the same change; it is baked, so it rides a release.
-3. **`eaglehunt-ops#360`** (marvin's docker-tenant hardening): weewx answered, marvin decides. If it
-   schedules `--cap-drop ALL --security-opt no-new-privileges` on `weewx.service` or
-   `weewx-influxdb.service`, ring weewx first and keep the restart out of any image cutover. Two
-   measurements stay open because the classifier denied them: the running weewx container's own
-   `/proc` caps and the influxdb image's setuid list (GOTCHAS §3).
-4. **weewx 5.5.0 → 5.5.2 (v2.0.19, the S147 branch `s147-weewx-5.5.2`; PR #420 is superseded by
-   it, close #420 with a pointer once it lands).** Read and tested: `ops/weewx_bump_check.sh` passes
+3. **`eaglehunt-ops#360`** (marvin's docker-tenant hardening, `MARVIN-DEC-0191` installed): the
+   flags (`--cap-drop ALL`, `no-new-privileges`) take effect at each unit's next start. **Done:**
+   `weewx-influxdb.service` restarted 2026-09-30 13:53:45 ET, accepted (`NoNewPrivs: 1`, `CapBnd`
+   0) and posted on #360. **Left: `weewx.service`, as its own restart apart from the v2.0.19
+   cutover**, the owner's window (a couple of minutes of records while the hop re-acquires). Smoke:
+   startup lines, first archive record, `rxCheckPercent`, then `exec … cat /proc/self/status`; post
+   the acceptance line on #360. `eh-proxy` won't start if `weewx-data/feed` is missing, so never
+   delete or replace that directory.
+4. **weewx 5.5.0 → 5.5.2 (v2.0.19): the pin is on `dev` (#425); #420 is closed.** Read and tested: `ops/weewx_bump_check.sh` passes
    on 5.5.2 and fails on 5.5.0 (the control). The one prod-visible change: with `rapidfire` and
    `archive_post` both on (our live `[[Wunderground]]`), 5.5.0 posted the rapidfire thread to the
    archive URL and 5.5.2 posts it to `rtupdate.wunderground.com`. **Release steps left, all the
@@ -79,9 +80,9 @@ answering `eaglehunt-ops#357`.
 | InfluxDB | marvin, `weewx-influxdb.service`, unchanged |
 | weewx-monitor | restarted 2026-09-29 09:31:16 ET onto #413; sha `5cd09917…` = `dev`@`4fd9039`; `REMEDY_MODE=none`; four `ISS battery: OK` reports so far |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
-| `main`/`dev` | `dev` = `4fd9039` plus the S146 records PR. `main` is still v2.0.13, unpromoted (job 5) |
+| `main`/`dev` | `dev` = `a039a65` (S147's #424 and #425 merged, plus this handoff fix). `main` is still v2.0.13, unpromoted (job 5) |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · v2.0.17 and v2.0.18 not pushed (`eaglehunt-ops#265`) |
-| Trackers | repo: #421 (gate holes), **PR #424 (#423's fix) and PR #425 (weewx 5.5.2, stacked on #424) open, green, owner merges #424 first**, #423 answered and waiting on #424, #420 closed (superseded by #425), #380 informational · ops: #357 answered, awaiting the owner and HLF (job 2) · #360 answered, marvin decides (job 3) · #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN (this desktop session reached marvin) |
+| Trackers | repo: #421 (gate holes), #423 answered, fix merged (#424), waits on the first campaign (job 1), #420 closed (superseded by #425), #380 informational · ops: #357 answered, awaiting the owner and HLF (job 2) · #360 influxdb restart accepted, `weewx.service` restart left (job 3) · #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN (this desktop session reached marvin) |
 
 ## Blockers
 
