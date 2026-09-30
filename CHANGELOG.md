@@ -6,6 +6,19 @@ under [Pre-S16].
 
 ---
 
+## [S147] — 2026-09-30 — `rx_experiment.sh` runs as `t-weewx` (#423, MARVIN-DEC-0189)
+
+- **Campaigns would have refused at preflight, and then aborted.** marvin moved
+  `weewx-rx-experiment.service` from root to `t-weewx`. Preflight's `systemctl cat` went through
+  `marvin-own`, which grants no read verbs; new `RX_READ_SYSTEMCTL` (default plain `systemctl`) does
+  the reads. `health_ok` also ran `docker inspect` every pass, which fails without the docker group,
+  so every swap would have timed out; new `weewx_running()` asks `systemctl is-active` in systemd
+  mode. Docker mode is unchanged. Five tests; three fail against the old script.
+- **Mirrors and docs.** `ops/weewx-monitor.service` and `ops/weewx-rx-experiment.service` are now
+  verbatim copies of marvin's installed units (credential file under `/etc/marvin/env.d/weewx/`, the
+  old tenant path a root-owned symlink that must stay a symlink). `ARCHITECTURE.md` corrected.
+- **Not verified:** no arm swap has run end to end as `t-weewx`. The first campaign is that test.
+
 ## [S146] — 2026-09-29 — v2.0.18 in prod (DEC-0206): DEC-0205's driver and uploader fixes, the monitor's #413 restarted; ROADMAP full pass; ERR-0010; a wrong INTERFACES claim corrected
 
 - **Deployed, the owner's go at each prod step (DEC-0206).** #419 (Dockerfile stamp, `soak_check.sh`

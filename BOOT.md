@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S146 → S147)
+## ▶ Resume here (S147 → S148)
 
 ### What's settled (do not re-derive)
 
@@ -32,10 +32,13 @@ OWM/Windy rain history.
 by weewx (`StdWXCalculate`, `PressureCooker`) and populated in 99.5% of rows, not NULL. Found while
 answering `eaglehunt-ops#357`.
 
-### ▶▶ S147 JOB LIST
+### ▶▶ S148 JOB LIST
 
-1. **Confirm the S146 records PR merged into `dev`** (it carries this file; `gh pr list` finds it).
-   The merge is the owner's.
+1. **Confirm the S147 PR (#423's `rx_experiment.sh` non-root fix) merged into `dev`**
+   (`gh pr list` finds it; the merge is the owner's). Then **the first campaign is the end-to-end
+   test** of an arm swap as `t-weewx` through `marvin-own`; run it attended, and note the result on
+   #423. The monitor's credential file is now `/etc/marvin/env.d/weewx/`, and the tenant-root
+   `monitor.env` is a root-owned symlink that must stay one.
 2. **`eaglehunt-ops#357`, `bar_absolute`: the design needs the owner's call and a Fable 5.1
    session** (a cross-repo contract change). The tracker reply gives (A) feed `bar_absolute` in as
    weewx's own `pressure`, or (B) a new field. The dashboard answered that it reads neither
@@ -109,5 +112,5 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-09-29 (S146). v2.0.18 in prod (DEC-0206); the monitor's #413 live; the ROADMAP
+_Last updated: 2026-09-30 (S147). #423 non-root campaign fix on a PR. v2.0.18 in prod (DEC-0206); ROADMAP
 pass done. Job 2 (`#357`) is the next real design work._

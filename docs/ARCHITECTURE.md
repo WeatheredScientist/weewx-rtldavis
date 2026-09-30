@@ -141,8 +141,12 @@ at the tenant root (`/srv/docker/weewx/`) — self-service via `marvinctl --tena
 running process; see `CONSTANTS.md`'s Release mechanics row). It runs as systemd unit
 `weewx-monitor.service` in `/weather.slice`, `User=t-weewx`/`Group=t-weewx` — **not** the NAS-era
 DSM-Task `weewx-monitor` user this section used to describe. Credentials
-(`ALERT_FROM`/`GMAIL_PASS`/`ALERT_TO`/`STATION_NAME`) live in gitignored `monitor.env` at the tenant
-root (DEC-0009).
+(`ALERT_FROM`/`GMAIL_PASS`/`ALERT_TO`/`STATION_NAME`) live in a root-owned file under
+`/etc/marvin/env.d/weewx/` (`MARVIN-DEC-0189`, weewx#423), not in the tenant tree. The old tenant
+path `monitor.env` is a root-owned symlink to it, kept so `rx_experiment.sh` (which sources that path
+for campaign mail) keeps working. Never replace the symlink with a file: the monitor would stop
+reading it and campaign mail would drift from the monitor's. Rotating the Gmail app password is an
+owner root gesture on marvin (DEC-0009).
 
 **`REMEDY_MODE=none` on marvin, on purpose** — the unit detects and escalates (RF reception,
 uploader alerting, input-staleness watchdog) but takes no automatic remedy action yet. The
