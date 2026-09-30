@@ -11286,3 +11286,59 @@ step, as in DEC-0204.
 - A `frame failed message-type proof` line (DEC-0203's driver half), which needs a glitch.
 - Whether the dupgate patch still applies clean: the build reused the cached patch layer, so its log
   neither confirmed nor refuted S145's finding (offset 0, fuzz 0 on the laptop's tools).
+
+## DEC-0207 — A weewx engine bump is proven by `ops/weewx_bump_check.sh` before it is built; PR #420 (5.5.0 → 5.5.2) is taken as v2.0.19 through `dev`, and Dependabot is retargeted to `dev`
+
+**Status:** Accepted (S147; the pin is on a branch, not built or deployed) · **applies** DEC-0011 ·
+**follows** DEC-0206.
+
+### Context
+
+PR #420's three checks were green, and that proved nothing about the new engine. CI's `tests` job
+installs `pytest` alone, and the tests stub weewx (`tests/test_influx_lease_yield.py` even sets
+`weewx.__version__ = "5.5.0"` on a fake module). There is no dev receiver (DEC-0011), so a weewx
+bump has had no runtime proof of any kind. The PR also targeted `main`, which is v2.0.13 and trails
+`dev` by six releases; merging it there would have put a pin on `main` that no release carries.
+
+### What the 5.5.0 → 5.5.2 diff changes for us
+
+Read in full (93 commits; 27 files under `src/`), then checked by running both versions:
+
+- **`restx.py`, the one prod-visible change.** Our live `[[Wunderground]]` sets `rapidfire = True` and
+  `archive_post = True`. In 5.5.0 the first thread's `setdefault('server_url', …)` won, so **both
+  threads posted to the archive URL**, and setting `rtfreq` too raised `TypeError` from
+  `AmbientThread`. In 5.5.2 each thread gets its own endpoint: the rapidfire thread posts to
+  `rtupdate.wunderground.com`. Measured, not inferred, with a mock engine on each version.
+  `OgoxeUploader` subclasses `StdWunderground` but never runs `StdWunderground.__init__`, so it is unaffected.
+- **`engine.py`:** the driver loads with `importlib.import_module` instead of `__import__` plus
+  `sys.modules`. Equivalent for `user.rtldavis`.
+- **`TimeSpan` and `ValueTuple`** became `namedtuple` subclasses. No non-test code here uses either.
+- **`weecfg`** (config save keeps mode and ownership; `extension uninstall` keeps in-use sections).
+  The Dockerfile's `weectl station create` output differs from 5.5.0's only in the version stamp and
+  in the quoting of commented-out skin lines, so the baked config is the same in effect.
+- Everything else is `weectl`, packaging, Vantage and FineOffset fixes, none of which we use.
+
+### Decision
+
+1. **`ops/weewx_bump_check.sh` (+ `ops/weewx_bump_probe.py`) is the test strategy for an engine bump.**
+   It builds a scratch venv at the version under test, generates a stock station, copies in the baked
+   modules, and boots `weewxd` on the Simulator for 40 s against a closed local port with throwaway
+   credentials. It asserts the Wunderground endpoints (not merely "no error"), both thread
+   announcements, no unexpected ERROR line, a written loop feed and the driver's import path.
+   **Control:** it passes on 5.5.2 and fails on 5.5.0 (the probe reports the archive-URL routing and
+   the `TypeError`). It cannot prove the Go binary, real RF frames, the WeatherLink fetch, the
+   key-bearing uploaders or the amd64 build; `soak_check.sh` at cutover covers the observable part.
+2. **`requirements.txt` moves to `weewx==5.5.2` on `dev`, released as v2.0.19.** PR #420 is closed
+   with a pointer once that lands.
+3. **`.github/dependabot.yml` gains `target-branch: "dev"`**, so bumps stop opening against `main`.
+
+### Watch after cutover
+
+`Wunderground-RF` lines in `weewx.log` (its failures are silent by default: the rapidfire thread sets
+`log_failure = False`), and the station still updating on wunderground.com. The rapidfire endpoint
+takes the same station id and key, but that is the one behavior change a live signal has to confirm.
+
+### Not proven
+
+Whether WU's rapidfire endpoint accepts this station's posts. The 5.5.0 behavior (rapidfire on the
+archive URL) was the status quo, and it may have been silently degrading to ordinary archive posts.

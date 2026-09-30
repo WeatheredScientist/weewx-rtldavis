@@ -18,6 +18,12 @@ under [Pre-S16].
   verbatim copies of marvin's installed units (credential file under `/etc/marvin/env.d/weewx/`, the
   old tenant path a root-owned symlink that must stay a symlink). `ARCHITECTURE.md` corrected.
 - **Not verified:** no arm swap has run end to end as `t-weewx`. The first campaign is that test.
+- **weewx 5.5.0 → 5.5.2 staged for v2.0.19 (DEC-0207), not built.** PR #420's green checks proved
+  nothing (CI installs only pytest; the tests stub weewx). New `ops/weewx_bump_check.sh` boots a
+  scratch station on the Simulator with our baked modules; it passes on 5.5.2 and fails on 5.5.0. The
+  one prod-visible change: with `rapidfire` and `archive_post` both on, 5.5.2 posts the rapidfire
+  thread to `rtupdate.wunderground.com` (5.5.0 used the archive URL for both). Dependabot now
+  targets `dev`; #420 targeted `main`.
 
 ## [S146] — 2026-09-29 — v2.0.18 in prod (DEC-0206): DEC-0205's driver and uploader fixes, the monitor's #413 restarted; ROADMAP full pass; ERR-0010; a wrong INTERFACES claim corrected
 
