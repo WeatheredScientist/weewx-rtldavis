@@ -11,15 +11,25 @@
 # unattended overnight campaign with no scheduler is not a degraded mode, it is
 # the campaign not actually running unattended.
 #
-# WHY ROOT, NOT t-weewx
-# ----------------------
-# `tick`/`guard` restart weewx.service on every arm swap (RX_RESTART_MODE=systemd
-# -> `systemctl restart weewx.service`). `t-weewx` (weewx-monitor.service's user)
-# has no sudoers grant for that yet -- BOOT.md defers that as its own decision,
-# not something to fold in here. Running this unit as root mirrors exactly what
-# the Foundation cron did for months (root crontab, no per-swap confirmation) and
-# what tonight's manual launch did via the owner's marvin-admin key -- a standing
-# root timer for the campaign's own duration, not new privilege surface.
+# WHY t-weewx, NOT ROOT (MARVIN-DEC-0189)
+# ---------------------------------------
+# This unit used to run as root. It executes /srv/docker/weewx/ops/rx_experiment.sh -- a file in
+# t-weewx's OWN writable tree -- so any t-weewx process could replace that script and then
+# `marvinctl start` this unit (authorized by the weewx*.service manifest glob alone): tenant ->
+# root on demand. The root appends inside that tree (>>"$XLOG") were a symlink-clobber vector
+# on their own, so "stay root but pin a root-owned copy of the script" was rejected too.
+# The original reason for root (t-weewx had no way to restart weewx.service) was overtaken by
+# ops#274's `marvin-own weewx restart` sudoers grant. So the unit runs as the tenant, and the
+# script's restart goes through that grant: RX_SYSTEMCTL below word-splits (the script runs
+# `$SYSTEMCTL restart "$RESTART_UNIT"` unquoted) into exactly the granted shape
+# `sudo -n /usr/local/lib/marvin/marvin-own weewx restart weewx.service`.
+# NoNewPrivileges is deliberately NOT set: sudo cannot work under it.
+#
+# KNOWN COST, accepted: the script's preflight (`$SYSTEMCTL cat`, `docker inspect`) is not
+# something t-weewx may do, so a campaign REFUSES AT PREFLIGHT until weewx adapts the script --
+# loudly, not silently. Campaigns are stood down (DEC-0096), so nothing running breaks; the
+# adaptation is the weewx repo's job. host/tests/unit-privilege-lint.sh keeps this from
+# regressing to root (install-tenant-units.sh runs it and refuses on failure).
 #
 # INSTALL (marvin session / owner -- NOT from the weewx repo session, matching
 # weewx-monitor.service's own convention)
@@ -27,6 +37,7 @@
 #   install -m 0644 weewx-rx-experiment.service weewx-rx-experiment.timer /etc/systemd/system/
 #   systemctl daemon-reload
 #   systemctl enable --now weewx-rx-experiment.timer
+# (The install is root's job; the unit it installs runs as t-weewx, see above.)
 #
 # Deploy ops/rx_experiment.sh from the MERGED dev tip, never a local edit -- same
 # rule as every other artifact here (ops#214 silent-drift pattern).
@@ -44,21 +55,27 @@ After=weewx.service
 [Service]
 Type=oneshot
 Slice=weather.slice
+User=t-weewx
+Group=t-weewx
 
 # Marvin-specific overrides -- the script's own defaults assume the old NAS host
 # (RX_BASE=/volume1/docker/weewx-rtldavis, RX_DOCKER=/usr/local/bin/docker,
 # RX_RESTART_MODE=docker) and running any of those bare on marvin either fails
 # outright (RX_BASE: no such path) or takes prod down (RX_RESTART_MODE=docker
-# against a --rm unit -- DEC-0121). No EnvironmentFile: these four are the whole
+# against a --rm unit -- DEC-0121). No EnvironmentFile: these five are the whole
 # set the script reads (RX_CONTAINER's default already matches marvin).
 Environment=RX_BASE=/srv/docker/weewx
 Environment=RX_DOCKER=/usr/bin/docker
 Environment=RX_RESTART_MODE=systemd
 Environment=RX_RESTART_UNIT=weewx.service
+# Restart as the tenant via ops#274's grant (word-split by the script; see WHY t-weewx above).
+Environment="RX_SYSTEMCTL=sudo -n /usr/local/lib/marvin/marvin-own weewx"
 
 # tick first (advance the schedule if a block is due), then guard (abort/pause
 # on bad reception). Both share rx_experiment.sh's own lock, so back-to-back
 # calls in one pass are safe by design (script header: "tick/guard/abort
 # serialize behind one lock").
-ExecStart=/srv/docker/weewx/rx_experiment.sh tick
-ExecStart=/srv/docker/weewx/rx_experiment.sh guard
+# The script lives under ops/ (weewx's git-pull deploy layout); the old flat path went stale and is
+# absent, and systemd-analyze verify refuses a missing non-"-" Exec program (MARVIN-DEC-0189).
+ExecStart=/srv/docker/weewx/ops/rx_experiment.sh tick
+ExecStart=/srv/docker/weewx/ops/rx_experiment.sh guard

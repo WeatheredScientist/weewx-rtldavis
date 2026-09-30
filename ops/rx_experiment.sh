@@ -101,6 +101,11 @@ DOCKER="${RX_DOCKER:-/usr/local/bin/docker}"
 RESTART_MODE="${RX_RESTART_MODE:-docker}"     # docker | systemd
 RESTART_UNIT="${RX_RESTART_UNIT:-weewx.service}"
 SYSTEMCTL="${RX_SYSTEMCTL:-systemctl}"
+# Read-only unit queries (`cat`, `is-active`). $SYSTEMCTL is the privileged
+# restart path and on marvin it is `sudo -n marvin-own weewx`, whose grant has
+# no `cat` or `is-active` verb (MARVIN-DEC-0189, weewx#423): the script now runs
+# as t-weewx, so reads go through plain systemctl, which needs no privilege.
+READ_SYSTEMCTL="${RX_READ_SYSTEMCTL:-systemctl}"
 
 # How stale the monitor's log may be before its reception signal is untrustworthy.
 # The abort tripwire and the RF-dead pause guard BOTH read MONLOG; if nothing is
@@ -495,7 +500,9 @@ preflight() {
     systemd)
       command -v "${SYSTEMCTL%% *}" >/dev/null 2>&1 \
         || { echo "PREFLIGHT FAIL: systemctl not found ($SYSTEMCTL)" >&2; rc=1; }
-      $SYSTEMCTL cat "$RESTART_UNIT" >/dev/null 2>&1 \
+      command -v "${READ_SYSTEMCTL%% *}" >/dev/null 2>&1 \
+        || { echo "PREFLIGHT FAIL: systemctl not found ($READ_SYSTEMCTL, set RX_READ_SYSTEMCTL)" >&2; rc=1; }
+      $READ_SYSTEMCTL cat "$RESTART_UNIT" >/dev/null 2>&1 \
         || { echo "PREFLIGHT FAIL: unit $RESTART_UNIT not known to systemd" >&2; rc=1; }
       ;;
     *)
@@ -562,13 +569,27 @@ preflight() {
 # this arithmetic. Do not lower this without redoing it — and note the loop is
 # ALSO slower than its nominal sleep, because each pass greps a multi-MB log.
 HEALTH_TRIES=60
+
+# Is weewx up right now? Docker mode asks docker. systemd mode asks the unit,
+# because t-weewx has no docker group on marvin, so `docker inspect` there would
+# fail every pass and health_ok would time out on a healthy swap (weewx#423).
+# The unit is `docker run --rm` in the foreground, so `active` means the container
+# is running; `activating` (ExecStartPre, boot) correctly counts as not yet.
+weewx_running() {
+  if [ "$RESTART_MODE" = "systemd" ]; then
+    $READ_SYSTEMCTL is-active --quiet "$RESTART_UNIT" >/dev/null 2>&1
+    return $?
+  fi
+  [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" = "true" ]
+}
+
 health_ok() {
   say_dry "health check" && return 0
   local before after i
   before="$(grep -c 'Added record' "$WXLOG" 2>/dev/null || echo 0)"
   for i in $(seq 1 "$HEALTH_TRIES"); do
     sleep 5
-    [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" = "true" ] || continue
+    weewx_running || continue
     after="$(grep -c 'Added record' "$WXLOG" 2>/dev/null || echo 0)"
     [ "$after" -gt "$before" ] && return 0
   done
