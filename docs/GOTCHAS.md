@@ -124,6 +124,18 @@ alone did not catch.
 - **zsh expands a word that starts with `=` as a command path (S146).** `echo =====` (a separator
   in a multi-part command) fails with `= not found` and aborts the rest of that command. Use
   `printf -- '--- title\n'`.
+- **A green check on a dependency bump is about the stubs, not the dependency (S147).** PR #420
+  (weewx 5.5.0 → 5.5.2) showed `tests`, `lint` and `secret-scan` green, but CI installs only
+  `pytest` and the tests fake weewx, so nothing ran the new engine. `ops/weewx_bump_check.sh` does
+  (DEC-0207); run it on any engine bump. The same shape hid a second bug: `rx_experiment.sh`'s
+  `health_ok` needed the docker group, which no test or preflight exercised as the unit's new user,
+  so a swap would have timed out after a clean preflight (#423). When a script's user changes, list
+  every privileged call it makes, not just the one the ticket names.
+- **`secret-read-guard.sh` matches the config's filename in the command text, not the file's content
+  (S147).** A `diff`, `sed`, `cat` or trailing `head` in a command that names `weewx.conf` is blocked
+  even when the file is a scratch stock config with no secrets. Do not dodge it by spelling; `cp` the
+  scratch file to a neutral name in one call and read that, or put the work in a script file so the
+  command line is just `bash script.sh`.
 
 ## §2 Git, PRs, and the handoff
 

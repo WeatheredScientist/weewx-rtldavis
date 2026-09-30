@@ -71,7 +71,7 @@ answering `eaglehunt-ops#357`.
 8. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry.
 
-## Current state (S146 close)
+## Current state (S147 close; prod unchanged since S146)
 
 | Thing | State |
 |---|---|
@@ -81,7 +81,7 @@ answering `eaglehunt-ops#357`.
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
 | `main`/`dev` | `dev` = `4fd9039` plus the S146 records PR. `main` is still v2.0.13, unpromoted (job 5) |
 | Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · v2.0.17 and v2.0.18 not pushed (`eaglehunt-ops#265`) |
-| Trackers | repo: #421 (gate holes), PR #420, #380 informational · ops: #357 answered, awaiting the owner and HLF (job 2) · #360 answered, marvin decides (job 3) · #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN (this desktop session reached marvin) |
+| Trackers | repo: #421 (gate holes), **PR #424 (#423's fix) and PR #425 (weewx 5.5.2, stacked on #424) open, green, owner merges #424 first**, #423 answered and waiting on #424, #420 closed (superseded by #425), #380 informational · ops: #357 answered, awaiting the owner and HLF (job 2) · #360 answered, marvin decides (job 3) · #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN (this desktop session reached marvin) |
 
 ## Blockers
 
@@ -90,24 +90,21 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 ## Model tier
 
-**S146 ran on Sonnet 5.5 throughout** (the floor). The release was execution of DEC-0204's locked path
-with the owner's go at each prod step. The `#357` design was left for a Fable 5.1 session on purpose
-(job 2). No `/model` switch was made. **Desktop app:** the model persists, so start S147 on Sonnet
-unless job 2 is the session's work.
+**S147 ran on Sonnet 5.5 throughout** (the floor): #423's script fix and the weewx 5.5.2 staging were
+bounded execution, not judgment work. No `/model` switch was made, so there is nothing to restore.
+The `#357` design still waits for a Fable 5.1 session (job 2). **Desktop app:** the model persists, so
+start S148 on Sonnet unless job 2 is the session's work.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
 any NAS, marvin or campaign task (§3) · judging a component live, dead, or shipped (§4). **Read §3
 before the marvin task, not after.** **New this session:**
-- §1: a documented "null" was checked at the loop packet and asserted for the archive too; the
-  archive's `pressure` is populated. Read a value at every surface before saying it is absent.
-- §1: a 13-second build is a cached build; its log says nothing about the reused layers.
-- §2: `secret-read-guard.sh` scans heredoc bodies; DEC prose that names the conf plus the word `cut`
-  was blocked. Write documentation with the Edit or Write tools.
-- §2: a go can arrive hours after the question; re-verify tag, tip and prod health before the
-  mutation.
-- §3: `marvinctl exec-ro` refuses `{}`, `%` and `@` in argv too, with the same misleading error.
+- §1: a green check on a dependency bump is about the stubs, not the dependency (CI installs only
+  pytest); run `ops/weewx_bump_check.sh`. A script whose user changes needs every privileged call
+  listed, not just the one the ticket names.
+- §1: `secret-read-guard.sh` matches the config filename in the command text; `cp` a scratch file to a
+  neutral name, or run a script file.
 
 ## Files needed at session start
 
