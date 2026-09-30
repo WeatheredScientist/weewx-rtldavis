@@ -24,6 +24,10 @@ under [Pre-S16].
   one prod-visible change: with `rapidfire` and `archive_post` both on, 5.5.2 posts the rapidfire
   thread to `rtupdate.wunderground.com` (5.5.0 used the archive URL for both). Dependabot now
   targets `dev`; #420 targeted `main`.
+- **Merged and one prod restart.** #424 and #425 are on `dev` (`a039a65`); #420 closed. At marvin's
+  request (`eaglehunt-ops#360`, `MARVIN-DEC-0191`) `weewx-influxdb.service` was restarted 13:53:45 ET
+  to pick up `--cap-drop ALL` and `no-new-privileges`: `NoNewPrivs: 1`, `CapBnd` 0, the next archive
+  post went through. The `weewx.service` restart is left for the owner's window.
 
 ## [S146] — 2026-09-29 — v2.0.18 in prod (DEC-0206): DEC-0205's driver and uploader fixes, the monitor's #413 restarted; ROADMAP full pass; ERR-0010; a wrong INTERFACES claim corrected
 
