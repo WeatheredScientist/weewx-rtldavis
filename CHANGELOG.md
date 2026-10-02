@@ -6,6 +6,23 @@ under [Pre-S16].
 
 ---
 
+## [S148] — 2026-09-30/10-01 — #423's swap path proved end to end as `t-weewx`; `weewx.service` under #360's flags, accepted
+
+- **No campaign was queued** (the schedule has been empty since DEC-0128), so the owner chose a
+  test-only one: new arm `T` (prod's cmd plus an explicit `-ex 0`, the flag's default), then
+  `BASELINE`, driven by two hand-started passes of `weewx-rx-experiment.service`. No timer and no
+  `install`: the tenant-root snapshot was verified byte-identical to the live conf, and the state
+  file was seeded over sftp. PR #427; its dates moved once when it sat unmerged past the first
+  terminator.
+- **Both passes worked.** 2026-10-01 21:04:30 ET, `NONE -> T`: config write verified, restart through
+  `sudo -n marvin-own weewx restart`, healthy in 106 s via `systemctl is-active`. 22:31:22,
+  `T -> BASELINE`: live conf restored byte-exact (mode 0600 kept), harvest wrote 17 rx and 85 dup
+  rows under `T`, no mail failure. Schedule stood down again on the closeout PR.
+- **`eaglehunt-ops#360`: the 21:04:30 restart was also `weewx.service`'s flag restart.**
+  `NoNewPrivs: 1`, every capability set 0, uid 996. One record lost (21:05), 21:06 partial with
+  `rxCheckPercent` NULL, 21:07 at 100%. Posted; heartofgold confirmed on the box.
+- `GOTCHAS.md` §3: `marvinctl grep` also refuses `/` in a pattern. S144 rolled to the archive.
+
 ## [S147] — 2026-09-30 — `rx_experiment.sh` runs as `t-weewx` (#423, MARVIN-DEC-0189)
 
 - **Campaigns would have refused at preflight, and then aborted.** marvin moved
@@ -72,49 +89,3 @@ under [Pre-S16].
   applies clean (offset 0, fuzz 0) to today's tarball.
 - Closeout: DEC-0205 logged; DEC-0199 amended; `MANIFEST.md` row for the review record; GOTCHAS §1/§2
   gain four traps.
-
-## [S144] — 2026-09-28 — DEC-0200 verified overnight; #394's ISS battery flag surfaced by the monitor and cleaned at the source (DEC-0203); v2.0.17 in prod (DEC-0204); `CONSTANTS.md` marvin rows re-verified
-
-- **DEC-0200 verified (job 1).** 733 of 734 dark archive rows from 09-27 17:41 to 09-28 12:32 ET
-  read UV 0. The other is the partial first record of S143's restart (22:59, after two minutes with
-  no rows). None fell in (0, 0.05), and none was an exact 0.02 or 0.04. The same query flags all 747
-  dark rows of the pre-fix night (positive control). Recorded in DEC-0200's own row and body.
-- **#394 triaged, designed with the owner, and built (job 2, DEC-0203).** `txBatteryStatus` was
-  archived and shipped to InfluxDB and WeatherCloud, but shown nowhere. All 10 of its historical flips
-  were corrupt frames at outage onsets, not the battery.
-  - `weewx_monitor.py`: each 6-hourly RF email gains an `ISS battery:` line. A one-shot low-battery
-    email fires at 5 or more flagged minutes with healthy reception in one block, and re-arms after a
-    clear block. No archived minute would ever have tripped it.
-  - `rtldavis.py`: a co-rejected frame now drops its battery flags, and message types
-    0x0/0x1/0xB/0xD/0xF condemn a frame like a bounds failure. 9 of the 10 flips now drop at the
-    source. It also closes the 09-22 phantom-gust and 09-25 baseline-poisoning paths.
-  - 16 new tests. Pre-fix, 4 fail on their own assertions, and mutations of the gate, the latch and
-    the key set are each caught. Gates: ruff clean, pytest 532 passed and 17 skipped, mypy clean over
-    73 files. The secret scan is clean, with its identifier, IP and credential checks each
-    positive-controlled.
-  - Mid-decision, the owner was quoted "8 of 10" for the driver fix, a count that treated delta
-    trips as proof. The corrected tally (6 by bounds, 9 with the message-type proof) went back to
-    the owner before any code. The trap is now in `GOTCHAS.md` §1.
-  - PR #399 merged at 13:21 ET (`1dd3026`). The monitor was deployed self-service at 13:21:52
-    (sha matches `dev`); its first `ISS battery:` line is due in the 18:00 RF report.
-- **v2.0.17 built and cut over, on the owner's go at each prod step (DEC-0204).**
-  - PR #400 (`f255efb`) added a `.dockerignore` allowlist, since marvin's build verb is a plain
-    `docker build` of the tenant root, which also holds the archive, conf backups and InfluxDB
-    data. It added a test pinning the list to the Dockerfile and a v2.0.17 version comment.
-  - Built on marvin from the tenant root with a 217 kB context. Checked against v2.0.16 by the
-    sha of every baked file, only `rtldavis.py` (now `dev`'s) and the Go binary differ; the
-    binary differs because of S126's GPLv3 notice (same `go1.26.0`).
-  - Cutover at 13:32:38 by retagging `:marvin-live` and restarting. It booted clean, and the
-    first record came at 13:34.
-  - Tagged `v2.0.17` on `f255efb`, with a GitHub release. Not pushed to Docker Hub
-    (`eaglehunt-ops#265`).
-  - #394 closed with the deploy evidence.
-- **Reception at the new USB port (job 3): no change.** It averaged 99.9% at both `7-1.2` (3.9 days)
-  and `5-1` (20.5 days), with every hour within ±0.4 points. The move was missing from
-  `CONSTANTS.md`'s hardware timeline and is now added.
-- **`CONSTANTS.md` marvin rows re-verified (job 7).** The tenant root, both containers' user, image
-  and mounts, and the rollback images all match. Three stale rows were corrected: releases retag
-  `:marvin-live` rather than use `set-image` (its deploy dir is empty), marvin is the build host,
-  and `:v2.0.14` is still present. The host-tools row is moot for this tenant. The local-infra-doc
-  row stays unverified, since the read guard blocks it, correctly.
-- lheijst/rtldavis#7 still has no reply (job 5). Jobs 4, 6 and 8 carry forward unchanged.
