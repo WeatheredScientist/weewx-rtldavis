@@ -12,7 +12,11 @@ under [Pre-S16].
   Dockerfile stamp and `soak_check.sh`'s fallback (`ws.6` canary unchanged: no driver change); built
   on marvin from `dev`@`fee78e3`. `exec-ro` against v2.0.18: the Go binary and the five baked
   modules are sha-identical, only the engine differs. `soak_check.sh`: 19 passed. Tagged `v2.0.19`
-  with a GitHub release; not on Docker Hub (`eaglehunt-ops#265`).
+  with a GitHub release.
+- **`:v2.0.19` is on Docker Hub: the first real `marvinctl --tenant weewx push`** (00:31 ET, exit 0).
+  The manifest's `publish` line had been ratified since 2026-09-04, so `eaglehunt-ops#265`'s trigger
+  fired; commented there. Hub's digest equals prod's index digest. `:latest` stays at v2.0.13 (owner
+  route); v2.0.17 and v2.0.18 were never pushed.
 - **The one prod-visible change is confirmed.** The rapidfire thread now posts to
   `rtupdate.wunderground.com`. Its failures never reach `weewx.log`, so the check was external: the
   station's public wunderground.com page read CONNECTED, 2 seconds old, after the restart.

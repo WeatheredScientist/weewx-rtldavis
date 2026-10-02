@@ -11374,3 +11374,11 @@ the cutover.
 ### Rollback
 
 `marvinctl tag …:v2.0.18 …:marvin-live`, then `restart weewx.service`. `:v2.0.18` is local on marvin.
+
+### Addendum (S149, 00:31 ET): `:v2.0.19` pushed to Docker Hub
+
+`marvinctl --tenant weewx push weatheredscientist/weewx-rtldavis:v2.0.19` ran for the first time and
+exited 0: weewx's manifest has carried `publish = weatheredscientist/weewx-rtldavis` since 2026-09-04
+(MARVIN-DEC-0115), so `eaglehunt-ops#265`'s trigger had been armed all along. Hub's digest equals
+prod's index digest (`sha256:e18284026b8f…`). `:latest` stays at v2.0.13, the owner's route.
+`:v2.0.17` and `:v2.0.18` were not pushed: v2.0.19 supersedes them.
