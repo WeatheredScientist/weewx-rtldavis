@@ -6,6 +6,17 @@ under [Pre-S16].
 
 ---
 
+## [S149] — 2026-10-02 — v2.0.19 in prod (DEC-0208): weewx 5.5.2, the rapidfire endpoint confirmed live
+
+- **weewx 5.5.0 → 5.5.2 is live as `:v2.0.19` since 2026-10-02 00:18:38 ET.** PR #429 moved the
+  Dockerfile stamp and `soak_check.sh`'s fallback (`ws.6` canary unchanged: no driver change); built
+  on marvin from `dev`@`fee78e3`. `exec-ro` against v2.0.18: the Go binary and the five baked
+  modules are sha-identical, only the engine differs. `soak_check.sh`: 19 passed. Tagged `v2.0.19`
+  with a GitHub release; not on Docker Hub (`eaglehunt-ops#265`).
+- **The one prod-visible change is confirmed.** The rapidfire thread now posts to
+  `rtupdate.wunderground.com`. Its failures never reach `weewx.log`, so the check was external: the
+  station's public wunderground.com page read CONNECTED, 2 seconds old, after the restart.
+
 ## [S148] — 2026-09-30/10-01 — #423's swap path proved end to end as `t-weewx`; `weewx.service` under #360's flags, accepted
 
 - **No campaign was queued** (the schedule has been empty since DEC-0128), so the owner chose a
