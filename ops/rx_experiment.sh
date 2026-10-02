@@ -163,6 +163,11 @@ LOCK_STALE_SECS=1800     # a holder older than this is hung, not working: the
 #         upstream sums them (verified lheijst/rtldavis master, DEC-0059).
 #         -fc 0 -ppm 0 everywhere: changing them between campaigns would
 #         confound the LNA contrast (DEC-0064).
+#   T   — the SWAP-PATH TEST arm (S148, weewx#423): prod's own settings. The live
+#         cmd carries no -ex, and rtldavis's -ex defaults to 0, so T differs from
+#         live by an explicit default only: the write is observable, the
+#         receiver is not changed. Its own label keeps a path test's samples out
+#         of every campaign arm's harvest.
 arm_cmd() {
   case "$1" in
     P496) echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 0" ;;
@@ -176,6 +181,7 @@ arm_cmd() {
     B)    echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 0"  ;;
     C)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 50" ;;
     D)    echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 50" ;;
+    T)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0"  ;;
     *) return 1 ;;
   esac
 }
@@ -304,7 +310,18 @@ arm_cmd() {
 # bar and the pilot shortlists no candidate. Gain holds at 372. Schedule stood
 # down below — the gain axis is closed at marvin, do not re-sweep it without a
 # new reason.
+#
+# LOADED NOW: the S148 swap-path test (weewx#423), not a campaign. The first
+# end-to-end arm swap with the script running as t-weewx: restart through the
+# marvin-own grant, health through `systemctl is-active`, then the BASELINE
+# self-terminator. Driven by two hand-started passes of
+# weewx-rx-experiment.service (no timer), no `install`: the tenant-root
+# snapshot was verified byte-identical to the live conf at S148 and the state
+# file is seeded by hand. Two weewx.service restarts, measuring nothing. Empty
+# this block once the terminator has run (DEC-0096).
 SCHEDULE="
+2026-10-01T21:00|T
+2026-10-01T22:30|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
