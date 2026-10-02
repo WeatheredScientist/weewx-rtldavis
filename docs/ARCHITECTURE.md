@@ -23,7 +23,7 @@ Davis 6263 VP2+ ISS  ──915 MHz FHSS──▶  RTL-SDR Blog v3 (bias-tee-capa
                                          auto-appends -tf/-tr to the cmd line)
                                               │  LOOP packets (~2.5 s, METRICWX)
                                               ▼
-                                     WeeWX engine (5.5.0, verified live 2026-09-19)
+                                     WeeWX engine (5.5.2, verified live 2026-10-02)
              ┌───────────────┬────────────────┼───────────────────┬──────────────────┐
              ▼               ▼                 ▼                   ▼                  ▼
      data_services    process_services   xtype_services   archive_services   restful_services

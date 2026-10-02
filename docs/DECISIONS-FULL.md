@@ -11342,3 +11342,35 @@ takes the same station id and key, but that is the one behavior change a live si
 
 Whether WU's rapidfire endpoint accepts this station's posts. The 5.5.0 behavior (rapidfire on the
 archive URL) was the status quo, and it may have been silently degrading to ordinary archive posts.
+
+## DEC-0208 — v2.0.19: weewx 5.5.2 built from the tenant-root checkout and cut over 2026-10-02 00:18:38 ET; the rapidfire endpoint change confirmed live on wunderground.com
+
+**Status:** Accepted (deployed 2026-10-02 00:18:38 ET) · **ships** DEC-0207's pin · **follows** DEC-0204's
+release shape · **applies** MARVIN-DEC-0109/0116 (the floating `:marvin-live` tag)
+
+### Context
+
+DEC-0207 staged `weewx==5.5.2` on `dev` (#425, proved by `ops/weewx_bump_check.sh`) and left the build
+for a release. The owner's go was taken at each step: the stamp PR's merge and the marvin build, then
+the cutover.
+
+### What happened
+
+- **PR #429** moved the Dockerfile stamp v2.0.18 → v2.0.19 and `soak_check.sh`'s no-Dockerfile
+  fallback image. `EXPECT_DRIVER` stays `0.20+ws.6`: no driver change. Merged as `fee78e3`.
+- **Build:** `marvinctl pull`, then `marvinctl build /srv/docker/weewx -t …:v2.0.19`, exit 0. Image
+  `e1828402…` (index digest).
+- **Verified with `exec-ro` against v2.0.18:** the Go binary, `rtldavis.py`, `owm.py`, `windy.py` and
+  `influx.py` are sha256-identical; `pip show weewx` reads 5.5.0 in v2.0.18 and 5.5.2 in v2.0.19.
+- **Cutover:** `tag :v2.0.19 :marvin-live`, `restart weewx.service` at 00:18:38 ET. `weewxd` logged
+  `Starting up weewx version 5.5.2`, both `Wunderground-PWS` and `Wunderground-RF` announced, the first
+  post-restart archive record landed 00:19:00, and Influx, WU-PWS, PWSWeather, OWM, CWOP and Windy
+  published it. No WARNING, ERROR or traceback. `soak_check.sh`: 19 passed, 0 warnings, 0 failures.
+- **The one behavior change, confirmed externally.** `weewx.log` cannot show it (the rapidfire thread
+  sets `log_failure = False`). The station's public wunderground.com page read CONNECTED with
+  "2 seconds ago" at 00:20 ET, after the restart; only the rapidfire thread posts that often. WU accepts
+  this station's posts on `rtupdate.wunderground.com`.
+
+### Rollback
+
+`marvinctl tag …:v2.0.18 …:marvin-live`, then `restart weewx.service`. `:v2.0.18` is local on marvin.

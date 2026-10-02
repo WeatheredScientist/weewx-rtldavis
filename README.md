@@ -17,6 +17,12 @@ docker pull weatheredscientist/weewx-rtldavis:v2.0.16   # or :latest
 ```
 Pin a version tag (`:v2.0.16`) for reproducible deploys; `:latest` always tracks the newest release.
 
+> **v2.0.19 (source release, 2026-10-02; not yet on Docker Hub, where v2.0.16 below is still
+> current):** the weewx engine moves from 5.5.0 to 5.5.2. The driver and uploaders are unchanged.
+> With both `rapidfire` and `archive_post` on in `[[Wunderground]]`, the rapidfire thread now posts
+> to Weather Underground's own real-time endpoint (`rtupdate.wunderground.com`) instead of sharing
+> the archive URL.
+>
 > **v2.0.18 (source release, 2026-09-29; not yet on Docker Hub, where v2.0.16 below is still
 > current):** the first record after every driver start or counter reset no longer misreads
 > `rxCheckPercent` (the slot baseline was one packet off at seeding), and the OpenWeatherMap and
@@ -80,7 +86,7 @@ Pin a version tag (`:v2.0.16`) for reproducible deploys; `:latest` always tracks
 > **blocks forever** — no crash, no traceback, and a container that still reports `Up`. That cost us a
 > 7-hour outage. See the [CHANGELOG](CHANGELOG.md).
 > **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3
-> **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.5.0
+> **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.5.2
 > **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)
 
 ---
