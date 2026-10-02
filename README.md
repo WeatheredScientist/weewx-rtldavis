@@ -3,7 +3,7 @@
 An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](https://weewx.com/) plus a **patched** version of Luc Heijst's [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver. It intercepts a Davis Vantage station off the air with an RTL-SDR USB dongle and uploads to multiple weather services — no proprietary Davis hardware required.
 
 > **This is not stock upstream.** The driver shipped here is a fork of rtldavis v0.20 and reports
-> itself as `0.20+ws.6` (`ws.5` in the v2.0.16 image on Docker Hub). It carries a rain-counter glitch filter, a decode-layer sensor plausibility
+> itself as `0.20+ws.6` (`ws.5` in the older v2.0.16 image on Docker Hub). It carries a rain-counter glitch filter, a decode-layer sensor plausibility
 > filter, and five bug fixes that do not exist upstream — see
 > **[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)** for every divergence, why it is there, and
 > whether it is headed upstream.
@@ -13,24 +13,24 @@ An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](htt
 
 📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
 ```bash
-docker pull weatheredscientist/weewx-rtldavis:v2.0.16   # or :latest
+docker pull weatheredscientist/weewx-rtldavis:v2.0.19
 ```
-Pin a version tag (`:v2.0.16`) for reproducible deploys; `:latest` always tracks the newest release.
+Pin a version tag (`:v2.0.19`) for reproducible deploys. `:latest` is not moved automatically and
+still points at v2.0.13; v2.0.17 and v2.0.18 were never published as images, so build those from
+their tags if you need them.
 
-> **v2.0.19 (source release, 2026-10-02; not yet on Docker Hub, where v2.0.16 below is still
-> current):** the weewx engine moves from 5.5.0 to 5.5.2. The driver and uploaders are unchanged.
+> **v2.0.19 (2026-10-02; on Docker Hub as `:v2.0.19`):** the weewx engine moves from 5.5.0 to 5.5.2. The driver and uploaders are unchanged.
 > With both `rapidfire` and `archive_post` on in `[[Wunderground]]`, the rapidfire thread now posts
 > to Weather Underground's own real-time endpoint (`rtupdate.wunderground.com`) instead of sharing
 > the archive URL.
 >
-> **v2.0.18 (source release, 2026-09-29; not yet on Docker Hub, where v2.0.16 below is still
-> current):** the first record after every driver start or counter reset no longer misreads
+> **v2.0.18 (source release, 2026-09-29; no Docker Hub image, its changes are in `:v2.0.19`):** the first record after every driver start or counter reset no longer misreads
 > `rxCheckPercent` (the slot baseline was one packet off at seeding), and the OpenWeatherMap and
 > Windy uploaders now send rain in millimeters. Both had sent centimeters, 10× low, since they were
 > written, and Windy also sent one minute's rain instead of the last hour's. Driver now reports
 > `0.20+ws.6`.
 >
-> **v2.0.17 (source release, 2026-09-28; not yet on Docker Hub):** the decode filter now also treats a message type no Davis transmitter sends as
+> **v2.0.17 (source release, 2026-09-28; no Docker Hub image, its changes are in `:v2.0.19`):** the decode filter now also treats a message type no Davis transmitter sends as
 > proof of a corrupt frame, and a corrupt frame's battery-low bit is discarded along with its
 > weather fields. Before this, corrupt frames at reception collapses produced one-minute false
 > ISS low-battery readings and, occasionally, a phantom wind gust. The host monitor also reports

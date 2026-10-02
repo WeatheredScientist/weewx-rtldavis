@@ -20,7 +20,8 @@ is a **separate repo** — don't make dashboard changes here.
 else changed** (the Go binary and the five baked modules are sha-identical to v2.0.18). The
 rapidfire thread's move to `rtupdate.wunderground.com` is confirmed: the station's public WU page
 read CONNECTED, 2 seconds old, after the restart (that thread's failures never reach the log).
-Tagged `v2.0.19` on `fee78e3` with a GitHub release; not on Docker Hub (`eaglehunt-ops#265`).
+Tagged `v2.0.19` on `fee78e3` with a GitHub release, and on Docker Hub as `:v2.0.19` (the first
+real `marvinctl push`, 00:31 ET, digest equal to prod's).
 v2.0.18's content (DEC-0205's slot-count seed fix, banner `0.20+ws.6`, and OWM and Windy rain in
 millimeters) rides underneath. The monitor's #413 has run since 2026-09-29 09:31:16 ET.
 
@@ -46,9 +47,8 @@ first restart). heartofgold confirmed on the box.
    the two does it read?). First step of any build: one WeatherLink fetch to confirm this station's
    response carries `bar_absolute`, credentials never printed. Fix `pressure_service.py`'s stale
    "archive columns go NULL" comment in the same change; it is baked, so it rides a release.
-2. **`marvinctl push` now exists** (its help cites ops#265 and MARVIN-DEC-0115): check whether
-   weewx's manifest ratifies a Hub repo before treating #265 as still blocked. If it does, v2.0.17
-   to v2.0.19 can go to Hub and `:latest` can move, each the owner's gesture.
+2. **`:latest` on Docker Hub still points at v2.0.13** (the owner's gesture, DEC-0078's route, not
+   `marvinctl push`). `:v2.0.19` is on Hub since S149; the question is whether to move it.
 3. **`dev` → `main` promotion**, the owner's timing. `main` is v2.0.13; v2.0.14 to v2.0.19 have run
    unpromoted.
 4. **Watches, no action:** WU still showing the station over the next days (the rapidfire
@@ -69,7 +69,7 @@ first restart). heartofgold confirmed on the box.
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed; tenant-root snapshot = live conf (`cea58bc9…`) |
 | `main`/`dev` | `dev` = this closeout's merge. `main` is still v2.0.13, unpromoted (job 3) |
-| Docker Hub | `:v2.0.16` · `:latest` = v2.0.13 · v2.0.17 to v2.0.19 not pushed (`eaglehunt-ops#265`) |
+| Docker Hub | `:v2.0.19` (= prod, pushed S149) · `:v2.0.16` · `:latest` = v2.0.13 · v2.0.17 and v2.0.18 never pushed. `eaglehunt-ops#265`'s trigger has fired (S149 comment) |
 | Trackers | repo: #421 (gate holes), #423 closed with the S148 evidence, #380 informational · ops: #357 awaiting the owner and HLF (job 1) · #360 weewx done · #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN (this desktop session reached marvin) |
 
 ## Blockers
