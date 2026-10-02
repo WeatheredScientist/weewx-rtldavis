@@ -320,8 +320,8 @@ arm_cmd() {
 # file is seeded by hand. Two weewx.service restarts, measuring nothing. Empty
 # this block once the terminator has run (DEC-0096).
 SCHEDULE="
-2026-09-30T21:00|T
-2026-09-30T22:30|BASELINE
+2026-10-01T21:00|T
+2026-10-01T22:30|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
