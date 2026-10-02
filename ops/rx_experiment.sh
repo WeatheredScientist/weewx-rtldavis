@@ -311,17 +311,15 @@ arm_cmd() {
 # down below — the gain axis is closed at marvin, do not re-sweep it without a
 # new reason.
 #
-# LOADED NOW: the S148 swap-path test (weewx#423), not a campaign. The first
-# end-to-end arm swap with the script running as t-weewx: restart through the
-# marvin-own grant, health through `systemctl is-active`, then the BASELINE
-# self-terminator. Driven by two hand-started passes of
-# weewx-rx-experiment.service (no timer), no `install`: the tenant-root
-# snapshot was verified byte-identical to the live conf at S148 and the state
-# file is seeded by hand. Two weewx.service restarts, measuring nothing. Empty
-# this block once the terminator has run (DEC-0096).
+# RAN AND CLOSED: the S148 swap-path test (weewx#423), not a campaign. The
+# first end-to-end arm swap with the script running as t-weewx, driven by two
+# hand-started passes of weewx-rx-experiment.service (no timer, no `install`;
+# the tenant-root snapshot was byte-identical to the live conf and the state
+# file was seeded by hand). 2026-10-01: NONE -> T at 21:04:30 (restart through
+# the marvin-own grant, healthy in 106 s via `systemctl is-active`), T ->
+# BASELINE at 22:31:22 (live conf restored byte-exact, mode 0600 kept, harvest
+# and mail ran). Schedule stood down below (DEC-0096).
 SCHEDULE="
-2026-10-01T21:00|T
-2026-10-01T22:30|BASELINE
 "
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -239,6 +239,10 @@ alone did not catch.
 - **`due_arm()` never returns `NONE` once the pilot block has run** — check `current_arm()`/state +
   STOP/PAUSE directly, not log silence. *(An EMPTY schedule does return `NONE` — the DEC-0096
   stand-down state; `install` refuses it before it can matter.)*
+- **A schedule PR carries dated rows, and a merge does not re-check them** (S148). PR #427 sat
+  unmerged past its own `BASELINE` row; merged as written, the first pass would have gone
+  `NONE -> BASELINE` and skipped the test arm (and CI's staleness test would have gone red).
+  Re-date the rows when a schedule PR is merged later than planned.
 - **`marvin-<tenant>` SSH aliases have no shell or `git clone` verb** (S129, ops#257/DEC-0150) — the
   forced command (`marvinctl-remote`) dispatches only to `sftp-server`, `rsync --server`, or its own
   fixed verb list (`ps`, `logs`, `pull`, `restart`, …). `ssh marvin-weewx 'bash -s' < script` fails
@@ -300,7 +304,8 @@ alone did not catch.
   bracket expression and a `|` too, and so does `exec-ro`'s argv** (S144: `2026-09-27.22:5[6-9]`
   and `A|B` have no space, yet both drew the same "single whitespace-free token" error). **S146
   adds `{}`, `%` and `@`**: `find … -exec sha256sum {} +` and paths like `NOAA-%Y.txt.tmpl` or
-  `weewx@.service` all fail that way, with rc 3 and a message that names the wrong cause. To hash
+  `weewx@.service` all fail that way, with rc 3 and a message that names the wrong cause. **S148
+  adds `/`**: `grep bin/rtldavis` drew the same whitespace message, while `rtldavis.-gain` passed. To hash
   an image, list with a plain `find`, drop the odd names, and pass the rest as `sha256sum`'s
   arguments (220 files went through in one call). Grep a
   wider prefix and narrow locally, or run one pattern per call. Exit code 1 from
