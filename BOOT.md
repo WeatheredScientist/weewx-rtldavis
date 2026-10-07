@@ -37,10 +37,9 @@ stay in `docs/CODE_REVIEW_S145.md`; the secret gate's four holes are #421. ROADM
    needs a second boundary) · WU gold star (≥ 5 uninterrupted days; the clean run restarted at
    the 10-06 22:15 restart) · OWM and Windy rain in millimeters (needs rain; ERR-0010) · the first
    `frame failed message-type proof` line · freeze lead (blocker 1), measure at the next freeze.
-2. **`:latest` on Docker Hub still points at v2.0.13** (owner's gesture, DEC-0078's route).
-3. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI; the
+2. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI; the
    remainder of `eaglehunt-ops#358`.
-4. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
+3. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry.
 
 ## Current state (S150 close)
@@ -53,7 +52,7 @@ stay in `docs/CODE_REVIEW_S145.md`; the secret gate's four holes are #421. ROADM
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed |
 | `main`/`dev` | **`main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150).** Before it `main` was v2.0.16's promotion (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor (all docs, plus `ops/campaign_analyze.py`); #339 had already brought `dev` to parity with #338 |
-| Docker Hub | `:v2.0.20` (= prod) · `:v2.0.19` · `:v2.0.16` · `:latest` = v2.0.13 |
+| Docker Hub | `:v2.0.20` = `:latest` (= prod, `f617c9ca…`; `:latest` moved 2026-10-06 22:52 ET) · `:v2.0.19` · `:v2.0.16` |
 | Trackers | repo: #421 (gate holes), #380 informational · ops: #357 weewx side done, HLF's mapping pending on their side · #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
 
 ## Blockers
