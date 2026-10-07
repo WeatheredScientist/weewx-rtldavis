@@ -689,11 +689,16 @@ from the archive, humidity), and `altimeter` from that (`docs/INTERFACES.md` §1
 `pressure_service.py` (DEC-0209, `eaglehunt-ops#357`); `altimeter` is still weewx-derived, but from
 the measurement.
 
-- **Boundary timestamp:** the v2.0.20 cutover — **written here at the deploy.** The first record
-  carrying the measured value is the first archive record after the first post-restart WeatherLink
-  fetch (≤ 5 min after the restart); `barometer_fetch_epoch` at or after the restart marks it.
-- **Direction:** a level shift whose sign and size are measured across the boundary at the deploy
-  and recorded here. `barometer` (sea-level) does not move: it is the same passthrough on both sides.
+- **Boundary timestamp (S150, DEC-0209):** **2026-10-06 22:18:00 EDT** (`2026-10-07T02:18:00Z`),
+  the first archive record after the `v2.0.20` restart (22:15:14 EDT; the first post-restart
+  WeatherLink fetch logged `station pressure 29.534` at 22:17:19). Records at or after that instant
+  carry the measured value; the last derived record is 22:14:00 EDT. The three minutes between
+  (22:15, 22:16, 22:17) carry no records at all: the restart's acquisition gap.
+- **Direction and size, measured across the boundary:** a step **up of 0.008 inHg** in both
+  columns — `pressure` 29.526 → 29.534, `altimeter` 30.122 → 30.130 — with `barometer` unchanged
+  at 30.127 on both sides (the same passthrough). The first measured value equals the API's
+  `bar_absolute` to the thousandth, so the reversed reduction had been running ~0.008 inHg low at
+  that hour; the offset is temperature-dependent and will not be constant across the record.
 - **Scope:** archive `pressure` and `altimeter`; InfluxDB `pressure_inHg` and `altimeter_inHg` (same
   field names — a meaning change, not a schema change); and CWOP's posted barometer, which weewx
   sends from `altimeter` (`restx.py:1316`). **Not** `barometer`/`barometer_inHg`; not the loop JSON

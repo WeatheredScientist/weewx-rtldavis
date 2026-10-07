@@ -6,8 +6,18 @@ under [Pre-S16].
 
 ---
 
-## [S150] — 2026-10-06 — WeatherLink's `bar_absolute` becomes weewx's `pressure` (DEC-0209, `eaglehunt-ops#357` option A); rides v2.0.20
+## [S150] — 2026-10-06 — WeatherLink's `bar_absolute` becomes weewx's `pressure` (DEC-0209, `eaglehunt-ops#357` option A); v2.0.20 in prod the same night
 
+- **v2.0.20 is in prod since 2026-10-06 22:15:14 ET.** PR #433 moved the stamp; built on marvin
+  from `dev`@`9a86c97` (image `f617c9ca…`); `exec-ro` sha of the seven baked modules against
+  v2.0.19: only `pressure_service.py` differs, equal to `dev`'s. The first fetch (22:17:19) logged
+  `station pressure 29.534`; the first record (22:18:00) carries `pressure 29.534`, `altimeter
+  30.130` against the derived rows' 29.526 / 30.122 — a +0.008 inHg step, `barometer` unchanged
+  (DISC-0002 filled). Zero WARNING/ERROR lines since the restart; three archive minutes lost to it.
+  `soak_check.sh`: 19 passed, 0 warnings, 0 failures (an earlier run inside the acquisition gap
+  flagged ARCHIVE STALLED, as expected). `:v2.0.20` pushed to Docker Hub with `marvinctl push` at
+  22:19 ET, Hub's digest equal to prod's (`f617c9ca…`). Tagged `v2.0.20` on `9a86c97` with a GitHub
+  release.
 - **`pressure_service.py` reads `bar_absolute` beside `bar_sea_level` and injects it as `pressure`**
   when the packet's is null; weewx's `prefer_hardware` keeps it, so the archive's station pressure is
   measured and `altimeter` derives from it instead of from the reversed sea-level value. Without the
