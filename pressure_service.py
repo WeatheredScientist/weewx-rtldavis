@@ -41,6 +41,12 @@ class DavisPressureFetcher(StdService):
         self.station_id = int(pressure_dict.get('station_id', 0))
         self.fetch_interval = int(pressure_dict.get('fetch_interval', 3600))
         self.last_pressure = None
+        # DEC-0209 (eaglehunt-ops#357): WeatherLink's bar_absolute, the raw
+        # sensor reading -- the only MEASURED station pressure this station
+        # has, since the ISS never transmits pressure. Taken from the same
+        # record as the sea-level value, never from a different sensor.
+        self.last_station_pressure = None
+        self._warned_no_absolute = False
         self.last_fetch = 0        # throttle stamp: set at every ATTEMPT, success or not
         self.last_success = None   # epoch of the last fetch that actually yielded a value (#172)
         # S57b: never log key material, not even a prefix. This line used to log
@@ -84,16 +90,26 @@ class DavisPressureFetcher(StdService):
             data = r.json()
             for sensor in data.get('sensors', []):
                 for record in sensor.get('data', []):
-                    if 'bar_sea_level' in record and record['bar_sea_level']:
-                        self.last_pressure = record['bar_sea_level']
-                        self.last_success = time.time()
-                        log.info("DavisPressureFetcher: got pressure %.3f", self.last_pressure)
-                        return
-                    if 'bar' in record and record['bar']:
-                        self.last_pressure = record['bar']
-                        self.last_success = time.time()
-                        log.info("DavisPressureFetcher: got pressure %.3f", self.last_pressure)
-                        return
+                    sea_level = record.get('bar_sea_level') or record.get('bar')
+                    if not sea_level:
+                        continue
+                    self.last_pressure = sea_level
+                    self.last_success = time.time()
+                    # bar_absolute sits beside bar_sea_level in the barometer
+                    # sensor's record (DEC-0209). Read it from THIS record only:
+                    # a value from another record would be another sensor's.
+                    absolute = record.get('bar_absolute')
+                    if absolute:
+                        self.last_station_pressure = absolute
+                        log.info("DavisPressureFetcher: got pressure %.3f, station pressure %.3f",
+                                 sea_level, absolute)
+                    else:
+                        log.info("DavisPressureFetcher: got pressure %.3f", sea_level)
+                        if not self._warned_no_absolute:
+                            self._warned_no_absolute = True
+                            log.warning("DavisPressureFetcher: no bar_absolute in the barometer "
+                                        "record; pressure stays weewx-derived (DEC-0209)")
+                    return
             log.warning("DavisPressureFetcher: no pressure found in response")
         except Exception as e:
             log.error("DavisPressureFetcher: error fetching pressure: %s", _redact_secrets(str(e)))
@@ -110,16 +126,27 @@ class DavisPressureFetcher(StdService):
             packet = event.packet
             # barometer (sea-level, WeatherLink-corrected) is the quantity we
             # fetched -- inject it; that is this service's whole purpose.
+            # DEC-0086 documents the passthrough itself.
             #
             # pressure (station) and altimeter are DIFFERENT quantities. The
             # old backfill wrote this same sea-level number into both, so the
             # archive's station-pressure column carried sea-level values at
             # any nonzero elevation (#144, hlf#302) -- not a reader trap but a
-            # wrong number. Honest nulls instead (DEC-0006): the ISS never
-            # provides them, so they stay None and the archive columns go NULL
-            # rather than borrowed. DEC-0086 documents the passthrough itself.
+            # wrong number. DEC-0091 stopped that and left both keys None.
+            # That did NOT make the columns NULL (INTERFACES §1, corrected
+            # S146): StdWXCalculate's prefer_hardware computes any key that is
+            # None, so weewx derived pressure by reversing the sea-level value
+            # and altimeter from that.
             if packet.get('barometer') is None:
                 packet['barometer'] = self.last_pressure
+        if self.last_station_pressure is not None:
+            # pressure IS measured now: WeatherLink's bar_absolute, from the
+            # same fetch (DEC-0209, eaglehunt-ops#357). Injected as a hardware
+            # value, so prefer_hardware keeps it and derives altimeter from a
+            # measurement instead of a reversed reduction. altimeter is never
+            # injected: the station does not measure it.
+            if event.packet.get('pressure') is None:
+                event.packet['pressure'] = self.last_station_pressure
         if self.last_success is not None:
             # #172: the fetch's own freshness, distinct from last_fetch (a
             # throttle stamp that advances on FAILED attempts too). Stamped

@@ -11382,3 +11382,57 @@ exited 0: weewx's manifest has carried `publish = weatheredscientist/weewx-rtlda
 (MARVIN-DEC-0115), so `eaglehunt-ops#265`'s trigger had been armed all along. Hub's digest equals
 prod's index digest (`sha256:e18284026b8f…`). `:latest` stays at v2.0.13, the owner's route.
 `:v2.0.17` and `:v2.0.18` were not pushed: v2.0.19 supersedes them.
+
+## DEC-0209 — WeatherLink's `bar_absolute` becomes weewx's `pressure`: the archive's station pressure is measured, and `altimeter` derives from it (`eaglehunt-ops#357`, option A)
+
+**Status:** Accepted (code on `dev`; ships with v2.0.20) · **resolves** `eaglehunt-ops#357` (weewx side)
+· **supersedes in part** DEC-0091 (the null-key half) · **applies** DEC-0006 (no borrowed value) ·
+**extends** DEC-0086 (the WeatherLink passthrough)
+
+### Context
+
+HLF's barometer verification frame (hlf#593, option 2) needs a *measured* station pressure from the
+archive. The archive's `pressure` was not one: DEC-0091 left the key null, and weewx's
+`prefer_hardware` then derived it by reversing WeatherLink's sea-level `barometer` through its own
+reduction (found S146, `INTERFACES.md` §1 corrected then). S146 put two shapes on the tracker: (A)
+feed `bar_absolute` in as weewx's own `pressure`, or (B) a new field. Both consumers answered: the
+dashboard (2026-09-29) and HLF (S362, 2026-10-06) read neither `pressure_inHg` nor `altimeter_inHg`;
+HLF needs the value in the archive, which under (B) would mean a new column. The owner chose (A).
+
+### Decision
+
+- `pressure_service.py` reads `bar_absolute` from the **same record** it takes `bar_sea_level` (or
+  the legacy `bar`) from, and injects it as `pressure` when the packet's is `None`, the same shape as
+  the `barometer` relay. A `bar_absolute` in some other record is another sensor's reading and is
+  ignored (tested).
+- `altimeter` is never injected. weewx 5.5.2's `prefer_hardware` computes only a key that is `None`
+  (`wxservices.py:132`, read from the prod image), so the archive pass keeps the injected `pressure`
+  and derives `altimeter` from a measurement instead of a reversed reduction.
+- If the response lacks `bar_absolute`, nothing changes: `pressure` stays `None`, weewx derives as
+  before, and the service logs one warning per run.
+- The loop JSON is unchanged (neither key was ever in its contract). InfluxDB's `pressure_inHg` and
+  `altimeter_inHg` already exist (`obs_to_upload = most`), so the change there is meaning, not schema.
+- Consumer-visible at the v2.0.20 cutover and recorded as `DISC-0002` in `docs/DATA_ERRATA.md`:
+  archive `pressure`/`altimeter`, Influx `pressure_inHg`/`altimeter_inHg`, and CWOP's posted
+  barometer, which weewx sends from `altimeter` (`restx.py:1316`). The boundary timestamp and the
+  measured level shift are written into DISC-0002 at the deploy.
+- The file is baked (`CONSTANTS.md` deploy layers), so this rides a release: v2.0.20.
+
+### Verification
+
+Five new tests and the S82b injection test split in two (`tests/test_pressure_injection.py`); the
+three gates green (601 passed, 17 skipped). The one-off probe of this station's `current` response
+(the first step BOOT named for any build) was classifier-denied in-session as a production read and
+run by the owner instead (2026-10-06, the venv interpreter; it printed key names and `bar_*` values
+only). HTTP 200, four sensors; the barometer sensor's record (type 242, data structure 19) holds
+exactly `bar_absolute`, `bar_offset`, `bar_sea_level`, `bar_trend`, `ts`, `tz_offset`, reading
+`bar_absolute = 29.534`, `bar_sea_level = 30.127`, `bar_offset = 0`, in inHg. One record carries both
+pressures, as the code assumes, and the console applies no user offset. The 0.59 inHg gap matches
+the site's elevation.
+
+### Rejected
+
+(B), a new field: additive, but it leaves a derived value posing as a measured one under the name
+`pressure` (the thing DEC-0091 set out to fix), and HLF would need an archive column for it anyway.
+Deriving true station pressure from altitude in this repo: DEC-0091 already rejected it, and a
+measured value is now available.

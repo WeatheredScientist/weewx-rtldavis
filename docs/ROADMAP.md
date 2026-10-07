@@ -823,9 +823,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       **Corrected S146:** this line and INTERFACES.md said the archive's pressure/altimeter columns
       "go NULL" (DEC-0091); they are weewx-derived from the sea-level value and populated in 99.5%
       of rows, found when HLF read the bucket. The doc now says so.
-      **Open ask, design not started (S146):** `eaglehunt-ops#357` wants WeatherLink's
-      `bar_absolute` published as a measured station pressure beside the passthrough
-      `barometer_inHg`, for HLF's barometer verification frame. **Corrected S97:** this line
+      **Built S150 (DEC-0209):** `eaglehunt-ops#357`'s ask for WeatherLink's `bar_absolute` as a
+      measured station pressure is option (A) — it becomes weewx's own `pressure`, `altimeter`
+      derives from it; ships with v2.0.20, boundary in `DATA_ERRATA.md` DISC-0002. **Corrected S97:** this line
       previously also claimed DEC-0053's station-identity finding was documented — it was not; only
       DEC-0053's cache-bounding finding (Finding 1) had actually made it into the doc. §2 now carries
       the missing station-identity/series-key trap (Finding 2), closing that gap for real. Finding 3
