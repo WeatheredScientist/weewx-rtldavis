@@ -18,6 +18,10 @@ under [Pre-S16].
   flagged ARCHIVE STALLED, as expected). `:v2.0.20` pushed to Docker Hub with `marvinctl push` at
   22:19 ET, Hub's digest equal to prod's (`f617c9ca…`). Tagged `v2.0.20` on `9a86c97` with a GitHub
   release.
+- **Docker Hub `:latest` moved from v2.0.13 to v2.0.20** (22:52 ET, owner route): `docker buildx
+  imagetools create` from the laptop, registry-side, same index digest as prod. The first attempt
+  failed `insufficient_scope` on the stored Hub credential; a fresh `docker login` by the owner
+  fixed it. Recorded in CONSTANTS as the measured shape of the owner route.
 - **`dev` promoted to `main` as v2.0.20, tag `prod-baseline-20261006`** (106 commits, S122 → S150).
   Found while doing it: `main` was v2.0.16's promotion (`prod-baseline-20260904`, #324) plus the
   misrouted #338, not v2.0.13 as BOOT and CONSTANTS had said since S122; both corrected. The merge
