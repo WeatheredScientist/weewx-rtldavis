@@ -1014,6 +1014,91 @@ def test_systemd_mode_restarts_the_unit_not_the_container(tmp_path):
     assert "docker kill" not in out, "must not use the NAS kill/start pair on marvin"
 
 
+# ── non-root run (MARVIN-DEC-0189, weewx#423) ─────────────────────────────────
+# marvin moved weewx-rx-experiment.service from root to t-weewx. As that user the
+# privileged restart path (`sudo -n marvin-own weewx`) has no `cat` or `is-active`
+# verb and there is no docker group, so the read-only checks must not use either.
+
+
+def _stub(tmp_path, name, body):
+    p = tmp_path / name
+    p.write_text("#!/bin/bash\n" + body + "\n")
+    p.chmod(0o755)
+    return str(p)
+
+
+def _non_root_env(tmp_path, unit_active=True):
+    """Restart path that refuses every read verb (the marvin-own shape), a plain
+    systemctl that answers reads, and a docker binary that does not exist."""
+    restart = _stub(tmp_path, "fake-marvin-own",
+                    'case "$1" in restart) exit 0;; *) echo "verb not granted: $1" >&2; exit 1;; esac')
+    reader = _stub(tmp_path, "fake-systemctl",
+                   'case "$1" in cat) exit 0;; is-active) exit %d;; *) exit 2;; esac'
+                   % (0 if unit_active else 3))
+    return dict(RX_RESTART_MODE="systemd", RX_RESTART_UNIT="weewx.service",
+                RX_SYSTEMCTL=restart, RX_READ_SYSTEMCTL=reader,
+                RX_DOCKER=str(tmp_path / "no-such-docker"))
+
+
+def test_preflight_reads_the_unit_through_the_unprivileged_systemctl(tmp_path):
+    """The bug: preflight ran `$SYSTEMCTL cat`, which `marvin-own` does not grant,
+    so every campaign refused at preflight as t-weewx."""
+    _preflight_base(tmp_path)
+    r = _call_preflight(tmp_path, **_non_root_env(tmp_path))
+    assert "not known to systemd" not in r.stderr
+    assert "no docker binary" not in r.stderr, "systemd mode must not need docker"
+    assert r.returncode == 0, r.stderr
+
+
+def test_preflight_still_refuses_an_unknown_unit_in_systemd_mode(tmp_path):
+    _preflight_base(tmp_path)
+    env = _non_root_env(tmp_path)
+    env["RX_READ_SYSTEMCTL"] = _stub(tmp_path, "deaf-systemctl", "exit 1")
+    r = _call_preflight(tmp_path, **env)
+    assert r.returncode != 0
+    assert "not known to systemd" in r.stderr
+
+
+def _weewx_running(tmp_path, unit_active):
+    env = dict(os.environ, RX_BASE=str(tmp_path), **_non_root_env(tmp_path, unit_active))
+    return subprocess.run(
+        ["bash", "-c", f"source {SCRIPT} 2>/dev/null; weewx_running"],
+        capture_output=True, text=True, env=env).returncode
+
+
+def test_weewx_running_asks_the_unit_in_systemd_mode(tmp_path):
+    _preflight_base(tmp_path)
+    assert _weewx_running(tmp_path, unit_active=True) == 0
+    assert _weewx_running(tmp_path, unit_active=False) != 0
+
+
+def test_health_ok_passes_in_systemd_mode_without_docker(tmp_path):
+    """health_ok used to `docker inspect` every pass. As t-weewx that always fails,
+    so a healthy swap timed out and the campaign aborted. A new archive record plus
+    an active unit must be enough."""
+    conf, logs = _preflight_base(tmp_path)
+    env = dict(os.environ, RX_BASE=str(tmp_path), **_non_root_env(tmp_path))
+    wxlog = logs / "weewx.log"
+    r = subprocess.run(
+        ["bash", "-c",
+         f"source {SCRIPT} 2>/dev/null; HEALTH_TRIES=3; "
+         f"sleep() {{ echo 'Added record' >> '{wxlog}'; }}; health_ok"],
+        capture_output=True, text=True, env=env, timeout=30)
+    assert r.returncode == 0, r.stderr
+
+
+def test_health_ok_fails_when_the_unit_is_not_active(tmp_path):
+    conf, logs = _preflight_base(tmp_path)
+    env = dict(os.environ, RX_BASE=str(tmp_path), **_non_root_env(tmp_path, unit_active=False))
+    wxlog = logs / "weewx.log"
+    r = subprocess.run(
+        ["bash", "-c",
+         f"source {SCRIPT} 2>/dev/null; HEALTH_TRIES=3; "
+         f"sleep() {{ echo 'Added record' >> '{wxlog}'; }}; health_ok"],
+        capture_output=True, text=True, env=env, timeout=30)
+    assert r.returncode != 0
+
+
 def test_docker_mode_remains_the_default_for_existing_nas_installs(tmp_path):
     """This edit must not change what an existing NAS install does."""
     _preflight_base(tmp_path)

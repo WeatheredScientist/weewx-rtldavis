@@ -3,7 +3,7 @@
 An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](https://weewx.com/) plus a **patched** version of Luc Heijst's [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver. It intercepts a Davis Vantage station off the air with an RTL-SDR USB dongle and uploads to multiple weather services — no proprietary Davis hardware required.
 
 > **This is not stock upstream.** The driver shipped here is a fork of rtldavis v0.20 and reports
-> itself as `0.20+ws.5`. It carries a rain-counter glitch filter, a decode-layer sensor plausibility
+> itself as `0.20+ws.6` (`ws.5` in the older v2.0.16 image on Docker Hub). It carries a rain-counter glitch filter, a decode-layer sensor plausibility
 > filter, and five bug fixes that do not exist upstream — see
 > **[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)** for every divergence, why it is there, and
 > whether it is headed upstream.
@@ -13,10 +13,30 @@ An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](htt
 
 📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
 ```bash
-docker pull weatheredscientist/weewx-rtldavis:v2.0.16   # or :latest
+docker pull weatheredscientist/weewx-rtldavis:v2.0.19
 ```
-Pin a version tag (`:v2.0.16`) for reproducible deploys; `:latest` always tracks the newest release.
+Pin a version tag (`:v2.0.19`) for reproducible deploys. `:latest` is not moved automatically and
+still points at v2.0.13; v2.0.17 and v2.0.18 were never published as images, so build those from
+their tags if you need them.
 
+> **v2.0.19 (2026-10-02; on Docker Hub as `:v2.0.19`):** the weewx engine moves from 5.5.0 to 5.5.2. The driver and uploaders are unchanged.
+> With both `rapidfire` and `archive_post` on in `[[Wunderground]]`, the rapidfire thread now posts
+> to Weather Underground's own real-time endpoint (`rtupdate.wunderground.com`) instead of sharing
+> the archive URL.
+>
+> **v2.0.18 (source release, 2026-09-29; no Docker Hub image, its changes are in `:v2.0.19`):** the first record after every driver start or counter reset no longer misreads
+> `rxCheckPercent` (the slot baseline was one packet off at seeding), and the OpenWeatherMap and
+> Windy uploaders now send rain in millimeters. Both had sent centimeters, 10× low, since they were
+> written, and Windy also sent one minute's rain instead of the last hour's. Driver now reports
+> `0.20+ws.6`.
+>
+> **v2.0.17 (source release, 2026-09-28; no Docker Hub image, its changes are in `:v2.0.19`):** the decode filter now also treats a message type no Davis transmitter sends as
+> proof of a corrupt frame, and a corrupt frame's battery-low bit is discarded along with its
+> weather fields. Before this, corrupt frames at reception collapses produced one-minute false
+> ISS low-battery readings and, occasionally, a phantom wind gust. The host monitor also reports
+> the ISS battery flag in each reception summary, and emails once when the flag persists across
+> healthy reception. Driver still reports `0.20+ws.5`.
+>
 > **Current version:** v2.0.16 — **upgrade if you are on any earlier tag.**
 > **New in v2.0.15–v2.0.16:** two data-accuracy fixes to the reception-quality metric, both
 > confirmed live in production. The Go demodulator was double-decoding a fraction of legitimate
@@ -66,7 +86,7 @@ Pin a version tag (`:v2.0.16`) for reproducible deploys; `:latest` always tracks
 > **blocks forever** — no crash, no traceback, and a container that still reports `Up`. That cost us a
 > 7-hour outage. See the [CHANGELOG](CHANGELOG.md).
 > **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3
-> **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.5.0
+> **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.5.2
 > **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)
 
 ---
@@ -83,7 +103,7 @@ own image on top, pins a Python wheel, or compiles against system libraries is b
 change. Hence `v1.0-ubuntu22` (Ubuntu 22.04 / Python 3.10) → `v2.0-ubuntu26` (Ubuntu 26.04 /
 Python 3.14). Patch releases within a major are ordinary fixes and features.
 
-**The driver version — `0.20+ws.5`.** This is a
+**The driver version — `0.20+ws.6`.** This is a
 [PEP 440 local version identifier](https://peps.python.org/pep-0440/#local-version-identifiers),
 the Python-native way to say "upstream's release, plus our local patches":
 
@@ -91,7 +111,11 @@ the Python-native way to say "upstream's release, plus our local patches":
 |------|---------|
 | `0.20` | **upstream's** version — Luc Heijst's rtldavis v0.20. Ours to point at, not to claim. It moves only if we rebase onto a new upstream release. |
 | `ws` | **W**eathered**S**cientist — this fork's maintainer, matching the GitHub org and Docker Hub namespace. |
-| `4` | our patch level on top of that upstream release. |
+| `N` | our patch level on top of that upstream release (`6` from v2.0.18; `5` from v2.0.13 through v2.0.17). It rises with every behavior change, per rule 1 below. |
+
+Releases v2.0.14 through v2.0.17 each changed the driver without a bump, so they all report `ws.5`;
+v2.0.18 reports `ws.6` (the slot-count fix from issue #402 plus items 14-18 of
+[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)).
 
 Two rules follow, and we hold ourselves to both:
 
@@ -100,8 +124,8 @@ Two rules follow, and we hold ourselves to both:
    in the log. (Until 2026-07-13 this driver logged a bare `0.20` while carrying a rain filter and
    five bug fixes — anyone debugging from those logs was misled. That is the mistake this rule
    exists to prevent.)
-2. **Each patched file carries its own `ws.N`.** `rtldavis.py` is at `ws.5` while `influx.py` is at
-   `ws.1`, because they are different upstream works with different patch lineages. A shared counter
+2. **Each patched file carries its own `ws.N`.** `rtldavis.py` is at `ws.6` while `influx.py` is at
+   `ws.2`, because they are different upstream works with different patch lineages. A shared counter
    would imply changes that never happened.
 
 **We never renumber into upstream's space.** Bumping the driver to `0.21` would collide with a
@@ -358,6 +382,9 @@ The included `weewx_monitor.py` runs on the NAS host (outside Docker) and:
 - Repeats alerts every 2 hours for ongoing outages
 - Tracks WU Rapidfire RF reception quality — alerts when packet reception drops below threshold
 - Sends a daily email summary of RF reception by hour
+- Reports the ISS battery-low flag in each reception summary, and emails once when the flag is set
+  across several minutes of healthy reception (a lone flagged minute during a reception collapse is
+  a corrupt frame, not the battery)
 
 ### RF Reception Monitoring
 

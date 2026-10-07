@@ -32,6 +32,9 @@ Documentation=https://github.com/WeatheredScientist/weewx-rtldavis
 # stop it at exactly the moment it becomes useful.
 After=weewx.service
 Wants=weewx.service
+# Paging hook folded in from the box-side override.conf drop-in it replaces (MARVIN-DEC-0155,
+# 2026-09-09; ops#351, S55).
+OnFailure=marvin-notify@%n.service
 
 [Service]
 Type=simple
@@ -39,9 +42,25 @@ User=t-weewx
 Group=t-weewx
 Slice=weather.slice
 
+# The leading "+" is load-bearing: under User=t-weewx the handler cannot read
+# /etc/marvin/notify.env without it (MARVIN-DEC-0155, ops#351, S55). It also means the
+# EnvironmentFile below is consumed in root context -- see there (MARVIN-DEC-0189).
+ExecStopPost=+/usr/local/bin/marvin-notify --stop-post %n
+
 # Credentials (ALERT_FROM / GMAIL_PASS / ALERT_TO / STATION_NAME). Never
 # committed -- this repo is public (DEC-0012).
-EnvironmentFile=/srv/docker/weewx/monitor.env
+# The file lives in a ROOT-OWNED directory (MARVIN-DEC-0189, ops#356): the "+" stop-post
+# above runs as root and inherits this unit's whole environment, so a tenant-writable
+# EnvironmentFile would let t-weewx choose root's environment (LD_PRELOAD, PATH, ...) by
+# killing its own process. A root-owned FILE inside a tenant-writable directory is not
+# enough -- directory write permission governs unlink/rename, so the tenant could still
+# replace it. Hence /etc/marvin/env.d/weewx (dir 0750 root:t-weewx, file 0640 root:t-weewx;
+# group-read gives t-weewx no new reach, the monitor already holds these values). The old
+# tenant path /srv/docker/weewx/monitor.env is now a root-owned symlink to this file so
+# rx_experiment.sh, which sources the old path for campaign mail, keeps working; a tenant
+# may delete that link (harmless), not write through it. Rotating the Gmail app password
+# is therefore an owner root gesture now, not a tenant edit.
+EnvironmentFile=/etc/marvin/env.d/weewx/monitor.env
 
 # Paths. Everything below derives from BASE_DIR; the Foundation default
 # (/volume1/docker/weewx-rtldavis) is what froze, so it is set explicitly here
@@ -77,9 +96,22 @@ Environment=INPUT_STALE_S=300
 # (MARVIN-DEC-0051 reassigned two controller roles). On a box hosting two live
 # tenants and a passed-through ASM3142 it would either no-op or reset someone
 # else's device.
+#
+# REMEDY_SYSTEMCTL is NOT literally "systemctl" here -- ops#274 found that
+# t-weewx's actual sudoers grant is `marvin-own weewx <verb> <target>`, not a
+# bare `sudo systemctl`, so the old value would fail every time restart_unit
+# is armed. weewx_monitor.py's do_restart_unit() always appends
+# ['restart', REMEDY_UNIT] to this value's own tokens (never re-derive that
+# composition here or in marvin's copy -- read it from source), so the value
+# below is the prefix ONLY, through the tenant name, with no verb of its own:
+# split + ['restart', 'weewx.service'] resolves to exactly
+# `sudo -n /usr/local/lib/marvin/marvin-own weewx restart weewx.service`,
+# matching the granted shape verb-for-verb. Untested end-to-end as of this
+# edit -- verify with a deliberate restart_unit exercise once marvin installs
+# it, per ops#274's own note.
 Environment=REMEDY_MODE=none
 Environment=REMEDY_UNIT=weewx.service
-Environment="REMEDY_SYSTEMCTL=sudo systemctl"
+Environment="REMEDY_SYSTEMCTL=sudo -n /usr/local/lib/marvin/marvin-own weewx"
 
 # Campaign inhibit. An RX campaign restarts weewx once per arm on purpose; every
 # one of those looks exactly like the fault this watchdog remedies, and a remedy

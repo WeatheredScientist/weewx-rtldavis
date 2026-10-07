@@ -9,6 +9,8 @@ import os
 import sys
 import re
 import sqlite3
+import fcntl
+from collections import deque
 from email.mime.text import MIMEText
 from datetime import datetime
 
@@ -85,17 +87,29 @@ CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 #                 trusting it: across ~17 forensically-captured events on our
 #                 hardware it never once demonstrably fixed a stall, and
 #                 ERR-0005 suspects reset #10 caused a strictly worse mode.
-#   restart_unit  marvin: `systemctl restart <REMEDY_UNIT>`. weewx.service is
-#                 `docker run --rm` with `ExecStartPre=docker rm -f`, so a
-#                 restart IS the full container recreate -- the remedy that
-#                 actually resolved ERR-0005, which the Foundation monitor could
-#                 only reconstruct via `docker inspect` and mail to a human.
+#   restart_unit  marvin: REMEDY_SYSTEMCTL's prefix + `restart <REMEDY_UNIT>` --
+#                 NOT literally bare `systemctl` (ops#274: t-weewx's sudoers
+#                 only grants `marvin-own weewx <verb> <target>`, so the
+#                 deployment's own Environment= line supplies whatever prefix
+#                 that box actually allows; see REMEDY_SYSTEMCTL below).
+#                 weewx.service is `docker run --rm` with
+#                 `ExecStartPre=docker rm -f`, so a restart IS the full
+#                 container recreate -- the remedy that actually resolved
+#                 ERR-0005, which the Foundation monitor could only
+#                 reconstruct via `docker inspect` and mail to a human.
 #   none          detect and escalate only; never act. The honest setting for
 #                 any host where no remedy has been shown to work.
 #
 # Every mode keeps the SAME escalation discipline (RESET_MAX_TRIES, the verify
 # window, one email per outage). Only the action in the middle changes.
-REMEDY_MODE = os.environ.get('REMEDY_MODE', 'usb_reset')
+#
+# Exactly these three strings are accepted, in lowercase. Anything else (a typo,
+# 'NONE', 'systemd', an empty value) is logged at startup and treated as 'none'
+# (#404). The dispatch used to fall through to the USB reset for it, so a bad
+# value ran the one remedy the marvin unit forbids while the log denied it.
+REMEDY_MODES = ('usb_reset', 'restart_unit', 'none')
+_remedy_mode_env = os.environ.get('REMEDY_MODE', 'usb_reset')
+REMEDY_MODE = _remedy_mode_env if _remedy_mode_env in REMEDY_MODES else 'none'
 REMEDY_UNIT = os.environ.get('REMEDY_UNIT', 'weewx.service')
 # How to invoke systemctl. marvin's tenant runs unprivileged, so this is the
 # seam where a deployment supplies whatever it is actually allowed to use
@@ -205,20 +219,41 @@ RF_TX_PER_MIN = float(os.environ.get('RF_TX_PER_MIN', 60.0 / 2.8125))
 # Env-overridable (e.g. RF_REPORT_INTERVAL_HOURS in monitor.env).
 RF_REPORT_INTERVAL_HOURS = max(1, min(24, int(os.environ.get('RF_REPORT_INTERVAL_HOURS', 6))))
 
+# --- ISS low-battery flag (#394, DEC-0203) ---
+# The driver archives the ISS's battery-low bit as txBatteryStatus, and weewx keeps
+# the LAST packet's value for each minute. Through 2026-09-28 it was set in exactly
+# 10 archived minutes, every one a lone minute at a freeze or reception-collapse
+# onset (rxCheckPercent 2-19%): corrupt frames, not a battery. A weak battery sets
+# the bit on every packet it sends, so it shows in minute after minute of healthy
+# reception. The alert therefore counts only minutes whose own reception was
+# healthy, and needs several of them in one reporting block. Checked with the
+# RF reception summary, every RF_REPORT_INTERVAL_HOURS.
+BATTERY_HEALTHY_RX_PCT  = 50  # a minute counts only if its rxCheckPercent >= this
+BATTERY_LOW_MIN_MINUTES = 5   # healthy flagged minutes in one block that mean "low"
+
 # --- PID guard ---
 # '--test-alert' bypasses the guard entirely: it sends one test email and exits,
 # and must NOT touch the running monitor's pidfile.
+#
+# Uses flock, not a PID-existence check: `/proc/<pid>` existing only means SOME
+# process holds that number, not that it's a prior monitor instance. Across a
+# reboot, systemd's own docker-run process can land on the exact PID the old
+# monitor happened to use, and the old check treated that as "still running"
+# forever (every restart attempt saw the same live-but-foreign PID and exited).
+# flock is scoped to the open file description, cleared by the kernel the
+# moment a process exits or the box reboots -- no staleness window to hit.
 _TEST_ALERT = '--test-alert' in sys.argv
 if not _TEST_ALERT:
-    if os.path.exists(PIDFILE):
-        old = open(PIDFILE).read().strip()
-        if old and os.path.exists(f'/proc/{old}'):
-            print(f'Already running (PID {old}), exiting')
-            sys.exit(0)
-    with open(PIDFILE, 'w') as f:
-        f.write(str(os.getpid()))
-    import atexit
-    atexit.register(lambda: os.remove(PIDFILE) if os.path.exists(PIDFILE) else None)
+    _pidfile_fh = open(PIDFILE, 'a+')
+    try:
+        fcntl.flock(_pidfile_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print('Already running (lock held), exiting')
+        sys.exit(0)
+    _pidfile_fh.seek(0)
+    _pidfile_fh.truncate()
+    _pidfile_fh.write(str(os.getpid()))
+    _pidfile_fh.flush()
 
 # --- Helpers ---
 def log(msg):
@@ -226,6 +261,11 @@ def log(msg):
     with open(LOG, 'a') as f:
         f.write(line + '\n')
         f.flush()
+
+# The REMEDY_MODE check above runs before log() exists, so its verdict is reported here.
+if REMEDY_MODE != _remedy_mode_env:
+    log(f"REMEDY_MODE={_remedy_mode_env!r} is not one of {', '.join(REMEDY_MODES)}; "
+        f"treating it as none: no automatic remedy will run (#404)")
 
 def send_email(subject, body):
     try:
@@ -646,6 +686,17 @@ def campaign_inhibited():
     return os.path.exists(CAMPAIGN_INHIBIT)
 
 
+def remedy_target():
+    """The function REMEDY_MODE dispatches to, or None when the mode takes no action.
+
+    The one place a mode becomes an operation (#404). reset_dongle() runs what this
+    returns and remedy_action() describes it, so the log and the action cannot
+    disagree. Anything that is not an action mode ('none', or a value that somehow
+    got past the import check) maps to None, never to a reset. Looked up at call
+    time so a test can replace do_reset or do_restart_unit."""
+    return {'usb_reset': do_reset, 'restart_unit': do_restart_unit}.get(REMEDY_MODE)
+
+
 def remedy_action():
     """Human name of the action REMEDY_MODE will actually take.
 
@@ -653,10 +704,12 @@ def remedy_action():
     logs named an operation that had stopped happening, and a reader reasoning
     from them reasons about the wrong mechanism. Now that the action is
     mode-selected, a single hardcoded string would be that defect by
-    construction."""
-    if REMEDY_MODE == 'restart_unit':
+    construction. It asks remedy_target() what will run, so it names the operation
+    that is dispatched whatever REMEDY_MODE holds (#404)."""
+    target = remedy_target()
+    if target is do_restart_unit:
         return f'{REMEDY_SYSTEMCTL} restart {REMEDY_UNIT}'
-    if REMEDY_MODE == 'usb_reset':
+    if target is do_reset:
         return f'{USB_RESET_ACTION} via {USB_RESET_SCRIPT}'
     return 'no automatic remedy (REMEDY_MODE=none)'
 
@@ -715,7 +768,8 @@ def reset_dongle(last_reset, notify=True):
         log(f"SKIP remedy: campaign inhibit present ({CAMPAIGN_INHIBIT}); "
             f"would have run {remedy_action()}")
         return last_reset
-    if REMEDY_MODE == 'none':
+    target = remedy_target()
+    if target is None:
         log("SKIP remedy: REMEDY_MODE=none; detection and escalation only")
         return last_reset
     if now - last_reset < RESET_CD:
@@ -723,7 +777,6 @@ def reset_dongle(last_reset, notify=True):
         return last_reset
     log(f"REMEDY: {remedy_action()}")
     import threading
-    target = do_restart_unit if REMEDY_MODE == 'restart_unit' else do_reset
     t = threading.Thread(target=target, kwargs={'notify': notify}, daemon=True)
     t.start()
     return time.time()
@@ -1084,12 +1137,109 @@ def format_reception_summary(summary, label):
                      f"{summary['records']}")
     lines.append("")
     lines.append("Note: received = per-record rxCheckPercent x physical TX rate, each record "
-                 "clamped at 100%. The driver floor-divides the archive period by the loop "
-                 f"period (60 s -> {int(RF_TX_PER_MIN)}, a 59 s period -> {int(RF_TX_PER_MIN) - 1}) "
-                 f"against {RF_TX_PER_MIN:.2f} real transmissions/min, so a fully received minute "
-                 "reads 101-105% (~103% mean, measured since DEC-0135; #313). The clamp keeps "
-                 "'dropped' a lower bound on real loss instead of netting good hours negative.")
+                 "clamped at 100%. Before #317 (DEC-0137-0139, shipped v2.0.16) the driver "
+                 "floor-divided the archive period by the loop period, so a fully received "
+                 "minute read 101-105% (~103% mean, DEC-0135; #313) and the clamp did real work. "
+                 "#317 denominates by the ISS's own inter-arrival clock instead, so a fully "
+                 "received minute now reads exactly 100% by construction -- the clamp stays as a "
+                 "safety net, not the primary source of accuracy, and 'dropped' remains a lower "
+                 "bound on real loss either way.")
     return "\n".join(lines)
+
+
+def summarize_battery_rows(rows):
+    """Count one block's ISS battery-low minutes (#394). ROWS are (dateTime,
+    rxCheckPercent, txBatteryStatus). A minute with no flag value carries no
+    battery information and is skipped. Returns None when no row carries a flag
+    at all (nothing to report), else a dict:
+      healthy         -- minutes with rxCheckPercent >= BATTERY_HEALTHY_RX_PCT
+      flagged_healthy -- of those, how many carry the flag
+      flagged_other   -- flagged minutes with collapsed or NULL reception: the
+                         corrupt-frame class, reported but never alerted on
+      low             -- flagged_healthy reached BATTERY_LOW_MIN_MINUTES"""
+    healthy = flagged_healthy = flagged_other = 0
+    seen = False
+    for _ts, rx, flag in rows:
+        if flag is None:
+            continue
+        seen = True
+        good = rx is not None and rx >= BATTERY_HEALTHY_RX_PCT
+        if good:
+            healthy += 1
+        if flag > 0:
+            if good:
+                flagged_healthy += 1
+            else:
+                flagged_other += 1
+    if not seen:
+        return None
+    return {'healthy': healthy, 'flagged_healthy': flagged_healthy,
+            'flagged_other': flagged_other,
+            'low': flagged_healthy >= BATTERY_LOW_MIN_MINUTES}
+
+
+def db_battery_summary(start_ts, end_ts, db_path=None):
+    """Read txBatteryStatus + rxCheckPercent for [START_TS, END_TS) from the archive
+    DB (read-only) and return summarize_battery_rows() of it, or None. Any DB error
+    is logged and swallowed, like db_reception_summary(): a battery line is never
+    worth the monitor dying for."""
+    db_path = db_path or ARCHIVE_DB
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        try:
+            rows = con.execute(
+                "SELECT dateTime, rxCheckPercent, txBatteryStatus FROM archive "
+                "WHERE dateTime >= ? AND dateTime < ? ORDER BY dateTime",
+                (start_ts, end_ts)).fetchall()
+        finally:
+            con.close()
+    except Exception as e:
+        log(f"DB BATTERY SUMMARY ERROR: {e}")
+        return None
+    return summarize_battery_rows(rows)
+
+
+def format_battery_line(b):
+    """One line for the RF reception email: OK / watch / LOW, plus any flagged
+    minutes the healthy-reception gate set aside."""
+    if b['low']:
+        line = (f"ISS battery: LOW -- flag set in {b['flagged_healthy']} of {b['healthy']} "
+                f"healthy-reception minutes")
+    elif b['flagged_healthy']:
+        line = (f"ISS battery: watch -- flag set in {b['flagged_healthy']} of {b['healthy']} "
+                f"healthy-reception minutes (alert at {BATTERY_LOW_MIN_MINUTES})")
+    else:
+        line = f"ISS battery: OK -- flag clear in all {b['healthy']} healthy-reception minutes"
+    if b['flagged_other']:
+        line += (f"; {b['flagged_other']} more flagged minute(s) with collapsed reception "
+                 f"set aside (corrupt-frame class, #394)")
+    return line
+
+
+def battery_alert_decision(b, alerted):
+    """Hysteresis for the one-shot low-battery email: (send_now, alerted_after).
+    Fires once when a block reads LOW, re-arms only after a fully clear block, and
+    a 'watch' block (a few flagged minutes) changes nothing. A dying cell that
+    flags at night and clears by day therefore re-alerts about once a day."""
+    if b is None:
+        return False, alerted
+    if b['low']:
+        return (not alerted), True
+    if b['flagged_healthy'] == 0:
+        return False, False
+    return False, alerted
+
+
+def send_battery_alert(b, label):
+    body = (f"The ISS set its battery-low flag in {b['flagged_healthy']} of {b['healthy']} "
+            f"minutes with healthy reception, {label}.\n\n"
+            f"A lone flagged minute is usually a corrupt frame at a reception collapse "
+            f"(#394). This many, with reception healthy, is the ISS reporting its own "
+            f"supply: replace the ISS battery (the CR123A lithium cell on the SIM board).\n\n"
+            f"Checked every {RF_REPORT_INTERVAL_HOURS} h with the RF reception summary. "
+            f"This alert fires once and re-arms after a block with the flag clear.")
+    log(f"BATTERY LOW: {format_battery_line(b)} ({label})")
+    send_email(f"{STATION_NAME}: ISS battery low", body)
 
 
 def wu_record_key(line):
@@ -1108,13 +1258,53 @@ def wu_record_key(line):
     m = WU_RECORD_RE.search(line)
     return m.group(1) if m else line
 
+def classify_reception_alert(recent_counts):
+    """Is a sustained reception alert a FULL OUTAGE or mere degradation? (#373)
+
+    Two independent signals, either one sufficient -- cross-referenced rather
+    than trusted alone (the same shape ops/freeze_baseline.py's classify()
+    uses for RF-dead vs freeze): every window in the current sustain streak
+    saw literally zero packets, not just below WU_RF_MIN_PCT; or the driver's
+    OWN watchdog has already given up (WD['escalated'] -- a stall past
+    RESET_MAX_TRIES, or an immediate 'not running' exit). Either alone means
+    "nothing is coming back on its own without intervention"; a plain
+    below-threshold window with the driver still trying does not.
+
+    RECENT_COUNTS is the rolling record of the last WU_RF_SUSTAIN window counts,
+    never the 5-minute period list, which main() empties on its own cadence
+    (#403).
+    """
+    zero_windows = all(c == 0 for c in recent_counts[-WU_RF_SUSTAIN:])
+    escalated = WD['escalated']
+    if not (zero_windows or escalated):
+        return False, ''
+    reasons = []
+    if zero_windows:
+        reasons.append('zero packets in every recent window')
+    if escalated:
+        reasons.append('driver watchdog already escalated')
+    return True, '; '.join(reasons)
+
+
 def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
                             wu_in_alert, wu_alert_sent_at, wu_repeat_sent_at,
-                            wu_hourly_buckets, now):
-    """Close a 60s reception window. Returns updated state tuple."""
+                            wu_hourly_buckets, now, wu_recent_counts=None):
+    """Close a 60s reception window. Returns updated state tuple.
+
+    WU_RECENT_COUNTS is the rolling record of the last WU_RF_SUSTAIN window counts,
+    a deque(maxlen=WU_RF_SUSTAIN) that main() owns and never empties. FULL OUTAGE
+    classification and the alert averages read it, not wu_period_counts. That list
+    is emptied every WU_RF_LOG_INTERVAL for the RECEPTION: line, so its "last five
+    windows" depended on where in the 5-minute cycle the alert fell (#403). A
+    caller that never empties wu_period_counts may omit the record."""
     try:
         pct = wu_pct(wu_window_count)
         wu_period_counts.append(wu_window_count)
+        if wu_recent_counts is None:
+            wu_recent_counts = deque(wu_period_counts, maxlen=WU_RF_SUSTAIN)
+        else:
+            wu_recent_counts.append(wu_window_count)
+        recent = list(wu_recent_counts)[-WU_RF_SUSTAIN:]
         log(f"WINDOW: {wu_window_count}/{WU_RF_EXPECTED} ({pct:.0f}%)")
 
         # Store in hourly bucket
@@ -1142,24 +1332,30 @@ def close_reception_window(wu_window_count, wu_period_counts, wu_bad_windows,
             wu_in_alert = True
             wu_alert_sent_at = now
             wu_repeat_sent_at = now
-            avg = (sum(wu_period_counts[-WU_RF_SUSTAIN:]) / (WU_RF_SUSTAIN * WU_RF_EXPECTED)) * 100
-            log(f"RECEPTION ALERT: {wu_bad_windows} consecutive windows below {WU_RF_MIN_PCT}%, avg {avg:.0f}%")
+            avg = wu_pct(sum(recent) / len(recent))
+            full_outage, reason = classify_reception_alert(recent)
+            log(f"RECEPTION ALERT: {'FULL OUTAGE -- ' if full_outage else ''}"
+                f"{wu_bad_windows} consecutive windows below {WU_RF_MIN_PCT}%, avg {avg:.0f}%")
             episode_open(avg, now)
             send_email(
-                f"{STATION_NAME}: RF reception LOW",
-                f"WU-RF reception below {WU_RF_MIN_PCT}% for {wu_bad_windows} consecutive minutes.\n"
+                f"{STATION_NAME}: RF reception {'DOWN' if full_outage else 'LOW'}",
+                f"WU-RF reception below {WU_RF_MIN_PCT}% for {wu_bad_windows} consecutive minutes"
+                f"{f' ({reason})' if full_outage else ''}.\n"
                 f"Average over last {wu_bad_windows} windows: {avg:.0f}%\n"
                 f"Alert time: {datetime.now()}"
             )
         elif wu_in_alert and (now - wu_repeat_sent_at) >= REPEAT:
             wu_repeat_sent_at = now
-            avg = (sum(wu_period_counts[-WU_RF_SUSTAIN:]) / (WU_RF_SUSTAIN * WU_RF_EXPECTED)) * 100
+            avg = wu_pct(sum(recent) / len(recent))
+            full_outage, reason = classify_reception_alert(recent)
             episode_note_avg(avg)
             td = int(now - wu_alert_sent_at)
-            log(f"RECEPTION REPEAT: still low {avg:.0f}% after {td//60}min")
+            log(f"RECEPTION REPEAT: still {'FULL OUTAGE' if full_outage else 'low'} "
+                f"{avg:.0f}% after {td//60}min")
             send_email(
-                f"{STATION_NAME}: RF reception STILL LOW",
-                f"WU-RF reception still below {WU_RF_MIN_PCT}% — ongoing for {td//60}min.\n"
+                f"{STATION_NAME}: RF reception STILL {'DOWN' if full_outage else 'LOW'}",
+                f"WU-RF reception still below {WU_RF_MIN_PCT}% — ongoing for {td//60}min"
+                f"{f' ({reason})' if full_outage else ''}.\n"
                 f"Average over last {wu_bad_windows} windows: {avg:.0f}%\n"
                 f"As of: {datetime.now()}"
             )
@@ -1180,6 +1376,7 @@ def main():
     wu_window_start   = time.time()
     wu_window_epochs  = set()   # unique record epochs seen this window (DEC-0024)
     wu_period_counts  = []
+    wu_recent_counts  = deque(maxlen=WU_RF_SUSTAIN)   # #403: the 5-min log flush never empties it
     wu_period_start   = time.time()
     wu_bad_windows    = 0
     wu_in_alert       = False
@@ -1188,6 +1385,7 @@ def main():
     wu_first_seen     = False
     wu_hourly_buckets = {}
     wu_report_start   = period_floor(time.time(), RF_REPORT_INTERVAL_HOURS)
+    battery_alerted   = False   # #394 one-shot latch; a restart re-arms it
 
     # S82b (#180): pick up an episode a previous monitor process left open.
     # wu_in_alert is re-derived from the restored onset (the two are the same
@@ -1221,6 +1419,7 @@ def main():
             wu_window_start  = now
             wu_window_epochs = set()
             wu_period_counts = []
+            wu_recent_counts.clear()
             wu_period_start  = now
             wu_bad_windows   = 0
             wu_first_seen    = False
@@ -1301,6 +1500,7 @@ def main():
             wu_window_start   = now
             wu_window_epochs  = set()
             wu_period_counts  = []
+            wu_recent_counts.clear()
             wu_period_start   = now
             wu_bad_windows    = 0
             wu_first_seen     = False
@@ -1313,7 +1513,7 @@ def main():
              wu_hourly_buckets) = close_reception_window(
                 len(wu_window_epochs), wu_period_counts, wu_bad_windows,
                 wu_in_alert, wu_alert_sent_at, wu_repeat_sent_at,
-                wu_hourly_buckets, now)
+                wu_hourly_buckets, now, wu_recent_counts)
             wu_window_start = wu_window_start + WU_RF_WINDOW
             wu_window_epochs = set()
             # S62: judge the pending reset now that a fresh window has closed,
@@ -1325,7 +1525,7 @@ def main():
         # --- Reception: log 5-min summary ---
         if wu_first_seen and (now - wu_period_start) >= WU_RF_LOG_INTERVAL:
             if wu_period_counts:
-                avg = (sum(wu_period_counts) / len(wu_period_counts) / WU_RF_EXPECTED) * 100
+                avg = wu_pct(sum(wu_period_counts) / len(wu_period_counts))
                 maintained = "OK" if avg >= WU_RF_MIN_PCT else "LOW"
                 log(f"RECEPTION: {avg:.0f}% avg over last {len(wu_period_counts)} windows "
                     f"[{maintained}] (bad windows: {wu_bad_windows})")
@@ -1349,11 +1549,18 @@ def main():
                 log(f"RECEPTION SUMMARY (WU-scrape fallback): sending for {label}")
             else:
                 body = None
+            # #394: the ISS battery flag rides the same block, from the same archive.
+            battery = db_battery_summary(wu_report_start, block)
+            if body and battery:
+                body += "\n\n" + format_battery_line(battery)
             if body:
                 # Logged, not just emailed (ops#257 limb 3): the email-only path meant
                 # this summary was unreachable by any ad-hoc tenant read.
                 log(body)
                 send_email(f"{STATION_NAME}: RF Reception — {label}", body)
+            send_now, battery_alerted = battery_alert_decision(battery, battery_alerted)
+            if send_now:
+                send_battery_alert(battery, label)
             wu_hourly_buckets = {}
             wu_report_start   = block
 

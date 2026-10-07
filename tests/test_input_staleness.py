@@ -20,6 +20,7 @@ pidfile guard).
 
 Run:  .venv/bin/python -m pytest tests/test_input_staleness.py
 """
+import importlib.util
 import os
 import sys
 import time
@@ -189,12 +190,21 @@ def test_remedy_action_names_what_will_actually_happen(monkeypatch):
     assert wm.USB_RESET_ACTION in wm.remedy_action()
 
 
-def test_default_mode_preserves_legacy_behavior():
+def test_default_mode_preserves_legacy_behavior(monkeypatch, tmp_path):
     """This is a published extension. An existing Synology install must not
-    silently change what it does because marvin needed something else."""
-    assert os.environ.get('REMEDY_MODE') in (None, 'usb_reset') or True
-    # The module default, read at import, is the legacy body.
-    assert wm.REMEDY_MODE in ('usb_reset', 'restart_unit', 'none')
+    silently change what it does because marvin needed something else.
+
+    The default is read at import, so this loads a private copy of the module with
+    REMEDY_MODE removed from the environment (the shared `wm` is left alone). The
+    assertion once ended in `or True` and accepted every mode, so changing the
+    default to another mode left it green (#404)."""
+    monkeypatch.delenv("REMEDY_MODE", raising=False)
+    monkeypatch.setenv("MONITOR_LOG", str(tmp_path / "monitor.log"))
+    monkeypatch.setattr(sys, "argv", ["weewx_monitor.py", "--test-alert"])
+    spec = importlib.util.spec_from_file_location("weewx_monitor_default_probe", wm.__file__)
+    fresh = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fresh)
+    assert fresh.REMEDY_MODE == 'usb_reset'
 
 
 def test_restart_unit_mode_dispatches_to_the_unit_restart(monkeypatch):

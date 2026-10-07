@@ -101,6 +101,11 @@ DOCKER="${RX_DOCKER:-/usr/local/bin/docker}"
 RESTART_MODE="${RX_RESTART_MODE:-docker}"     # docker | systemd
 RESTART_UNIT="${RX_RESTART_UNIT:-weewx.service}"
 SYSTEMCTL="${RX_SYSTEMCTL:-systemctl}"
+# Read-only unit queries (`cat`, `is-active`). $SYSTEMCTL is the privileged
+# restart path and on marvin it is `sudo -n marvin-own weewx`, whose grant has
+# no `cat` or `is-active` verb (MARVIN-DEC-0189, weewx#423): the script now runs
+# as t-weewx, so reads go through plain systemctl, which needs no privilege.
+READ_SYSTEMCTL="${RX_READ_SYSTEMCTL:-systemctl}"
 
 # How stale the monitor's log may be before its reception signal is untrustworthy.
 # The abort tripwire and the RF-dead pause guard BOTH read MONLOG; if nothing is
@@ -158,6 +163,11 @@ LOCK_STALE_SECS=1800     # a holder older than this is hung, not working: the
 #         upstream sums them (verified lheijst/rtldavis master, DEC-0059).
 #         -fc 0 -ppm 0 everywhere: changing them between campaigns would
 #         confound the LNA contrast (DEC-0064).
+#   T   — the SWAP-PATH TEST arm (S148, weewx#423): prod's own settings. The live
+#         cmd carries no -ex, and rtldavis's -ex defaults to 0, so T differs from
+#         live by an explicit default only: the write is observable, the
+#         receiver is not changed. Its own label keeps a path test's samples out
+#         of every campaign arm's harvest.
 arm_cmd() {
   case "$1" in
     P496) echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 0" ;;
@@ -171,6 +181,7 @@ arm_cmd() {
     B)    echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 0"  ;;
     C)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 50" ;;
     D)    echo "    cmd = /usr/local/bin/rtldavis -gain 496 -v -fc 0 -ppm 0 -ex 50" ;;
+    T)    echo "    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0 -ex 0"  ;;
     *) return 1 ;;
   esac
 }
@@ -299,6 +310,15 @@ arm_cmd() {
 # bar and the pilot shortlists no candidate. Gain holds at 372. Schedule stood
 # down below — the gain axis is closed at marvin, do not re-sweep it without a
 # new reason.
+#
+# RAN AND CLOSED: the S148 swap-path test (weewx#423), not a campaign. The
+# first end-to-end arm swap with the script running as t-weewx, driven by two
+# hand-started passes of weewx-rx-experiment.service (no timer, no `install`;
+# the tenant-root snapshot was byte-identical to the live conf and the state
+# file was seeded by hand). 2026-10-01: NONE -> T at 21:04:30 (restart through
+# the marvin-own grant, healthy in 106 s via `systemctl is-active`), T ->
+# BASELINE at 22:31:22 (live conf restored byte-exact, mode 0600 kept, harvest
+# and mail ran). Schedule stood down below (DEC-0096).
 SCHEDULE="
 "
 
@@ -495,7 +515,9 @@ preflight() {
     systemd)
       command -v "${SYSTEMCTL%% *}" >/dev/null 2>&1 \
         || { echo "PREFLIGHT FAIL: systemctl not found ($SYSTEMCTL)" >&2; rc=1; }
-      $SYSTEMCTL cat "$RESTART_UNIT" >/dev/null 2>&1 \
+      command -v "${READ_SYSTEMCTL%% *}" >/dev/null 2>&1 \
+        || { echo "PREFLIGHT FAIL: systemctl not found ($READ_SYSTEMCTL, set RX_READ_SYSTEMCTL)" >&2; rc=1; }
+      $READ_SYSTEMCTL cat "$RESTART_UNIT" >/dev/null 2>&1 \
         || { echo "PREFLIGHT FAIL: unit $RESTART_UNIT not known to systemd" >&2; rc=1; }
       ;;
     *)
@@ -562,13 +584,27 @@ preflight() {
 # this arithmetic. Do not lower this without redoing it — and note the loop is
 # ALSO slower than its nominal sleep, because each pass greps a multi-MB log.
 HEALTH_TRIES=60
+
+# Is weewx up right now? Docker mode asks docker. systemd mode asks the unit,
+# because t-weewx has no docker group on marvin, so `docker inspect` there would
+# fail every pass and health_ok would time out on a healthy swap (weewx#423).
+# The unit is `docker run --rm` in the foreground, so `active` means the container
+# is running; `activating` (ExecStartPre, boot) correctly counts as not yet.
+weewx_running() {
+  if [ "$RESTART_MODE" = "systemd" ]; then
+    $READ_SYSTEMCTL is-active --quiet "$RESTART_UNIT" >/dev/null 2>&1
+    return $?
+  fi
+  [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" = "true" ]
+}
+
 health_ok() {
   say_dry "health check" && return 0
   local before after i
   before="$(grep -c 'Added record' "$WXLOG" 2>/dev/null || echo 0)"
   for i in $(seq 1 "$HEALTH_TRIES"); do
     sleep 5
-    [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" = "true" ] || continue
+    weewx_running || continue
     after="$(grep -c 'Added record' "$WXLOG" 2>/dev/null || echo 0)"
     [ "$after" -gt "$before" ] && return 0
   done
