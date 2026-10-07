@@ -18,6 +18,12 @@ under [Pre-S16].
   flagged ARCHIVE STALLED, as expected). `:v2.0.20` pushed to Docker Hub with `marvinctl push` at
   22:19 ET, Hub's digest equal to prod's (`f617c9ca…`). Tagged `v2.0.20` on `9a86c97` with a GitHub
   release.
+- **`dev` promoted to `main` as v2.0.20, tag `prod-baseline-20261006`** (106 commits, S122 → S150).
+  Found while doing it: `main` was v2.0.16's promotion (`prod-baseline-20260904`, #324) plus the
+  misrouted #338, not v2.0.13 as BOOT and CONSTANTS had said since S122; both corrected. The merge
+  conflicted in ten docs and `ops/campaign_analyze.py` (#338's hunks against `dev`'s later
+  rewrites, #339 having already carried its content to `dev`), every conflict resolved in `dev`'s
+  favor and the result's tree checked equal to `dev`'s.
 - **`pressure_service.py` reads `bar_absolute` beside `bar_sea_level` and injects it as `pressure`**
   when the packet's is null; weewx's `prefer_hardware` keeps it, so the archive's station pressure is
   measured and `altimeter` derives from it instead of from the reversed sea-level value. Without the
