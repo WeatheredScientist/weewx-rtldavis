@@ -8,7 +8,7 @@
 #
 #    Copyright (c) 2025 Vince Skahan <vinceskahan@gmail.com>
 #
-# This is derived almost verbatim from smeisens/weewx-wundergroundlike (Github), weewx 5.2.0 restx.py 
+# This is derived almost verbatim from smeisens/weewx-wundergroundlike (Github), weewx 5.2.0 restx.py
 # which is:
 #
 #    Copyright (c) 2009-2024 Tom Keffer <tkeffer@gmail.com>
@@ -27,6 +27,17 @@
 #               is never set (the URL is the hardcoded OGOXE_API_URL constant), so
 #               it always logged None. It now logs the URL actually used.
 #   2026-07-05  added the SPDX-License-Identifier line above.
+#   2026-07-04  __init__ calls weewx.engine.StdService.__init__ where upstream
+#               calls super().__init__, so StdWunderground.__init__ never runs and
+#               this class starts no Wunderground threads of its own. Already in
+#               the file when it entered this repo (first commit 253cbcf).
+#               Deliberate (#408, S146): with [[Wunderground]] configured, the
+#               parent init would start a second set of Wunderground threads and
+#               bind new_archive_record twice; this class builds its own thread.
+#   2026-07-05  rewrote two comments (above the debug log and above archive_queue)
+#               that contradicted each other about where server_url comes from.
+#   2026-09-29  removed trailing whitespace from two upstream lines (the comment
+#               ending "restx.py" and the log.info() call for the loaded config).
 #
 #   See CHANGES-FROM-UPSTREAM.md.
 #-----------------------------------------------------------------
@@ -75,7 +86,7 @@ class OgoxeUploader(weewx.restx.StdWunderground):
                       "with 'station', and 'password' in weewx.conf")
             return
 
-        log.info("OgoxeUploader: Configuration loaded for station %s", 
+        log.info("OgoxeUploader: Configuration loaded for station %s",
                  _ambient_dict.get('station', 'UNKNOWN'))
 
         # server_url is hardcoded (OGOXE_API_URL below), not from get_site_dict

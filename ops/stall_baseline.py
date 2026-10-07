@@ -59,79 +59,90 @@ USAGE
     ops/stall_baseline.py                # full report
     ops/stall_baseline.py --gap-min 45   # re-cluster at a different threshold
 
-Connection facts come from the environment or ~/.claude/nas.env, same posture as
-ops/soak_check.sh -- never from this PUBLIC repo (DEC-0012).
+Transport is `marvinctl --tenant weewx` (own-tenant self-service, DEC-0125/DEC-0128's
+proven shape, ported from the now-dead NAS-ssh transport at ops#286) -- no connection
+secrets, no env vars, nothing from this PUBLIC repo to manage (DEC-0012).
 """
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import subprocess
 import sys
 from datetime import datetime, timedelta
 
-LOGDIR = "/volume1/docker/weewx-rtldavis/logs"
+LOGDIR = "/srv/docker/weewx/logs"  # marvin path; DEC-0118 moved the tenant off the NAS
 STALL_SIG = "rtldavis process stalled"
 NOTRUN_SIG = "rtldavis process is not running"
+# `marvinctl grep` refuses any pattern containing whitespace (a space becomes two
+# remote tokens) -- `.` stands in for the literal space in each signature above,
+# same trick campaign_analyze.py's transport note documents.
+STALL_GREP = "rtldavis.process.stalled"
+NOTRUN_GREP = "rtldavis.process.is.not.running"
 TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
 
-def nas_env() -> tuple[str, str, str]:
-    """Port/user/host from the environment, falling back to ~/.claude/nas.env.
+def _marvinctl(*args: str, input: str | None = None, timeout: int = 60) -> str:
+    """One `marvinctl --tenant weewx` call. Read-only throughout."""
+    proc = subprocess.run(
+        ["marvinctl", "--tenant", "weewx", *args],
+        input=input, capture_output=True, text=True, timeout=timeout)
+    if proc.returncode != 0:
+        sys.exit(f"stall_baseline: marvinctl {args[0]} failed (rc={proc.returncode}): "
+                 f"{proc.stderr.strip()[:400]}")
+    return proc.stdout
 
-    The env file is sourced in a subshell and only the three values are echoed:
-    it is never read into this process's output, because anything a tool prints
-    lands in a transcript (DEC-0047).
+
+def _grep(pattern: str, path: str) -> list[str]:
+    """One `marvinctl grep` call, matching server-side (only hits cross the wire).
+
+    Exit code 1 means either zero matches or a missing path -- marvinctl reports
+    both that way. Either is zero lines here, matching the old ssh
+    `grep -h ... 2>/dev/null`'s tolerance for a rotated file that has aged out.
     """
-    port, user, host = (os.environ.get(k, "") for k in
-                        ("NAS_PORT", "NAS_USER", "NAS_HOST"))
-    if not (port and user and host):
-        envf = os.path.expanduser("~/.claude/nas.env")
-        if os.path.exists(envf):
-            out = subprocess.run(
-                ["bash", "-c",
-                 f'. "{envf}" >/dev/null 2>&1; '
-                 'printf "%s\\n%s\\n%s\\n" "$NAS_PORT" "$NAS_USER" "$NAS_HOST"'],
-                capture_output=True, text=True).stdout.splitlines()
-            if len(out) == 3:
-                port, user, host = (a or b for a, b in
-                                    zip((port, user, host), out))
-    if not (port and user and host):
-        sys.exit("stall_baseline: NAS_PORT/NAS_USER/NAS_HOST unset — export them "
-                 "or create ~/.claude/nas.env (see gitignored docs/LOCAL_INFRA.md).")
-    return port, user, host
+    proc = subprocess.run(
+        ["marvinctl", "--tenant", "weewx", "grep", pattern, path],
+        capture_output=True, text=True, timeout=60)
+    if proc.returncode == 1:
+        return []
+    if proc.returncode != 0:
+        sys.exit(f"stall_baseline: marvinctl grep failed (rc={proc.returncode}): "
+                 f"{proc.stderr.strip()[:400]}")
+    return proc.stdout.splitlines()
+
+
+def _log_files(prefix: str) -> list[str]:
+    """Filenames directly under LOGDIR starting with `prefix`.
+
+    `marvinctl ls` takes one directory, no glob -- filter an `ls -la`-style
+    listing client-side instead of the old shell glob (`weewx.log.20*`).
+    """
+    names = []
+    for line in _marvinctl("ls", LOGDIR).splitlines():
+        parts = line.split(None, 8)
+        if len(parts) < 9:
+            continue
+        name = parts[8]
+        if name.startswith(prefix):
+            names.append(name)
+    return sorted(names)
 
 
 def fetch() -> tuple[list[str], list[str], list[str], list[str]]:
-    """One ssh round trip. Greps NAS-side; only matching lines cross the wire."""
-    port, user, host = nas_env()
-    remote = (
-        f'cd {LOGDIR} 2>/dev/null || exit 1; '
-        f'echo "---FILES---"; ls -1 weewx.log weewx.log.20* 2>/dev/null; '
-        f'echo "---NOW---"; tail -n 1 weewx.log 2>/dev/null | cut -c1-19; '
-        f'echo "---STALL---"; grep -h "{STALL_SIG}" weewx.log weewx.log.20* 2>/dev/null; '
-        f'echo "---NOTRUN---"; grep -h "{NOTRUN_SIG}" weewx.log weewx.log.20* 2>/dev/null; '
-        f'echo "---DROUGHT---"; grep -hc "DATA DROUGHT" weewx.log weewx.log.20* 2>/dev/null'
-    )
-    r = subprocess.run(["ssh", "-p", port, f"{user}@{host}", remote],
-                       capture_output=True, text=True)
-    if r.returncode != 0 and not r.stdout:
-        sys.exit(f"stall_baseline: ssh failed — {r.stderr.strip()[:200]}")
-    files: list[str] = []
-    stalls: list[str] = []
-    notrun: list[str] = []
-    drought: list[str] = []
-    now: list[str] = []
-    cur: str | None = None
-    for line in r.stdout.splitlines():
-        if line.startswith("---"):
-            cur = line.strip("-")
-            continue
-        {"FILES": files, "NOW": now, "STALL": stalls,
-         "NOTRUN": notrun, "DROUGHT": drought}.get(cur, []).append(line)
+    """One `ls` plus a `grep` per rotated file, per signature. Ported from the
+    NAS-ssh transport (dead since DEC-0118's host move) to `marvinctl --tenant
+    weewx` (ops#286): grep still runs server-side, same as the old ssh form.
+    """
+    files = _log_files("weewx.log")
     if not files:
         sys.exit("stall_baseline: no log files found — is LOGDIR correct?")
+    stalls: list[str] = []
+    notrun: list[str] = []
+    for f in files:
+        path = f"{LOGDIR}/{f}"
+        stalls += _grep(STALL_GREP, path)
+        notrun += _grep(NOTRUN_GREP, path)
+    now = [ln[:19] for ln in _marvinctl("tail", f"{LOGDIR}/weewx.log", "1").splitlines()]
     return files, stalls, notrun, now
 
 

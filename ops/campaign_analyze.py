@@ -83,14 +83,15 @@ Campaign A NEEDS that `--since`: its aborted 2026-07-29 attempt shares the same
 apparatus log, and without a cutoff those blocks join the arm means. The tool warns
 and names the epoch, but it will not refuse — pass it.
 
-Connection facts come from the environment or ~/.claude/nas.env, never from this
-PUBLIC repo (DEC-0012): NAS_PORT / NAS_USER / NAS_HOST.
+Transport is `marvinctl --tenant weewx` (own-tenant self-service, DEC-0125/DEC-0128's
+proven shape) -- no connection secrets, no env vars, nothing from this PUBLIC repo
+to manage (DEC-0012).
 """
 
 from __future__ import annotations
 
 import argparse
-import os
+import json
 import re
 import statistics
 import subprocess
@@ -115,10 +116,16 @@ LEGENDS: Dict[str, Dict[str, str]] = {
           "P328": "pilot gain 328", "P207": "pilot gain 207"},
 }
 
-DEFAULT_LOG = "/volume1/docker/weewx-rtldavis/logs/rx_experiment.log"
+DEFAULT_LOG = "/srv/docker/weewx/logs/rx_experiment.log"
 CONTAINER = "weewx-rtldavis-v2"
-ARCHIVE_DB = "/opt/weewx-data/archive/weewx.sdb"
-DOCKER = "/usr/local/bin/docker"
+# `exec-ro` runs a fresh one-off container from the bare image, not the live
+# container -- it mounts the tenant root read-only at its own HOST path
+# (verified live: `mount` inside it shows `/srv/docker/weewx`, not a remap to
+# `/opt/weewx-data`), so this is a different path than the live container's own
+# in-container `/opt/weewx-data/archive/weewx.sdb`. Confirmed present and
+# readable this session; the venv (VENV_PY below) IS image-baked, so it needs
+# no such remap.
+ARCHIVE_DB = "/srv/docker/weewx/weewx-data/archive/weewx.sdb"
 VENV_PY = "/opt/weewx-venv/bin/python3"
 
 # The apparatus writes these; both carry a leading local timestamp. `nasctl grep`
@@ -197,10 +204,10 @@ def parse_blocks(lines: Sequence[str], settle_s: int,
                  now: Optional[int] = None) -> List[Block]:
     """Turn the apparatus log's swap/stop events into settled arm blocks.
 
-    Timestamps in that log are NAS-local; this converts with the LOCAL clock, so
-    the dev machine and the NAS must share a timezone. They do (same house), but
-    the assumption is stated rather than hidden -- a silent one-hour shear would
-    misattribute a whole block and look like a result.
+    Timestamps in that log are marvin-local; this converts with the LOCAL clock,
+    so the dev machine and marvin must share a timezone. They do (same house),
+    but the assumption is stated rather than hidden -- a silent one-hour shear
+    would misattribute a whole block and look like a result.
     """
     events: List[Tuple[int, Optional[str]]] = []
     for line in lines:
@@ -308,77 +315,81 @@ def summarize(recs: Sequence[Rec], blocks: Sequence[Block]) -> List[ArmStat]:
 
 # ── I/O ──────────────────────────────────────────────────────────────────────
 
-# The lower bound is resolved ON THE NAS, before the query runs. Resolving it
-# locally would mean asking for `dateTime>=0` and dragging the ENTIRE archive
-# across ssh to throw almost all of it away -- measured: that read does not
-# finish inside a 120 s timeout. The apparatus log's first timestamp is the
-# earliest a campaign row can exist, so it is the natural floor.
-REMOTE = r"""
-set -u
-LOG='@LOG@'
-SINCE=@LO@
-echo '===SWAPS==='
-grep -E 'swapping|ABORT|CAMPAIGN COMPLETE' "$LOG" 2>/dev/null || true
-if [ "$SINCE" -le 0 ]; then
-  first=$(grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' "$LOG" \
-          2>/dev/null | head -1)
-  SINCE=$(date -d "$first" +%s 2>/dev/null || echo 0)
-fi
-echo "===SINCE=$SINCE==="
-echo '===ROWS==='
-@DOCKER@ exec @CONTAINER@ @VENV_PY@ -c "
+# The query is fed to python3 on STDIN, never as a `-c` argument: `exec-ro`'s argv
+# path rejects any string containing quotes or parentheses, even with zero literal
+# whitespace in it (DEC-0124, tested with a base64/exec()-driven payload) -- real
+# Python cannot be expressed through argv at all. Stdin is the only working path,
+# proven live on Campaigns C and D (DEC-0125/DEC-0128, 1333 then more rows, exit 0).
+DB_QUERY = """
 import sqlite3
-db = sqlite3.connect('file:@DB@?mode=ro', uri=True)
-q = 'SELECT dateTime,interval,rxCheckPercent FROM archive WHERE dateTime>=$SINCE ORDER BY dateTime'
+db = sqlite3.connect('file:{db}?mode=ro', uri=True)
+q = 'SELECT dateTime,interval,rxCheckPercent FROM archive WHERE dateTime>={lo} ORDER BY dateTime'
 for dt, iv, pct in db.execute(q):
     print('%d,%s,%s' % (dt, '' if iv is None else iv, '' if pct is None else pct))
-"
 """
+
+_LEADING_TS_RE = re.compile("^" + _TS)
+
+
+def _marvinctl(*args: str, input: Optional[str] = None,
+              timeout: int = 60) -> str:
+    """One `marvinctl --tenant weewx` call. Read-only throughout."""
+    proc = subprocess.run(
+        ["marvinctl", "--tenant", "weewx", *args],
+        input=input, capture_output=True, text=True, timeout=timeout)
+    if proc.returncode != 0:
+        sys.exit(f"marvinctl {args[0]} failed (rc={proc.returncode}): "
+                 f"{proc.stderr.strip()[:400]}")
+    return proc.stdout
+
+
+def _resolve_image(container: str) -> str:
+    """The live container's own image, e.g. weatheredscientist/weewx-rtldavis:v2.0.16.
+
+    `exec-ro` takes an image, not a container name, and a hardcoded tag goes
+    stale every release (`CONSTANTS.md`'s release table changes it most
+    sessions) -- read it off the running container instead, every time.
+    """
+    info = json.loads(_marvinctl("inspect", container))
+    return info[0]["Config"]["Image"]
 
 
 def fetch(log_path: str, lo: int) -> Tuple[List[str], List[Rec]]:
-    """One ssh round-trip for both the apparatus log and the archive rows.
+    """Two `marvinctl --tenant weewx` calls: the apparatus log, then the archive rows.
 
-    Batched deliberately: CONVENTIONS warns that SSH to this box flakes on rapid
-    reconnects. Read-only throughout -- the DB is opened `mode=ro`.
+    Ported from the NAS-ssh transport (unreachable since DEC-0118's host move) to
+    the sanctioned marvin transport, proven live on Campaigns C and D
+    (DEC-0125/DEC-0128): `cat` for the log (tier 1, floor-allowed, own-tenant path)
+    and `exec-ro ... -- python3 -` for the DB (own resources, tier 2). No pre-
+    filtering of the log is needed on the way in -- `parse_blocks`/`attempt_starts`
+    already `.search()` each line for the patterns they want, so a raw `cat` of the
+    whole file is exactly as selective as the old remote `grep` was.
     """
-    port, user, host = (os.environ.get("NAS_PORT"), os.environ.get("NAS_USER"),
-                        os.environ.get("NAS_HOST"))
-    if not (port and user and host):
-        sys.exit("NAS_PORT/NAS_USER/NAS_HOST unset -- export them or create "
-                 "~/.claude/nas.env (see gitignored docs/LOCAL_INFRA.md).")
+    lines = _marvinctl("cat", log_path).splitlines()
 
-    script = (REMOTE
-              .replace("@LOG@", log_path)
-              .replace("@DOCKER@", DOCKER)
-              .replace("@CONTAINER@", CONTAINER)
-              .replace("@VENV_PY@", VENV_PY)
-              .replace("@DB@", ARCHIVE_DB)
-              .replace("@LO@", str(lo)))
-    proc = subprocess.run(
-        ["ssh", "-p", port, f"{user}@{host}", "bash -s"],
-        input=script, capture_output=True, text=True, timeout=180)
-    if proc.returncode != 0:
-        sys.exit(f"ssh failed (rc={proc.returncode}): {proc.stderr.strip()[:400]}")
+    if lo <= 0:
+        lo = 0
+        for line in lines:
+            m = _LEADING_TS_RE.match(line)
+            if m:
+                lo = _epoch(m.group(1))
+                break
 
-    swaps: List[str] = []
+    image = _resolve_image(CONTAINER)
+    query = DB_QUERY.format(db=ARCHIVE_DB, lo=lo)
+    out = _marvinctl("exec-ro", image, "--", VENV_PY, "-",
+                     input=query, timeout=180)
+
     recs: List[Rec] = []
-    section = ""
-    for line in proc.stdout.splitlines():
-        if line.startswith("==="):
-            section = line
+    for line in out.splitlines():
+        if not line:
             continue
-        if section.startswith("===SINCE="):
-            continue
-        if section == "===SWAPS===":
-            swaps.append(line)
-        elif section == "===ROWS===" and line:
-            parts = line.split(",")
-            if len(parts) == 3:
-                recs.append(Rec(int(parts[0]),
-                                int(parts[1]) if parts[1] else None,
-                                float(parts[2]) if parts[2] else None))
-    return swaps, recs
+        parts = line.split(",")
+        if len(parts) == 3:
+            recs.append(Rec(int(parts[0]),
+                            int(parts[1]) if parts[1] else None,
+                            float(parts[2]) if parts[2] else None))
+    return lines, recs
 
 
 # ── Report ───────────────────────────────────────────────────────────────────
@@ -433,7 +444,7 @@ def report(campaign: str, blocks: Sequence[Block], recs: Sequence[Rec],
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--campaign", default="A", help="A, B, or D (selects the arm legend)")
-    ap.add_argument("--log", default=DEFAULT_LOG, help="apparatus log on the NAS")
+    ap.add_argument("--log", default=DEFAULT_LOG, help="apparatus log on marvin")
     ap.add_argument("--settle", type=int, default=600,
                     help="seconds to drop after each swap (default 600, matching "
                          "rx_experiment.sh SETTLE_SECS)")

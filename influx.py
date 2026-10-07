@@ -194,7 +194,7 @@ import weewx.restx
 import weewx.units
 from weeutil.weeutil import to_bool, accumulateLeaves
 
-# '+ws.N' = PEP 440 local version: upstream base 0.20, WeatheredScientist rev 1.
+# '+ws.N' = PEP 440 local version: upstream base 0.20, WeatheredScientist patch N.
 # Not stock upstream -- see the modification notice at the top of this file.
 VERSION = "0.20+ws.2"
 

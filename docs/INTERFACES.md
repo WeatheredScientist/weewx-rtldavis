@@ -22,6 +22,13 @@ Written by `loop_json_writer.py` (a WeeWX `data_service`, DEC-0005) to
 only the path differs. `loop-data.txt` is served to the dashboard's ongoing polling at `/loopdata`
 by the eh-proxy (which lives in the dashboard's deployment, not this repo).
 
+Both paths are configurable (`[LoopJsonWriter]` `path` and `current_path`). The defaults above are
+what a stock install writes. **A consumer that bind-mounts these files must mount their directory,
+not the files.** Every write replaces a file by rename, and a single-file bind pins the original
+inode, so the consumer would read a frozen file forever. This project's own deployment writes both
+files into `weewx-data/feed/`, a directory holding nothing else, and the eh-proxy mounts that
+directory alone (DEC-0202).
+
 **`current.json` is a cold-load SNAPSHOT on its own slower cadence, not a second live feed
 (DEC-0093, S85).** It exists for a boot fetch — so a first-time visitor doesn't see em-dashes before
 the polling loop's first response lands (Cold-load Fix B, DEC-0051) — and is rewritten **at most
@@ -77,13 +84,30 @@ not this repo's.
   ever succeeded this run. Consumers wanting a staleness gate compare it to `dateTime` (both are
   epoch seconds); `barometer_inHg` itself still expires from the feed at 2 × `fetch_interval` as
   above.
-- **`pressure` and `altimeter` are honest nulls, not backfilled (S82b, #144; lands with v2.0.14).**
+- **`pressure` is measured from v2.0.20 (DEC-0209, `eaglehunt-ops#357`) and `altimeter` derives
+  from it. Before that, weewx derived both (S82b, #144; corrected S146).**
   The fetched sea-level value used to also backfill the internal `pressure` (station) and
   `altimeter` loop-packet keys — different quantities, so the archive's station-pressure column
-  carried sea-level numbers at this site's elevation (hlf#302). Per DEC-0006 they now stay null
-  (the ISS never transmits them), and the **archive columns go NULL from the v2.0.14 deploy
-  onward**. Neither key was ever part of this published loop-JSON contract; archive readers
-  (hyperlocal-forecast) get honest absence instead of a mislabeled value.
+  carried sea-level numbers at this site's elevation (hlf#302). DEC-0091 stopped that and left both
+  keys null in the loop packet. **The archive and InfluxDB columns were never NULL, though:** the
+  live conf carries `[StdWXCalculate][[Calculations]] pressure = prefer_hardware` and
+  `altimeter = prefer_hardware`, and weewx computes any such key that is `None`
+  (`wxservices.py:132`, 5.5.2). `pressure` was `PressureCooker.pressure` (`wxxtypes.py`): the
+  sea-level `barometer` run backward through a reduction formula using the station altitude, the
+  current temperature, the temperature 12 hours earlier from the archive, and humidity; `altimeter`
+  followed from it. Measured 2026-09-29: 10,002 of the last 7 days' 10,055 archive rows carried
+  both (29.46 inHg against a 30.04 sea-level `barometer`). The magnitude was right for a station
+  pressure, but the value was WeatherLink's own temperature-dependent reduction reversed, not a
+  reading. (S82b's text here said the columns "go NULL"; it had been checked against the loop
+  packet, never the archive.)
+  **From v2.0.20, `pressure_service.py` reads WeatherLink's `bar_absolute`** — the console's raw
+  barometer reading, taken from the same record as `bar_sea_level` — and injects it as `pressure`
+  when the packet's is null. `prefer_hardware` keeps it, so the archive's `pressure` and InfluxDB's
+  `pressure_inHg` are a measurement, and `altimeter`/`altimeter_inHg` derive from that measurement
+  (never injected: the station does not measure altimeter). If a response lacks `bar_absolute`, the
+  key stays null and weewx derives as before, with one warning per run. The boundary, its level
+  shift and its consumers (including CWOP, which posts `altimeter`) are `docs/DATA_ERRATA.md`
+  DISC-0002. Neither key is in this loop-JSON contract, and `barometer_inHg` is unchanged.
 
   Past its TTL a field is **omitted rather than frozen**, and the writer logs a `WARNING` naming the
   field. Before S48 the cache was unbounded, so a dead or SensorQC-rejected sensor emitted its last
@@ -91,6 +115,12 @@ not this repo's.
 - A field absent from the cache — never yet seen this run, **or expired** — is simply omitted;
   consumers must treat any field as possibly-missing. **A missing field means "no current value,"
   never "value unchanged."**
+- **`radiation` and `UV` read 0 in the dark because of config, not the driver (DEC-0080, DEC-0200).**
+  Each diode sensor's dark floor decodes to a small fixed code: radiation 1.758 W/m², UV 0.04 or
+  sometimes 0.02. `weewx.conf.example`'s `StdCalibrate` lines zero exactly those codes, and that
+  happens before every surface in this document (loop JSON, archive, InfluxDB, uploads). A
+  deployment without those lines emits the raw floor. On this station, rows written before each
+  line was applied still carry it: radiation before 2026-08-11, UV before 2026-09-27 17:40 ET.
 
 **Fields** (`packet_key → output_key`):
 

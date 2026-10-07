@@ -1,7 +1,7 @@
 # Changes from upstream
 
 **Status:** Source of truth for what this project changed in code it did not write.
-**Last updated:** 2026-09-04 (S123)
+**Last updated:** 2026-09-29 (S145)
 
 This project is a Docker distribution of a **modified** Davis/rtldavis receiver stack. It is not
 stock upstream, and several of the files it ships are other people's work with our patches on top.
@@ -51,8 +51,8 @@ suffix: upstream's base version, `+ws`, our revision.
 
 | File | Upstream version | Ours |
 |------|------------------|------|
-| `rtldavis.py` | `0.20` | `0.20+ws.5` |
-| `influx.py` | `0.20` | `0.20+ws.1` |
+| `rtldavis.py` | `0.20` | `0.20+ws.6` from v2.0.18 (v2.0.13 through v2.0.17 report `0.20+ws.5`) |
+| `influx.py` | `0.20` | `0.20+ws.2` |
 
 The suffix sorts after the base version and is unambiguous about its parent. `rtldavis.py` also logs
 `(fork of lheijst 0.20, patched by WeatheredScientist -- not stock upstream)` at startup, which
@@ -64,10 +64,11 @@ you see it, the baked driver is the one running).
 ## `rtldavis.py`
 
 Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 2025-12-20
-`re.compile` deprecation patch). Delta: **+1204 / −166 lines** (1422 → 2460 lines), recounted
-2026-09-04 (S123) — includes DEC-0135's driver-side repeat counters (`dedup_key`, `repeat_count`,
-`duplicate`) and #317's slot-count `rxCheckPercent` denominator (PR #319), both landed since the
-prior S97 count (**+815 / −149**, 1422 → 2088 lines).
+`re.compile` deprecation patch). Delta: **+1239 / −167 lines** (1422 → 2494 lines), recounted
+2026-09-28 (S145) at `7d06cbf` — includes hot swap (item 17), DEC-0135's driver-side repeat counters
+(`dedup_key`, `repeat_count`), #317's slot-count `rxCheckPercent` denominator (PR #319) and the
+widened co-rejection of item 18, all landed since the prior S97 count (**+815 / −149**, 1422 →
+2088 lines).
 
 The baseline is not vendored here — the Dockerfile fetches it at build time — so recount it rather
 than trusting this number:
@@ -109,11 +110,12 @@ contribution (see [Upstreaming](#upstreaming) below).
 | 7 | **Calm-air wind gate** | 2026-07-04 | Raw wind speed ≤ 2 with direction 0 is the 6410 hall-sensor floor, not wind. Record 0 speed and a **null** direction instead of a false "2 mph from due north" that pollutes wind roses. |
 | 8 | **freqError stored for US and NZ** | 2026-07-04 | Upstream stores frequency-error statistics only when `frequency == 'EU'`. We store for `EU`, `US` and `NZ` — the data is just as useful on 915 MHz, and this is a 915 MHz station. |
 | 9 | Lint / dead code | 2026-07-08 | Dropped unused imports (`timegm`, `fnmatch`, `string`), the dead `_fmt()`, and the unused `parse_readings()`. Bare `except:` → `except Exception:`. [DEC-0027] |
-| 11 | **Frame-level co-rejection** — a bounds failure condemns the whole frame | 2026-07-27 | Extends 6, which vetted each field independently — so a frame carrying *positive proof* of corruption could still have its other fields trusted. On 2026-07-27 one CRC-valid frame decoded humidity to 144.9 %RH (out of spec, rejected) and a wind byte to 39 mph from dead calm (in spec, under the delta cap, accepted) — the phantom became the archive interval's gust max and went out to ten external networks (ERR-0004). Every weather field rides the same 8-byte frame, so a **bounds** failure on any one of them now nulls all of them (`FRAME_WEATHER_KEYS`), skips the rain counter *without* resyncing `last_rain_count`, and moves no delta baselines. Diagnostics (battery flags, supercap, freqError, `pct_good`) deliberately survive: they describe the link, not the weather. A **delta** trip never co-rejects — a large step can be genuine weather; an impossible value cannot. Zero fitted parameters, so nothing can drift. Shipped in v2.0.9 (S52). [DEC-0054] |
+| 11 | **Frame-level co-rejection** — a bounds failure condemns the whole frame | 2026-07-27 | Extends 6, which vetted each field independently — so a frame carrying *positive proof* of corruption could still have its other fields trusted. On 2026-07-27 one CRC-valid frame decoded humidity to 144.9 %RH (out of spec, rejected) and a wind byte to 39 mph from dead calm (in spec, under the delta cap, accepted) — the phantom became the archive interval's gust max and went out to ten external networks (ERR-0004). Every weather field rides the same 8-byte frame, so a **bounds** failure on any one of them now nulls all of them (`FRAME_WEATHER_KEYS`), skips the rain counter *without* resyncing `last_rain_count`, and moves no delta baselines. Link diagnostics (freqError, `pct_good`) deliberately survive: the receiver measures them, so they describe the link, not the frame. (The frame's own battery flags survived too until #18, and supercap/solar power still do.) A **delta** trip never co-rejects — a large step can be genuine weather; an impossible value cannot. Zero fitted parameters, so nothing can drift. Shipped in v2.0.9 (S52). [DEC-0054] |
 
 | 13 | **Stall/drought self-classification** — `STALL DIAGNOSIS` + `DATA DROUGHT` log lines | 2026-08-11 | Seven sessions (S67–S73) could not tell outage classes apart after the fact: a mute child (process/USB fault), a child emitting but decoding nothing (RF-quiet), and genuine reception collapse all looked identical in the logs, and USB resets were fired blind at all three. The driver now counts raw stderr lines and hop-only packets since the last real data packet: the 150 s stall raise is preceded by a `STALL DIAGNOSIS` line (raw count 0 = mute; >0 = emitting), and a paced `DATA DROUGHT` line covers the RF-quiet case, which never trips the stall watchdog because hop packets reset it. Plus a 10-line stderr tail via `drain_stderr()` at every stall. |
 | 17 | **Hot swap of `-gain` / `-ex` via a watched control file** — no weewx or container restart | 2026-08-26 | Both are startup-only CLI flags on the Go binary, so upstream's only way to change them is a full restart; campaign work paid a 600 s settle window and a restart transient per swap. Opt-in via `hotswap_control_file` (unset = off, so stock behavior is unchanged). The driver polls that path about every 10 s at the top of `genLoopPackets`, and on an mtime change respawns the child with the new flags via the `shutdown()`/`startup(cmd, …)` path that already existed. **The control file accepts only bounds-checked `gain` (0–496) and `ex` (0–1000) integers, never a command string** — `cmd` reaches `shlex.split()` → `Popen`, so a raw-command channel would be arbitrary code execution for anything able to write that path. A swap resets the stall-watchdog counters and widens the threshold to 240 s until the first packet, because a respawned child restarts its radio init period (US: 133 s) and the normal 150 s watchdog — whose timer a respawn does *not* reset — would otherwise tear the driver down mid-init. Plus rollback to the last known-good command on a failed startup, an atomic ack file recording the measured respawn gap, and the control file honored at init so a restart cannot silently revert a swapped value. [DEC-0117] |
 | 16 | **SensorQC bounds extended to the extra-sensor fields and `rain_rate`** | 2026-08-20 | `temp_1`/`temp_2`/`humid_1`/`humid_2` and `rain_rate` were listed in `FRAME_WEATHER_KEYS` (co-rejected when a frame is corrupt) but absent from `SENSOR_QC_DEFAULTS` — a corrupted reading on any of them could never trigger its own bounds rejection, only ride along on some other field's. Extended to match `temperature`/`humidity`'s bounds (`temp_1`/`temp_2`/`humid_1`/`humid_2` share the identical decode expression as those fields) and `weewx.conf.example`'s existing `StdQC` `rainRate` backstop (0–16 in/h) for `rain_rate`. Dormant on this station (single ISS, no `temp_hum` channel), but a real gap for other users' multi-transmitter or temp/humidity-extension configs. |
+| 18 | **Co-rejection widened: the frame's battery flags go with it, and an impossible message type is proof** | 2026-09-28 | Extends 11 on two axes, both from #394's audit of the ISS low-battery flag. **(a)** The battery-low bit is bit 3 of the frame's own byte 0, so a condemned frame's flag is as corrupt as its weather: all 10 archived ISS low-battery flips (2026-08-30 to 09-25) were lone minutes at a freeze or reception-collapse onset, not a battery. `FRAME_BATTERY_KEYS` are now nulled with `FRAME_WEATHER_KEYS`; a clean frame's flag flows untouched. **(b)** A message type no Davis transmitter sends (0x0, 0x1, 0xB, 0xD, 0xF; every type they do send has its own branch, including the undecoded 0x3 and 0xC) is the same positive proof as an out-of-spec value, so it now condemns the frame too. All 8 such frames in the station's 31 days of logs were glitches carrying a 39 to 111 mph wind, one of which slipped under the delta cap as a phantom 11 mph gust. Before this, a delta-rejected corrupt wind also became the delta baseline, costing the next genuine reading. Together, 9 of the 10 flips now drop at the source. Still zero fitted parameters. Supercap/solar power are decoded from the frame too and still survive (recorded, not changed). Shipped in v2.0.17 (S144). [DEC-0203] |
 ### Why these filters exist: the corruption mechanism
 
 Items 1 and 6 both exist because **corrupt sensor readings arrive with a valid CRC**. The cause is now
@@ -165,22 +167,20 @@ transmissions, holding `rxCheckPercent` at ~73% on a ~99% link. The patch gates 
 loop period of 2.5625 s) and logs the survivors as `repeat packet:`.
 
 **Belongs upstream** — it is not station-specific: any Davis station whose transmitter re-sends
-unchanged payloads has been mis-reporting reception the same way. Draft lives in `docs/upstream/`
-(gitignored); see `docs/UPSTREAM-THREADS.md`.
+unchanged payloads has been mis-reporting reception the same way. **Posted 2026-09-06** as
+[lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7); see `docs/UPSTREAM-THREADS.md`.
 
 **Maintenance note:** because the tarball is unpinned, the patch is also a tripwire. It is applied
 with `--batch --forward` and followed by a `grep -c dupwindow` assertion, so a build **fails loud**
 rather than silently producing an unpatched binary if upstream's source moves.
 
-**GPLv3 §5(a) notice: not yet added to `main.go` itself.** The patch's `From:`/`Subject:` header
-identifies the fork, and the added code comments explain the change, but unlike `rtldavis.py`
-(which logs a fork-identity line at startup) nothing in the patched binary states outright that it
-carries a modification. `main.go`'s existing `log.Printf` startup line does now print `dupWindow=%d`
-alongside the other flags, which at least surfaces the new flag — but that is not the same as a
-"you modified this, on this date" notice. Tracked as
-[#327](https://github.com/WeatheredScientist/weewx-rtldavis/issues/327) rather than patched here:
-it is a Go source change to a file that is not vendored in this repo, and belongs with a
-build/deploy verification pass, not a docs-only session.
+**GPLv3 §5(a) notice: added to `main.go` itself** ([#327](https://github.com/WeatheredScientist/weewx-rtldavis/issues/327)).
+A new hunk in `patch/rtldavis-dupgate.patch` inserts a `//`-comment block right after the import
+block (before `const maxTr = 8`) stating the file was modified, by whom, and on what date, with
+pointers to DEC-0135 and the patch file for the actual diff — so the patched binary now states
+outright that it carries a modification, matching what `rtldavis.py`'s startup fork-identity line
+already does for the driver side. Verified applying cleanly against the live `src.tgz` bundle with
+the same `patch -p1 --batch --forward` recipe the Dockerfile uses.
 
 ## `influx.py`
 
@@ -212,6 +212,9 @@ weewx 5.2 `restx.py`).
 |---|--------|------|-----|
 | 1 | Misleading debug log | 2026-07-05 | `log.debug` reported `_ambient_dict.get('server_url')`, a key that is never set — the URL is the hardcoded `OGOXE_API_URL` constant — so it always logged `None`. Now logs the URL actually used. |
 | 2 | SPDX tag | 2026-07-05 | Added `SPDX-License-Identifier`. |
+| 3 | `__init__` calls `StdService.__init__`, not `super().__init__` | 2026-07-04 | Upstream's constructor (`ogoxe/weewx-ogoxe`, checked at `f69b103`) calls `super(OgoxeUploader, self).__init__`, which reaches `StdWunderground.__init__`. Ours calls `weewx.engine.StdService.__init__` directly, so that step never runs. `StdWunderground.__init__` reads `[StdRESTful][[Wunderground]]` and, when it is configured, starts Wunderground archive and RapidFire threads (weewx 5.5.0 `restx.py`); skipping it means this class starts none of its own. The line was already in the file when it entered this repo (first commit `253cbcf`, which captured the production copy), so the date is when it was first recorded, not necessarily when it was made. **Deliberate, reason derived S146 ([#408](https://github.com/WeatheredScientist/weewx-rtldavis/issues/408)):** with `[[Wunderground]]` configured, as it is in this deployment, `StdWunderground.__init__` starts its own Wunderground-PWS and -RF threads and binds the same events. Calling it from this service would run a second set of Wunderground threads next to the real `StdWunderground` service and bind `new_archive_record` twice. This class builds the one `AmbientThread` it needs itself. Read from weewx 5.5.0 `restx.py` and this file, not tested by running the alternative; the original author's own reason is still unrecorded. |
+| 4 | Two comments rewritten | 2026-07-05 | The comments above the debug log and above `self.archive_queue` contradicted each other about where `server_url` comes from (`get_site_dict` versus the hardcoded `OGOXE_API_URL`). Both now say the constant. Comments only; no code changed. |
+| 5 | Trailing whitespace | 2026-09-29 | Removed from two upstream lines (the comment ending `restx.py` in the header and the `log.info` call for the loaded configuration), because the repo's pre-commit hook strips it from any file it touches. No behavior change. |
 
 ## `wcloud.py`
 
@@ -247,7 +250,7 @@ The goal is for this list to get **shorter**. Standing policy:
 | windDir branch bug | `lheijst/weewx-rtldavis` | Not yet offered |
 | `NameError` on unknown channel | `lheijst/weewx-rtldavis` | Not yet offered |
 | `rxCheckPercent` dead metric | `lheijst/weewx-rtldavis` | Not yet offered |
-| Outside-temperature sign + `0xFF8` sentinel | `lheijst/weewx-rtldavis` | Not yet offered — belongs alongside [#22](https://github.com/lheijst/weewx-rtldavis/pull/22); bites every cold-climate user, so it is the strongest remaining candidate |
+| Outside-temperature sign + `0xFF8` sentinel | `lheijst/weewx-rtldavis` | [PR #23](https://github.com/lheijst/weewx-rtldavis/pull/23) OPEN since 2026-07-28 (S55), the companion to [#22](https://github.com/lheijst/weewx-rtldavis/pull/22); bites every cold-climate user |
 | `e.read()` / TLS / `KeyError` fixes | `david-lutz/weewx-influx2` | **[PR #1](https://github.com/david-lutz/weewx-influx2/pull/1) OPEN** since 2026-07-13 (S38) — that repo's first-ever PR, and it has been quiet since 2023 |
 
 Whatever is not upstreamed stays here, with a reason. That is the point of the inventory.

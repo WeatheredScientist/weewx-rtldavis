@@ -40,7 +40,7 @@
 #
 #   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
 #   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
-#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.5'
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.6'
 #   so the difference is visible in the logs. Bugs here are ours, not upstream's.
 #
 #   Changes, with the date each was recorded in git. Entries dated 2026-07-04
@@ -103,9 +103,23 @@
 #               which never trips the 150s watchdog because hop packets reset
 #               it). Ends the effective-vs-ineffective USB-reset ambiguity that
 #               consumed S67-S73.
+#   2026-08-19  #219: shutdown reap, AsyncReader EOF spin, get_stderr 10 s cap.
+#   2026-08-19  #220: every battery-low frame was dropped whole at dispatch.
+#   2026-08-19  #221: four divide-by-zero/negative-shift crashes guarded.
+#   2026-08-19  #222: wind and rain_count channel gates; duplicate channels refused.
+#   2026-08-20  #226: default stanza, cmd split, version gate, show-packets fixes.
+#   2026-08-20  #225: freqError rotation, v12 freqError, pct_good storage fixes.
+#   2026-08-20  #225: SensorQC bounds extended to temp_1/2, humid_1/2, rain_rate.
+#   2026-08-21  #233: shutdown() also kills the child via its own Popen handle.
+#   2026-08-26  opt-in -gain/-ex hot swap via a validated control file (DEC-0117).
+#   2026-09-03  a re-sent unchanged payload is suppressed and counted (DEC-0135).
+#   2026-09-03  rxCheckPercent counts ISS slots, not wall-clock periods (#317).
+#   2026-09-28  co-rejection: battery flags, impossible message types (DEC-0203).
+#   2026-09-29  #402: first rxCheckPercent after a start or reset was off by one.
+#   2026-09-29  #406: ws.5 -> ws.6; the 2026-08-19 to 09-28 entries shipped as ws.5.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
-#   These fixes are offered upstream; this fork exists to ship them in the meantime.
+#   Some of these fixes are offered upstream; this fork ships them in the meantime.
 #
 #-------
 
@@ -202,10 +216,11 @@ def logerr(msg):
 
 DRIVER_NAME = 'Rtldavis'
 # Fork of Luc Heijst's rtldavis v0.20. The '+ws.N' suffix is a PEP 440 local
-# version identifier: upstream base 0.20, WeatheredScientist revision 1. Never
+# version identifier: upstream base 0.20, WeatheredScientist revision N. N goes
+# up with every behavior change to this file (README rule 1, #406). Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.5'
+DRIVER_VERSION = '0.20+ws.6'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
@@ -428,14 +443,36 @@ SENSOR_QC_DEFAULTS = {
 # its same-frame siblings can be trusted either. The 2026-07-27 phantom 39 mph
 # gust (ERR-0004) rode a frame whose own humidity decoded to 144.9%: humidity
 # was rejected, the wind byte sailed through and became the interval's gust
-# max on every external network. Diagnostics (battery flags, supercap_volt,
-# solar_power, freqError telemetry, pct_good) are deliberately NOT in this
-# set -- they describe the link/station, not the weather.
+# max on every external network. Link diagnostics (freqError telemetry,
+# pct_good) are deliberately NOT in this set -- the receiver measures them,
+# so they describe the link, not the frame's contents.
 FRAME_WEATHER_KEYS = (
     'temperature', 'humidity', 'wind_speed', 'wind_dir', 'wind_speed_ec',
     'wind_speed_raw', 'uv', 'solar_radiation', 'rain_rate',
     'temp_1', 'temp_2', 'humid_1', 'humid_2',
 )
+
+# DEC-0203 (#394): the battery-low flag is bit 3 of the condemned frame's own
+# byte 0, so it is exactly as corrupt as its weather siblings -- unlike
+# pct_good/freqError above, it was decoded from the frame, not measured by
+# the receiver. All 10 archived ISS low-battery flips (08-30 -> 09-25) were
+# single minutes at a freeze or reception-collapse onset, 9 of them carrying
+# a bounds or message-type proof. Nulled with the weather keys on
+# co-rejection; a clean frame's flag flows untouched. (supercap_volt and
+# solar_power are decoded from the frame too and still survive -- DEC-0203
+# records that gap rather than widening this change.)
+FRAME_BATTERY_KEYS = (
+    'bat_iss', 'bat_anemometer', 'bat_th_1', 'bat_th_2', 'bat_leaf_soil',
+)
+
+# DEC-0203: set by parse_raw when the iss/anemometer/temp_hum dispatch meets a
+# message type no Davis transmitter sends (0x0, 0x1, 0xB, 0xD, 0xF -- every
+# type they do send has its own branch, including the undecoded 0x3 and 0xC).
+# A CRC-valid frame carrying one is multi-bit corrupt: the same positive proof
+# as an out-of-spec value, so _data_to_packet co-rejects on it. Every prod log
+# marvin holds (08-29 -> 09-28) had 8 such frames, each one at a glitch.
+# Driver-internal: no sensor_map entry reads it, so it never reaches a packet.
+IMPOSSIBLE_MSG_TYPE_KEY = 'msg_type_impossible'
 
 
 class SensorQC(object):
@@ -1509,6 +1546,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # rides the same 8-byte frame -- so null them all and move no
             # baselines. A delta trip never triggers this: a large step can
             # be genuine weather; an impossible value cannot.
+            proofs = []
             for qc_key in self._sensor_qc.limits:
                 qc_reason = self._sensor_qc.check_bounds(
                     qc_key, data.get(qc_key))
@@ -1518,12 +1556,21 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                            "RF glitch, not weather; DEC-0029)" %
                            (qc_key, data[qc_key], qc_reason))
             if frame_corrupt:
-                nulled = [k for k in FRAME_WEATHER_KEYS
+                proofs.append('bounds')
+            # DEC-0203: a message type no transmitter sends is the same kind
+            # of proof -- parse_raw has already logged which type it was.
+            if data.get(IMPOSSIBLE_MSG_TYPE_KEY) is not None:
+                frame_corrupt = True
+                proofs.append('message-type')
+            if frame_corrupt:
+                # The frame's own battery bit goes with it (DEC-0203).
+                nulled = [k for k in FRAME_WEATHER_KEYS + FRAME_BATTERY_KEYS
                           if data.get(k) is not None]
                 for k in nulled:
                     data[k] = None             # null-on-rejection, DEC-0006
-                logerr("frame failed bounds proof -- co-rejecting same-frame "
-                       "fields: %s (DEC-0054)" % ', '.join(sorted(nulled)))
+                logerr("frame failed %s proof -- co-rejecting same-frame "
+                       "fields: %s (DEC-0054)" %
+                       (' + '.join(proofs), ', '.join(sorted(nulled))))
             else:
                 for qc_key in self._sensor_qc.limits:
                     if data.get(qc_key) is None:
@@ -1643,6 +1690,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     # last counter reset -- seed the baseline to this packet
                     # too, so the denominator starts counting from here.
                     self.stats['prev_pkt_ts'][i] = now
+                    # #402: the count baseline starts at this packet too.
+                    # Otherwise it sits in `count` while its slot never sits
+                    # in the delta. At startup its count also includes
+                    # packets Go counted but never emitted during init.
+                    self.stats['last_cnt'][i] = new_cnt[i]
                 self.stats['last_pkt_ts'][i] = now
             self.stats['curr_cnt'][i] = new_cnt[i]
 
@@ -1683,6 +1735,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # jitter (up to +5 pts). The ISS clock is exact, so
                         # round() has no ambiguity, and count[i] <= max_count[i]
                         # holds by construction: one accepted packet per slot.
+                        # That needs `count` and the delta to start from the
+                        # same packet, which the seed and the skipped first
+                        # boundary now keep (#402).
                         delta = self.stats['last_pkt_ts'][i] - self.stats['prev_pkt_ts'][i]
                         self.stats['max_count'][i] = round(delta / self.stats['loop_times'][x])
                         self.stats['prev_pkt_ts'][i] = self.stats['last_pkt_ts'][i]
@@ -1701,10 +1756,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # post-reset packet instead of spanning the reset.
                         self.stats['prev_pkt_ts'][i] = 0.0
                         self.stats['last_pkt_ts'][i] = 0.0
-                    # count[i] == 0: genuinely no packets this period (RF-dead),
-                    # not a reset. Leave last_pkt_ts/prev_pkt_ts untouched so
-                    # the next period's delta spans the full gap once
-                    # reception resumes -- max_count grows to match.
+                    # count[i] == 0: no packets past the baseline this period
+                    # (RF-dead, or only the seed, #402), not a reset. Leave
+                    # last_pkt_ts/prev_pkt_ts untouched so the next period's
+                    # delta spans the full gap once reception resumes --
+                    # max_count grows to match.
             # if there is a total
             # NOTE (S24, DEC-0024 review H2): this was previously also gated on
             # `self.stats['pct_good_all'] is not None`, but _init_stats and
@@ -1722,6 +1778,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     x = self.stats['activeTrIds'][i]
                     logdbg("ARCHIVE_STATS: station %d: max_count= %4d count=%4d missed=%4d pct_good=%6.2f" %
                         (i+1, self.stats['max_count'][i], self.stats['count'][i], self.stats['missed'][i], self.stats['pct_good'][i]))
+        else:
+            # #402: the first boundary after startup computes nothing, but
+            # _reset_stats still moves last_cnt up to it. Move the slot
+            # baseline with it, or the next delta spans two periods while
+            # its count spans one.
+            for i in range(0, 4):
+                self.stats['prev_pkt_ts'][i] = self.stats['last_pkt_ts'][i]
 
     def new_archive_record(self, event):
         logdbg("new_archive_record")
@@ -2308,8 +2371,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         dbg_parse(2, "rain_count_raw=0x%02x value=%s" %
                                   (rain_count_raw, rain_count))
             else:
-                # unknown message type
+                # A type no Davis transmitter sends: proof the frame is
+                # corrupt, so _data_to_packet co-rejects it (DEC-0203).
                 logerr("unknown message type 0x%01x" % message_type)
+                data[IMPOSSIBLE_MSG_TYPE_KEY] = message_type
 
         elif data['channel'] == self.channels['leaf_soil']:
             # leaf and soil station

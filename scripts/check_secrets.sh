@@ -6,12 +6,16 @@
 # Exit non-zero (and print the offending line) if a scanned file contains:
 #   - an assignment-style secret with a real-looking value
 #   - a known personal identifier (PWS id, place name, the NAS IP, …)
+#   - a private-range LAN IP/subnet written as bare prose, known or not (DEC-0144)
 #
 # ---------------------------------------------------------------------------
-# READ THIS BEFORE TOUCHING THE ALLOW-LIST. Four bug classes have already shipped
+# READ THIS BEFORE TOUCHING THE ALLOW-LIST. Seven bug classes have already shipped
 # here, each of which made the gate GREEN WHILE CATCHING NOTHING. Every one of them
 # is now a planted payload in scripts/test_check_secrets.sh — the literals live
-# THERE, where they execute, not here, where they would merely be prose (DEC-0040):
+# THERE, where they execute, not here, where they would merely be prose (DEC-0040).
+# Classes 1-4 are written up below. Classes 5-7 are documented where their detector
+# is defined: 5 is the `pass` key plus the quoted app-password literal (S68), 6 the
+# unquoted app password (S76, DEC-0084), 7 a private-range LAN address as prose (DEC-0144).
 #
 #   1. `grep -viE` (case-INSENSITIVE allow-list). Its [A-Z] terms then matched
 #      lowercase code, so the ALL_CAPS-constant rule swallowed nearly every
@@ -52,6 +56,16 @@
 #
 #       scripts/test_check_secrets.sh        <-- RUN IT AFTER ANY CHANGE HERE
 #
+# "EVERY CLASS HAS A PLANTED PAYLOAD" WAS ITSELF UNVERIFIED (S145, #409). A mutation
+# pass — delete one alternate from a scratch copy of this file, re-run the test,
+# expect it to go red — found that `passcode`, the bare `key` alternate, the quoted
+# app-password shape, most private-range sub-ranges, most allow-list alternates and the
+# whole identifier check could each be deleted with every control still green. Each now
+# has a planted control. Two kinds of deletion still stay green, and no control can kill
+# them: `api_?secret` is redundant with the unanchored `secret`, and six allow alternates
+# are inert (see INERT ALTERNATES below). When you add or change an alternate, delete it
+# in a scratch copy and confirm the test goes red.
+#
 # ---------------------------------------------------------------------------
 set -u
 status=0
@@ -64,20 +78,49 @@ files=("$@")
 # --- Personal / infra identifiers that must never be committed ---
 # The patterns themselves are private (naming them here would leak them in this
 # PUBLIC script), so they live in the GITIGNORED scripts/.identifiers file (one
-# extended-regex per line). If that file is absent (CI, a fork, another user),
-# the identifier check is skipped — there is nothing owner-specific to catch.
+# extended-regex per line). If that file is absent (CI, a fork, another user, and
+# every git WORKTREE, which never checks out a gitignored file), the identifier check
+# is skipped, and since S145 (#409) it says so on stderr instead of staying silent.
+# Two switches, both read from the environment (the pre-commit hook inherits it):
+#   CHECK_SECRETS_REQUIRE_IDENTIFIERS=1  exit 2 unless the list is present and holds a
+#       pattern. The owner opts in on a machine that has the file; CI must not, it
+#       has none. Unset, empty and 0 all mean "skip if absent", as before. Any other
+#       value counts as on: a typo makes the gate stricter, never quieter.
+#   CHECK_SECRETS_IDENT_FILE=<path>      read the list from here instead. The test
+#       plants a synthetic list this way, so the check has a control that does not
+#       depend on the private file.
+# A list that is not a valid regex is fatal in either mode: grep would exit 2 with no
+# output, and the per-file scan below would read that as "no hits".
+# Exit codes: 1 = a finding, 2 = the gate could not run as configured.
 # No broad email regex: upstream author attribution (Keffer, Heijst, Skahan,
 # OgoXe) is legitimate in a public repo.
-ident_file="$(dirname "$0")/.identifiers"
+ident_file="${CHECK_SECRETS_IDENT_FILE:-$(dirname "$0")/.identifiers}"
 ident_re=""
 if [ -f "$ident_file" ]; then
   ident_re="$(grep -vE '^[[:space:]]*(#|$)' "$ident_file" | paste -sd '|' -)"
 fi
+require_ident=0
+case "${CHECK_SECRETS_REQUIRE_IDENTIFIERS:-}" in ''|0) ;; *) require_ident=1 ;; esac
+if [ -z "$ident_re" ]; then
+  if [ "$require_ident" -eq 1 ]; then
+    echo "SECRET-SCAN: CHECK_SECRETS_REQUIRE_IDENTIFIERS is set but the identifier list is missing or empty: $ident_file" >&2
+    echo "  A git worktree does not carry the gitignored list; copy scripts/.identifiers in from the main checkout." >&2
+    exit 2
+  fi
+  echo "SECRET-SCAN: note: identifier check SKIPPED (no patterns in $ident_file)." >&2
+else
+  printf '' | grep -E "$ident_re" >/dev/null 2>&1
+  if [ $? -eq 2 ]; then
+    echo "SECRET-SCAN: $ident_file is not a valid extended-regex list; the identifier check cannot run." >&2
+    exit 2
+  fi
+fi
 
 # --- What looks like a secret: KEY <sep> VALUE, value 8+ credential-ish chars ---
 # `_key` is shared by the detector AND by every POSITIONED allow term below, so
-# an allow can only ever fire against the key the detector actually matched —
-# never against some other word that happens to appear later on the line.
+# an allow term must sit right after a credential key — not float anywhere on the line.
+# It is still tested per LINE, not per match: on a line with two assignments, an
+# allowed first one excuses a literal second one. Measured S145 (#409), not fixed.
 _key='(password|passcode|pass|PASS|api_?key|api_?secret|token|secret|[^A-Za-z_]key)'
 _assign="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=-]{8,}'
 
@@ -131,6 +174,40 @@ _apppw_assign="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[a-z]{4}([[:space:]
 
 secret_re="${_assign}|${_apppw}|${_apppw_assign}"
 
+# --- hole class 7 (DEC-0144): a private-range LAN IP/subnet as bare PROSE ---
+# Everything above is KEY=VALUE shaped: a credential always sits after an `=`/`:`.
+# A LAN IP/subnet does not — it shows up mid-sentence in a diagnostic note (an
+# "X is on this subnet, Y is on that one" routing observation) or a routing
+# comment, so no assignment-shaped rule was ever going to catch it, and none of
+# the ALLOW rules below apply to it (they are all keyed off `$_key`, which a bare
+# IP never has). This is a SEPARATE, pattern-based detector for that reason,
+# matching the same "general shape, not a finite list" approach `_assign` takes
+# for credentials — `.identifiers` (below) is the opposite approach, a finite list
+# of exact known values, and that is precisely why it never caught this: a subnet
+# written a new way, or with a wildcard octet, is not a value that list can
+# enumerate in advance.
+#
+# Proven blind before this fix, not assumed: a throwaway file containing a real
+# private IP in prose passed the gate clean (exit 0) pre-fix. Two real instances
+# already shipped through it — DEC-0127 (a personal LAN identifier in tracked
+# docs, full history rewrite) and DEC-0144 (this one: the same subnet class, plus
+# a raw marvin IP posted straight to a GitHub comment, which no git-triggered gate
+# could ever reach — see the DEC for why that half needs a different fix, not this
+# script).
+#
+# RFC1918 ranges only (10/8, 172.16/12, 192.168/16) — a public IP is not a LAN
+# secret. The `x` alternation matches this repo's own placeholder-adjacent habit
+# of writing a subnet with a wildcard trailing octet, which is prose ABOUT the
+# exposure, not an escape from it (see the planted BAD payloads in
+# scripts/test_check_secrets.sh for the exact shape, per DEC-0040 — this comment
+# deliberately does not spell it out, for the same reason the `_apppw` comment
+# above doesn't). Boundary groups (`^|[^0-9.]` / `[^0-9]|$`) stop a match from
+# starting or ending mid-octet, which is what keeps this from firing on a
+# three-dotted-number version string like weewx's own (see the GOOD payloads) —
+# the pattern requires all four octets, so a three-number version string never
+# engages it; verified against that exact repo line, not assumed.
+_private_ip='(^|[^0-9.])(10\.[0-9x]{1,3}\.[0-9x]{1,3}\.[0-9x]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9x]{1,3}\.[0-9x]{1,3}|192\.168\.[0-9x]{1,3}\.[0-9x]{1,3})([^0-9]|$)'
+
 # NOTE: there is deliberately NO "the line is a comment" allow rule. It was
 # removed in S40 (bug class 4 / DEC-0045). A comment marker is not evidence about
 # the VALUE, and a commented-out credential in a public repo is still leaked.
@@ -149,6 +226,15 @@ secret_re="${_assign}|${_apppw}|${_apppw_assign}"
 #   FOO_BAR                         an ALL_CAPS *underscored* constant REFERENCE.
 #     The underscore does the real work: `= INFLUX_TOKEN` is a reference, while
 #     `= REALSECRETVALUE` is a bare literal and is NOT allowed.
+# INERT ALTERNATES (S145, #409). The detector only fires on 8+ value characters, and
+# an allow term only matters on a line the detector fired on. `${`, the two empty-quote
+# forms and `input(` can never start such a value, so on their own assignment they never
+# fire; their one remaining effect is to excuse a literal elsewhere on the same line.
+# `None` and `-1` fire only when the value merely BEGINS with the token, so no natural
+# line exercises them. A bare `getenv(` is the same, and its control is a helper name
+# starting with it. All stay as documented intent; a green GOOD line for one of them is
+# not coverage. `os.getenv(...)` is flagged, not excused: the value must begin with the
+# token. The test marks such lines (inert).
 _val='(YOUR_|your_|\$\{|os\.environ|getenv|sys\.argv|argv|input\(|""|'"''"'|None|-1\b|self\.|options\.|[A-Za-z_][A-Za-z_0-9]*\.get\(|(site|config|stn)_dict|[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\b)'
 allow_value="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?'"$_val"
 
@@ -201,7 +287,17 @@ for f in "${files[@]}"; do
     fi
   fi
 
-  # (b) assignment-style secrets with a real value.
+  # (b) a private-range LAN IP/subnet as bare prose (hole class 7, DEC-0144).
+  # Own check, not folded into (c): it is not KEY=VALUE shaped, so none of (c)'s
+  # allow-list applies to it, and it needs none — a placeholder like <NAS_IP> or
+  # <MARVIN_IP> contains no digits, so it cannot accidentally match this pattern.
+  hits=$(grep -nE "$_private_ip" "$f" 2>/dev/null)
+  if [ -n "$hits" ]; then
+    echo "SECRET-SCAN: private LAN IP/subnet literal in $f (use a <..._IP>/<..._SUBNET> placeholder):"
+    echo "$hits"; status=1
+  fi
+
+  # (c) assignment-style secrets with a real value.
   #
   # The allow-list is evaluated against the RAW line. `grep -n` gives us the line
   # number for the human; the "N:" prefix is then stripped with bash parameter

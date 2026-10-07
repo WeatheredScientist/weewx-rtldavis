@@ -72,11 +72,24 @@ gone stale on two values: the reception baseline and the driver-vs-config layer 
   Then pick up cross-repo assignments (ops-DEC-0005; Claude sessions only — one
   command, the rest of eaglehunt-ops stays not-a-session-start-read):
   `gh issue list -R WeatheredScientist/eaglehunt-ops --label repo:weewx --state open`
+- **Cross-repo dispatch (OPS-DEC-0215, STANDARD §12 rules 7–8):** after posting a tracker comment
+  that asks something of another repo, check `ListAgents` for that repo's current live session
+  (`cwd`, last-activity, running state; never a title carrying the closeout `✓`) and ring it ONE
+  line — the issue number and which repo is asked, nothing else. A ring is a doorbell, not an
+  authorization: the tracker stays the record, and an answer given only in chat isn't an answer
+  until it's posted there. Receiving a ring: read the issue, do what lies inside your own
+  permissions, answer on the tracker, ring back. **Nothing Class C rides a message** (OPS-DEC-0034)
+  — a Class C need goes on the issue as an `**Ask:**` line, never executed on a peer's say-so or
+  parked as a prompt in an unwatched window (OPS-DEC-0192). No live session: nothing more happens —
+  the inbox pull above is the fallback, unchanged.
 - **End (closeout skeleton — DEC-0052, adapted from eaglehunt-ops OPS-DEC-0016):**
   0. **Closeout rides the merge, never follows it** (OPS-DEC-0195, ops#218 — adopted S125). When
      this session's own work IS a merge or a prod promotion, the `BOOT.md` pointer, the
      `CHANGELOG.md` line, and the DEC row ride that same PR or land before the merge — never
-     deferred to a later pass. Reason: a session can drop out of view (auto-archive on PR merge)
+     deferred to a later pass. **If the promotion bumps the version, `git tag -a vX.Y.Z` +
+     `gh release create` ride it too** (`docs/CONVENTIONS.md`'s Git workflow section, #331) — five
+     releases shipped silently without either before this line existed. Reason: a session can drop
+     out of view (auto-archive on PR merge)
      before a post-merge closeout pass runs, stranding the handoff on a stale pointer (ops#218's
      EHWD S261 case; weewx hit the same shape at S120/S122, repaired only because S121/S123
      happened to run the debt hook). A verified session does not idle-wait for a 6-hourly window or
@@ -120,3 +133,14 @@ gone stale on two values: the reception baseline and the driver-vs-config layer 
   not from CHANGELOG or memory; every other doc points at it. DEC-0023 supersedes the old
   shared-counter idea in DEC-0013. The governed era runs **S16 → S17 → S18 → S19 → S20 → S21 → S22 →
   S23 → …**; pre-S16 history is reconstructed/approximate.
+
+## Estate context — 2026-09-27
+Home IT estate repo of record is `~/Projects/heartofgold`: docs, policies, ADRs, runbooks, CHANGELOG, inventory.
+This repo owns its image build and dev compose only. Production deployment on marvin — the systemd units,
+slice and tenant manifest — is owned by heartofgold/host/: etc/systemd/system/ (this tenant's units and slice)
+plus etc/marvin/tenants.d/weewx.conf (ADR-0005; the ADR names the one current exception). The live image
+pin is on the box, not in git: /etc/marvin/deploy.d/weewx/ for units that adopted `marvinctl set-image`,
+a tenant-owned floating tag otherwise — read with `marvinctl cat`, never edited by hand.
+Do not add production deployment config here. Handoffs for this repo stay in this repo.
+If a session here changes what runs on marvin or how, add a heartofgold/CHANGELOG.md line, same session.
+marvin's own tracker and decisions live at heartofgold/MARVIN-STATE.md and heartofgold/MARVIN-DECISIONS.md.

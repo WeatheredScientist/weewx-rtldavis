@@ -7533,6 +7533,11 @@ change the adopted gain (DEC-0115's 496 stands as the last *measured* value; 372
 provisionally, pending a real re-sweep). Does not touch InfluxDB's own location — it stays NAS-hosted
 for now; only the config pointing at it moved.
 
+> **2026-09-08 pointer:** the `marvin` repo named above no longer exists as a separate checkout — it
+> merged into the estate repo at `~/Projects/heartofgold` (weewx-rtldavis#378, ops#299).
+> `MARVIN-DEC-0062` now lives in `heartofgold/MARVIN-DECISIONS.md`. See CLAUDE.md's "Estate
+> context" block.
+
 ## DEC-0119 — ops#183's Influx outage: root cause was external, the backfill tool had two real bugs, and this repo's own alerter was blind the whole time
 
 **Status:** Accepted · **Date:** 2026-08-29 (S106) · **Relates to** DEC-0118 (the migration this
@@ -9310,6 +9315,68 @@ stale, the port is what the marvin-side consumers have been using since DEC-0118
 **as-run record** `docs/INFLUXDB-MIGRATION.md` §8
 
 
+### Context
+
+DEC-0141 was written and merged (PR #334) at ~21:38 ET with "daytime" as the proposed cutover
+window. The owner, via the ops session, asked whether daytime was load-bearing. It was not — a
+default assumption, not a requirement — and the runbook's real preconditions (marvin's stage 0,
+the dark-parallel test, dashboard's confirmations) could all be met within the hour. The owner said
+go at ~21:50 ET; the move ran 22:08–22:43 ET with the owner attending in the weewx and ops chats.
+
+### What was decided during execution (each a deviation from the written plan, recorded so the
+runbook reads true)
+
+1. **Copy route: `docker cp <container>:<path> -` streamed into tar files on the marvin-data share**,
+   not `sudo tar` on the NAS. `nas-admin` has no non-interactive sudo, and the store's data dir is
+   `0700 uid 1000`; the docker daemon reads it as root and `docker cp` works on a stopped container,
+   which is exactly what the final copy needs. One Class C mint per NAS step (two in all).
+2. **The two copies were kept, the delta was not.** Snapshot for stage 1 (live, torn-bolt risk
+   accepted — it started clean), final copy from the stopped server for stage 2; the dark copy was
+   wiped before the final one landed. Equality test = the two user buckets' shard counts and bytes,
+   not the raw 64-shard total: the system buckets `_monitoring`/`_tasks` lose their expired empty
+   shards on first start (16 → 6 and 3), which is the retention enforcer working, not data loss.
+3. **Stage 0 landed before stage 1 with one side effect owned by marvin (MARVIN-DEC-0121/0122):**
+   `install-tenant-units.sh weewx` also installed `weewx.service`'s committed `:marvin-live` re-pin
+   (ops#257 limb 2). Marvin tagged `v2.0.16` → `:marvin-live` the same turn, so weewx's step-7
+   restart started from that alias — same bytes, banner `0.20+ws.5` confirmed live. ops#257 limb
+   2's "tag" step is therefore done, by marvin's hand rather than weewx's `marvinctl tag`.
+4. **`weewx.conf.rx-baseline` lives at the tenant root, not under `weewx-data/`.** The runbook had
+   the wrong path; the owner's four-file `sed` errored on it and exited 2, which made the
+   `&&`-chained "new address" grep skip — the zeros the owner then saw were the *old*-address grep
+   and were correct. Verified by redacted read that `weewx.conf` had flipped; the `.rx-baseline`
+   edit was re-issued as its own line. Lesson: never `&&` a verification grep after a multi-file
+   `sed`; and CONSTANTS.md now carries both paths.
+5. **influxd exits 2 on SIGTERM** — measured on both hosts. `SuccessExitStatus=2` added to the unit
+   (stage 3 re-install by marvin); Foundation's `Exited (2)` was a clean stop, not a crash.
+6. **Step 9 (backfill) deferred to S125.** 29 archive records (22:14–22:42 ET) are in SQLite and
+   not in the `weewx` bucket. Running the DEC-0119-fixed tool needs the write token in a root shell
+   on marvin; doing that at 22:45 with a token paste buys nothing that tomorrow does not.
+
+### Verified (timestamps ET)
+
+- 22:35:02 `weewx-influxdb.service` active + enabled in `/weather.slice`; `/health` pass v2.7.12;
+  `weewx` 16 shards / 16.87 MB, `eh_rollup` 16 shards / 212,744 B (= Foundation's last state
+  including the 22:00 event-detect write); no `lvl=warn|error`.
+- 22:40:43 `user.influx INFO Data will be uploaded to http://<MARVIN_IP>:8086`; 22:43:16 `Influx:
+  Published record 2026-09-04 22:43:00` — first write to the marvin store; publishing every minute
+  since.
+- 22:44 Foundation `:8086` refuses; `influxdb` container stopped, `--restart=no`, trees intact —
+  the rollback artifact until ops#260 step 4.
+- Dashboard's step 8 (eh-proxy restart, timer re-enable, `verify_archive_fresh.py`) is their report
+  on ops#270; weewx's own end-to-end probe through the public proxy is in `docs/INFLUXDB-MIGRATION.md` §8.
+
+### Consequences
+
+- **Foundation hosts no weather workload.** OPS-DEC-0188's weather half is true in fact from
+  22:43 ET; the drill (ops#260) can be scheduled once ops#270 stage 3 closes.
+- **Two Class C NAS gestures and three owner-hands marvin gestures** was the whole cost — the
+  16 MB estimate was right about the outage shape (gesture time), wrong by 9× on bytes (152 MB tar:
+  bolt/sqlite/WAL are not in `storage_shard_disk_size`).
+- **Open, S125:** backfill 22:14–22:42; `SuccessExitStatus=2` re-install; `weewx-influxdb-backup`
+  pre-dump timer; delete the two final tars from the share; ops/dashboard doc rows; weewx's drill
+  section; `BACKLOG.md` NAS-LEASE item closes as moot.
+
+
 ## DEC-0143 — Closeout skeleton gets a step 0: `BOOT.md`/`CHANGELOG.md`/DEC entries ride the merge or promotion PR itself, never a deferred post-merge pass (OPS-DEC-0195)
 
 **Status:** Accepted (process, no code) · **Date:** 2026-09-05 (S125) · **adopts** OPS-DEC-0195
@@ -9371,63 +9438,2017 @@ branch/PR requirement, and the pause-for-approval rule are all untouched. This i
 whose own work includes a merge or a prod promotion — a pure research/investigation session with
 nothing merging is unaffected.
 
+
+## DEC-0144 — The secret gate gains a general private-IP/subnet detector, proven necessary twice in one evening
+
+**Status:** Accepted (executed) · **Date:** 2026-09-05 (S125) · **follows** DEC-0127, same failure
+class · **hardens** the mechanism DEC-0012/DEC-0039 established for credentials, extended to LAN
+identifiers · **files** the comment-body gap as a separate cross-repo issue, not fixed here
+
+### Trigger
+
+ops#275 (ops S39, 2026-09-05) found a private LAN subnet literal in two 2026-08-15 commits —
+`5e7e759` adds it to `BOOT.md`, `0419d54` removes it — the exact exposure class DEC-0127 (S112)
+already rewrote this repo's full history to remove once, for a different value. The owner's
+question, verbatim: *how does this keep happening — I can't keep going to GitHub support asking
+them to clean up messes I create through bad LLM management.* That question is answered honestly
+below, not deflected.
+
+### What actually happened, rewrite half
+
+Rewritten again tonight: fresh `git clone --mirror`, `git filter-repo --replace-text` (the two
+literals → placeholder tokens), verified clean, force-pushed `refs/heads/*`/`refs/tags/*` — owner-run
+by hand from agent-prepared one-liners, per DEC-0127's own precedent (the classifier will not run
+history-mutation commands for an agent, and DEC-0127 recorded the owner holding the pen on every
+irreversible step as *correct*, not a workaround). Branch protection deleted and restored to its
+exact prior config on both `main`/`dev`. Verified independently, not on report: a fresh mirror clone
+from GitHub post-push showed 0 hits across `refs/heads`/`refs/tags`; `refs/pull/*` (GitHub-managed,
+not writable by a normal push) still pins pre-rewrite objects starting at PR #298 — the same platform
+residual DEC-0127 already named and accepted (SHA-addressable until a Support-side purge). Scope,
+measured directly: **221 commits** get new SHAs (everything from `5e7e759` forward, S84 through
+S125) — every SHA cited in this repo's own docs/cross-repo messages for three weeks stops resolving,
+content unchanged. PR #338 (open at the time, unrelated content) was merged first deliberately, to
+keep the rewrite from being one more moving part on top of an in-flight PR.
+
+### Root cause, the part that answers the owner's question
+
+`scripts/check_secrets.sh` had exactly two detectors before tonight: assignment-shaped credentials
+(`KEY = value`, DEC-0012/DEC-0039) and a finite, gitignored list of exact known identifiers
+(`.identifiers`). A LAN IP or subnet written as bare prose — a routing note, a diagnostic comment —
+is **neither shape**: it never sits after a `=`/`:`, and a subnet nobody had enumerated in advance
+(or the same subnet spelled with a wildcard trailing octet) was never going to be on a finite list
+written before the fact. **Proven blind, not assumed**: a throwaway file containing a real private IP
+in ordinary prose passed the gate clean (exit 0) before this fix — the same doctrine this file's own
+header insists on ("a green exit code is not evidence") applied to the gate's own coverage, not just
+its logic.
+
+**Made concrete within this very session, not hypothetical**: while investigating ops#275 and
+reporting weewx's InfluxDB drill results, this session posted marvin's raw LAN IP into a GitHub
+comment on ops#270 — caught by a peer (ops) session reading the comment, not by any mechanism on
+this end. `gh issue comment` is not a git operation; no git-triggered gate, however well the pattern
+set was tuned, could ever have reached it. Two independent instances of the identical root cause,
+roughly ninety minutes apart, in one session. That is the honest answer: the gate that exists was
+never built to catch this class of value, and the discipline that was supposed to substitute for a
+mechanical gate (remembering to use `<NAS_IP>`/`<MARVIN_IP>` placeholders) failed within the hour of
+being restated as a memory note — because a note is advisory, and advisory is exactly what already
+failed twice before tonight.
+
+### Fix — hole class 7
+
+A new pattern-based detector in `check_secrets.sh`, matching the same "general shape, not a finite
+list" approach `_assign` already takes for credentials: any RFC1918-range (`10/8`, `172.16/12`,
+`192.168/16`) IPv4 literal or wildcard-octet subnet, as bare prose. Deliberately a *separate* check
+from `.identifiers` rather than folded into it — `.identifiers` stays the right home for exact known
+values; this rule exists precisely because a new or wildcarded value is not one. No allow-list rule
+was needed for the existing placeholder tokens (`<NAS_IP>`, `<MARVIN_IP>`, …) — they contain no
+digits, so they cannot accidentally match an IP-shaped pattern.
+
+Checked for false positives before shipping, not assumed clean: `git grep` over the full tracked tree
+for both the four-octet and wildcard-octet forms found zero existing hits (the placeholder discipline
+already held everywhere it mattered). The one real risk found and verified handled —
+`rtldavis.py:220`'s `"10.0.0" < "3"` version-string comparison (a three-dotted-number, not an IP) —
+does not trip the rule, because the pattern requires all four octets; checked directly against that
+exact line, not inferred. `scripts/test_check_secrets.sh` gained 4 new BAD payloads (full IPs
+mid-sentence, the exact wildcard-subnet shape that caused tonight's incident, one payload per RFC1918
+range) and 5 new GOOD payloads (the version string, both placeholder tokens, a public IP, loopback) —
+63/63 passed, tracked tree clean (131 files).
+
+Caught its own author immediately: this DEC's first draft of the rule's explanatory comments used
+real-shaped example IPs in prose, which the new rule correctly flagged in `check_secrets.sh` itself.
+Fixed by describing the shape in words instead, per this file's own S40 precedent for the `_apppw`
+rule ("writing the example would make this comment a finding").
+
+### What this does NOT fix
+
+The `gh issue`/`gh pr` comment-and-body path has no git hook to reach it — `check_secrets.sh` only
+ever runs on `git commit` (pre-commit) and CI's scan of the tracked tree. Closing that gap needs a
+different mechanism (a PreToolUse-style hook scanning `gh` command bodies before they post, mirroring
+this repo's existing `docker-guard.sh`/`secret-read-guard.sh` pattern) — and that mechanism would be
+machine-wide tooling, not a file inside this repo, so it is not something a single repo session should
+install unilaterally. Filed as its own cross-repo issue for whoever owns that layer, rather than
+patched here as a workaround.
+
+### Also found and fixed while doing this work, recorded for completeness
+
+- **PR #338 (this session's DEC-0143 adoption) targeted `main` instead of `dev`** —
+  `gh pr create`'s default base branch, not overridden; this repo's convention is dev-first,
+  confirmed by #335/#336 both correctly targeting `dev`. Repaired via PR #339 (dev brought to parity
+  with main — the two branches were otherwise content-identical, so the fix was the exact missing
+  diff, not a rebase or a revert).
+- **This DEC's own first draft split DEC-0142's body in the process of inserting DEC-0143** — an
+  `old_string` match landed mid-entry instead of at the true end of DEC-0142's body. Caught by
+  re-reading the file rather than trusting the edit tool's success report, and repaired in the same
+  session before either doc left this branch. Recorded here rather than silently fixed, because it is
+  the same underlying lesson as the rest of this entry: verify against the actual state, not the
+  action taken.
+
+### Public communication
+
+`SECURITY.md` gains a second dated re-clone notice (same doctrine as the first: name the action and
+the class of exposure, not the specific value) plus a line noting the gate is now hardened against
+this class going forward.
+
+## DEC-0145 — GitHub Releases backfilled for v2.0.12–v2.0.16; the version-tag step joins the promotion convention
+
+**Status:** Accepted (executed) · **Date:** 2026-09-06 (S126) · **closes** #331 · **extends**
+`docs/CONVENTIONS.md`'s Git workflow section and CLAUDE.md's closeout skeleton step 0
+
+### Trigger
+
+#331 (weewx S123, 2026-09-04): five prod promotions (v2.0.12 through v2.0.16) had shipped to prod
+and Docker Hub over five weeks with no `vX.Y.Z` git tag and no GitHub release — the second published
+channel this repo describes itself by ("Docker Hub + GitHub releases") had been silently dead since
+`v2.0.11` (2026-07-28). Root cause: nothing in the promotion convention or the closeout skeleton
+named the step, so no session was ever prompted to run it.
+
+### Backfill
+
+Five annotated tags created and pushed, each anchored on the actual commit that built the
+corresponding image — verified, not taken from the historical record, because both DEC-0127 (S112)
+and DEC-0144 (S125) rewrote this repo's history since some of those images were built, changing every
+commit hash from that point forward. A fresh `git fetch --force --tags origin` first, after finding
+this session's own local clone still carried pre-rewrite tag objects (`prod-baseline-20260904`
+resolved locally to a commit no longer reachable from `origin/main` at all) — the remote's tags were
+already correct; only the local cache was stale.
+
+| Tag | Commit | Anchor |
+|---|---|---|
+| `v2.0.12` | `80329b3` | `main`, PR #151 (`prod-baseline-20260810`) |
+| `v2.0.13` | `0265621` | `main`, PR #161 (`prod-baseline-20260811`) |
+| `v2.0.14` | `18264d8` | `dev`, PR #275 (S101 close) |
+| `v2.0.15` | `ea17ea8` | `dev`, PR #308 (S116 close) |
+| `v2.0.16` | `4adb07c` | `main`, PR #324 (`prod-baseline-20260904`) |
+
+v2.0.14 and v2.0.15 never got their own `main` promotion — both were folded into the single
+267-commit v2.0.16 promotion (PR #324) — so those two tags anchor on the `dev` commit the image was
+actually built from, matching CONSTANTS.md's own release-mechanics record rather than inventing a
+`main` anchor that never existed.
+
+`gh release create` for each, titled and noted from this repo's own already-public CHANGELOG/
+CHANGELOG-ARCHIVE content — no new infra detail introduced. **Explicit owner instruction going in:
+the release text must carry zero identifiable infrastructure or location detail**, not just no
+secrets — so the five bodies were written to describe software behavior only (metric fixes, gain
+adoption, packet-decode changes) and deliberately omit the `Foundation`/`marvin` host codenames that
+already appear elsewhere in this repo's public docs, out of caution rather than because those
+codenames are themselves sensitive.
+
+### Convention change
+
+`docs/CONVENTIONS.md`'s Git workflow section: "Promotion = merge + deploy + tag" now spells out that
+a version-bumping promotion needs **both** tags — `prod-baseline-YYYYMMDD` (the promotion anchor) and
+`vX.Y.Z` + a GitHub release (the public release) — not done until both exist. CLAUDE.md's closeout
+skeleton step 0 (DEC-0143/OPS-DEC-0195) gets the same addition: the tag and release ride the
+promotion PR, same as the `BOOT.md`/`CHANGELOG.md`/DEC-row discipline it already states.
+
+### Declined for now
+
+#331's step 3 asked whether a release workflow should exist (joining `dockerhub-description.yml`,
+which already runs on every `main` push) or whether releases stay owner/session-triggered like
+`:latest`'s own move (DEC-0078's precedent). **Declined — stays manual**, same as `:latest`: the
+convention-doc fix (above) is what was missing, not automation; a promotion is already a deliberate,
+low-frequency, human-attended event (weeks apart), so a workflow would add CI surface for a step that
+this DEC's own convention change already makes hard to forget. Revisit if a promotion is ever missed
+again after this fix — that would be evidence the doc alone isn't enough.
+## DEC-0146 — Foundation's DSM `rx_experiment.sh` tasks fired for 13 days past campaign close and never touched anything
+
+**Status:** Accepted (investigation, no code) · **Date:** 2026-09-06 (S126) · **closes** ops#278 ·
+**corroborates and closes out** BACKLOG.md's S104 finding · **eliminates a candidate cause for**
+the 2026-08-25 21:40 restart mystery, without solving it
+
+### Trigger
+
+ops#278 (owner's DSM Task Scheduler read, 2026-09-05 10:50 AM ET): Foundation still ran two ENABLED
+user-defined DSM tasks every 10 minutes — `guard` and `tick`, both invoking
+`/volume1/docker/weewx-rtldavis/rx_experiment.sh` — even though the weewx container on Foundation
+was decommissioned 2026-09-02 and marvin runs the same driver as `weewx-rx-experiment.timer`. This
+is not a new observation: `BACKLOG.md` already flagged the identical shape at S104 (2026-08-25),
+three days after campaign B closed, and recorded it as "no arm is being swapped and no data is at
+risk" from reading `rx_experiment.state` = `BASELINE` — but nobody had disabled the DSM tasks in the
+eleven days between that entry and this one, and by the time this session looked, the owner had
+already disabled them (2026-09-05 11:20 ET) and Foundation's entire `/volume1/docker/weewx-rtldavis/`
+directory had been deleted as part of ops#260 step 4's NFS-export retirement (MARVIN-DEC-0134). The
+historical log/state files ops's own comment thread quoted mtimes and partial content for no longer
+exist to re-read directly.
+
+### What was actually traced
+
+Rather than re-assert the S104 observation or take "no arm is being swapped" on faith a second time,
+this session read `ops/rx_experiment.sh`'s own gating logic end to end:
+
+- `current_arm()` (`rx_experiment.sh:382`) is a pure read of `$STATE`'s first `|`-delimited field.
+  Foundation's copy last wrote that file 2026-08-23 (per ops's own mtime read) — campaign B's actual
+  `BASELINE` self-termination — and it never changed again.
+- `due_arm()` (`:418`) walks `$SCHEDULE`, a hardcoded block baked into the script at deploy time, and
+  returns the latest row at-or-before "now", or `BASELINE`/nothing once every row has passed.
+  Foundation's copy of the script carries a file mtime of 2026-08-14 (ops's own stat read) — **before**
+  DEC-0096 (S88, 2026-08-18) introduced the "empty `SCHEDULE=` between campaigns" stand-down
+  convention. So Foundation's frozen copy still carries whatever schedule was live for campaign B's
+  actual pilot, ending at the 2026-08-23 `BASELINE` row — the same row `current_arm()` already reads.
+  Past that date, `due_arm()` has nothing later to return.
+- `tick()` (`:720`) only reaches `write_arm()`/`restart_container()` (the two functions that touch
+  `weewx.conf` or the container) when `want != have` **and** `want` is a real, distinct arm string —
+  neither condition was ever met: `want` and `have` were both pinned to `BASELINE` (or, if the
+  schedule were somehow already empty, `want` would read `NONE`, hitting the earlier, equally inert
+  `[ "$want" = "NONE" ]` branch instead). Either way, the config-writing path was structurally
+  unreachable for the entire 09-02→09-05 window.
+- `guard()` (`:773`) exits immediately and silently once `current_arm()` reads `BASELINE` (`:787`) —
+  it never reaches its own reception-pause/abort logic either.
+
+### Explaining the log churn without the files
+
+Ops's read found Foundation's `rx_experiment.log` mtime as recent as 2026-09-04 06:30 — apparently in
+tension with "every path is a silent no-op." It is not: `acquire_lock()` (`:323`) logs
+`"LOCK: breaking stale lock ..."` whenever it finds a lock directory older than
+`LOCK_STALE_SECS` with no live holder, independent of what `guard`/`tick` do afterward. This is
+exactly the signature `BACKLOG.md`'s S104 entry already recorded verbatim ("churning `LOCK: breaking
+stale lock` and `another instance holds the lock`") for the same script running the same way, eleven
+days earlier. The log traffic is lock-contention noise, not campaign or config activity — consistent
+across both this session's code trace and the independent S104 read, four weeks apart.
+
+### Positive control
+
+Rather than rest solely on a code-reading argument with no way to re-inspect the deleted historical
+files, this session checked the one artifact that a real config write would have changed: marvin's
+live `[Rtldavis] cmd` line, read via `marvinctl --tenant weewx conf ... Rtldavis` (the redacting
+reader — a bare `grep` on `weewx.conf` is blocked by `secret-read-guard.sh`, DEC-0047, since the same
+file carries credentials elsewhere). It still reads `-gain 372`, matching `CONSTANTS.md`'s recorded
+value with no drift. `marvinctl --tenant weewx cat .../rx_experiment.state` reads
+`BASELINE|1788240639|2026-09-01 01:30:39` — campaign D's own self-termination timestamp, confirming
+marvin's copy is the current, correctly-advancing state, independent of Foundation's frozen one.
+
+### What this does NOT resolve
+
+`BACKLOG.md` had listed the DSM scheduler as "the leading hypothesis" for an unexplained
+2026-08-25 21:40 EDT prod restart, on the reasoning that it was "the one thing left on the box still
+holding a mandate to touch this container." This DEC's tracing removes that mandate entirely — the
+scheduler could not reach `restart_container()` at any point after campaign B's close, which
+includes 08-25. That **eliminates** the hypothesis rather than confirming it: the restart's cause is
+now more open than before, with no remaining candidate on `BACKLOG.md`'s own elimination list.
+
+### Documentation
+
+`docs/CAMPAIGN-B-RUNBOOK.md` gets a retirement banner: Foundation no longer exists, its DSM apparatus
+is gone, and the runbook is kept as historical record of the actual swap night, not a template for
+future use. `BACKLOG.md`'s S104 entry is marked resolved in place (text preserved, per STANDARD rule
+1 — move text, never delete or rewrite history) and its neighboring "2026-08-25 21:40 restart" entry
+is corrected to drop the now-eliminated DSM hypothesis rather than silently continuing to suggest it.
+
+## DEC-0147 — weewx's container runs as `t-weewx` via `--user` on the unit, not a baked `USER` (ops#274 item 5)
+
+**Status:** Accepted (executed 2026-09-06 13:12:05 EDT, verified same session) · **Date:** 2026-09-06 (S126) ·
+**answers** ops#274 item 5 · **departs from** HLF's baked-`USER` pattern
+(`hyperlocal-forecast#470`, MARVIN-DEC-0138) for a stated reason · **relies on** MARVIN-DEC-0106 ·
+**interacts with** MARVIN-DEC-0139 (ACL mask) · **upholds** DEC-0008 · **applies** OPS-DEC-0192
+(no peer-relayed authorization)
+
+### Trigger
+
+ops#274 item 5: "run tenant containers as their own uid, not root." HLF shipped theirs
+(`hyperlocal-forecast#470`, MARVIN-DEC-0138) with a numeric `USER` baked into their Dockerfile plus a
+one-time chown of their bind mounts. ops asked weewx's status; measured, not assumed: `marvinctl
+--tenant weewx inspect weewx-rtldavis-v2` shows `"User": ""` and the tracked Dockerfile carries no
+`USER` directive at all — the container has been running as root the entire time it has lived on
+marvin. The owner green-lit the move in this repo's own chat. A marvin-relayed "owner said go" for the
+same change reached this session first and was **explicitly not acted on** — a peer relay is not
+owner authorization for a live change on this repo's single receiver, the same doctrine OPS-DEC-0192
+recorded: a gesture given in another window is invisible here, and this session waited for the
+owner's word in its own chat before doing anything.
+
+### Decision 1 — run-time `--user`, not a baked Dockerfile `USER`
+
+`weewx.service`'s `docker run` line gains `--user 996:986` (`t-weewx`'s uid:gid on marvin) and
+`-e HOME=/tmp`. The Dockerfile itself is untouched — no `USER` directive, no `chown` step added to
+the image build.
+
+**Rationale:** this image is **public** — `weatheredscientist/weewx-rtldavis` on Docker Hub, pulled
+and run by people who are not this repo's owner, on their own hosts with their own bind mounts. A
+uid baked into the image only works if every downstream user's `weewx-data`/`logs` bind mounts happen
+to already be writable by that exact numeric uid; for anyone upgrading an existing install, a baked
+uid would silently turn writable files into unwritable ones on the next pull, with no way for the
+image itself to fix a host-side directory it doesn't own. That is the same shape of hazard the
+monitor's `REMEDY_MODE` default already treats as unacceptable — *changing an existing install's
+behavior silently is its own defect*, not a `main`/`dev`-flag-visible one. HLF's baked pattern is the
+right call for their own private image with a known, controlled set of hosts; it is the wrong call
+for a published extension with an unknown install base. Run-time `--user` gets the same non-root
+outcome without asking every downstream host to already match a number this repo picks.
+
+`HOME=/tmp` exists because uid 996 has no `/etc/passwd` entry inside the container, so any code path
+that calls `expanduser("~")` (Python's `os.path.expanduser`, or a library doing the equivalent) falls
+back to reading `$HOME` and, failing that, historically resolves to the current user's home directory
+lookup failing — inside a minimal container image that can mean falling through to the image's own
+root-owned tree, which is read-only for uid 996. Setting `HOME=/tmp` gives any such lookup a writable,
+uid-agnostic target instead.
+
+### Decision 2 — USB device access needs nothing new
+
+MARVIN-DEC-0106 (S23, ops#253) already installed a udev rule for weewx's exec-ro spectrum-capture
+work: `SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="2838", GROUP="t-weewx",
+MODE="0660"` — matched by vendor:product rather than bus number, because the bus number is not
+stable on this board (MARVIN-DEC-0064).
+
+Measured from inside the currently-running (root) container: `/dev/bus/usb/007/003` — the RTL-SDR
+dongle — is `crw-rw---- 0:986`; every other node under `/dev/bus/usb/` is `crw-rw---- 0:0`, untouched
+by the rule because they don't match vendor:product 0bda:2838. `docker run --user 996:986` makes gid
+986 (`t-weewx`) the container's **primary** group, so the existing group-rw bit on the dongle's device
+node grants access with no `--group-add` flag needed. `rtl_biast` (the bias-tee control used to toggle
+the LNA) opens the same libusb handle and needs nothing separate. The container's `--device
+/dev/bus/usb` mount (the whole bus, not a single node — the bus number itself is unstable) stays
+exactly as it is; only the one node the dongle presents as actually opens for uid 996, same as it did
+for root.
+
+### Decision 3 — file permissions, measured from inside the running container
+
+Uid mapping between container and host is identity on this setup (no user-namespace remapping): files
+the current root container created show as host uid:gid `0:0`; the mounted `weewx.sdb` — created
+before the container existed — already shows as `996:986`. Walked every writable path the driver
+touches:
+
+- **`archive/weewx.sdb`** — mode `r-x------`, no owner write bit at all, plus a POSIX ACL mask left by
+  MARVIN-DEC-0139's `t-hlf` read grant (`setfacl -m u:t-hlf:r--`). Root could write it only because
+  root ignores DAC checks entirely; uid 996 could not. **Fix: `chmod u+w`** — deliberately **not**
+  `chmod 600`. On a file carrying a POSIX ACL, `chmod`'s group-permission bits set the ACL **mask**,
+  not the traditional group bits; `600` would set that mask to `---`, which silently caps every ACL
+  entry — including `t-hlf`'s read grant — back to no access, undoing MARVIN-DEC-0139 as a side effect
+  of an unrelated permission fix. `u+w` touches only the owner bit and leaves the mask (and `t-hlf`'s
+  grant) untouched.
+- **`logs/weewx.log`** — root-owned `0644`. `[Logging]`'s `TimedRotatingFileHandler` opens this file
+  in place for append; owner-only write with a different owner would fail on the first log line.
+  **Fix: `chown 996:986`.**
+- **`current.json` / `loop-data.txt`** — root-owned, but `loop_json_writer.py` (lines 244–246) never
+  opens them for in-place append: it writes to a temp file with `open(tmp, 'w')` and calls
+  `os.replace(tmp, dest)`, which only needs the **directory** to be writable, not the destination file.
+  The directory is already `996`-owned `rwx`. **No action** — these self-heal on the first write.
+- **`public_html`** — mode `0555`, but every `[StdReport]` report entry is `enable = false`, so nothing
+  ever writes there. **No action.**
+- **`weewx.conf`** — `0600 996:986` already. **No action.**
+- **Rotated logs** (`weewx.log.YYYY-MM-DD`) — root-owned, but log rotation only renames/unlinks at the
+  directory level; a rotated file is never opened again for writing. **No action.**
+
+Pre-staged via `marvinctl --tenant weewx exec` running as root-in-container, against weewx's own bind
+mounts, while the root container was still running and serving prod. Flagged to marvin as within the
+tenant's own envelope (own tree, own container, no cross-tenant touch). Safe to apply against a live
+container because permission changes don't retroactively affect file descriptors already open, and
+root's own writes ignore the modes being changed anyway.
+
+### Decision 4 — cutover keeps SIGKILL; one hazard is specific to this transition
+
+DEC-0008 measured that a graceful SIGTERM shutdown left the RTL-SDR dongle in a bad state and adopted
+`docker kill` (SIGKILL, via the unit's `ExecStop`) instead — considered and rejected on the record
+again here rather than assumed to still hold, because "a cleaner shutdown" is exactly the kind of
+plausible-sounding change a root→non-root cutover invites revisiting.
+
+The one hazard genuinely new to *this* transition: if the SIGKILL lands mid-transaction, the
+(still-root, pre-cutover) `weewxd` process can leave a root-owned hot `weewx.sdb-journal` behind. The
+next `weewxd` — now uid 996 — cannot open a hot journal it doesn't have write access to
+(`sqlite3PagerSharedLock` returns `SQLITE_CANTOPEN` when a journal exists but can't be opened
+read-write), so the archive database would fail to open on the very first start under the new user.
+Probability is roughly transaction-duration-in-ms / 60 s — small, but non-zero and specific to the one
+restart that crosses the uid boundary; every restart afterward has no root-owned journal to strand.
+
+**Mitigation:** cut over as three separate steps — `marvinctl stop`, `ls archive/` (confirm no
+`weewx.sdb-journal` present), `marvinctl start` — rather than a single `restart`, with a marvin `chown`
+gesture on the journal only if one is actually found sitting there. After the switch, every journal
+created is already `996`-owned, so this is a one-time hazard, not a standing one.
+
+### Verification plan (results in a follow-up entry, not here)
+
+Nothing in this DEC was executed against prod; it records the design only. The follow-up entry is
+expected to confirm: the container's runtime `id` reports uid 996; the startup log carries the
+bias-tee-off line, the driver banner `0.20+ws.5`, and `Initializing weewxd`; no `PermissionError`
+anywhere in the startup log; `current.json`/`loop-data.txt` flip to `996:986` ownership on their first
+write; `weewx.sdb`'s mtime advances past the cutover; the monitor's `RECEPTION:` lines resume on
+schedule. Expected outage: one container recreate, ~16–31 s, per the `v2.0.15`/`v2.0.16` precedent
+(DEC-0136/DEC-0138). **Rollback** is a unit-flag revert (marvin gesture: drop `--user`/`-e HOME`,
+`daemon-reload`, `marvinctl restart`) — the root image starts fine again after the pre-staged
+permission fixes, since root ignores file modes regardless of who last changed them. This is **not** a
+retag: the image bytes never changed, only the unit's invocation of them, so rollback carries none of
+the image-rollback machinery in `CONSTANTS.md`'s Release/rollback table.
+
+### Execution and verification (same session)
+
+- **Cutover:** `marvinctl stop weewx.service` issued and completed 13:11:55 EDT (unit went `failed
+  (Result: exit-code)` — expected, `docker kill` exits the `docker run` non-zero). Archive dir
+  checked between stop and start: no `weewx.sdb-journal` present — clean kill, the hot-journal
+  contingency above did not fire. `marvinctl start weewx.service` 13:12:05 EDT → active. Container
+  recreate: 10 s.
+- **Unit edit:** `--user 996:986` + `-e HOME=/tmp` added to `ExecStart`, `daemon-reload` done —
+  marvin's gesture, recorded as MARVIN-DEC-0140. Verified from weewx's side before cutover:
+  `marvinctl cat` of the unit showed the flags with everything else byte-identical to the pre-edit
+  capture; `marvinctl unit` showed no "changed on disk" warning.
+- **uid verification:** `marvinctl exec … id` → `uid=996 gid=986 groups=986` (name lookups fail
+  cosmetically — no passwd entry, by design). `Config.User` = `996:986`. Container stdout showed the
+  entrypoint's bias-tee-off line and `rtl_biast` finding the RTL2838 (device opened as 996).
+- **`weewx.log` at 13:12:06:** every service init, driver banner `0.20+ws.5`, startup process
+  `/usr/local/bin/rtldavis -gain 372 …`, `Using binding 'wx_binding' to database 'weewx.sdb'`,
+  `Daily summaries up to date`, `Starting main packet loop.` — no `PermissionError`.
+- **fd-level USB verification:** `/proc` inside the container showed PID 1 `weewxd`, PID 15
+  `rtldavis` holding fd 7 → `/dev/bus/usb/007/003` (the dongle) — USB access as uid 996 confirmed at
+  the file-descriptor level (MARVIN-DEC-0106's `root:t-weewx 0660` udev rule, primary gid 986).
+- **Monitor continuity:** `weewx_monitor.log` kept reading the now-996-owned log; `WINDOW: 0/21` at
+  13:13:18 and 13:14:18 (the expected acquisition gap), lines resumed 13:14:48.
+- **RF acquisition:** ~175 s (DEC-0136 measured 128 s on 09-03; same order, inherent to any restart,
+  not caused by this change) — first `Wunderground-RF: Published record` at 13:15:03.
+- **loop-JSON self-heal:** `current.json` (mtime 13:14) and `loop-data.txt` (mtime 13:15) flipped
+  from `root:root` to `t-weewx:t-weewx` on their first write — the tmp+`os.replace` self-heal
+  predicted above; no chown was needed.
+- **First archive record:** `Influx: Published record 2026-09-06 13:15:00 EDT` logged at 13:15:17;
+  `weewx.sdb` mtime 13:15, no journal left behind.
+- **Errors:** lines matching `ERROR|CRITICAL|Traceback|Permission` in `weewx.log` since 13:12: 0.
+
+**Data gap:** as seen by consumers, 13:11:55 → 13:15:00 ≈ 3 min 5 s, of which ~10 s is the container
+recreate and the rest is the driver's cold-start RF acquisition — the same shape every restart has.
+
+**Rollback:** not needed — the cutover succeeded on the first attempt; the unit-flag-revert path
+above was never invoked.
+
+---
+
+## DEC-0148 — `ops/campaign_analyze.py` ported to marvin (ops#250): closes the DEC-0128/DEC-0134 method gap, and finds `exec-ro`'s mount path is host-side, not the live container's
+
+**Status:** Accepted (executed, verified against live data) · **Date:** 2026-09-07 (S127) ·
+**closes** ops#250 · **closes the method gap** DEC-0125/DEC-0128 both flagged ("hand-assembled
+transport... port it before a third") · **does not touch** `ops/soak_check.sh` (same root cause,
+ops#250's related-surface note, sequenced as a separate follow-up)
+
+### The port
+
+`fetch()` was the only NAS-hardwired part of the tool — the analysis core (`gap_adjacent`,
+`partition`, `parse_blocks`, `attempt_starts`, `summarize`, `report`) is pure and untouched, exactly
+as DEC-0125/DEC-0128 already proved by importing it unmodified against a hand-assembled transport.
+Two `marvinctl --tenant weewx` calls replace the old raw-ssh round trip: `cat` for the apparatus log
+(tier 1, floor-allowed, no gesture) and `exec-ro <image> -- /opt/weewx-venv/bin/python3 -` for the
+archive rows, with the sqlite query piped on **stdin**, never `-c` argv — DEC-0124 already found
+`-c` rejects any string with quotes or parentheses even at zero literal whitespace, so stdin (live
+since ops#235's `-i` fix) is the only path that can carry real Python. The image tag is resolved at
+run time from `marvinctl inspect weewx-rtldavis-v2`'s `Config.Image` rather than hardcoded, so it
+doesn't go stale at the next release. `DEFAULT_LOG` moved to marvin's project root
+(`/srv/docker/weewx/logs/rx_experiment.log`); the `NAS_PORT`/`NAS_USER`/`NAS_HOST` env-var
+requirement is gone entirely — `marvinctl` carries its own auth and host, so running this tool no
+longer needs `~/.claude/nas.env`.
+
+### New finding: `exec-ro` mounts the tenant root at its own HOST path, not the live container's
+
+Not documented anywhere before this session. `exec-ro` is a fresh one-off `docker run` from the bare
+image (tier 2, "own resources"), not an attach to the already-running `weewx-rtldavis-v2` — so it
+does **not** carry that container's per-file bind list (`/opt/weewx-data`, `/var/log/weewx`, etc.).
+Verified live: `exec-ro ... -- mount` shows `/dev/mapper/vg0-srv on /srv/docker/weewx type ext4
+(ro,relatime)` — the whole tenant root, read-only, at its real **host** path. So the archive DB
+inside `exec-ro` is `/srv/docker/weewx/weewx-data/archive/weewx.sdb`, not the live container's
+in-container `/opt/weewx-data/archive/weewx.sdb` — confirmed present and readable
+(`-rwxr-----+ 996 986`) at the host path, and confirmed *absent* at the in-container one (`ls` there
+returns the image's own baked example tree, not the live data — no `archive/` directory exists in
+it at all). `campaign_analyze.py`'s `ARCHIVE_DB` constant now names the host path; `VENV_PY`
+(`/opt/weewx-venv/bin/python3`) is unaffected because the venv is image-baked, not a live bind.
+DEC-0125/DEC-0128's own two prior pulls must have used this same host path already — the DECISIONS
+entries elided the literal string ("`file:.../weewx.sdb?mode=ro`"), so it was never actually written
+down before now.
+
+### A second file broke silently: `ops/freeze_baseline.py`'s borrowed constants
+
+`ops/freeze_baseline.py` (companion to `stall_baseline.py`, DEC-0083's freeze-rate baseline) imports
+`campaign_analyze.DOCKER`/`CONTAINER`/`ARCHIVE_DB`/`VENV_PY` to build its *own* raw-NAS-ssh
+`docker exec` script — a different, unported transport that still runs **inside** the live
+container, where `/opt/weewx-data/archive/weewx.sdb` is correct and `/srv/docker/weewx/...` would be
+wrong. Repointing `campaign_analyze.ARCHIVE_DB` to the `exec-ro` host path (and removing `DOCKER`
+entirely, since `exec-ro` needs no docker-binary path) would have silently fed the wrong DB path into
+`freeze_baseline.py`'s own remote script — caught by mypy's `Module has no attribute "DOCKER"` on the
+green gate, not by inspection. Fix: `freeze_baseline.py` gets its own local copies of all four
+constants (identical values to what `campaign_analyze.py` used to export), decoupling the two
+files. **`freeze_baseline.py` itself is unchanged in behavior and still NAS-hardwired** — same
+unported status as `soak_check.sh`, now for the same reason (its transport talks to the live
+container directly; `campaign_analyze.py`'s no longer does).
+
+### Verification
+
+Ran the ported tool live against marvin (`--campaign B --since <epoch spanning Campaign C+D>`) and
+compared arm-by-arm against the historical record rather than trusting "it ran": **exact match** to
+DEC-0125's Campaign C figures (arm A 72.82%/n=368/sd=8.13, arm B 73.98%/n=350/sd=8.35) and DEC-0128's
+Campaign D pilot figures (P496 74.65, P449 73.79, P402 74.98, P372 74.97, P328 73.29, P207 68.17) —
+matched to the decimal, not just "same ballpark." The tool correctly printed its own pooled-attempt
+warning (two campaigns' swap events both fall inside the wide `--since` chosen for this check).
+Green gate: ruff clean, mypy clean (0 errors after the `freeze_baseline.py` fix, previously 1),
+pytest 475 passed / 17 skipped (unchanged — none of the 14 `test_campaign_analyze.py` tests touch
+`fetch()`, all pass unmodified).
+
+### What this does NOT do
+
+Does not port `ops/soak_check.sh` (same NAS-ssh root cause, explicitly deferred — ops's own
+related-surface note left the sequencing to weewx, and that script's shape is a dozen live health
+checks with remote awk-based log windowing, not two clean read calls; a separate, larger port).
+Does not port `ops/freeze_baseline.py` (out of ops#250's scope; decoupled only enough to stop this
+session's change from silently breaking it).
+
+## DEC-0149 — ops#257 limb 1 (marvin tenant-root git conversion): adopt the CoffeeRadar swap shape over a diff-and-categorize pass
+
+**Status:** Accepted (design, no code yet) · **Date:** 2026-09-07 (S128) · **decides** the open
+question in ops#257's Phase A/B exchange with marvin S29 · **supersedes** weewx's own originally
+proposed diff-and-categorize plan (never itself logged as a DEC) · **depends on** marvin
+`MARVIN-DEC-0144` (`git_branch=dev` set, deploy key added) · limb 2/3 already closed (`MARVIN-DEC-0109`/S119)
+
+### The decision
+
+marvin S29 researched how HLF, dashboard, and CoffeeRadar's onboardings each reconciled a tenant
+root into a real git checkout, at weewx's request after weewx floated a Phase A/B (file-by-file
+diff-and-categorize) plan. HLF and dashboard were both fresh clones into empty trees — no
+precedent value for weewx's case, a 4-month working directory of a continuously-running receiver.
+CoffeeRadar is the one comparable mess (a tar-packaging corruption, not organic accretion), and its
+fix was **not** a diff-and-categorize pass: fresh clone made elsewhere, the entire stale tree
+renamed aside intact (kept, not deleted), the fresh clone dropped into its place, then only the
+known-live untracked paths manually restored.
+
+Owner's call: adopt that shape for weewx's own conversion. Reasoning — a full diff-and-categorize
+pass requires pre-judging every file in an unknown junk drawer before anything is safe to touch, on
+a tree backing a live receiver; the swap needs no such judgment up front, deletes nothing, and
+leaves the renamed-aside tree available to consult if something's later found missing. The known
+landmines this repo has already documented (`loop_json_writer.py`/`ogoxeUploader.py` decoys in
+`weewx-data/bin/user/`, the `sortedcontainers` whole-directory mount with no repo copy,
+`weewx.conf`/`weewx.conf.rx-baseline`, `archive/weewx.sdb`, `logs/`) have to be correctly restored
+post-swap regardless of which strategy was picked — this decision is about the *mechanism*, not
+about skipping that list.
+
+### Scratch-location question, resolved as a side effect
+
+Marvin's access-model correction (same exchange) offered two shapes for where the fresh clone gets
+made: (a) a scratch subdir inside weewx's own tenant tree (`/srv/docker/weewx/.git-recon/`, same
+shape as the existing `build-vX.Y.Z/` dirs, deleted when done, zero marvin gestures), or (b) a
+one-off root chown of a separate path. The swap shape needs no separation from the live tree beyond
+what a rename-aside already provides, so (a) is sufficient — no marvin root gesture required for
+this step. `t-weewx` already owns `/srv/docker/weewx` 0750 end to end.
+
+### Verification obligation carried forward, not yet satisfied
+
+Marvin's research also surfaced that CoffeeRadar's `marvinctl pull` was **never actually confirmed
+working end-to-end** (wrong `origin` remote for a period, no later re-run recorded) — only
+dashboard's `pull` is a proven-working precedent. Adopting the swap shape does not itself prove
+`pull` works afterward; a live `marvinctl --tenant weewx pull` test (expect "Already up to date" or
+a real fast-forward) is a required step of Phase A/B, not an optional nicety, the same way
+dashboard's onboarding got one.
+
+### Execution safety, flagged by marvin's review before anything ran
+
+marvin reviewed this plan on ops#257 and caught a hazard neither post had stated: `weewx.service`
+runs continuously throughout, unlike HLF/dashboard's onboardings (no live service yet at their
+clone time). The container's existing per-file bind mounts are established by dentry at
+container-start, so they'd keep resolving transiently even through a mid-run parent rename — but
+the **host** side loses the ability to reach `/srv/docker/weewx/...` by that path for the swap's
+duration, and anything else touching the path during the window (restic's nightly backup list, a
+`marvinctl` read, the monitor daemon) would see it move out from under them. **`weewx.service` must
+be stopped for the swap window** (rename → clone → restore → verify `git status` clean), same
+discipline as any other live cutover in this repo — not optional, and not previously stated in
+either the owner's decision or this DEC's first draft.
+
+### What this does NOT do
+
+Does not execute the swap. No code or prod-tree change happened this session — this closes the
+strategy question so Phase A/B can be built against an agreed shape, per the repo's
+discuss-design-before-coding rule and `CONSTANTS.md`'s "prod is sacred" doctrine. The actual
+conversion (stop `weewx.service`, build the fresh clone in `.git-recon/`, rename the live tree
+aside, swap, restore the named landmine paths, restart, confirm `pull` live) is future work,
+sequenced in `BOOT.md`'s job list, not this DEC.
+
+## DEC-0150 — ops#257 limb 1: DEC-0149's swap executed and verified; the mechanism turned out to be sftp, not ssh
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-07 (S129) · **executes** DEC-0149
+· **closes** ops#257 (limb 1 was the last open piece; limbs 2/3 already closed) · **unblocks**
+ops#272's weewx row · **incidentally closes** `BOOT.md` job 6 (cgroup placement)
+
+### What ran, and how — the mechanism DEC-0149 assumed didn't exist
+
+DEC-0149 assumed the swap would run as a shell script over `ssh marvin-weewx`. It doesn't: that
+alias's forced command (`marvinctl-remote`) dispatches only to `sftp-server`, `rsync --server`, or
+its fixed verb list — there is no `bash`/shell verb and no `git clone` verb. Confirmed by trying
+`ssh marvin-weewx 'bash -s' < script` and getting `unknown verb 'bash'` back, then confirmed
+against marvin's own `marvinctl-remote` source (relayed by the live marvin session): `pull` is
+hardcoded to `git -C $repo pull --ff-only`, nothing else, and the deploy key (`MARVIN-DEC-0144`) is
+wired only into that one code path.
+
+**What actually worked:** the SFTP protocol itself is not verb-parsed — once the forced command
+hands off to `sftp-server`, the full SFTP op set is available (`mkdir`, `rename`, `rmdir`, `get`,
+`put`), scoped by `t-weewx`'s own filesystem permissions, no shell involved. The entire swap ran as
+one `sftp -b batchfile marvin-weewx` batch: `mkdir live-aside-20260907`, then one `rename` per
+existing top-level entry (158 of them, enumerated from a live `ls -a1`, not guessed) into that
+directory, then one `rename` per fresh-clone entry (43, same method) promoting `.git-recon/`'s
+contents to the top level, then `rmdir .git-recon`. This transport is plain-shape SFTP over a
+`marvin-<tenant>` alias — OPS-DEC-0193's advisory-allow — so the swap itself needed **no Class C
+mint**. (Two incidental commands *did* trigger Class C during prep: a mis-parsed local-redirect
+`sftp | tail > file` the push-nas-guard couldn't prove was local-only, and one earlier failed `ssh
+… bash` attempt before the mechanism above was known — both owner-confirmed in chat, one-shot
+tokens minted, per SOP. No guard was bypassed or routed around.)
+
+### The landmine list grew by one, and by one category
+
+DEC-0149 named `weewx.conf`, `weewx.conf.rx-baseline`, `archive/weewx.sdb`, `logs/`, the
+`loop_json_writer.py`/`ogoxeUploader.py` decoys, and `sortedcontainers/`. Verifying live state
+directly (`docker inspect`'s mount list, `.gitignore`, `git ls-tree`) before touching anything
+found two things the plan hadn't:
+
+1. **`weewx-data/` is not git-tracked at all** (`git ls-tree` on `dev` has zero `weewx-data/`
+   entries; `.gitignore` confirms `weewx-data/` and `archive/` are excluded). So `weewx.conf`,
+   `archive/weewx.sdb`, and the decoy files aren't independent landmines to restore piecemeal —
+   they're all just contents of one untracked directory. The swap restored `weewx-data/` wholesale
+   from the aside copy, which subsumes all of DEC-0149's individually-named paths inside it. Two
+   more untracked live files at the tenant root — `monitor.env`, `proxy.env` — got the same
+   wholesale-restore treatment; DEC-0149 didn't name them, but they're the same kind of live secret
+   config `weewx.conf.rx-baseline` already was, sitting right next to it, and there was no reason to
+   treat them differently.
+2. **`weewx_monitor.py` is git-tracked, sits at the exact path the swap occupies, and its live SHA
+   did not match `dev`'s tip** (`147f3eff…` live vs `285743d4…` on `dev`). Checked every other
+   root-level tracked file the same way — `loop_json_writer.py` and `influx.py` are byte-identical
+   to `dev` (CONSTANTS.md already documents scp-deploy for those, so no surprise); driver files
+   (`rtldavis.py`, `pressure_service.py`, `dewpoint_service.py`, `owm.py`, `windy.py`, `wcloud.py`,
+   `entrypoint.sh`, `docker-compose.yml`, `Dockerfile`, root `.gitignore`) differ too, but
+   CONSTANTS.md's deploy-layers table already establishes these are baked into the image at build
+   time — the host copy has never been what runs, so landing on `dev`'s tip is the desired outcome
+   of self-service builds going forward, not a risk. `weewx_monitor.py` is the one exception: it
+   runs as a host-level daemon (`weewx-monitor.service`) directly off the on-disk file, with its own
+   separate owner-run deploy history (CONSTANTS.md's deploy-layers row) — letting the swap silently
+   hand it `dev`'s tip would have been an undiscussed prod deploy disguised as a tree conversion.
+   marvin's session agreed with this read before execution. Handled by renaming the fresh clone's
+   copy aside as `weewx_monitor.py.dev-tip-not-deployed` (kept, not discarded — it documents exactly
+   what's queued) and restoring the live copy as `weewx_monitor.py`.
+
+### A now-visible, not newly-created, piece of drift
+
+`weewx_monitor.py` now shows as a git-tracked file whose on-disk content differs from `HEAD` — this
+is real and will persist until someone deliberately reconciles it (checks out `dev`'s tip and
+restarts `weewx-monitor.service` to pick it up, once that's a decision someone actually makes, not
+a byproduct of this swap). This is not new drift the swap introduced — CONSTANTS.md's deploy-layers
+table already documented that this file deploys separately from any merge, meaning a
+merged-but-undeployed gap has always been possible here; there was simply no git checkout before
+now to make it visible as a diff. Treat it as the first case of a general fact: for any host file
+that is both git-tracked and used directly (unlike the baked driver files), `git status` on this
+checkout is now the honest, previously-unavailable answer to "does the deployed version match
+`dev`?" — a capability this repo didn't have before this session.
+
+### Execution facts
+
+Outage: `weewx.service` stopped 14:15:36 EDT, restarted 14:24:48 EDT — **~9 minutes**, not the
+"well under a minute" estimate given before starting. The swap operations themselves were fast; the
+gap is verification and script-building time spent with the service already down rather than
+staged fully in advance. `weewx_monitor.py`'s own staleness alarm fired correctly at the 5-minute
+mark during this window — expected behavior, not a new incident, and it cleared once the log
+resumed.
+
+`marvinctl --tenant weewx pull` returned "Already up to date" — but the **first** run of it used
+`https://github.com/…` (anonymous, unauthenticated — works only because this repo is public), not
+the SSH deploy-key path DEC-0149's obligation was actually about, because the local clone that got
+rsynced up was never repointed off its default HTTPS origin before transport. Fixed post-hoc:
+fetched `.git/config` via `sftp get`, edited `origin`'s URL to
+`git@github.com:WeatheredScientist/weewx-rtldavis.git` locally, `sftp put` back — no shell edit
+needed, same mkdir/rename/get/put toolkit covers file edits, not just moves. Re-ran `pull`:
+`From github.com:WeatheredScientist/weewx-rtldavis` — confirms the SSH/deploy-key path this
+whole obligation was meant to prove.
+
+**Container's cgroup placement corrected as a side effect** (`BOOT.md` job 6 /
+`MARVIN-DEC-0141`): the restart re-ran `docker run` fresh from the unit file, which already carried
+`--cgroup-parent=weather.slice` since marvin's S29 edit — the pre-swap container just predated that
+edit. Confirmed in the post-restart `docker run` invocation string. No separate action needed;
+folding it into this restart (rather than a second one later) was the plan already.
+
+`weewx-data/archive/weewx.sdb` verified intact post-swap (43MB, correct mtime). `current.json` and
+`loop-data.txt` confirmed writing fresh timestamps within a minute of restart. `weewx.log` resumed
+normal startup sequence, main packet loop running, no error lines.
+
+### What this does NOT do
+
+Does not reconcile `weewx_monitor.py`'s drift — that stays a deliberate, separate action. Does not
+update `docs/CONVENTIONS.md`'s release-mechanics section or `CONSTANTS.md`'s deploy-layers table —
+same session, tracked as this session's own remaining closeout work, not deferred past it. Does not
+touch ops#272's other tenants' rows (already closed by HLF/coffeeradar/dashboard/marvin).
+
+## DEC-0151 — post-hardware-install incident: DEC-0150's landmine list missed `influxdb/`; `weewx-monitor`'s PID-existence guard failed on PID reuse across reboot
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-07 (S130) · **follows** DEC-0150 ·
+**fixes** a gap DEC-0150's landmine list didn't name · **amends** `weewx_monitor.py`'s PID guard
+
+### What happened
+
+Owner-scheduled hardware installs on marvin required a graceful `weewx.service` stop at 17:09 EDT.
+A bind mount follows the inode, not the path, so `weewx-influxdb.service` — still running — kept
+writing to DEC-0150's already-moved `influxdb/` directory the whole time, which is why nobody
+noticed at the 14:24:48 swap that DEC-0150's landmine list never named `influxdb/` at all (it isn't
+git-tracked, so the SHA-diff sweep that caught `weewx_monitor.py`'s drift had no reason to look at
+it). The first post-install boot of `weewx-influxdb.service` (19:28:27 EDT) started against a bind
+source that no longer existed at that path; dockerd auto-created empty `root:root` placeholders,
+and `influxd` (running as uid 996) couldn't create its own data directories inside them — a crash
+loop, stopped by a peer session at 20:09:20 EDT to end the noise. Found and root-caused by the
+marvin-side session (Fable, "marvin S31"), not this repo — full mechanism, timestamps and
+ownership bits are that session's own account; this entry covers only weewx's side of the
+recovery, verified independently rather than taken on the peer's report alone (`docs/GOTCHAS.md`
+§1/§2).
+
+Separately, `weewx-monitor.service` was found crash-looping (`activating (auto-restart)`, exiting
+clean every ~15–30s) since its own post-reboot start at 19:51. Root cause: `weewx_monitor.py`'s PID
+guard (`os.path.exists(f'/proc/{old}')`) only checks that *some* process holds the PID recorded in
+the last run's pidfile — not that it's a prior monitor instance. Across the reboot, the number
+happened to land on `weewx.service`'s own `docker run` process (PID 1822), so every restart
+attempt saw a live-but-foreign PID and exited immediately, believing another monitor was already
+running. Effect: no uploader alerting or RF-reception watchdog since 19:51.
+
+### What weewx did, in order (self-service throughout, no Class C needed)
+
+1. **Verified marvin's restore independently** before touching anything — `marvinctl --tenant
+   weewx stat`/`ls` on `/srv/docker/weewx/influxdb/{data,config}` confirmed `t-weewx:t-weewx`
+   ownership and the real store contents (`engine/`, `backup/`, `influxd.bolt`, `influxd.sqlite`)
+   in place, independent of the peer session's own report.
+2. **Started `weewx-influxdb.service`** (`marvinctl --tenant weewx start`) — clean boot, all 42
+   shards loaded, no mkdir errors, `influx bucket list --org eaglehunt` confirmed all four buckets
+   (`weewx`, `eh_rollup`, `_tasks`, `_monitoring`) intact.
+3. **Backfilled the archive→InfluxDB gap.** `ops/backfill_influx.py` assumes NAS-side execution
+   (local sqlite path, `localhost:8086`) and doesn't run as-is against marvin. Rather than port it
+   under incident pressure, ran its logic ad hoc via `marvinctl --tenant weewx exec
+   weewx-rtldavis-v2` — the **live running container**, not `exec-ro` (which turned out to have no
+   network egress at all: `exec-ro` is an isolated one-off, fine for `campaign_analyze.py`'s
+   read-only DB queries per DEC-0148 but useless for a POST). The script read the InfluxDB token
+   out of the container's own mounted `weewx.conf` and used it entirely inside that subprocess —
+   the token value never appeared in this session's own transcript. Window bounded from
+   `weewx.log` ground truth, not the peer's stated estimate: last good `Influx: Published` was
+   record **17:08:00 EDT**, first good publish after the fix was **20:52:00 EDT** — 34 archive
+   records existed in that span (the two fully-dark stretches, 17:09→19:28 and 19:47→19:51, have no
+   archive rows at all, so nothing to backfill there). Posted all 34, verified via `influx query`
+   from the `weewx-influxdb` container: 32 carry `rxCheckPercent`, 19 carry `outTemp_F` — the gap
+   between those two counts is expected, not every archive record populates every field.
+4. **Fixed the `weewx_monitor.py` PID guard** (`weewx_monitor.py:213-231`): replaced the
+   PID-existence check with `fcntl.flock(LOCK_EX | LOCK_NB)` on the pidfile. A flock is scoped to
+   the open file description and released by the kernel the instant the holding process exits or
+   the box reboots — there is no stale-but-plausible state for a reused PID number to hit, unlike a
+   number compared against `/proc`. Landed via PR, deployed with `marvinctl --tenant weewx pull` +
+   `restart weewx-monitor.service` once merged.
+
+### What this does NOT do
+
+Does not fix `docs/CONVENTIONS.md`'s or `CONSTANTS.md`'s DEC-0150 runbook language to derive a
+landmine list from every unit's bind-mount sources (`grep -- '-v /srv/docker/weewx'
+/etc/systemd/system/weewx*.service`) rather than from memory — flagged by the peer session as a
+correction ops is filing cross-repo; tracked as a `BOOT.md` job, not done in this entry. Does not
+change `ops/backfill_influx.py` itself to run against marvin natively — the ad hoc `marvinctl exec`
+invocation solved this incident's specific window; a real port (NAS-path and `localhost:8086`
+defaults, batch size, `--dry-run`) is separate follow-up work, not filed as its own tracker item
+yet.
+
+## DEC-0152 — ops#286/ops#287: the last of the NAS-ssh transport retired, three tools ported to `marvinctl`
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-07/08 (S131) · **closes** ops#286,
+ops#287 · **extends** the `marvinctl exec-ro` transport DEC-0124/DEC-0148 established for
+`ops/campaign_analyze.py` · **relates to** DEC-0118 (the host move that made NAS-ssh dead)
+
+### What happened
+
+`ops/freeze_baseline.py`, `ops/stall_baseline.py`, and `ops/soak_check.sh` still `ssh`'d straight
+to the NAS and `docker exec`'d into the live container using in-container paths — all three dead
+since DEC-0118 moved the tenant to marvin, reaching nothing real. Ported all three to
+`marvinctl --tenant weewx`, in two PRs:
+
+1. **PR #369 (ops#286):** `freeze_baseline.py`'s own `fetch_archive()`/`fetch_restarts()` moved to
+   `marvinctl exec-ro` (same stdin-query shape as `campaign_analyze.py`, DEC-0124: `exec-ro`'s argv
+   path rejects any token with quotes/parens, so a real Python query can only survive on stdin) and
+   `marvinctl grep` respectively. **`stall_baseline.py`'s `fetch()` had to move too**, even though
+   ops#286 named only `freeze_baseline.py`'s two functions: `freeze_baseline.py`'s own `main()`
+   calls `stall_baseline.fetch()` directly, so porting only the two named functions would still
+   leave the tool unable to run at all post-move. `marvinctl grep` enforces a whitespace-free
+   pattern client-side (a space becomes two remote tokens) — multi-word signatures use `.` as a
+   regex stand-in for the literal space (`rtldavis.process.stalled`), and an OR across two
+   signatures (`tick: swapping` / `RESTORING baseline snapshot`) runs as two separate greps instead
+   of one alternation, since the pattern can carry no whitespace at all. Dropped a dead `DATA
+   DROUGHT` grep in the old `stall_baseline.fetch()`: computed but never returned, found while
+   rewriting the function's transport — a pre-existing no-op, not a regression.
+2. **PR #371 (ops#287):** `soak_check.sh` needed its own design pass, not a copy-paste, as the
+   issue itself predicted — a dozen checks fed by one remote awk/grep round trip became ~15
+   separate `marvinctl` calls (`inspect`, `unit`, `stat`, `proc meminfo`, `cat`/`grep` per log file,
+   `exec-ro`), with windowed counts done by `cat`-ing the needed rotated log(s) once and filtering
+   locally via plain string comparison — log timestamps are zero-padded ISO, which sorts correctly
+   as text, so no remote (or even local) date arithmetic is needed for the per-line cut, only for
+   the cutoff itself.
+
+### The real bug the port avoided
+
+The old `EXPECT_IMAGE` canary compared `docker inspect`'s `Config.Image` to a **versioned tag
+string** (e.g. `:v2.0.13`). marvin's `set-image` deploy flow runs the live container under a
+**local alias tag** — `marvin-live` today — so `Config.Image` never reads back a versioned tag at
+all post-move. A straight string compare would have failed the canary **permanently, on a healthy
+station**, exactly the DEC-0031 stock-driver-trap shape this check exists to catch, except now
+crying wolf on every single run instead of catching a real regression. Fixed to compare **image
+ID** via `marvinctl check-image <expected-versioned-tag>` against `inspect`'s own `.Image` field —
+confirmed live that `marvin-live` and `:v2.0.16` share one sha256 image ID, so the fix is inert on
+a healthy station and fires correctly on a genuine mismatch (test-covered both ways).
+
+### Other findings along the way
+
+- The old pid-file + `/proc` liveness check for `weewx-monitor.service` cannot work post-move
+  either: the monitor is a **host systemd unit**, invisible to `exec-ro`'s own isolated container.
+  Replaced with `marvinctl unit weewx-monitor.service` (an OS-level liveness signal) kept
+  **alongside** the existing log-mtime freshness check, not instead of it — the mtime check is the
+  one that catches a wedge (alive but not writing), which a pure `Active: active (running)` read
+  cannot see; DEC-0036's whole point.
+- **One feature dropped, not silently:** the old single ssh round trip timed itself
+  (`remote_elapsed_s`, an NAS-load signal, itself found to be miscomputed by DEC-0087/S87). ~15
+  separate `marvinctl` calls have no single number to report in its place; each measured fast live
+  (a 3.3 MB `weewx.log` `cat` took 0.56s), so this is a removed diagnostic, not a functional loss —
+  no replacement is proposed.
+- `tests/test_soak_check.py` was not named in ops#287 and was found broken by the port: it drives
+  the real script with `ssh` stubbed on `PATH`, so the transport change broke all 15 of its tests
+  at collection. Rewritten around a fake `marvinctl` on `PATH` instead, keyed by verb and the
+  basename of the path/pattern asked for, so the script's own windowing/counting logic still runs
+  for real rather than against a pre-computed answer. 22 tests now (was 15): the existing coverage
+  plus new positive/negative pairs for the image-ID-vs-tag fix and the restart-loop detector
+  (S95/#245's named incident).
+- `marvinctl grep`/`ls`/`stat` have their own quirks not previously documented — see
+  `docs/GOTCHAS.md` §3.
+
+### Verification
+
+Both scripts run live against the real marvin host end to end (not just the offline test suites):
+`stall_baseline.py` — 11 log files, 2 episodes over 10.9 days; `freeze_baseline.py` — 15,273
+archive rows, 44 freezes classified (a live side-finding, not acted on here: the freeze rate read
+**4.03/day, AT RECORD MAX across every rolling window**, against DEC-0083's ~1.49/day baseline —
+flagged to the user, not investigated in this entry); `soak_check.sh` — 17 passed/1 warning/1 real
+fail (a restart-loop flag from that same session's own legitimate S130 deploy, 22 min apart — the
+script's own comment already names an attended deploy as this shape's expected false-positive).
+Green gate clean on both PRs (ruff/mypy/pytest, 480 passed/17 skipped after both merged — +5 over
+the S130 baseline, matching the net new test count); secret scan clean.
+
+### What this does NOT do
+
+Does not investigate the AT-RECORD-MAX freeze rate `freeze_baseline.py` surfaced live — flagged as
+a live finding, not a regression from this port (the classification logic is unit-tested and
+unchanged in behavior), and left for a session that can actually look into root cause. Does not
+touch `ops/campaign_analyze.py` (already ported, DEC-0148, working, out of scope) or
+`ops/backfill_influx.py` (DEC-0151 already named this as separate follow-up work). Does not close
+ops#265 (Docker Hub publish path) — checked in passing this session (`marvinctl push` exists,
+citing ops#265 itself) and confirmed via the ops session to already be accurately tracked as
+"wired but unexercised," not newly resolved.
+
+---
+
+## DEC-0153 — ERR-0008: 76-minute reception gap backfilled from the WeatherLink→WU path, same method as ERR-0003/ERR-0005
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-08 (S132) · **applies** DEC-0032's
+`backfill`/`_qc` in-band-flag pattern · **confirms** ERR-0005's finding that neither machine history
+API carries read entitlement on this account · **relates to** `#370`/`#373`
+
+### What happened
+
+Between S131's close (22:59:47 EDT, 2026-09-07) and this session, a live incident ran and was never
+closed out in this repo's own docs — only on the tracker. `#370` (filed by "marvin S31,"
+Fable): post-case-work re-enumeration put the RTL2838 on a chipset-xHCI USB port, a configuration
+`MARVIN-DEC-0064` already established breaks this driver's hop-tracking on this board, degrading
+reception from ~19:51 ET to irregular 1–5 minute gaps. The owner's physical fix — moving the dongle
+back to the CPU-attached cluster — triggered a harder failure in flight: `#373`, filed
+by whichever session responded to the move, records the container's `/dev/bus/usb` view going stale
+and `rtldavis` crash-looping with **zero** archive records for ~71 minutes (22:31–23:42 EDT by the
+tracker's own account). Neither issue got a matching `DATA_ERRATA.md`/`DECISIONS.md` entry, and
+`BOOT.md`'s resume pointer still read "S131 → S132" with no mention of either — the same
+closeout-debt shape `ops#218` exists to catch, just not caught by it here because the pointer's own
+staleness didn't cross a commit boundary until this session.
+
+Independently confirmed against the archive itself before doing anything: the SQLite archive shows
+a clean 76-minute gap, last real record **22:29:00 EDT** (already degraded — `outTemp = NULL`, the
+tail of #370's condition) to next real record **23:45:00 EDT**, with nothing in between — closely
+matching but not identical to #373's own 22:31–23:42 estimate (archive boundaries are ground truth
+here; the tracker figure was a log-read estimate).
+
+### What this session did
+
+1. **Confirmed the gap is real and unaddressed** via a read-only query against marvin's live archive
+   (`marvinctl --tenant weewx exec weewx-rtldavis-v2` into the **running** container, per DEC-0151's
+   precedent — `exec-ro` has no network egress and, separately here, no `sqlite3` binary; the live
+   container has both Python's stdlib `sqlite3` and network access).
+2. **Sourced the backfill from Weather Underground's public history table** for our own station
+   identity (no login required, so reachable from the ordinary browser tool — not gated the way an
+   authenticated console would be). **Tried the machine-readable path first and it failed exactly as ERR-0005
+   predicted it would**: `v2/pws/history/all` returned `401 Unauthorized` with the station's own
+   upload password (the same credential that authenticates current-conditions and RapidFire posts) —
+   this account has no historical-read entitlement, now confirmed a second time on a second
+   incident. Went straight to the manual/table read per that erratum's own stated recommendation,
+   rather than also re-trying WeatherLink v2's `historic` endpoint (already shown empty-but-200 on
+   this account by ERR-0005; no reason to expect a different result).
+3. **Cross-validated the WU rows against our own archive boundaries** before booking anything: WU's
+   62.0 °F neighborhood at 10:18–10:29 PM matches our last-good 62.0 °F at 22:18 EDT; WU's 60.0 °F at
+   11:44 PM matches our first-resumed 59.9 °F at 23:45 EDT. Dropped the 11:44 PM row itself from the
+   booked set — missing dewpoint/humidity/gust, and immediately adjacent to the boundary, which
+   DEC-0069 already established as the record most likely to carry contamination from whatever
+   caused the gap.
+4. **Backfilled the archive**, same technique as DEC-0151/ERR-0003/ERR-0005: backup first
+   (`weewx.sdb.bak-S132-preBackfill-20260908-084528`), 5 rows inserted at `interval = 15` (honest
+   cadence, not our 1-minute native rate — the SQLite schema has no dedicated backfill column, so
+   `interval` is itself the provenance signal here, as it was in both prior incidents),
+   `weectl database rebuild-daily --date=2026-09-07 -y` run immediately after (1,117 records
+   reprocessed, matches the day's known record count).
+5. **Backfilled InfluxDB**, same 5 points on `record,binding=archive`, each carrying the in-band
+   **`backfill = 1`** field (DEC-0032's `rain_qc` pattern) — written via the weewx uploader's own
+   write-scoped token, read directly out of the live container's mounted `weewx.conf` and used
+   entirely inside that subprocess, never appearing in this session's transcript (DEC-0151's
+   technique, applied to a second credential). `POST /api/v2/write` returned HTTP 204.
+6. **Read-verified both stores** before considering this done: the SQLite query re-run shows the 5
+   new rows exactly where expected, bracketed cleanly by the real 22:29 and 23:45 records with no
+   collision; the InfluxDB write-token cannot read its own bucket back (confirmed, not assumed — an
+   expected shape per CONSTANTS §5's write-only scoping, not a defect), so verification instead used
+   the `weewx-influxdb` container's own `operator` CLI profile, which returned all 5 `outTemp_F`
+   values and all 5 `backfill=1` fields at the correct timestamps.
+7. **Logged `ERR-0008`** (`docs/DATA_ERRATA.md`) with the full correction-status table, in the same
+   format as ERR-0003/ERR-0005/ERR-0007.
+
+### What this does NOT do
+
+Does not fix `#373` (`weewx_monitor.py` can't distinguish a full outage from partial
+degradation) — that is a design decision on the monitor's alert classes, orthogonal to backfilling
+the data the outage cost, and stays open on the tracker. Does not re-attempt either machine history
+API a third time — two incidents now agree neither carries read entitlement on this account; a
+future backfill should go straight to the manual table read, per ERR-0005's own advice, now doubly
+confirmed. Does not audit whether other consumers (dashboard cards, records) need to know about the
+`backfill=1` flag — same open item ERR-0003 left for the dashboard side, unchanged here. Does not
+retroactively write a BOOT.md/CHANGELOG entry for the #370/#373 incident session itself (that
+session's own work — the physical dongle move, the tracker filings — is accounted for by the issues
+it filed; this entry documents only the backfill this session performed).
+
+## DEC-0154 — `#370`/`#373`: the RTL2838's `/dev/bus/usb` view went stale after the port move; a container recreate fixed it; the monitor's fully-down-vs-degraded blind spot filed separately
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-07/08 (S134, the `#370`/`#373`
+incident session DEC-0153 flagged as still owing its own entry) · **precedes** DEC-0153 (that
+entry's backfill target is this entry's outage) · **files** `#373` · **relates to**
+`eaglehunt-ops#370` (marvin's own finding)
+
+### What happened
+
+Checking in on tracked issues found `#370` (filed by marvin S31/Fable): reception degraded from
+~19:51 ET after the RTL2838 re-enumerated on marvin's chipset-xHCI port following case work —
+`MARVIN-DEC-0064` already established that port class breaks this driver's hop-tracking. By the
+time this session investigated, the picture had moved past the reported ~50% degradation: live logs
+showed `rtldavis` crash-looping every ~70s with `user.rtldavis ERROR rtldavis exited with no stderr
+captured` since 22:38:37 EDT — zero archive records, not a partial loss.
+
+**Root cause, established from `weewx.service`'s own unit line, not assumed:** the container's
+`--device /dev/bus/usb:/dev/bus/usb` passthrough is a one-time snapshot Docker takes at container
+start (19:51:02 EDT, *before* the 22:31 port move), not a live bind. `marvinctl --tenant weewx exec
+weewx-rtldavis-v2 -- ls /dev/bus/usb/005` inside the running container showed no `002` node at all,
+while the host's own `kmsg` confirmed the RTL2838 re-enumerated there (`usb 5-1`, 22:38:37) — the
+exact "stale container view" signature DEC-0075 built `ops/usb_forensics.sh` to detect, one of that
+tool's two predicted failure shapes, now observed for the first time. This is a different mechanism
+from `#370`'s own reported degradation (a genuine RF/hop-tracking problem); the two stacked because
+the owner's physical remedy for the first problem triggered the second.
+
+### The fix
+
+`marvinctl --tenant weewx restart weewx.service` (self-service, no owner gesture) — `weewx.service`
+already does `ExecStartPre=docker rm -f` + a fresh `docker run` on restart (confirmed from the unit
+file), which re-snapshots `/dev/bus/usb` against the port's current state. Restarted 23:42:48 EDT;
+clean startup, `rtldavis` came up once and stayed up (no repeat of the "no stderr" error); first
+`Wunderground-RF` publish 23:44:41; first archive record `23:45:00 EDT` on the normal 60s cadence;
+`weewx_monitor.py` auto-fired "RECOVERY: Wunderground-RF after 63min." Verified via the archive
+directly, not the log alone: `SELECT dateTime FROM archive` shows a clean 76-minute hole
+22:29:00→23:45:00 EDT and nothing since — the gap DEC-0153 backfilled from WU.
+
+### `#373` filed, not fixed here
+
+Independently confirmed during this response: `weewx_monitor.log` read `WINDOW: 0/21 (0%)` /
+`DRIVER NOT RUNNING detected` throughout the *entire* 71-minute crash loop — structurally identical
+to what a much milder reception dip would also produce. Nothing in the monitor's own state
+distinguished "completely down" from "degraded." Filed as `#373` rather than patched inline — a
+monitor alert-class change needs its own design pass (DEC-0081/DEC-0120 already carry comparable
+machinery for RF-quiet vs. mute-child episodes; this may be a variant, or already covered and just
+under-surfaced in the log formatting), not a quick fix under incident pressure. Still open as of this
+entry.
+
+### What this does NOT do
+
+Does not change the container's device-passthrough shape (a full `/dev/bus/usb` directory mount) to
+something that would auto-recover from a future port move without a restart — no such Docker
+mechanism exists for `--device` on a directory; a recreate is the only lever, same conclusion
+DEC-0065/DEC-0147 already reached for the adjacent USB-reset question. Does not investigate why the
+owner's physical move landed the dongle on `5-1` rather than back at the documented-good `7-1.2`
+cluster — a hardware-siting question outside this repo's own visibility, `eaglehunt-ops#370`'s to
+own if reception quality (as opposed to this outage) turns out to still be degraded at the new
+position.
+
+## DEC-0155 — `eaglehunt-ops#288`: derive a tenant-tree restore list from live unit files, not memory (`ops/tenant_mounts.py`)
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-08 (S134) · **closes**
+`eaglehunt-ops#288` · **confirms** DEC-0151's `influxdb/`/`nas-lease` finding independently, by a
+different method
+
+### What happened
+
+`eaglehunt-ops#288`'s still-open lesson 1 (marvin's own comment already shipped lesson 2, the
+`ExecStartPre=test -e <marker>` store guards on `weewx.service`/`weewx-influxdb.service`): a
+tree-swap's restore list must be *derived* from the units' own bind mounts, not hand-curated —
+DEC-0150's swap missed `influxdb/` for exactly that reason, and a curated list is only ever as
+complete as whoever wrote it remembered to be.
+
+Built `ops/tenant_mounts.py`. **Reads unit *files*, not `marvinctl unit`'s runtime status** —
+`weewx-influxdb-backup.service` and `weewx-rx-experiment.service` are periodic and print no
+`ExecStart` line in `systemctl status` once inactive, so a runtime-status-only approach would silently
+under-report; the unit file is authoritative regardless of whether anything is currently running.
+Every `-v SRC:DST[:MODE]` extracted (backslash-continuation-aware, multi-`ExecStart=`-aware for
+`weewx-rx-experiment.service`'s `tick`/`guard` pair) and classified against *this repo's own local
+git tree*: **TRACKED** (git-restorable, e.g. `influx.py`), **IGNORED** (a known `.gitignore`d data
+dir, e.g. `weewx-data/`, `logs/`, `sortedcontainers/`), or **UNDOCUMENTED** (neither — the exact
+DEC-0150 failure shape). Also reports cross-tenant reads *into* weewx's own tree, discovered via
+`marvinctl --tenant weewx unit weather.slice`'s box-wide visibility (`eh-proxy.service`,
+`hlf-api.service` both mount weewx paths read-only) — paths a weewx-side swap must not relocate
+without warning those tenants. An optional `--check FILE` flag diffs a swap plan's own list against
+the derived one.
+
+**Live-verified against marvin, not just unit-tested:** correctly flags `influxdb/data`,
+`influxdb/config`, and `nas-lease` as undocumented — reproducing DEC-0151's real, independently-found
+result by a completely different method (git-tree classification vs. that incident's own
+after-the-fact SHA-diff sweep). `sortedcontainers/` initially looked like a possible
+tool bug (assumed vendored-and-tracked) until a fuller `.gitignore` read confirmed it is
+deliberately excluded, same class as `weewx-data/`/`logs/` — a reminder that a "surprising"
+classification is worth checking against the source of truth before trusting the tool over it.
+
+16 new tests (`tests/test_tenant_mounts.py`), offline — `classify()` tested against this repo's own
+real git state rather than a mocked one, the same pattern `stall_baseline.py`'s tests use. Full suite
+green (496 passed/17 skipped), ruff/mypy clean. Merged via PR #375.
+
+### What this does NOT do
+
+Does not auto-discover `OWN_UNITS`/`EXTERNAL_UNITS` — both lists are hardcoded, matching this repo's
+existing convention of hardcoded log paths/signatures elsewhere in `ops/`; box-wide unit enumeration
+is not a `marvinctl` verb, so a new cross-tenant consumer showing up needs a human to add it. Does
+not change how a tree-swap is actually *executed* (still DEC-0149/0150's SFTP-batch shape) — this is
+a pre-flight check to run before one, not a replacement for the runbook.
+
+## DEC-0196 — `ops/backfill_container.py` fixed to actually run self-service against marvin
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-09 (S136) · **follows** DEC-0151,
+DEC-0153, DEC-0155 (the incidents that worked around this) · **fixes** `ops/backfill_container.py`
+
 ### Context
 
-DEC-0141 was written and merged (PR #334) at ~21:38 ET with "daytime" as the proposed cutover
-window. The owner, via the ops session, asked whether daytime was load-bearing. It was not — a
-default assumption, not a requirement — and the runbook's real preconditions (marvin's stage 0,
-the dark-parallel test, dashboard's confirmations) could all be met within the hour. The owner said
-go at ~21:50 ET; the move ran 22:08–22:43 ET with the owner attending in the weewx and ops chats.
+Three separate incidents (DEC-0151 S130, DEC-0153, and the ERR-0009 attempt near DEC-0155) each
+needed to backfill an archive→InfluxDB gap after a marvin incident, and each reimplemented the
+backfill logic ad hoc via `marvinctl --tenant weewx exec weewx-rtldavis-v2` rather than running
+either checked-in tool. Investigated why, rather than assuming: `ops/backfill_container.py`
+(existing since S16, purpose-built for exactly this in-container execution) was broken as
+committed — `INFLUX_ORG = "YOUR_INFLUX_ORG"` was a never-filled placeholder, `INFLUX_URL =
+"http://influxdb:8086"` a compose-network hostname that hasn't resolved since `docker-compose.yml`
+became decorative, and its sqlite connection opened the LIVE production archive read-write
+instead of read-only (weedb's own 30 s lock-timeout fix, DEC-0070/DEC-0071, doesn't apply to a
+separate process's own connection). `ops/backfill_influx.py`'s own defaults were merely stale
+(NAS/localhost-era), not broken outright, but it can't be run self-service from marvin regardless:
+`marvinctl` exposes no verb to run an arbitrary command on marvin's bare host — every
+network-capable tier-2 verb (`exec`, as opposed to `exec-ro`, which has no network egress) is
+scoped to a live container.
 
-### What was decided during execution (each a deviation from the written plan, recorded so the
-runbook reads true)
+### The fix
 
-1. **Copy route: `docker cp <container>:<path> -` streamed into tar files on the marvin-data share**,
-   not `sudo tar` on the NAS. `nas-admin` has no non-interactive sudo, and the store's data dir is
-   `0700 uid 1000`; the docker daemon reads it as root and `docker cp` works on a stopped container,
-   which is exactly what the final copy needs. One Class C mint per NAS step (two in all).
-2. **The two copies were kept, the delta was not.** Snapshot for stage 1 (live, torn-bolt risk
-   accepted — it started clean), final copy from the stopped server for stage 2; the dark copy was
-   wiped before the final one landed. Equality test = the two user buckets' shard counts and bytes,
-   not the raw 64-shard total: the system buckets `_monitoring`/`_tasks` lose their expired empty
-   shards on first start (16 → 6 and 3), which is the retention enforcer working, not data loss.
-3. **Stage 0 landed before stage 1 with one side effect owned by marvin (MARVIN-DEC-0121/0122):**
-   `install-tenant-units.sh weewx` also installed `weewx.service`'s committed `:marvin-live` re-pin
-   (ops#257 limb 2). Marvin tagged `v2.0.16` → `:marvin-live` the same turn, so weewx's step-7
-   restart started from that alias — same bytes, banner `0.20+ws.5` confirmed live. ops#257 limb
-   2's "tag" step is therefore done, by marvin's hand rather than weewx's `marvinctl tag`.
-4. **`weewx.conf.rx-baseline` lives at the tenant root, not under `weewx-data/`.** The runbook had
-   the wrong path; the owner's four-file `sed` errored on it and exited 2, which made the
-   `&&`-chained "new address" grep skip — the zeros the owner then saw were the *old*-address grep
-   and were correct. Verified by redacted read that `weewx.conf` had flipped; the `.rx-baseline`
-   edit was re-issued as its own line. Lesson: never `&&` a verification grep after a multi-file
-   `sed`; and CONSTANTS.md now carries both paths.
-5. **influxd exits 2 on SIGTERM** — measured on both hosts. `SuccessExitStatus=2` added to the unit
-   (stage 3 re-install by marvin); Foundation's `Exited (2)` was a clean stop, not a crash.
-6. **Step 9 (backfill) deferred to S125.** 29 archive records (22:14–22:42 ET) are in SQLite and
-   not in the `weewx` bucket. Running the DEC-0119-fixed tool needs the write token in a root shell
-   on marvin; doing that at 22:45 with a token paste buys nothing that tomorrow does not.
+Fixed `backfill_container.py` in place, verified live against the real running container
+(read-only, no secret values printed to this session's transcript during verification):
 
-### Verified (timestamps ET)
+- Reads `server_url`/`org`/`bucket`/`token` directly from the container's own mounted
+  `weewx.conf` (`/opt/weewx-data/weewx.conf`, confirmed live: `[[Influx]]` sits under
+  `[StdRESTful]`) via `configobj` — already a weewx dependency, confirmed importable via the
+  container's own venv (`/opt/weewx-venv/bin/python3`; the container's plain `python3` does not
+  have it). The token never has to be typed, exported, or otherwise cross a transcript
+  (MARVIN-DEC-0128's own warning against `env`/`printenv` inside `marvinctl exec`).
+- Opens the archive read-only (`file:...?mode=ro`, `uri=True`), matching
+  `backfill_influx.py`'s already-correct pattern.
+- `--start`/`--end` are now required, with no default — the committed defaults were leftover
+  one-off incident dates (2026-05-19/06-19), a footgun for a tool meant to be reusable across
+  incidents.
+- Documented the actual working invocation in the module's own docstring: `marvinctl exec`'s
+  argv must be whitespace-free tokens, so the script body is piped over stdin instead of run
+  from a mounted path:
+  `cat ops/backfill_container.py | marvinctl --tenant weewx exec weewx-rtldavis-v2 --
+  /opt/weewx-venv/bin/python3 - --start ... --end ... --dry-run`.
 
-- 22:35:02 `weewx-influxdb.service` active + enabled in `/weather.slice`; `/health` pass v2.7.12;
-  `weewx` 16 shards / 16.87 MB, `eh_rollup` 16 shards / 212,744 B (= Foundation's last state
-  including the 22:00 event-detect write); no `lvl=warn|error`.
-- 22:40:43 `user.influx INFO Data will be uploaded to http://<MARVIN_IP>:8086`; 22:43:16 `Influx:
-  Published record 2026-09-04 22:43:00` — first write to the marvin store; publishing every minute
-  since.
-- 22:44 Foundation `:8086` refuses; `influxdb` container stopped, `--restart=no`, trees intact —
-  the rollback artifact until ops#260 step 4.
-- Dashboard's step 8 (eh-proxy restart, timer re-enable, `verify_archive_fresh.py`) is their report
-  on ops#270; weewx's own end-to-end probe through the public proxy is in `docs/INFLUXDB-MIGRATION.md` §8.
+`backfill_influx.py` is unchanged in behavior; only its docstring now says its defaults are
+stale (DEC-0141 moved InfluxDB off the NAS entirely) and points at `backfill_container.py` for
+self-service in-container runs.
 
-### Consequences
+### Verification
 
-- **Foundation hosts no weather workload.** OPS-DEC-0188's weather half is true in fact from
-  22:43 ET; the drill (ops#260) can be scheduled once ops#270 stage 3 closes.
-- **Two Class C NAS gestures and three owner-hands marvin gestures** was the whole cost — the
-  16 MB estimate was right about the outage shape (gesture time), wrong by 9× on bytes (152 MB tar:
-  bolt/sqlite/WAL are not in `storage_shard_disk_size`).
-- **Open, S125:** backfill 22:14–22:42; `SuccessExitStatus=2` re-install; `weewx-influxdb-backup`
-  pre-dump timer; delete the two final tars from the share; ops/dashboard doc rows; weewx's drill
-  section; `BACKLOG.md` NAS-LEASE item closes as moot.
+Live `--dry-run` against the real running container: conf auto-read, read-only connect, and
+batching all worked end to end against the real archive — 870 records found and correctly
+batched for a same-day window, zero writes (dry-run never POSTs). Full local suite green (496
+passed/17 skipped), ruff/mypy clean; no test exercises either script directly (they are
+incident-response tools, not library code, matching `ops/campaign_analyze.py`'s own class), so
+the live dry-run is the real verification here, not the test suite.
+
+### Incidental finding, filed not fixed
+
+While verifying, `marvinctl --tenant weewx conf` (whose own stated job is "config read, values
+redacted server-side") redacted `token` correctly but returned `server_url` — a real marvin LAN
+IP — in the clear. That's a heartofgold/marvinctl tooling gap, not this repo's to fix; filed as
+`eaglehunt-ops#308` with a suggested key-name-based remedy, and heartofgold's live session
+notified directly per the standing cross-repo SOP.
+
+## DEC-0197 — Adopt the cross-repo dispatch ring protocol (OPS-DEC-0215)
+
+**Status:** Accepted (process, no code) · **Date:** 2026-09-13 (S137) · **adopts** OPS-DEC-0215
+(eaglehunt-ops `STANDARD.md` §12 rules 7–8) · **answers** weewx's half of `eaglehunt-ops#321` ·
+**amends** `CLAUDE.md`'s Session ritual
+
+### Context
+
+`eaglehunt-ops#321` broadcast the owner's decision (ops S53, 2026-09-13) to all five member repos:
+the cross-repo backlog is not slow to *finish* (median 1 day to close across the last 200 ops
+issues) but slow to *start*, because a live session only reads its inbox at `SessionStart` — every
+cross-repo hop waited for the owner to notice and say "look," making the owner the bus. ops#230
+(2026-09-06) had already measured the alternative: an HLF ask sat four days on the tracker and
+landed fifteen minutes after marvin rang HLF's live session directly. OPS-DEC-0197 kept direct
+messaging but only owner-triggered; OPS-DEC-0215 makes the **poster** of a cross-repo tracker ask
+the trigger, standing.
+
+### The change
+
+`CLAUDE.md`'s Session ritual gains a **Cross-repo dispatch** bullet, placed next to the existing
+inbox-pull step (the destination this repo's own session protocol already uses, per the issue's
+routing-not-prescribing framing — `CLAUDE.md` here carries real rules, unlike coffeeradar's
+router-only copy, DEC-0135 there):
+
+- **Sender:** after posting a tracker comment asking something of another repo, check `ListAgents`
+  for that repo's current live session and ring it ONE line — the issue number and which repo is
+  asked, nothing else. A ring is a doorbell, not an authorization; the tracker stays the record.
+- **Receiver:** read the issue, act inside your own permissions, answer on the tracker, ring back.
+- **Class C line:** nothing Class C rides a message (OPS-DEC-0034) — a Class C need goes on the
+  issue as an `**Ask:**` line, never executed on a peer's say-so or parked as a prompt in an
+  unwatched window (OPS-DEC-0192).
+- No live session: nothing happens beyond the existing session-start inbox pull, unchanged.
+
+Wording mirrors hlf's (`hyperlocal-forecast#532`), coffeeradar's (`BOOT.md`), and heartofgold's
+(`CLAUDE.md`, `7a745a2`) already-adopted text, per the issue's own request for consistent
+adoption across the five repos.
+
+### Scope
+
+Doc-only, no code change. Landed via PR #385 (`dev`); `**Answered:** weewx-rtldavis` posted on
+`eaglehunt-ops#321` linking it.
+
+## DEC-0198 — Freeze-rate re-read confirms DEC-0088's 1.31/day; S131's 4.03/day was that session's own confound
+
+**Status:** Accepted (measurement) · **Date:** 2026-09-14 (S138) · **confirms** DEC-0088 ·
+**retires** `BOOT.md` blocker 1 (freeze-rate half) · **relates to** DEC-0083, DEC-0085, DEC-0152
+
+### Context
+
+`BOOT.md` job 1 carried "re-run `ops/freeze_baseline.py` after a quiet stretch" since S135 —
+three sessions (S135, S136, S137) without a clean re-read, and ROADMAP.md's S136 reconciliation
+explicitly declined to update the P0 freeze-rate line on S131's unconfirmed 4.03/day "at record
+max" reading, pending exactly this.
+
+### What was checked first
+
+`marvinctl --tenant weewx unit weewx.service`, before trusting any measurement: the container has
+run continuously since 2026-09-07 23:42:48 EDT with zero restarts — a genuinely quiet window, not
+assumed. (ROADMAP's S136 text also named S134/S135 as adding further confounding restarts; the
+unit's own continuous-uptime record shows none has touched `weewx.service` since 09-07 23:42 —
+whatever those sessions restarted, it was not this unit. The direct measurement below supersedes
+the secondhand claim either way.)
+
+### The read
+
+`ops/freeze_baseline.py` over 2026-08-28 → 2026-09-14 (17.6 d, 24,750 per-minute archive rows):
+68 gaps >150s (5 RF-dead, 14 arm-swap, excluded first) leave 49 freezes. Rolling-window placement:
+current 24h/36h/48h/72h windows all read **0 freezes — 0.0th percentile of 351-399 windows,
+"unremarkable."**
+
+Of the 49, **24 cluster on 2026-09-07 14:15–22:21** — the exact day S131 ran, including one
+8580 s (2.4 h) outlier — which is also the day S131 ported this very script to `marvinctl`
+transport (DEC-0152). Excluding that one incident day: 25 freezes / ~16.6 d ≈ **1.51/day**,
+matching DEC-0088's 1.31/day and DEC-0083's 1.49/day within normal variation. Only one freeze
+since: 2026-09-11, isolated, 240 s.
+
+### Conclusion
+
+S131's 4.03/day "at record max" reading was that session's own incident/migration activity, not a
+real regression — exactly the confound `BOOT.md` job 1 was carried to check. DEC-0088's 1.31/day
+baseline holds. The deeper freeze *mechanism* stays unproven (DEC-0068/DEC-0094 — unchanged by
+this entry, a rate re-read, not a root-cause finding). `BOOT.md` blocker 1 reworded to drop the
+resolved confound and keep only the genuinely open mechanism question; ROADMAP.md's P0 line
+reconciled.
+
+## DEC-0199 — `weewx_monitor.py` gains a FULL OUTAGE reception alert class (#373)
+
+**Status:** Accepted (executed, verified) · **Date:** 2026-09-14 (S138) · **closes** `#373` ·
+**extends** DEC-0081, DEC-0120 · **relates to** `#370`, DEC-0154
+
+**Amended 2026-09-29 (S145, DEC-0205):** #403 found that the classifier and the alert averages read
+`wu_period_counts`, which the 300 s RECEPTION log flush empties, so the classification and the average
+depended on phase and "no new state" did not hold. PR #413 adds a rolling record of the last
+`WU_RF_SUSTAIN` windows that the flush never touches.
+
+### Context
+
+`#373` (filed S134/DEC-0154): during the 2026-09-07 22:31–23:42 EDT outage, `weewx_monitor.log`
+logged `WINDOW: 0/21 (0%)` and intermittent `DRIVER NOT RUNNING detected` for ~71 minutes — the
+same shape a much milder reception dip produces. `close_reception_window()`'s own alert class
+(`RECEPTION ALERT`/`STILL LOW`/email subject `RF reception LOW`) is a single below-`WU_RF_MIN_PCT`
+threshold with no severity gradient: a streak averaging 45% and a streak of literal silence read
+identically except for a number in the email body. A human or a future session skimming the log
+could not tell "getting worse" from "unaffected, still just degraded."
+
+Investigated first whether the gap was really here at all: the driver-*process* side already has
+distinct, escalating classes (DEC-0081/DEC-0120) — `watchdog_stall()` resets once then escalates,
+`watchdog_not_running()` escalates immediately, both via `send_unrecoverable_alert()`, a loud
+once-per-outage "manual intervention needed" email. That mechanism likely did fire during the
+09-07 incident. The actual gap is narrower than the issue's title suggests: it's the
+*reception-percentage* path's own alert class, not a missing escalation.
+
+### The change
+
+New `classify_reception_alert(wu_period_counts)` cross-references two independent signals, either
+sufficient alone — the same shape `ops/freeze_baseline.py`'s `classify()` uses for RF-dead vs.
+freeze (check an independent ground-truth signal, don't trust one derived metric):
+
+1. Every window in the current `WU_RF_SUSTAIN`-window streak saw literally zero packets (`all(c
+   == 0 ...)` over `wu_period_counts[-WU_RF_SUSTAIN:]`, data already being collected — no new
+   state).
+2. The driver's own watchdog has already given up (`WD['escalated']`) — a stall past
+   `RESET_MAX_TRIES`, or an immediate not-running exit.
+
+Either alone means nothing is coming back without intervention; a plain below-threshold window
+with the driver still trying does not. Wired into both the initial `RECEPTION ALERT` and the
+`REPEAT` path: log line gains a `FULL OUTAGE` prefix, email subject becomes `RF reception
+DOWN`/`STILL DOWN` instead of `LOW`/`STILL LOW`, and the body names which signal(s) fired (`zero
+packets in every recent window`, `driver watchdog already escalated`, or both). Recovery wording
+untouched — recovery is recovery regardless of how bad the alert was.
+
+### Verification
+
+10 new tests in `tests/test_reception_full_outage.py` — `close_reception_window()` had zero prior
+coverage. Covers: each signal independently, both together, one nonzero window in an otherwise
+dead streak not tripping the zero-windows path alone, the repeat path saying `STILL DOWN`, and
+recovery wording unaffected. Full suite 506 passed/17 skipped (up from 496 — the 10 new), ruff and
+mypy clean, secret gate clean. Landed via PR #389 (`dev`).
+
+### Scope
+
+Code change to `weewx_monitor.py` + tests only. **Not deployed to marvin by this entry** —
+`weewx_monitor.py` is a host-side daemon read directly off disk (`CONSTANTS.md`'s deploy-layers
+table): shipping this requires `marvinctl pull` followed by a deliberate `weewx-monitor.service`
+restart, tracked separately (`BOOT.md` job list) rather than assumed live.
+
+## DEC-0200 — UV diode-floor correction: DEC-0080's exact-code zero, extended to two UV codes
+
+**Status:** Accepted (config change, applied) · **Date:** 2026-09-27 (S141) · **extends** DEC-0080 ·
+**applies** DEC-0070 · **answers** `eaglehunt-ops#343`
+
+### Context
+
+`eaglehunt-ops#343` (HLF DEC-0235's UV verification): dark-hour UV reached InfluxDB as 0.04, and
+nothing in the estate corrected it. The dashboard only appeared to, because it rounds to one decimal
+at display time. The owner's physics (ops `CONSTANTS.md` §1, "Diode dark floors"): the solar and UV
+sensors are diodes with a base voltage at zero irradiance, so the dark reading is a fixed level.
+**Zero it at the source; never subtract it**, since it is not an additive offset. The thread's
+proposed line zeroed `uv_raw=2` (0.04) alone, by analogy with DEC-0080's single solar code. Ops
+closed the thread and withdrew its ask 23 s after the owner (via HLF, 5:23:32 PM ET) put the fix on
+weewx. The owner started this session for it.
+
+### Measurement (read-only, prod archive, 2026-08-12 → 09-27)
+
+The driver decodes UV as `uv_raw / 50.0` (`rtldavis.py`, message type 4), so a LOOP packet can
+only carry multiples of 0.02. Across the 30,101 dark sensor rows (`radiation = 0`):
+
+| archive UV | code | rows | share |
+|---|---|---|---|
+| 0.04 | `uv_raw 2` | 29,175 | 96.9% |
+| 0.02 | `uv_raw 1` | 758 | 2.5% |
+| 0.021–0.039 | minutes averaging codes 1 and 2 (~6 UV readings/min) | 167 | 0.6% |
+| 0.08 | one pre-sunset row (09-21 18:36) | 1 | — |
+
+- **Codes 0 and 3 never appear in dark sensor data.** The only dark 0.0 rows are ERR-0008's five
+  WU-backfilled rows (`interval = 15`).
+- **Code 1 comes in runs of minutes** (e.g. 09-26 21:58–22:03), with no temperature trend: 1.0–4.9%
+  of the rows in each 5 °F bin from 45 to 80 °F. It is still one base voltage. It just sits near the
+  1/2 quantization edge, so it can read as either code.
+- **UV holds code 2 through twilight** until solar reaches ~35 W/m², then steps to 0.06 (09-26,
+  07:15 → 07:20).
+- **DEC-0080 re-verified clean.** All 10,990 non-null 00–04 h rows have radiation 0. `sr_raw 2`
+  (3.516) shows only at 06–08 h and 17–20 h, i.e. real twilight. The solar floor really is one
+  code; the UV floor is not.
+- Davis spec sheet DS6490 (Rev. H): UV index resolution 0.1, accuracy ±5% of full scale (±0.8
+  index), 150 mV per index. Codes 1–2 (≈3–6 mV) are finer than the sensor's own rated resolution.
+
+### Decision (owner, S141)
+
+Zero exactly codes 1 and 2. This follows DEC-0080's pre-registered rule for a second code showing
+up in the dark: extend per-code, never a loose threshold:
+
+    UV = UV if UV is None else (0 if 0.01 < UV < 0.05 else UV)
+
+- **Two-code exact window.** The only representable LOOP values inside it are 0.02 and 0.04. 0 passes
+  through unchanged, and 0.06 and above are untouched. It is still exact-code zeroing, never a
+  subtraction. The one-code line (`0.03 < UV < 0.05`) was put to the owner and rejected: it leaves
+  ~3% of dark minutes at 0.02 or a fraction of it.
+- **Accepted cost.** A genuine twilight 0.02/0.04 reads 0, which is below the sensor's rated
+  resolution.
+- **Same layer, same three homes as DEC-0080.** (1) The live `weewx.conf` on marvin (the mount wins
+  in prod, DEC-0046). (2) `weewx.conf.rx-baseline` at the tenant root (a campaign
+  `restore_baseline` would otherwise wipe it; this is DEC-0080's lesson). (3) `weewx.conf.example`,
+  the versioned public artifact, now pinned by `tests/test_diode_floor_corrections.py`, which
+  evaluates both lines the way weewx 5.5's `StdCalibrate` does (`eval` with `{'math': math}`,
+  `option_as_list(value)[0]`) over every code the driver can emit. It asserts UV zeroes exactly
+  {1, 2} and radiation exactly {1}, and that neither expression contains a comma, which ConfigObj
+  would split and truncate. Positive-controlled: the one-code window fails with `{2} == {1, 2}`, and a
+  comma mutation fails 5 of 10.
+- **History is not rewritten** (DEC-0080 precedent). Rows before the apply keep 0.02/0.04 on dark
+  hours; the step change at the apply is accepted. HLF zeroes the dark code in its own verification
+  records and scores UV skill on daylight only, so it needs nothing retroactive from weewx.
+- **Scope.** LOOP packets only (weewx 5.5: with no directive, archive corrections are skipped for
+  software-generated records), so one line reaches the archive, InfluxDB (`influx.py` coerces with
+  `float()`), the loop JSON and every uploader, the same path DEC-0080 proved.
+
+### Apply
+
+Dry-run first, inside the prod container: the exact `sed` on a temp copy of the live conf. `diff`
+showed only the two inserted lines; ConfigObj parse + `compile` passed for all three corrections;
+the copy was deleted. Then, owner-approved (Class C, root route), at **2026-09-27 17:39:57 ET**:
+`ssh marvin-sudo "runuser -u t-weewx -- sed -i -e '/^ *radiation = …/a\ …comment' -e '/^ *radiation
+= …/a\ …UV line' <live weewx.conf> <tenant-root weewx.conf.rx-baseline>"`. Both files were
+verified by redacted read (`marvinctl conf … StdCalibrate`), and mode `0600 t-weewx` was preserved.
+`marvinctl --tenant weewx restart weewx.service` ran at 17:40:18. weewxd 5.5.0 was up and in the
+main packet loop at 17:40:20 with no `StdCalibrate` or other startup errors, and loop UV was flowing
+again (0.24 at 17:41:41). The first post-restart minute (17:41) archived UV/radiation as NULL
+(partial interval before the ISS rotation resynced). Windy and WOW each returned one 429 on that
+record, a restart-induced post-interval reset.
+
+### Verification
+
+**First dusk verified the same evening.** UV archived 0.08 through 18:27, then **0.0 from 18:29
+onward** while solar was still ~16 W/m²; before the fix those minutes read 0.04. The one fractional
+value, 0.0141 at 18:28, is the **transition minute**: 0.08 readings averaged with zeroed ones. Post-fix,
+a LOOP value can only be 0 or ≥ 0.06, so an archive fraction in (0, 0.05) is always a minute that mixes
+the two. That happens at the edge of every dusk and dawn and is expected, not a dark code.
+
+**Full overnight verified (S144, 2026-09-28).** A read-only query of the prod archive (`mode=ro`,
+via `marvinctl exec` with the venv interpreter) covered 2026-09-27 17:41 → 09-28 12:32 ET: 1,130
+one-minute rows, 734 of them dark (`radiation = 0`). **733 read UV 0 and one is NULL. None falls in
+(0, 0.05), none is an exact 0.02 or 0.04, and none reads ≥ 0.05.** Positive control: the same query
+over the pre-fix night (09-26 17:41 → 09-27 07:30) flags all 747 of its dark rows (737 at 0.04, 8 at
+0.02, 2 fractional). Dawn produced no in-window fraction at all. UV held 0 through the solar twilight
+code (`sr_raw 2`, 07:01–07:18) up to ~14 W/m², mixed to 0.061 at 07:26, and read 0.08 from 07:27.
+The lone NULL (22:59) comes from S143's DEC-0202 restart, not this line. weewxd reached its packet
+loop at 22:56:51, but no LOOP packet reached it until after 22:58:00, so 22:57 and 22:58 have no rows
+and 22:59 is the partial first record (`rxCheckPercent` NULL too, 54% at 23:00). Windy and WOW each
+returned one 429 on it, as at 17:41. A UV-only NULL is routine anyway: 93 in the two weeks before.
+HLF S349 confirmed the InfluxDB side the same evening (ops#343, closed), so DEC-0200 is verified end
+to end. A future dark code is still extended per-code, never by widening the window.
+
+---
+
+## DEC-0201 — Config backups live in `weewx-data/conf-archive/` (0700); the live conf stays 0600
+
+**Status:** Accepted (applied on marvin) · **Date:** 2026-09-27 (S142) · **applies** DEC-0012,
+DEC-0047 · **relates** DEC-0147 · **corrects** `CONSTANTS.md`'s NAS-overlay rows (MARVIN-DEC-0134)
+· **follow-up** `eaglehunt-ops#348`
+
+### Context
+
+In a `marvinctl ls` of `weewx-data`, S141 found that dated `weewx.conf` backups had built up beside
+the live conf over five months of sessions. They are copies of a credential-bearing file (DEC-0047's
+class). S142 re-checked two premises read-only before deciding what to do:
+
+- **The NAS is out of the picture.** `CONSTANTS.md` still described `/volume1/docker/weewx-rtldavis/`
+  as an NFS overlay of marvin's export. It no longer is. MARVIN-DEC-0134 retired the export on
+  2026-09-05, and S142 measured the result: `nfs-server` is disabled and inactive on marvin, the path
+  is gone from the NAS, the NAS has no NFS client mounts, and Container Manager and the
+  `/volume1/docker` weather trees were removed (archived owner-only first).
+- **On marvin, the 0750 tenant root does not limit who can read `weewx-data`.** dockerd resolves
+  bind-mount sources as root, so a container that mounts `weewx-data` sees it from the mount point
+  down, whatever the parent's mode. S142 inspected every container on marvin:
+  - `weewx-rtldavis-v2` and `weewx-influxdb` run as t-weewx.
+  - `hyperlocal-forecast-api` (995:985) mounts only `weewx-data/archive`.
+  - The dashboard's `eh-proxy` (994:984, dashboard DEC-0307) mounts **all of `weewx-data`**
+    read-only, to read two files (`loop-data.txt`, `current.json`). It reads as *other*: no userns
+    remap, no added capabilities.
+
+So file mode is the only boundary between another tenant's container and everything
+credential-bearing in `weewx-data`. The prod image's weewx 5.5.0 also has a mechanism that breaks
+that boundary on its own. `weecfg.save()` is what every conf-rewriting `weectl` command uses. It
+renames the old conf to `weewx.conf.<YYYYMMDDHHMMSS>` (`weeutil.move_with_timestamp`), then writes the
+new live conf with `shutil.copyfile`, which creates it at the process umask (0644).
+
+### Decision (owner, S142)
+
+1. **Backups of `weewx.conf`, and any other credential-bearing snapshot, live in
+   `weewx-data/conf-archive/`** (dir 0700, files 0600, owned t-weewx). They never sit in the
+   `weewx-data` top level. This was chosen over `chmod 0600` in place. Both protect equally today,
+   but archiving takes the files out of the listing another tenant sees, and it survives a later mode
+   slip on any single file.
+2. **The archive goes inside `weewx-data`, not at the tenant root.** The tenant key reaches the tree
+   only through the container's own mounts (`marvinctl exec` as 996), so a root-level folder would
+   need the owner route. It would also add nothing. The one case it covers beyond a 0700 dir, a
+   foreign container running as root, exposes the live conf anyway.
+3. **The live conf stays 0600.** After any `weectl` run that rewrites it, `chmod 0600` the live conf
+   and move the timestamped copy into `conf-archive/`. This is written into the `CONSTANTS.md`
+   live-config table and `GOTCHAS.md` §3. It is a rule, not a mechanical guard. A mode check in
+   `weewx_monitor.py` would be the mechanical version, and it is left for a later design discussion.
+4. **Narrowing `eh-proxy`'s mount is outside weewx's lane.** It is filed as `eaglehunt-ops#348`
+   for the dashboard and marvin. Single-file bind mounts don't work, because both files are written
+   by atomic rename and a single-file mount pins the old inode. The workable shape is a feed
+   subdirectory that the proxy mounts at the same `/weewx-data` target.
+5. **Credential rotation is the owner's call, separate from this entry.** The specifics are in the
+   gitignored local-infra doc (DEC-0012).
+
+### Apply
+
+At 2026-09-27 19:13:58 EDT, `marvinctl --tenant weewx exec weewx-rtldavis-v2 -- sh` ran as 996:986
+with the script on stdin. It moved 27 `weewx.conf.*` backups and one pre-S13 zip into
+`conf-archive/`. The script pinned the exact file list and aborted on any drift, leaving everything
+unmoved. A dry run against a scratch tree covered five cases: the clean run, an unlisted file, a
+missing file, a re-run, and a stray zip. The live conf wasn't touched, mtimes were kept, and
+`weewx.service` wasn't restarted.
+
+### Verification
+
+- **Host-side `marvinctl ls`:** `conf-archive` is 0700 t-weewx, no `weewx.conf.*` or `.zip` is left
+  in the top level, the live conf is 0600, and the loop feed was fresh at 19:14.
+- **Names-only sweep of `weewx-data` for world-readable files:** only stock skin/util configs, code
+  (including old driver and uploader copies in `bin/user/`), the loop feed, and archive DB backups
+  remain. Credential-shaped literal assignments counted zero in all of them except two third-party
+  extension-installer defaults, both placeholder-shaped.
+
+---
+
+## DEC-0202 — The loop feed moves into `weewx-data/feed/`; the old names become temporary relative symlinks
+
+**Status:** Accepted (applied on marvin; `eaglehunt-ops#348` complete, 2026-09-27 23:26:57 ET) ·
+**Date:** 2026-09-27 (S143) · **follows** DEC-0201 · **applies** DEC-0070, DEC-0080 (two copies of
+one setting) · **relates** DEC-0093, MARVIN-DEC-0183 · `eaglehunt-ops#348` steps 1 and 4 of 4
+
+### Context
+
+DEC-0201 found that the dashboard's `eh-proxy` (994:984) bind-mounts all of `weewx-data` and reads
+only two files from it: `loop-data.txt` and `current.json`. Narrowing the mount was filed as
+`eaglehunt-ops#348`. A feed subdirectory is the only shape that works, because a single-file bind pins
+the inode that `loop_json_writer.py`'s atomic rename replaces. S142's plan cut weewx's config change
+and marvin's mount change over together in one window, since either one alone leaves the proxy
+reading a dead file.
+
+On 2026-09-27 the dashboard (S316) measured `server.js`: two fixed reads, nothing else under
+`/weewx-data`, and no dashboard code change needed. It also offered a way out of the synchronized
+window. weewx moves first and leaves relative symlinks at the old names. Under the old
+whole-directory mount they resolve inside the proxy's container, so it keeps reading live data until
+marvin flips the mount on its own schedule. marvin (S54) took that sequence and added two standing
+rules for `feed/`.
+
+### Decision
+
+1. **weewx accepts the symlink transition.** It removes the one hard constraint in S142's plan, the
+   synchronized two-repo window. The only stale window left is weewx's own restart.
+2. **The new location is a live-config deviation, not a new code default.** `loop_json_writer.py`
+   keeps its stock defaults (`/opt/weewx-data/loop-data.txt`, `/opt/weewx-data/current.json`),
+   which is what a public install writes and what `INTERFACES.md` documents. This deployment adds a
+   `[LoopJsonWriter]` section setting `path` and `current_path` under `feed/`.
+3. **Both config copies carry the section:** the live `weewx.conf` and the tenant-root
+   `weewx.conf.rx-baseline`. A campaign `restore_baseline` copies the baseline over the live conf.
+   Without the section, that silently puts the writer back at the top level, which after marvin's
+   flip is a file the proxy no longer sees (DEC-0080's shape).
+4. **The symlinks go in after the restart, never before.** Until the running writer is on the new
+   paths, its `os.replace()` onto `loop-data.txt` would replace a symlink with a regular file. Each
+   swap is atomic (`ln -s` to a temporary name, then `mv -T` over the old file), so the proxy never
+   sees either name missing.
+5. **Standing rules for `feed/`, from marvin S54:**
+   - Never delete or recreate the directory while `eh-proxy` runs. A directory bind pins the
+     directory's inode, the single-file bug one level up. Files are only renamed into it.
+   - It must exist before marvin flips the mount. Otherwise dockerd creates it root:root, and the
+     writer (996:986) can't write there.
+   - It stays 0755 and the two files stay `o+r`. That is the dashboard's one requirement: uid 994
+     reads as *other*.
+
+### Apply
+
+All times ET, 2026-09-27.
+
+- **Dry run** inside the prod container on a private `/tmp` copy of the live conf, parsed with the
+  venv interpreter and ConfigObj with `interpolation=False`, as weewx opens it. Result: exactly one
+  new top-level section, every other section identical, 5 lines added and 0 removed. The copy was
+  removed. (The first two attempts failed harmlessly on the two `GOTCHAS.md` §3 traps: bare
+  `python3` has no configobj, and default interpolation. The first had no cleanup trap and left the
+  copy in the container's private `/tmp`; the second's trap removed it.)
+- **22:54:57**, `weewx.conf.rx-baseline` at the tenant root, which is outside the container's
+  mounts: owner-approved Class C root route, `ssh marvin-sudo 'runuser -u t-weewx -- sh -s' <
+  script`. The file was backed up into `conf-archive/`, the section appended, 0600 t-weewx kept,
+  +5/−0.
+- **22:56:28**, as 996:986 via `marvinctl exec`: `feed/` created 0755, the live conf backed up into
+  `conf-archive/` and appended, 0600 kept, +5/−0, re-parsed clean. Both scripts aborted on drift
+  (an existing `feed/` or section).
+- **22:56:50**, `marvinctl --tenant weewx restart weewx.service`. weewxd logged `LoopJsonWriter:
+  writing to /opt/weewx-data/feed/loop-data.txt every packet and /opt/weewx-data/feed/current.json
+  every 60 s` at 22:56:51. The first packet landed in `feed/` about 106 s after the restart.
+- **22:58:37**, both top-level names swapped atomically: `loop-data.txt -> feed/loop-data.txt` and
+  `current.json -> feed/current.json`. No `.tmp` or `.lnk` leftovers.
+
+### Verification
+
+- **Through `eh-proxy` on the LAN at 22:58:54:** `/loopdata` 200 with `dateTime` 1.4 s old;
+  `/current` 200 (the first-packet snapshot). The baseline before the change was 200 at 0.8 s and
+  200 at 9.9 s.
+- **`weewx.log` since 22:56:** 0 ERROR, 0 CRITICAL, 0 tracebacks, against 101 INFO lines in the same
+  window. The INFO count is the positive control. A first pass filtered on the syslog date shape and
+  returned a false zero (`GOTCHAS.md` §1).
+- **Modes:** `feed/` 0755 996:986; both files 0644 996:986; the live conf and the baseline 0600;
+  both pre-edit copies 0600 in `conf-archive/`. `marvinctl conf` reads the section back from the
+  baseline.
+
+### Completion (`eaglehunt-ops#348`, the same night) and rollback
+
+- **Step 2, marvin, 23:20:56 ET (MARVIN-DEC-0183):** `eh-proxy`'s mount flipped to
+  `weewx-data/feed`. A gate ran first: both files read as 994:984 through a bind of `feed/`. The
+  same gesture pinned `--user 994:984`, fixed the unit header and added the box pager.
+- **Step 3, dashboard, 23:22:** PASS. `/loopdata` and `/current` returned 200 and fresh on prod
+  and dev, and `/current` advanced 64 s between fetches, so renames are visible through the
+  directory bind. No `ENOENT`.
+- **Step 4, weewx, 23:26:57:** both symlinks removed as t-weewx via `marvinctl exec`. Each was
+  checked to be exactly `feed/<name>` before its `rm`, and `feed/` was untouched. Through eh-proxy
+  at 23:27:04, `/loopdata` returned 200 at 0.2 s old and `/current` 200 at 14.3 s. `weewx.log`
+  showed 0 ERROR and 0 CRITICAL against 27 INFO lines.
+- **Rollback now needs marvin too.** The narrowed proxy sees only `feed/`, so moving the writer
+  back to the top level means restoring both conf copies from `conf-archive/`, restarting, and
+  reverting marvin's mount in the same window.
+
+---
+
+## DEC-0203 — #394: the monitor surfaces the ISS battery flag, gated on healthy reception; co-rejection takes the frame's battery bit, and an impossible message type counts as proof
+
+**Status:** Accepted (deployed 2026-09-28: the monitor at 13:21:52 ET, the driver in v2.0.17 at 13:32:39 ET, DEC-0204) · **Date:** 2026-09-28 (S144) ·
+**extends** DEC-0054 · **refines** DEC-0054 §4 · **answers** #394
+
+### Context
+
+#394 (owner, 2026-09-20) asked for a practical signal that the ISS battery needs replacing, and
+started from its own question: is `bat_iss` archived or surfaced anywhere yet?
+
+- **Archived: yes.** The default sensor map sends `bat_iss` to `txBatteryStatus`, present on every
+  archive row since 2026-05-19. weewx 5.5's accumulator keeps each minute's last value
+  (`extractor = last`).
+- **Shipped but never shown.** InfluxDB receives it (the live `[[Influx]]` section sets no
+  `obs_to_upload`, so `most` applies), and WeatherCloud receives it as `bat01`. It is not in the
+  loop JSON (a fixed field list), the monitor, or the dashboard.
+
+### Measurement (read-only; prod archive and `weewx.log`, 2026-05-19 → 09-28)
+
+- `txBatteryStatus` read 1 in exactly **10 of 184,717 rows**, all since 2026-08-30, and none in the
+  3.5 months at Foundation. Each is a lone minute.
+- **Every one sits at a freeze or reception-collapse onset.** Its `rxCheckPercent` was 2–19% against
+  60–100% around it. Either the next two or more minutes are missing, or the record was written about
+  4 minutes late (09-21's 21:10 record at 21:13:50, 09-24's 22:40 at 22:44:28: DEC-0088's freezes).
+- What the log shows in each flagged minute:
+
+| Evidence in the minute | Events |
+|---|---|
+| Bounds co-rejection (DEC-0054) | 6 |
+| Impossible message type, no bounds failure | 3 |
+| Temperature delta trip only (64.2 °C from 22.8 °C, inside the sensor spec) | 1 |
+
+- **`unknown message type` fired 8 times across every rotated log marvin holds (08-29 → 09-28):**
+  three of 0x0, two of 0xB, and one each of 0x1, 0xD and 0xF. Every one was a glitch, with a 39–111
+  mph wind riding the frame. The 09-22 06:05 frame (type 0x1) slipped under the delta cap as an
+  11 mph gust, which `dewpoint_service` flagged as the ERR-0004 signature. On 09-25 at 01:44, the
+  delta check rejected a type-0x0 frame's 80.5 m/s wind but resynced the baseline to it, so the
+  genuine 3.1 m/s reading at 01:48:32 was rejected too.
+- **No flip was the battery.** A weak cell sets the bit on every packet, so it would show in minute
+  after minute of healthy reception. None has: 0 of 184,717 minutes carry the flag with
+  `rxCheckPercent` ≥ 50.
+- Aside: `supplyVoltage` (the driver's `supercap_volt`, message type 2) is populated in about 26% of
+  rows. It is bimodal (~2.84 V and ~1.03 V) and switches near 00–01 h and 07–08 h, which does not look
+  like a discharge curve. It stays out of scope, as the issue asked.
+
+### Decision (owner, S144)
+
+The owner chose "monitor + driver fix". After the corrected tally (6 of 10 flips drop by the bounds
+proof alone, 9 of 10 with a message-type proof), the owner also chose the wider proof. An earlier
+"8 of 10" had counted delta trips as proof, which DEC-0054 does not.
+
+1. **Monitor (`weewx_monitor.py`).** Each RF report block (6 h), it reads `txBatteryStatus` and
+   `rxCheckPercent` from the archive, read-only. A minute counts only if its own reception is healthy
+   (`BATTERY_HEALTHY_RX_PCT = 50`), and 5 healthy flagged minutes in a block
+   (`BATTERY_LOW_MIN_MINUTES`) mean LOW.
+   - The RF reception email gains one line: OK, watch, or LOW. Flagged minutes with collapsed
+     reception are listed as set aside.
+   - A LOW block sends a one-shot "ISS battery low" email. It re-arms only after a fully clear block,
+     so a cell that flags by night and clears by day re-alerts about once a day.
+   - The latch lives in memory, so a monitor restart re-arms it.
+2. **Driver: a condemned frame loses its battery flags** (refines DEC-0054 §4). `FRAME_BATTERY_KEYS`
+   are nulled along with `FRAME_WEATHER_KEYS`. §4's "diagnostics describe the link" holds for
+   `pct_good` and `freqError`, which the receiver measures. It does not hold for a bit decoded from
+   the corrupt frame itself. A clean frame's flag flows untouched, so a real weak battery still
+   reaches the archive.
+3. **Driver: a message type no Davis transmitter sends is proof** (extends DEC-0054's trigger).
+   These are 0x0, 0x1, 0xB, 0xD and 0xF; every type the transmitters do send has its own branch,
+   including the undecoded 0x3 and 0xC. The criterion is DEC-0054's own (a value the transmitter
+   cannot emit), with zero parameters.
+   - `parse_raw` marks the frame (`msg_type_impossible`, driver-internal, never in a packet), and
+     `_data_to_packet` co-rejects it.
+   - The log line names the proof: `frame failed message-type proof -- co-rejecting …`. The
+     bounds-only text is unchanged.
+   - Co-rejection also stops the corrupt wind from becoming the delta baseline (the 09-25 case).
+
+**Not changed, and recorded:**
+- Supercap and solar power are decoded from the frame too, and they still survive a co-rejection.
+  No consumer reads them, and the owner's scope named the battery bit.
+- The 09-11 flip (a delta trip, with no proof in the frame) still reaches the archive. The monitor's
+  gate covers it.
+- The monitor thresholds are constants, not env knobs.
+- The driver banner stays `0.20+ws.5`, as it has through every driver change since S73.
+
+### Tests
+
+- `tests/test_sensor_qc.py`: `test_co_rejection_nulls_only_weather_fields` asserted that a
+  condemned frame's battery flag survives. That assertion is inverted here, per the S40 lesson.
+  - New tests: a clean frame's flag flows; a coverage guard ensures every `bat_*` sensor-map value
+    is co-rejectable; `parse_raw` marks exactly 0/1/B/D/F.
+  - Replays: 09-22 06:05 (the phantom gust and its flag are nulled) and 09-25 01:44 (no baseline
+    poisoning), plus the QC-disabled path, which stays untouched.
+  - Pre-fix run: `HEAD`'s driver with only the two new names shimmed in, so behavior alone was under
+    test. 4 tests failed, each on its own assertion.
+  - Mutation: dropping `bat_th_2` from `FRAME_BATTERY_KEYS` fails the coverage guard.
+- `tests/test_battery_flag_monitor.py`:
+  - The 10 real flag minutes never alert, and ten collapsed-reception flags in one block never alert
+    either. Removing the healthy gate fails 5 tests.
+  - It also covers the threshold boundary, the hysteresis sequence (breaking the latch fails it), a
+    temp `.sdb` round-trip, and a missing DB or column returning None.
+
+### Deploy
+
+- **Monitor:** after the merge, `marvinctl --tenant weewx pull`, then `restart
+  weewx-monitor.service` (self-service; see `CONSTANTS.md`'s deploy-layers table). Verify that the
+  sha matches `dev`'s tip, the start time follows the file's mtime, and the `Remedy armed:` line
+  appears. The next 6-hourly RF email should carry the `ISS battery:` line.
+- **Driver:** the baked layer, so it needs a v2.0.17 image build and cutover (owner's go). The
+  `vX.Y.Z` tag and GitHub release ride that promotion.
+- **Both done the same session (S144):** the monitor at 13:21:52 ET, and the driver as v2.0.17 at
+  13:32:39 ET. The as-run record is DEC-0204.
+
+---
+
+## DEC-0204 — v2.0.17: DEC-0203's driver half, built from the tenant-root checkout behind a build-context allowlist, verified against v2.0.16, and deployed
+
+**Status:** Accepted (deployed 2026-09-28 13:32:39 ET) · **Date:** 2026-09-28 (S144) · **ships**
+DEC-0203 · **follows** DEC-0138's verify-before-cutover shape · **applies** MARVIN-DEC-0109/0116 (the
+floating `:marvin-live` tag)
+
+### Context
+
+DEC-0203's driver half is baked into the image (DEC-0031), so it needed a release. This was the
+first build since the tenant root became a `dev` checkout (S129, DEC-0150). v2.0.15 and v2.0.16 were
+built from separately extracted trees (DEC-0136, DEC-0138). marvin's `build` verb runs
+`docker build -t <tag> -- <path>` with no filtering (heartofgold's `marvin-own`). The tenant root
+holds `weewx-data/` (the archive, and conf backups with credentials), `influxdb/` and `logs/`
+alongside the source, and the repo had no `.dockerignore`.
+
+### Decision (owner's go at each prod step, S144)
+
+1. **Build from the tenant root, behind a `.dockerignore` allowlist.** It excludes `*`, then
+   re-admits only the Dockerfile's COPY sources. `tests/test_dockerignore.py` pins the list to the
+   Dockerfile; dropping `wcloud.py` fails it. This went in PR #400, together with the Dockerfile's
+   version comment, which had read v2.0.14 since v2.0.14.
+2. **Release path:** `marvinctl pull` → `build /srv/docker/weewx -t …:v2.0.17` → verify the image
+   with `exec-ro` → `tag …:v2.0.17 …:marvin-live` → `restart weewx.service`. There is no
+   `set-image`: the unit runs the floating own-tag (`CONSTANTS.md` corrected this session).
+3. **Tag `v2.0.17` on the built commit, `f255efb`** (`dev`). It is not pushed to Docker Hub; that
+   stays `eaglehunt-ops#265`'s question.
+
+### As-run (2026-09-28, ET)
+
+- **The monitor half went first.** #399 merged at 13:21:05 (`1dd3026`). `marvinctl pull` took the
+  tenant root from `c887aec` (S138) to it; none of the 20 changed files is bind-mounted. The monitor
+  restarted at 13:21:52, after the file's 13:21:36 mtime. Its sha `8a07efd7…` matches `dev`, and the
+  log shows `Remedy armed: no automatic remedy (REMEDY_MODE=none)`.
+- **Build.** #400 merged at 13:27:23 (`f255efb`) and was pulled. BuildKit transferred a 217 kB
+  context, so the allowlist held, and no step was cached; the build returned RC 0 and produced image
+  `621710f7…`. `weectl`'s "Logging error" traces during the build are the container's missing
+  `/dev/log`, which is benign.
+- **Verified before the cutover, with `exec-ro` sha256 of every baked file against v2.0.16.** Only
+  two files differ:
+  - `rtldavis.py` went from `57bf0dc7…` to `090e5700…`, which is `dev`'s.
+  - `/usr/local/bin/rtldavis` differs because S126's GPLv3 §5(a) notice (#327, merged after
+    v2.0.16's build) shifts `main.go`'s line numbers. Both binaries embed `go1.26.0`, and upstream's
+    `src.tgz` last changed 2026-01-03.
+  - weewx is 5.5.0, and `rtldavis -h` lists `-dupwindow`.
+  - The build log shows the notice hunk applied "with fuzz 2". It is harmless as a comment, but it
+    is a drifting patch (`BOOT.md` follow-up).
+- **Cutover.** `:marvin-live` was retagged to v2.0.17 (`check-image`: `621710f7…`), and
+  `weewx.service` restarted at 13:32:38. The container was up at 13:32:39 on `621710f7…`, running
+  `996:986`, with a running driver sha of `090e5700…`.
+  - weewxd 5.5.0 booted clean: 61 INFO and 0 ERROR/CRITICAL/traceback before the first record. The
+    banner reads `0.20+ws.5`, unchanged by design. The loop writer targets `feed/`.
+  - The first record was 13:34:00, written at 13:34:15. 13:33 has no row (hop re-acquisition), and
+    13:34 is the partial first record with `rxCheckPercent` NULL. The only errors since the restart
+    are Windy's and WOW's 429 on that record, the known restart pattern.
+  - 13:35 read 58% while reception ramped back up, and 13:36–13:38 read 100%. The monitor's
+    13:36:55 window spanning the restart read 67%, still `[OK]` with 0 bad windows, so no
+    alert fired.
+  - It was the first `weewx.service` restart since `ops#351` folded weewx's systemd drop-ins at
+    13:04 the same day, and it came up clean.
+- **Rollback:** `marvinctl tag weatheredscientist/weewx-rtldavis:v2.0.16
+  weatheredscientist/weewx-rtldavis:marvin-live`, then restart. `:v2.0.16` (`1a9daeb6…`) is still
+  local.
+
+### Not yet observed
+
+- A live `frame failed message-type proof` line. That needs a glitch, and there were 8 in 31 days.
+- The monitor's first `ISS battery:` line, due in the 18:00 ET RF report.
+
+## DEC-0205 — S145 code audit: tiered parallel review, ten high findings filed and fixed on seven branches, DEC-0199 superseded in part, driver to ws.6
+
+**Status:** Accepted (PRs #412–#418 squash-merged to `dev` 2026-09-29 on the owner's go; deploy is S146) ·
+**Date:** 2026-09-29 (S145) · **supersedes in part** DEC-0199 · **extends** DEC-0137 (#402),
+DEC-0039/DEC-0144 (#409) · **relates to** DEC-0014 (No-Rewrite), DEC-0027 (no formatter)
+
+### Context
+
+v2.0.17 had just shipped (DEC-0204). The owner asked for an audit of the whole tree for
+inconsistencies, misattributions, and missed chances at clearer code, run with parallel agents tiered
+by the work. No code had been reviewed end to end since the S24 review (`docs/CODE_REVIEW_S24.md`).
+
+### Method
+
+Six read-only reviewers, one per file set: `rtldavis.py` (diffed against the stock upstream tarball),
+`weewx_monitor.py`, the other runtime modules (diffed against their upstream baselines), the ops and
+build harness, `tests/`, and a Haiku cross-referencer for DEC, issue, version and host strings. Sonnet
+for the five judgment reviews, Haiku for the mechanical one. The main thread (Fable 5.1) verified
+every high finding directly before filing it, and redid the cross-referencer's two zero results by
+hand: 29 issue numbers and 88 DEC ids all resolve (the two out-of-index ids are correctly prefixed
+`OPS-DEC-0188` and "dashboard DEC-0266"). Fixes ran as seven agents in isolated worktrees, one branch
+each, Opus for the driver numerics and Sonnet for the rest, each under a shared brief: smallest change,
+test first, all four gates green before every commit, no push. The combined tree was merged on a
+scratch branch and gated in both collection orders before any PR opened.
+
+### Findings fixed (high)
+
+| Issue | Finding | PR |
+|---|---|---|
+| #402 | slot-count denominator off by one at seeding; first record after any start or reset misread | #412 |
+| #403 | FULL OUTAGE classifier and alert average read a list emptied every 300 s; phase-dependent | #413 |
+| #404 | any unrecognized `REMEDY_MODE` ran the USB reset while logging "no automatic remedy" | #413 |
+| #405 | OWM and Windy sent rain in centimeters where both APIs take millimeters (10× low) | #414 |
+| #406 | `ws.N` unmoved since 2026-08-11 through five behavior changes; README table and influx figure stale | #412, docs PR |
+| #407 | `soak_check.sh` default image `:v2.0.16` flagged healthy v2.0.17 prod | #417 |
+| #408 | OgoXe `StdService.__init__` divergence absent from the 5(a) notice and inventory | docs PR |
+| #409 | secret gate: several pattern classes had no planted control; identifier check silent when the list is absent | #415 |
+| #410 | `test_reception_pct.py` asserted nothing; `test_input_staleness.py` asserted `or True` | #413 |
+| #411 | suite passed only in alphabetical order; 25 of 30 shuffles failed | #416 |
+| ops#358 | the gate test planted private-range addresses that also appear in the private estate repos (private issue) | #415 |
+
+### Decisions
+
+1. **A subagent's zero is a claim.** The cross-referencer's "0 issue citations" and "no missing DEC
+   ids" were both false; hand grep found 29 and 2. Positive-control any zero, clean, or all-match
+   result from delegated look-like work before relaying it (GOTCHAS §1).
+2. **Controls per class.** Every pattern alternate and allow-list alternate in `check_secrets.sh`
+   carries a planted control, and the claim is proven by mutation, not by a green run. This is the
+   seventh time the gate was found blind (DEC-0039, DEC-0045, DEC-0076, DEC-0084, S142 and now).
+3. **DEC-0199 superseded in part.** Its "no new state" did not hold; a rolling record is the state.
+4. **Version honesty restored.** `DRIVER_VERSION` is `0.20+ws.6` on `dev`; README says so as pending,
+   since the published images report ws.5. README rule 1 stands as written.
+5. **Records ride the PRs.** This closeout (BOOT, CHANGELOG, this row) rides the docs PR, per
+   OPS-DEC-0195.
+
+### Not fixed here
+
+The 29 medium and low items in `docs/CODE_REVIEW_S145.md`; the detector holes the mutation pass
+exposed (quoted key names never scanned; `SECRET_KEY`/`private_key`/`access_key` missed; allow terms
+applied per line); the OgoXe divergence's reason (not recorded anywhere; owner's call); an errata
+decision for the rain history at OWM and Windy; the 27 per-file weewx stubs the conftest now makes
+redundant.
+
+### Deploy
+
+#412 and #414 are baked: v2.0.18. #413 is the host daemon: `pull` then a deliberate restart, plus a
+heartofgold CHANGELOG line. `EXPECT_DRIVER` in `soak_check.sh` moves to ws.6 at that deploy.
+
+## DEC-0206 — v2.0.18: DEC-0205's driver and uploader fixes built from the tenant-root checkout, verified against v2.0.17, and deployed after the monitor's #413; #408 recorded as deliberate; the OWM and Windy rain history logged as ERR-0010
+
+**Status:** Accepted (deployed 2026-09-29: the monitor at 09:31:16 ET, the image at 16:37:37 ET) ·
+**Date:** 2026-09-29 (S146) · **ships** DEC-0205's baked and host halves · **follows** DEC-0204's
+release shape · **applies** MARVIN-DEC-0109/0116 (the floating `:marvin-live` tag)
+
+### Context
+
+DEC-0205 fixed ten high findings on `dev` and left the deploy to S146: #412 (driver, ws.6) and #414
+(uploaders) are baked into the image, #413 is the host monitor. The owner's go was taken at each prod
+step, as in DEC-0204.
+
+### Decision
+
+1. **Same release path as DEC-0204:** `marvinctl pull` → `build /srv/docker/weewx -t …:v2.0.18` →
+   verify with `exec-ro` → `tag …:v2.0.18 …:marvin-live` → `restart weewx.service`. The monitor half
+   went first, as in S144.
+2. **The canaries move at the deploy, not before.** PR #419 carried the Dockerfile stamp
+   (v2.0.17 → v2.0.18) and `soak_check.sh`'s `EXPECT_DRIVER` (ws.5 → ws.6) plus its no-Dockerfile
+   fallback image, and was the last thing merged before the pull (`ops#147` item 6: a bump made in
+   anticipation reads a healthy station red).
+3. **#408 is deliberate.** With `[[Wunderground]]` configured, as here, `StdWunderground.__init__`
+   (weewx 5.5.0 `restx.py`) starts its own Wunderground-PWS and -RF threads and binds the same
+   events, so calling it from `OgoxeUploader` would run a second set next to the real service and bind
+   `new_archive_record` twice. The class builds the one `AmbientThread` it needs. Recorded in
+   `CHANGES-FROM-UPSTREAM.md` and the file header. Derived from reading the code, not tested by
+   running the alternative; the original author's reason is still unrecorded.
+4. **#405 gets an errata entry, ERR-0010.** OWM's `rain_1h` was 10× low and Windy's `precip` the
+   wrong window as well as the wrong unit, since 2026-05-21 (git date; the first live post is not
+   established). The archive and InfluxDB were never affected; the third-party series cannot be
+   corrected. Logged per ERR-0009's precedent of recording an unrecoverable gap.
+5. **The ROADMAP tripwire ran (due S146):** four lines moved, a P0.7 opened for the audit, next
+   check S156. See the file's own guardrail section.
+
+### As-run (2026-09-29, ET)
+
+- **Merge and pull.** #419 merged at 09:30:39 (`4fd9039`). `marvinctl pull` took the tenant root from
+  `7d06cbf` (S144) to it, 31 files. The only bind-mounted file among them is `influx.py`, a comment
+  change; the running container keeps its old inode until it is recreated.
+- **Monitor.** On-disk sha `5cd09917…` = `dev`'s, mtime 09:31:07. Restarted 09:31:16 (`8a07efd7…`
+  before). The log shows `Remedy armed: no automatic remedy (REMEDY_MODE=none)` and no
+  `is not one of` line, so #404's validation accepted the live value. It ran clean for seven hours,
+  and the 12:00 summary carried `ISS battery: OK`. Across the later cutover it logged two 19%
+  windows (16:38, 16:39) and one `[LOW]` five-window average (52%, 16:41), with `bad windows: 0`
+  and no alert.
+- **Build.** `marvinctl build /srv/docker/weewx -t …:v2.0.18` ran 09:31:33 to 09:31:46, exit 0. The
+  context was 169 kB (BuildKit sends the delta). Steps 1–17 were cached: the Go binary, the venv and
+  `pressure_service.py` reused v2.0.17's layers. Every layer from `COPY owm.py` down re-executed, and
+  the minimal stage's `apt-get` re-ran, so its system packages are whatever Ubuntu 26.04 served that
+  morning. Image `7feeda50…`.
+- **Verified before the cutover.** `exec-ro` sha256 of 224 baked files against `:v2.0.17`
+  (`/opt/weewx-venv/…/user`, `/opt/weewx-data`, `/usr/local/{bin,lib}`, `/entrypoint.sh`,
+  `/etc/modprobe.d`, plus `python3`, `rtl_biast`, `rtl_sdr`, libusb). Exactly four differ, each equal
+  to `dev`@`4fd9039`'s file: `rtldavis.py` (`090e5700…` → `1cfd41f2…`), `owm.py` (`6d88f904…` →
+  `60b8593d…`), `windy.py` (`b52c1dac…` → `96074cd2…`), and `influx.py` (`3ad0a5e5…` → `23f21235…`,
+  comment only). The Go binary, the baked config, the entrypoint, python3 and libusb are identical.
+  Five files whose names carry `%` or `@` (skin templates, a systemd template) were left out because
+  `exec-ro` refuses those characters in an argument.
+- **Cutover.** The build sat seven hours before the owner's go. Re-checked at 16:37:19: prod healthy,
+  `dev` unchanged at `4fd9039`. `:marvin-live` retagged to `:v2.0.18` at 16:37:01 (`check-image`:
+  `7feeda50…` for both). `weewx.service` restarted 16:37:37; the container was up at 16:37:38 as
+  `996:986` on `7feeda50…`, banner `driver version is 0.20+ws.6`.
+- **After.** In the first four minutes: 129 INFO lines, 0 WARNING, 0 ERROR/CRITICAL/traceback.
+  `soak_check.sh`: 19 passed, 0 warnings, 0 failures, with the image read from the Dockerfile stamp
+  and the `0.20+ws.6` canary green. The archive has no 16:38 or 16:39 row (a two-minute gap while
+  the hop re-acquired), 16:40 is the partial first record with `rxCheckPercent` NULL, and **16:41
+  reads 100.0**. The equivalent record after v2.0.17's cutover read 58% (S144). One observation
+  each, so suggestive only; #402's cold-start test is the proof.
+- **Rollback:** `marvinctl tag weatheredscientist/weewx-rtldavis:v2.0.17
+  weatheredscientist/weewx-rtldavis:marvin-live`, then restart. `:v2.0.17` (`621710f7…`) is local.
+
+### Not yet observed
+
+- The OWM and Windy rain fix live: it needs rain, and 0 × 10 = 0 (ERR-0010).
+- A `frame failed message-type proof` line (DEC-0203's driver half), which needs a glitch.
+- Whether the dupgate patch still applies clean: the build reused the cached patch layer, so its log
+  neither confirmed nor refuted S145's finding (offset 0, fuzz 0 on the laptop's tools).
+
+## DEC-0207 — A weewx engine bump is proven by `ops/weewx_bump_check.sh` before it is built; PR #420 (5.5.0 → 5.5.2) is taken as v2.0.19 through `dev`, and Dependabot is retargeted to `dev`
+
+**Status:** Accepted (S147; the pin is on a branch, not built or deployed) · **applies** DEC-0011 ·
+**follows** DEC-0206.
+
+### Context
+
+PR #420's three checks were green, and that proved nothing about the new engine. CI's `tests` job
+installs `pytest` alone, and the tests stub weewx (`tests/test_influx_lease_yield.py` even sets
+`weewx.__version__ = "5.5.0"` on a fake module). There is no dev receiver (DEC-0011), so a weewx
+bump has had no runtime proof of any kind. The PR also targeted `main`, which is v2.0.13 and trails
+`dev` by six releases; merging it there would have put a pin on `main` that no release carries.
+
+### What the 5.5.0 → 5.5.2 diff changes for us
+
+Read in full (93 commits; 27 files under `src/`), then checked by running both versions:
+
+- **`restx.py`, the one prod-visible change.** Our live `[[Wunderground]]` sets `rapidfire = True` and
+  `archive_post = True`. In 5.5.0 the first thread's `setdefault('server_url', …)` won, so **both
+  threads posted to the archive URL**, and setting `rtfreq` too raised `TypeError` from
+  `AmbientThread`. In 5.5.2 each thread gets its own endpoint: the rapidfire thread posts to
+  `rtupdate.wunderground.com`. Measured, not inferred, with a mock engine on each version.
+  `OgoxeUploader` subclasses `StdWunderground` but never runs `StdWunderground.__init__`, so it is unaffected.
+- **`engine.py`:** the driver loads with `importlib.import_module` instead of `__import__` plus
+  `sys.modules`. Equivalent for `user.rtldavis`.
+- **`TimeSpan` and `ValueTuple`** became `namedtuple` subclasses. No non-test code here uses either.
+- **`weecfg`** (config save keeps mode and ownership; `extension uninstall` keeps in-use sections).
+  The Dockerfile's `weectl station create` output differs from 5.5.0's only in the version stamp and
+  in the quoting of commented-out skin lines, so the baked config is the same in effect.
+- Everything else is `weectl`, packaging, Vantage and FineOffset fixes, none of which we use.
+
+### Decision
+
+1. **`ops/weewx_bump_check.sh` (+ `ops/weewx_bump_probe.py`) is the test strategy for an engine bump.**
+   It builds a scratch venv at the version under test, generates a stock station, copies in the baked
+   modules, and boots `weewxd` on the Simulator for 40 s against a closed local port with throwaway
+   credentials. It asserts the Wunderground endpoints (not merely "no error"), both thread
+   announcements, no unexpected ERROR line, a written loop feed and the driver's import path.
+   **Control:** it passes on 5.5.2 and fails on 5.5.0 (the probe reports the archive-URL routing and
+   the `TypeError`). It cannot prove the Go binary, real RF frames, the WeatherLink fetch, the
+   key-bearing uploaders or the amd64 build; `soak_check.sh` at cutover covers the observable part.
+2. **`requirements.txt` moves to `weewx==5.5.2` on `dev`, released as v2.0.19.** PR #420 is closed
+   with a pointer once that lands.
+3. **`.github/dependabot.yml` gains `target-branch: "dev"`**, so bumps stop opening against `main`.
+
+### Watch after cutover
+
+`Wunderground-RF` lines in `weewx.log` (its failures are silent by default: the rapidfire thread sets
+`log_failure = False`), and the station still updating on wunderground.com. The rapidfire endpoint
+takes the same station id and key, but that is the one behavior change a live signal has to confirm.
+
+### Not proven
+
+Whether WU's rapidfire endpoint accepts this station's posts. The 5.5.0 behavior (rapidfire on the
+archive URL) was the status quo, and it may have been silently degrading to ordinary archive posts.
+
+## DEC-0208 — v2.0.19: weewx 5.5.2 built from the tenant-root checkout and cut over 2026-10-02 00:18:38 ET; the rapidfire endpoint change confirmed live on wunderground.com
+
+**Status:** Accepted (deployed 2026-10-02 00:18:38 ET) · **ships** DEC-0207's pin · **follows** DEC-0204's
+release shape · **applies** MARVIN-DEC-0109/0116 (the floating `:marvin-live` tag)
+
+### Context
+
+DEC-0207 staged `weewx==5.5.2` on `dev` (#425, proved by `ops/weewx_bump_check.sh`) and left the build
+for a release. The owner's go was taken at each step: the stamp PR's merge and the marvin build, then
+the cutover.
+
+### What happened
+
+- **PR #429** moved the Dockerfile stamp v2.0.18 → v2.0.19 and `soak_check.sh`'s no-Dockerfile
+  fallback image. `EXPECT_DRIVER` stays `0.20+ws.6`: no driver change. Merged as `fee78e3`.
+- **Build:** `marvinctl pull`, then `marvinctl build /srv/docker/weewx -t …:v2.0.19`, exit 0. Image
+  `e1828402…` (index digest).
+- **Verified with `exec-ro` against v2.0.18:** the Go binary, `rtldavis.py`, `owm.py`, `windy.py` and
+  `influx.py` are sha256-identical; `pip show weewx` reads 5.5.0 in v2.0.18 and 5.5.2 in v2.0.19.
+- **Cutover:** `tag :v2.0.19 :marvin-live`, `restart weewx.service` at 00:18:38 ET. `weewxd` logged
+  `Starting up weewx version 5.5.2`, both `Wunderground-PWS` and `Wunderground-RF` announced, the first
+  post-restart archive record landed 00:19:00, and Influx, WU-PWS, PWSWeather, OWM, CWOP and Windy
+  published it. No WARNING, ERROR or traceback. `soak_check.sh`: 19 passed, 0 warnings, 0 failures.
+- **The one behavior change, confirmed externally.** `weewx.log` cannot show it (the rapidfire thread
+  sets `log_failure = False`). The station's public wunderground.com page read CONNECTED with
+  "2 seconds ago" at 00:20 ET, after the restart; only the rapidfire thread posts that often. WU accepts
+  this station's posts on `rtupdate.wunderground.com`.
+
+### Rollback
+
+`marvinctl tag …:v2.0.18 …:marvin-live`, then `restart weewx.service`. `:v2.0.18` is local on marvin.
+
+### Addendum (S149, 00:31 ET): `:v2.0.19` pushed to Docker Hub
+
+`marvinctl --tenant weewx push weatheredscientist/weewx-rtldavis:v2.0.19` ran for the first time and
+exited 0: weewx's manifest has carried `publish = weatheredscientist/weewx-rtldavis` since 2026-09-04
+(MARVIN-DEC-0115), so `eaglehunt-ops#265`'s trigger had been armed all along. Hub's digest equals
+prod's index digest (`sha256:e18284026b8f…`). `:latest` stays at v2.0.13, the owner's route.
+`:v2.0.17` and `:v2.0.18` were not pushed: v2.0.19 supersedes them.
+
+## DEC-0209 — WeatherLink's `bar_absolute` becomes weewx's `pressure`: the archive's station pressure is measured, and `altimeter` derives from it (`eaglehunt-ops#357`, option A)
+
+**Status:** Accepted (deployed 2026-10-06 22:15:14 ET as v2.0.20; addendum below) · **resolves** `eaglehunt-ops#357` (weewx side)
+· **supersedes in part** DEC-0091 (the null-key half) · **applies** DEC-0006 (no borrowed value) ·
+**extends** DEC-0086 (the WeatherLink passthrough)
+
+### Context
+
+HLF's barometer verification frame (hlf#593, option 2) needs a *measured* station pressure from the
+archive. The archive's `pressure` was not one: DEC-0091 left the key null, and weewx's
+`prefer_hardware` then derived it by reversing WeatherLink's sea-level `barometer` through its own
+reduction (found S146, `INTERFACES.md` §1 corrected then). S146 put two shapes on the tracker: (A)
+feed `bar_absolute` in as weewx's own `pressure`, or (B) a new field. Both consumers answered: the
+dashboard (2026-09-29) and HLF (S362, 2026-10-06) read neither `pressure_inHg` nor `altimeter_inHg`;
+HLF needs the value in the archive, which under (B) would mean a new column. The owner chose (A).
+
+### Decision
+
+- `pressure_service.py` reads `bar_absolute` from the **same record** it takes `bar_sea_level` (or
+  the legacy `bar`) from, and injects it as `pressure` when the packet's is `None`, the same shape as
+  the `barometer` relay. A `bar_absolute` in some other record is another sensor's reading and is
+  ignored (tested).
+- `altimeter` is never injected. weewx 5.5.2's `prefer_hardware` computes only a key that is `None`
+  (`wxservices.py:132`, read from the prod image), so the archive pass keeps the injected `pressure`
+  and derives `altimeter` from a measurement instead of a reversed reduction.
+- If the response lacks `bar_absolute`, nothing changes: `pressure` stays `None`, weewx derives as
+  before, and the service logs one warning per run.
+- The loop JSON is unchanged (neither key was ever in its contract). InfluxDB's `pressure_inHg` and
+  `altimeter_inHg` already exist (`obs_to_upload = most`), so the change there is meaning, not schema.
+- Consumer-visible at the v2.0.20 cutover and recorded as `DISC-0002` in `docs/DATA_ERRATA.md`:
+  archive `pressure`/`altimeter`, Influx `pressure_inHg`/`altimeter_inHg`, and CWOP's posted
+  barometer, which weewx sends from `altimeter` (`restx.py:1316`). The boundary timestamp and the
+  measured level shift are written into DISC-0002 at the deploy.
+- The file is baked (`CONSTANTS.md` deploy layers), so this rides a release: v2.0.20.
+
+### Verification
+
+Five new tests and the S82b injection test split in two (`tests/test_pressure_injection.py`); the
+three gates green (601 passed, 17 skipped). The one-off probe of this station's `current` response
+(the first step BOOT named for any build) was classifier-denied in-session as a production read and
+run by the owner instead (2026-10-06, the venv interpreter; it printed key names and `bar_*` values
+only). HTTP 200, four sensors; the barometer sensor's record (type 242, data structure 19) holds
+exactly `bar_absolute`, `bar_offset`, `bar_sea_level`, `bar_trend`, `ts`, `tz_offset`, reading
+`bar_absolute = 29.534`, `bar_sea_level = 30.127`, `bar_offset = 0`, in inHg. One record carries both
+pressures, as the code assumes, and the console applies no user offset. The 0.59 inHg gap matches
+the site's elevation.
+
+### Rejected
+
+(B), a new field: additive, but it leaves a derived value posing as a measured one under the name
+`pressure` (the thing DEC-0091 set out to fix), and HLF would need an archive column for it anyway.
+Deriving true station pressure from altitude in this repo: DEC-0091 already rejected it, and a
+measured value is now available.
+
+### Addendum (S150, the same night): deployed as v2.0.20
+
+DEC-0204's shape, the owner's go for the whole sequence taken once in chat. PR #433 moved the
+Dockerfile stamp and `soak_check.sh`'s fallback (`EXPECT_DRIVER` stays `0.20+ws.6`); `marvinctl
+pull` → `build` from `dev`@`9a86c97`, image `f617c9ca…`. `exec-ro` sha256 of the Dockerfile's seven
+baked modules against v2.0.19: only `pressure_service.py` differs, and its sha (`90f8d5b4…`) equals
+`dev`'s file; `pip show weewx` reads 5.5.2. Cutover `tag :v2.0.20 :marvin-live` + `restart
+weewx.service` at **22:15:14 EDT**; clean startup, zero WARNING/ERROR/CRITICAL lines since. The first
+fetch at 22:17:19 logged `got pressure 30.127, station pressure 29.534`; the first archive record,
+**22:18:00**, carries `pressure 29.534`, `altimeter 30.130` against the last derived row's 29.526 /
+30.122 — a +0.008 inHg step, `barometer` 30.127 on both sides. DISC-0002 is filled with that
+boundary. The archive read used `marvinctl exec` with a read-only sqlite probe (allowed this time;
+the WeatherLink probe earlier in the session was not). Three archive minutes (22:15–22:17) lost to
+the restart. Rollback: retag `:v2.0.19`, restart — and note that puts the columns back on the
+derived path.

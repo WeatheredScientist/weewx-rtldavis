@@ -62,7 +62,8 @@ _weeutil.weeutil, _weeutil.logger = _wu, _wlog
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rtldavis import (  # noqa: E402
-    SensorQC, QC_RESEED_SECONDS, RtldavisDriver, FRAME_WEATHER_KEYS)
+    SensorQC, QC_RESEED_SECONDS, RtldavisDriver, FRAME_WEATHER_KEYS,
+    FRAME_BATTERY_KEYS, IMPOSSIBLE_MSG_TYPE_KEY)
 
 T0 = 1_000_000.0  # arbitrary epoch for the fake clock
 
@@ -264,21 +265,107 @@ def test_corrupt_frame_skips_rain_counter_without_resync():
     p2 = drv._data_to_packet({'rain_count': 12})     # 2 genuine tips survive
     assert p2['rain'] == 2 * drv.rain_per_tip
 
-def test_co_rejection_nulls_only_weather_fields():
-    # diagnostics describe the link/station, not the weather: battery flag
-    # and reception stats must survive a co-rejected frame
+def test_co_rejection_nulls_battery_flag_but_keeps_link_stats():
+    # AMENDED for DEC-0203 (#394): this test used to assert the battery flag
+    # SURVIVES a co-rejected frame (txBatteryStatus == 0), under DEC-0054's
+    # "diagnostics describe the link" rule. That holds for pct_good, which the
+    # receiver measures, but the battery bit is decoded from the proven-
+    # corrupt frame's own byte 0 -- all 10 archived ISS low-battery flips were
+    # such frames. A passing test is not evidence if the assertion is wrong.
     drv = _bare_driver()
     pkt = drv._data_to_packet({'uv': 16.29, 'wind_speed': 2.0,
-                               'wind_dir': 90.0, 'bat_iss': 0,
+                               'wind_dir': 90.0, 'bat_iss': 1,
                                'pct_good_all': 67.0})
     assert pkt['UV'] is None and pkt['windSpeed'] is None
-    assert pkt['txBatteryStatus'] == 0
-    assert pkt['rxCheckPercent'] == 67.0
+    assert pkt['txBatteryStatus'] is None, \
+        "a condemned frame's battery bit is as corrupt as its weather"
+    assert pkt['rxCheckPercent'] == 67.0, "receiver-measured link stats survive"
+
+def test_clean_frame_battery_flag_flows():
+    # a genuine low battery must still reach the archive: only a condemned
+    # frame loses its flag
+    drv = _bare_driver()
+    pkt = drv._data_to_packet({'wind_speed': 2.0, 'wind_dir': 90.0,
+                               'humidity': 55.0, 'bat_iss': 1})
+    assert pkt['txBatteryStatus'] == 1
+    assert pkt['windSpeed'] == 2.0 and pkt['outHumidity'] == 55.0
 
 def test_frame_weather_keys_cover_all_qc_keys():
     # every QC-bounded field must be in the co-rejection set, or a corrupt
     # frame could null its siblings while a later-added field escapes
     assert set(SensorQC().limits) <= set(FRAME_WEATHER_KEYS)
+
+def test_frame_battery_keys_cover_every_battery_field():
+    # every battery flag the sensor map archives must be co-rejectable, or a
+    # transmitter added later could leak a corrupt frame's flag (DEC-0203)
+    bat = {v for v in RtldavisDriver.DEFAULT_SENSOR_MAP.values()
+           if v.startswith('bat_')}
+    assert bat and bat <= set(FRAME_BATTERY_KEYS)
+
+
+# --- Impossible message type as co-rejection proof (DEC-0203, #394) ---
+
+class _ParseDriver:
+    """Minimal stand-in for parse_raw, as in test_battery_status_dispatch.py:
+    parse_raw is @staticmethod but takes `self` explicitly."""
+    channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
+                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
+    rain_per_tip = 0.2
+    last_hum = None
+    _log_humidity_raw = False
+    parse_raw = staticmethod(RtldavisDriver.parse_raw)
+
+
+def _iss_frame(msg_type, battery_low=0, wind_raw=0, dir_raw=0x80):
+    # byte 0: message type (high nibble), battery bit 3, channel-1 (low 3)
+    return bytearray([(msg_type << 4) | (battery_low << 3) | 0,
+                      wind_raw, dir_raw, 0, 0, 0, 0, 0])
+
+def test_parse_raw_marks_only_impossible_message_types():
+    drv = _ParseDriver()
+    for t in (0x0, 0x1, 0xB, 0xD, 0xF):
+        data = drv.parse_raw(drv, _iss_frame(t, battery_low=1))
+        assert data.get(IMPOSSIBLE_MSG_TYPE_KEY) == t, "type 0x%x" % t
+        assert data['bat_iss'] == 1
+    # every type a transmitter does send, decoded or not, stays unmarked
+    for t in (0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xC, 0xE):
+        data = drv.parse_raw(drv, _iss_frame(t))
+        assert IMPOSSIBLE_MSG_TYPE_KEY not in data, "type 0x%x" % t
+
+def test_impossible_type_co_rejects_in_spec_wind_and_battery():
+    # 2026-09-22 06:05:15 replay: a type-0x1 frame whose wind (11 mph) sat
+    # under the 20 m/s delta cap, so per-field QC passed it and it became the
+    # minute's gust during a 3.4% rxCheckPercent collapse (dewpoint_service
+    # flagged the ERR-0004 signature). The frame type alone proves it corrupt.
+    drv = _bare_driver()
+    drv._data_to_packet({'wind_speed': 1.0 * MPH_TO_MPS, 'wind_dir': 180.0})
+    pkt = drv._data_to_packet({'wind_speed': 11 * MPH_TO_MPS,
+                               'wind_dir': 200.0, 'bat_iss': 1,
+                               IMPOSSIBLE_MSG_TYPE_KEY: 0x1})
+    assert pkt['windSpeed'] is None, "the phantom gust must not survive"
+    assert pkt['windDir'] is None
+    assert pkt['txBatteryStatus'] is None, "nor the frame's battery bit"
+
+def test_impossible_type_moves_no_baseline():
+    # 2026-09-25 01:44:00 replay: a type-0x0 frame decoded wind to 80.467 m/s
+    # (in spec). The delta check rejected it but resynced the baseline to it,
+    # so the genuine 3.129 m/s at 01:48:32 was rejected too, as a -77 m/s
+    # step. Co-rejected, the corrupt value never becomes delta history.
+    drv = _bare_driver()
+    drv._data_to_packet({'wind_speed': 2.23519, 'wind_dir': 180.0})
+    drv._data_to_packet({'wind_speed': 80.467, 'wind_dir': 90.0,
+                         IMPOSSIBLE_MSG_TYPE_KEY: 0x0})
+    pkt = drv._data_to_packet({'wind_speed': 3.1292722, 'wind_dir': 185.0})
+    assert pkt['windSpeed'] == 3.1292722, \
+        "post-glitch reading must be judged against the pre-glitch baseline"
+
+def test_impossible_type_ignored_when_qc_disabled():
+    # co-rejection is part of the QC filter; disabling it leaves frames as-is
+    drv = _bare_driver(enabled=False)
+    pkt = drv._data_to_packet({'wind_speed': 4.9, 'bat_iss': 1,
+                               IMPOSSIBLE_MSG_TYPE_KEY: 0x1})
+    assert pkt['windSpeed'] == 4.9 and pkt['txBatteryStatus'] == 1
+    assert IMPOSSIBLE_MSG_TYPE_KEY not in pkt
 
 
 if __name__ == "__main__":

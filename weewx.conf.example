@@ -467,6 +467,19 @@ version = 5.3.1
         # no-op) or lands on a different code.
         radiation = radiation if radiation is None else (0 if 1.75 < radiation < 1.77 else radiation)
 
+        # UV_DIODE_FLOOR (DEC-0200): the same thing for the VP2+ UV sensor (a
+        # photodiode + amplifier), whose dark output sits on the edge between two
+        # ADC codes: a dark reading decodes to uv_raw=2 (0.04 index) or, in runs of
+        # minutes, uv_raw=1 (0.02) (rtldavis.py, message type 4: uv_raw / 50) --
+        # measured ~97% / ~3% on this station, never code 0 or 3. Zero exactly
+        # those two codes: loop UV only carries multiples of 0.02, so the window
+        # holds 0.02 and 0.04 and nothing else. Never subtract the floor instead --
+        # it is not an additive offset. Known, accepted cost: a genuine twilight
+        # 0.02/0.04 also reads 0, finer than the sensor's rated 0.1-index
+        # resolution (Davis DS6490). Delete this line if your unit's dark UV reads
+        # 0; check which codes your floor lands on before relying on it.
+        UV = UV if UV is None else (0 if 0.01 < UV < 0.05 else UV)
+
 ##############################################################################
 
 #   This section is for quality control checks. If units are not specified,
