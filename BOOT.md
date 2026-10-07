@@ -23,7 +23,9 @@ archive's `pressure` is measured from **22:18:00 ET** (DISC-0002: +0.008 inHg st
 unchanged). Zero WARNING/ERROR lines, soak 19/0/0. Tagged `v2.0.20` on `9a86c97` with a GitHub
 release; `:v2.0.20` on Docker Hub (digest = prod's). `eaglehunt-ops#357` closed on weewx's side
 with the boundary timestamp; HLF gates its mapping on it. Rollback: retag `:v2.0.19` + restart —
-that puts the columns back on the derived path.
+that puts the columns back on the derived path. **The same night: `dev` promoted to `main`
+(`prod-baseline-20261006`, #436; `main` had been v2.0.16, not v2.0.13) and Docker Hub `:latest`
+moved to v2.0.20.** `main` lags `dev` only by the closeout docs.
 
 **#423's swap path is proved end to end as `t-weewx` (S148).** Schedule stood down, arm `T` kept in
 `arm_cmd`, timer not installed. **`eaglehunt-ops#360` is done on weewx's side** (both units under
@@ -94,5 +96,5 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-06 (S150). v2.0.20 in prod: measured station pressure. Nothing queued but
-watches and the owner's promotions._
+_Last updated: 2026-10-06 (S150 close). v2.0.20 in prod, on `main`, and `:latest`: measured station
+pressure. Nothing queued but watches and the owner-only items._
