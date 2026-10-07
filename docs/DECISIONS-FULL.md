@@ -11385,7 +11385,7 @@ prod's index digest (`sha256:e18284026b8f…`). `:latest` stays at v2.0.13, the 
 
 ## DEC-0209 — WeatherLink's `bar_absolute` becomes weewx's `pressure`: the archive's station pressure is measured, and `altimeter` derives from it (`eaglehunt-ops#357`, option A)
 
-**Status:** Accepted (code on `dev`; ships with v2.0.20) · **resolves** `eaglehunt-ops#357` (weewx side)
+**Status:** Accepted (deployed 2026-10-06 22:15:14 ET as v2.0.20; addendum below) · **resolves** `eaglehunt-ops#357` (weewx side)
 · **supersedes in part** DEC-0091 (the null-key half) · **applies** DEC-0006 (no borrowed value) ·
 **extends** DEC-0086 (the WeatherLink passthrough)
 
@@ -11436,3 +11436,19 @@ the site's elevation.
 `pressure` (the thing DEC-0091 set out to fix), and HLF would need an archive column for it anyway.
 Deriving true station pressure from altitude in this repo: DEC-0091 already rejected it, and a
 measured value is now available.
+
+### Addendum (S150, the same night): deployed as v2.0.20
+
+DEC-0204's shape, the owner's go for the whole sequence taken once in chat. PR #433 moved the
+Dockerfile stamp and `soak_check.sh`'s fallback (`EXPECT_DRIVER` stays `0.20+ws.6`); `marvinctl
+pull` → `build` from `dev`@`9a86c97`, image `f617c9ca…`. `exec-ro` sha256 of the Dockerfile's seven
+baked modules against v2.0.19: only `pressure_service.py` differs, and its sha (`90f8d5b4…`) equals
+`dev`'s file; `pip show weewx` reads 5.5.2. Cutover `tag :v2.0.20 :marvin-live` + `restart
+weewx.service` at **22:15:14 EDT**; clean startup, zero WARNING/ERROR/CRITICAL lines since. The first
+fetch at 22:17:19 logged `got pressure 30.127, station pressure 29.534`; the first archive record,
+**22:18:00**, carries `pressure 29.534`, `altimeter 30.130` against the last derived row's 29.526 /
+30.122 — a +0.008 inHg step, `barometer` 30.127 on both sides. DISC-0002 is filled with that
+boundary. The archive read used `marvinctl exec` with a read-only sqlite probe (allowed this time;
+the WeatherLink probe earlier in the session was not). Three archive minutes (22:15–22:17) lost to
+the restart. Rollback: retag `:v2.0.19`, restart — and note that puts the columns back on the
+derived path.
