@@ -6,6 +6,24 @@ under [Pre-S16].
 
 ---
 
+## [S150] — 2026-10-06 — WeatherLink's `bar_absolute` becomes weewx's `pressure` (DEC-0209, `eaglehunt-ops#357` option A); rides v2.0.20
+
+- **`pressure_service.py` reads `bar_absolute` beside `bar_sea_level` and injects it as `pressure`**
+  when the packet's is null; weewx's `prefer_hardware` keeps it, so the archive's station pressure is
+  measured and `altimeter` derives from it instead of from the reversed sea-level value. Without the
+  key nothing changes (one warning). Five new tests; the S82b injection test split in two. Baked, so
+  it rides a v2.0.20 release — not built this session.
+- **Both consumers answered on `eaglehunt-ops#357`** (dashboard 09-29, HLF S362, rung from here):
+  neither reads `pressure_inHg` or `altimeter_inHg`; HLF needs the value in the archive. The owner
+  chose (A). `DISC-0002` records the boundary (timestamp and shift filled at the deploy); INTERFACES
+  §1 rewritten; the ROADMAP line closed; CWOP noted as the one uploader that moves (it posts
+  `altimeter`).
+- **The station's response carries the key (owner-run probe, the in-session `marvinctl exec` was
+  classifier-denied as a production read):** the barometer sensor's record (type 242, data
+  structure 19) reads `bar_absolute = 29.534` beside `bar_sea_level = 30.127`, `bar_offset = 0`,
+  inHg — one record, the shape the code assumes. The probe printed key names and `bar_*` values
+  only.
+
 ## [S149] — 2026-10-02 — v2.0.19 in prod (DEC-0208): weewx 5.5.2, the rapidfire endpoint confirmed live
 
 - **weewx 5.5.0 → 5.5.2 is live as `:v2.0.19` since 2026-10-02 00:18:38 ET.** PR #429 moved the

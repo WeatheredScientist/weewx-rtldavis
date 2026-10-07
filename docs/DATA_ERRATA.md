@@ -673,3 +673,33 @@ correcting, not the link.
   #317 on this number.
 - **Correction status:** ⛔ not corrected, deliberately — same rationale as the first boundary:
   historical `rxCheckPercent` values reflect what the driver computed at the time.
+
+## DISC-0002 — `pressure` and `altimeter` change source at the v2.0.20 deploy: measured, not reversed (not an error)
+
+**Not an `ERR-####`.** No stored value is a bad decode on either side. This is a **source change** in
+two archive columns and their InfluxDB fields, recorded here because it is the file anyone consults
+when a stored series moves, and because both series show a level shift at one timestamp that would
+otherwise be re-discovered as weather.
+
+**What changed.** Until the v2.0.20 deploy the driver left `pressure` and `altimeter` null and weewx
+derived both: `pressure` by running WeatherLink's sea-level `barometer` backward through a
+temperature-dependent reduction (station altitude, current temperature, the temperature 12 h earlier
+from the archive, humidity), and `altimeter` from that (`docs/INTERFACES.md` §1). From the deploy,
+`pressure` is WeatherLink's `bar_absolute` — the console's raw barometer reading — injected by
+`pressure_service.py` (DEC-0209, `eaglehunt-ops#357`); `altimeter` is still weewx-derived, but from
+the measurement.
+
+- **Boundary timestamp:** the v2.0.20 cutover — **written here at the deploy.** The first record
+  carrying the measured value is the first archive record after the first post-restart WeatherLink
+  fetch (≤ 5 min after the restart); `barometer_fetch_epoch` at or after the restart marks it.
+- **Direction:** a level shift whose sign and size are measured across the boundary at the deploy
+  and recorded here. `barometer` (sea-level) does not move: it is the same passthrough on both sides.
+- **Scope:** archive `pressure` and `altimeter`; InfluxDB `pressure_inHg` and `altimeter_inHg` (same
+  field names — a meaning change, not a schema change); and CWOP's posted barometer, which weewx
+  sends from `altimeter` (`restx.py:1316`). **Not** `barometer`/`barometer_inHg`; not the loop JSON
+  (neither key was ever in it); not WU, PWSweather, Windy or OWM (they send `barometer`).
+- **Consumers:** HLF reads only the archive's `barometer` today and wants the new `pressure` for
+  hlf#593's verification frame; the dashboard reads neither field (both answered on
+  `eaglehunt-ops#357`). Nothing re-keys.
+- **Correction status:** ⛔ not corrected, deliberately. Pre-boundary rows are honest records of what
+  weewx computed at the time; no measured value exists for them.
