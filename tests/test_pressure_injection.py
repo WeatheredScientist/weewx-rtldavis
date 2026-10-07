@@ -64,7 +64,7 @@ import pressure_service as ps  # noqa: E402
 
 
 def _make_fetcher():
-    cfg = {'DavisPressure': {'api_key': 'test-key', 'api_secret': 'test-secret',
+    cfg = {'DavisPressure': {'api_key': 'YOUR_API_KEY', 'api_secret': 'YOUR_API_SECRET',
                              'station_id': '1'}}
     return ps.DavisPressureFetcher(engine=None, config_dict=cfg)
 

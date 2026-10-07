@@ -34,7 +34,7 @@ def check_wunderground():
         cfg = configobj.ConfigObj({
             "WEEWX_ROOT": "/tmp",
             "StdRESTful": {"Wunderground": dict(
-                {"enable": "true", "station": "KTEST1", "password": "throwaway",
+                {"enable": "true", "station": "KTEST1", "password": "YOUR_PASSWORD",
                  "rapidfire": "True", "archive_post": "True"}, **extra)},
             "DataBindings": {"wx_binding": {
                 "database": "d", "table_name": "archive",
@@ -69,7 +69,7 @@ def configure(conf_path, feed_dir):
     conf = configobj.ConfigObj(conf_path)
     conf["Station"]["station_type"] = "Simulator"
     wu = conf["StdRESTful"]["Wunderground"]
-    wu.update({"enable": "true", "station": "KTEST1", "password": "throwaway",
+    wu.update({"enable": "true", "station": "KTEST1", "password": "YOUR_PASSWORD",
                "rapidfire": "True", "archive_post": "True", "server_url": DEAD_URL})
     engine = conf["Engine"]["Services"]
     engine["process_services"] = list(engine["process_services"]) + [

@@ -11452,3 +11452,45 @@ boundary. The archive read used `marvinctl exec` with a read-only sqlite probe (
 the WeatherLink probe earlier in the session was not). Three archive minutes (22:15–22:17) lost to
 the restart. Rollback: retag `:v2.0.19`, restart — and note that puts the columns back on the
 derived path.
+
+## DEC-0210 — The secret gate's allow-list judges each match, not the line (#421)
+
+**Date:** 2026-10-07 (S151). **Status:** shipped (the PR for #421). Extends DEC-0039 and DEC-0045.
+
+### Context
+
+S145's mutation pass (#409) found four holes in the detectors themselves and left them for a
+design pass: (1) allow terms applied per line, so a real literal beside an env lookup passed;
+(2) quoted key names were never scanned (`"api_key": "<value>"`); (3) `SECRET_KEY`,
+`private_key` and `access_key` were missed; (4) `os.getenv('X')` was a false positive.
+
+### Decision
+
+All four, in one change, controls first. Each hole got a planted payload and was shown LEAKED
+(or FALSE POSITIVE) against the old gate before any detector edit: 15 BAD controls and 2 GOOD
+controls red.
+
+- Item 1: the allow-list splits in two. `allow_line` (the line's own key is `description`, or it
+  is `self.x = x`) still excuses the whole line. `allow_match` (a placeholder, reference or prose
+  VALUE) is tested per match: the scan loop cuts a flagged line into one segment per match (a
+  match's start to the next one's; literal string surgery, no offsets, locale-independent) and
+  every segment must carry its own term. A flagged line that yields no match stays flagged.
+- Item 2: `_sep` lets a closing quote sit between key and separator. It is shared by `_assign`,
+  `_apppw_assign` and `allow_value`, and `allow_prose` accepts the closing quote too.
+- Item 3: `(secret|access|private)_?[Kk]ey` plus the uppercase spellings (the allow-list is
+  case-sensitive, DEC-0045's reason).
+- Item 4: `os\.getenv` as its own allow alternate.
+
+### Consequences
+
+- Quoted-key scanning made four tracked lines visible. Two files' fixtures
+  (`ops/weewx_bump_probe.py`, `tests/test_pressure_injection.py`) now use `YOUR_*` values, and
+  windy.py's `'PASSWORD': self.password` needed `PASSWORD` on the key list (the reason `PASS` is
+  there, S68).
+- Mutation run, fourteen of fifteen deletions of a new alternate or of the per-match logic go
+  red. The survivor is the loop's fail-closed branch for a line that yields no match, which cannot
+  occur while the detector and the splitter share one regex. It stays as a guard against a future
+  edit to either.
+- Not changed: a default literal inside a lookup (`os.getenv('X', '<literal>')`) is still excused
+  as a runtime lookup. That is the existing `os.environ.get('K', '')` behaviour, now applied to
+  getenv.

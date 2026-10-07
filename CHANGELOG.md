@@ -6,6 +6,15 @@ under [Pre-S16].
 
 ---
 
+## [S151] — 2026-10-07 — the secret gate's four detector holes closed (#421, DEC-0210)
+
+- **`scripts/check_secrets.sh` now scans quoted key names, knows `secret_key`/`access_key`/`private_key`,
+  stops flagging `os.getenv(`, and judges the allow-list per match instead of per line.** Controls
+  first, shown red against the old gate; 190 controls green; fourteen of fifteen mutations of the new
+  alternates go red (the fifteenth is unkillable by construction). Three test fixtures took `YOUR_*`
+  placeholders and `PASSWORD` joined the key list, because the quoted-key change made four tracked
+  lines visible. Prod untouched; v2.0.20 soak 19/0/0, no `bar_absolute` fallback warning.
+
 ## [S150] — 2026-10-06 — WeatherLink's `bar_absolute` becomes weewx's `pressure` (DEC-0209, `eaglehunt-ops#357` option A); v2.0.20 in prod the same night
 
 - **v2.0.20 is in prod since 2026-10-06 22:15:14 ET.** PR #433 moved the stamp; built on marvin

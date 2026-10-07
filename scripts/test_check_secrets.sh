@@ -30,6 +30,10 @@
 # an allow-list rule that the detector never lets them reach, so they pass whatever the
 # allow-list says. They are marked (inert) and kept as guards against widening the
 # detector; the live allow-list controls are the ones added under S145.
+# S151 (#421) added a control for each of the four holes that pass found (holes 46-61 and
+# the S151 GOOD block) and mutation-tested every new alternate: fourteen deletions go red.
+# The fifteenth, the scan loop's fail-closed branch for a line that yields no match, stays
+# green and cannot be killed (the detector and the splitter run one regex).
 # THE RULE FOR EDITING THE GATE: delete the alternate you touched in a scratch copy and
 # confirm this file goes red. A control that stays green under deletion is not one.
 #
@@ -138,6 +142,27 @@ bad=(
   'self.api_key = api_key_value  # token = not-a-real-secret-0000' # (hole 43) `self.x = x` must END the line: excuse on the left
   'smtp_pass: abcd efgh ijkl mnop'                                 # (hole 44) unquoted 4x4 with a colon (holes 27-29 use `=`)
   "send_mail(user, 'abcd efgh ijkl mnop')"                         # (hole 45) the keyless 4x4 shape in single quotes
+  # --- S151 (#421): the four detector holes the S145 mutation pass found ---
+  # Hole class 8, quoted key names: the detector wanted the separator right after the key,
+  # so a JSON or dict-style key (a closing quote in between) was never scanned.
+  '"api_key": "not-a-real-secret-0000"'                            # (hole 46) JSON key, double quotes
+  "'token': 'not-a-real-secret-0000'"                              # (hole 47) dict key, single quotes
+  '{"password":"not-a-real-secret-0000"}'                          # (hole 48) no spaces around the colon
+  '"key": "not-a-real-secret-0000"'                                # (hole 49) bare `key`; the opening quote is its one preceding character
+  # Hole class 9, key names the list lacked.
+  'SECRET_KEY = "not-a-real-secret-0000"'                          # (hole 50) `secret_key`, uppercase
+  'secret_key = "not-a-real-secret-0000"'                          # (hole 51) lowercase
+  'private_key = "not-a-real-secret-0000"'                         # (hole 52) `private_key`
+  'access_key: not-a-real-secret-0000'                             # (hole 53) `access_key`, colon
+  'accessKey = "not-a-real-secret-0000"'                           # (hole 54) camelCase
+  'privatekey = not-a-real-secret-0000'                            # (hole 55) no underscore
+  'PRIVATE_KEY=not-a-real-secret-0000'                             # (hole 56) env-file spelling
+  # Hole class 10, the allow-list judged per LINE: one excused assignment excused the whole line.
+  'api_key = os.environ["A"], token = "not-a-real-secret-0000"'    # (hole 57) the excused assignment first
+  'token = "not-a-real-secret-0000", api_key = os.environ["A"]'    # (hole 58) the literal first
+  'token = YOUR_TOKEN_HERE; password = not-a-real-secret-0000'     # (hole 59) a placeholder, then a literal
+  'token = INFLUX_TOKEN  # api_key = not-a-real-secret-0000'       # (hole 60) a reference, then a commented literal
+  '"gmail_pass": abcd efgh ijkl mnop'                              # (hole 61) unquoted 4x4 behind a quoted key (the `_apppw_assign` separator)
 )
 
 # --- must PASS (exit zero) ------------------------------------------------------
@@ -205,6 +230,21 @@ good=(
   ', description: set token = not-a-real-secret-0000 here'       # `allow_keys` after a comma
   "'description': 'set token = not-a-real-secret-0000 here'"     # `allow_keys` with a single-quoted key
   'token = abc1234'                                              # 7 characters: the documented 8+ threshold, pinned from below
+  # --- S151 (#421): each new allow alternate fires on a line it alone excuses ---
+  '"api_key": "YOUR_API_KEY_HERE"'                               # a quoted key name still takes the value allow-list
+  "'token': os.environ['T']"                                     # ditto, single quotes and a bare lookup
+  'SECRET_KEY = sys.argv[1]'                                     # uppercase `SECRET_KEY`
+  'ACCESS_KEY = sys.argv[1]'                                     # uppercase `ACCESS_KEY`
+  'PRIVATE_KEY = sys.argv[1]'                                    # uppercase `PRIVATE_KEY`
+  "secret_key = settings.get('secret_key')"                      # lowercase `secret_key`
+  "private_key = settings.get('private_key')"                    # lowercase `private_key`
+  "access_key = settings.get('access_key')"                      # lowercase `access_key`
+  "accessKey = settings.get('accessKey')"                        # camelCase `Key`
+  "password = os.getenv('WEEWX_PW')"                             # `os.getenv(`: a runtime lookup, not a literal (#421 item 4)
+  'token = os.getenv("INFLUX_TOKEN")'                            # ditto, double quotes
+  'api_key = settings.get("api_key"), token = os.environ["T"]'   # two excused assignments on one line stay excused
+  '"token": InfluxDB 2.x Authorization Token'                    # multi-word prose behind a quoted key (`allow_prose`'s closing quote)
+  "params = {'id': sid, 'PASSWORD': self.password}"               # uppercase `PASSWORD` as a quoted key (windy.py's upload parameter)
 )
 
 echo "── planted BAD payloads (each MUST be caught) ──────────────────────────"
