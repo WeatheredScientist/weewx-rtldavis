@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S150 → S151)
+## ▶ Resume here (S151 → S152)
 
 ### What's settled (do not re-derive)
 
@@ -30,11 +30,11 @@ moved to v2.0.20.** `main` lags `dev` only by the closeout docs.
 **#423's swap path is proved end to end as `t-weewx` (S148).** Schedule stood down, arm `T` kept in
 `arm_cmd`, timer not installed. **`eaglehunt-ops#360` is done on weewx's side** (both units under
 `--cap-drop ALL` + `no-new-privileges`). The S145 audit's ten high items shipped; 29 medium/low
-stay in `docs/CODE_REVIEW_S145.md`; the secret gate's four holes are #421. ROADMAP next check: S156.
+stay in `docs/CODE_REVIEW_S145.md`. **The secret gate's four detector holes (#421) are fixed in S151 (DEC-0210): quoted key names, `secret_key`/`access_key`/`private_key`, `os.getenv(`, and the allow-list now judged per match; PR open until merged.** ROADMAP next check: S156.
 
-### ▶▶ S151 JOB LIST
+### ▶▶ S152 JOB LIST
 
-1. **Watch, no action unless it fires:** the measured `pressure` keeps arriving (a `no bar_absolute`
+1. **Watch, no action unless it fires** (S151 checked: soak 19/0/0, no fallback warning): the measured `pressure` keeps arriving (a `no bar_absolute`
    WARNING in `weewx.log` means the fallback ran and the column went derived again — then DISC-0002
    needs a second boundary) · WU gold star (≥ 5 uninterrupted days; the clean run restarted at
    the 10-06 22:15 restart) · OWM and Windy rain in millimeters (needs rain; ERR-0010) · the first
@@ -55,7 +55,7 @@ stay in `docs/CODE_REVIEW_S145.md`; the secret gate's four holes are #421. ROADM
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed |
 | `main`/`dev` | **`main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150).** Before it `main` was v2.0.16's promotion (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor (all docs, plus `ops/campaign_analyze.py`); #339 had already brought `dev` to parity with #338 |
 | Docker Hub | `:v2.0.20` = `:latest` (= prod, `f617c9ca…`; `:latest` moved 2026-10-06 22:52 ET) · `:v2.0.19` · `:v2.0.16` |
-| Trackers | repo: #421 (gate holes), #380 informational · ops: #357 weewx side done, HLF's mapping pending on their side · #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
+| Trackers | repo: #421 closes with its PR (S151), #380 informational · ops: #357 weewx side done, HLF's mapping pending on their side · #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
 
 ## Blockers
 
@@ -96,5 +96,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-06 (S150 close). v2.0.20 in prod, on `main`, and `:latest`: measured station
-pressure. Nothing queued but watches and the owner-only items._
+_Last updated: 2026-10-07 (S151). v2.0.20 in prod, on `main`, and `:latest`; the secret gate's four holes closed on a PR. Nothing queued but watches, the owner-only items and the 29 audit leftovers._
