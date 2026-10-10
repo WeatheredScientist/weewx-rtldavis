@@ -26,11 +26,13 @@ Set [LoopJsonWriter] current_interval = 0 to restore the old
 write-on-every-packet behavior.
 
 DEPLOY (this file is MOUNTED, not baked -- verified S84, DEC-0093):
-  /volume1/docker/weewx-rtldavis/loop_json_writer.py is bind-mounted over
-  the venv copy, and the Dockerfile does NOT COPY this file at all. So an
-  image rebuild is a SILENT NO-OP here; shipping a change means scp'ing
-  this file to the NAS project root and restarting the container. Note the
-  copy in weewx-data/bin/user/ is a decoy -- it is not the mount source.
+  <tenant root>/loop_json_writer.py (/srv/docker/weewx/ on marvin) is
+  bind-mounted over the venv copy, and the Dockerfile does NOT COPY this
+  file at all. So an image rebuild is a SILENT NO-OP here. The tenant root
+  is a real `dev` checkout (DEC-0150), so shipping a change means
+  `marvinctl --tenant weewx pull` and then restarting the container
+  (`marvinctl --tenant weewx restart weewx.service`). Note the copy in
+  weewx-data/bin/user/ is a decoy -- it is not the mount source.
 
 Fields written (None → omitted, last known value used for sparse fields):
   windSpeed_mph, windGust_mph, windDir

@@ -1,7 +1,8 @@
 # Architecture — weewx-rtldavis
 
 **Status:** Source of truth
-**Last updated:** 2026-09-19 (S139) — re-verified against live marvin state after sitting untouched
+**Last updated:** 2026-10-10 (S152) — §1 and §2 corrected: `LoopJsonWriter` runs last in
+`process_services` (eaglehunt-ops#395). Before that, 2026-09-19 (S139) — re-verified against live marvin state after sitting untouched
 since S17; the deploy-layers table below is now a pointer to `CONSTANTS.md` rather than a second
 copy, per STANDARD rule 5 (a second copy is a defect — this one drifted to a stale NAS path across
 the DEC-0118 marvin move without anyone noticing until now).
@@ -27,9 +28,11 @@ Davis 6263 VP2+ ISS  ──915 MHz FHSS──▶  RTL-SDR Blog v3 (bias-tee-capa
              ┌───────────────┬────────────────┼───────────────────┬──────────────────┐
              ▼               ▼                 ▼                   ▼                  ▼
      data_services    process_services   xtype_services   archive_services   restful_services
-     loop_json_writer  StdConvert/Cal/QC   StdWXXTypes      StdArchive        11 uploaders +
-     (→ loop-data.txt)  dewpoint_service    PressureCooker   (→ SQLite)        influx + ogoxe
-                        pressure_service    RainRater
+     (empty)           StdConvert/Cal/QC   StdWXXTypes      StdArchive        11 uploaders +
+                       dewpoint_service    PressureCooker   (→ SQLite)        influx + ogoxe
+                       pressure_service    RainRater
+                       loop_json_writer
+                       (→ loop-data.txt)
 ```
 
 **The driver spawns the Go binary; the Go binary owns the SDR.** Only one `rtldavis` process can
@@ -42,11 +45,16 @@ From `weewx.conf [Engine][Services]`:
 
 | Group | Services |
 |-------|----------|
-| `data_services` | `user.loop_json_writer.LoopJsonWriter` |
-| `process_services` | `StdConvert, StdCalibrate, StdQC, StdWXCalculate, user.dewpoint_service.DewpointCacher, user.pressure_service.DavisPressureFetcher` |
+| `data_services` | *(empty)* |
+| `process_services` | `StdConvert, StdCalibrate, StdQC, StdWXCalculate, user.dewpoint_service.DewpointCacher, user.pressure_service.DavisPressureFetcher, user.loop_json_writer.LoopJsonWriter` |
 | `xtype_services` | `StdWXXTypes, StdPressureCooker, StdRainRater, StdDelta` |
 | `archive_services` | `StdArchive` |
 | `restful_services` | `StationRegistry, Wunderground, PWSweather, CWOP, WOW, WOWBE, AWEKAS, user.wcloud.WeatherCloud, user.windy.Windy, user.owm.OWM, user.influx.Influx, user.ogoxeUploader.OgoxeUploader` |
+
+> **`LoopJsonWriter` runs last in `process_services`, never in `data_services`** (since 2026-07-12;
+> re-read from the live `weewx.conf` at S152). `data_services` runs first, so a writer there would
+> publish each LOOP packet before conversion, QC and the derived fields exist. This table read
+> "`data_services`" from S16 until S152 (eaglehunt-ops#395). `weewx.conf.example` carries the rule.
 
 > **Removed (S47):** `user.loopdata.LoopData` was never in any active list; the `loopdata.py` mount
 > and the `[LoopData]` config section were dead weight, now removed from the live container and
