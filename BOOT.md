@@ -55,9 +55,11 @@ the writer ships as a WeeWX extension, a release asset of this repo.** ROADMAP n
    (e) Ship: merge, `marvinctl pull` + restart `weewx.service`, confirm `writer` in
    `feed/loop-data.txt`; push `loopjson-v1.0.0`, confirm `weectl extension install <asset URL>`
    works; post the command on #440, close it with a comment, ring the dashboard's session.
-3. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI; the
-   remainder of `eaglehunt-ops#358` (the owner's off-screen address check).
-4. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
+3. **`eaglehunt-ops#404` (private, from S153's history scan): the owner's step comes first; once it
+   is commented done there, do the three weewx follow-ups the issue lists.** Read it there, not here.
+4. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI; the
+   remainder of `eaglehunt-ops#358` (the owner's off-screen address check); `eaglehunt-ops#404`'s step.
+5. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry.
 
 ## Current state (S150 close; trackers S153)
@@ -71,7 +73,7 @@ the writer ships as a WeeWX extension, a release asset of this repo.** ROADMAP n
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed |
 | `main`/`dev` | `main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150); `dev` is ahead only by docs and the secret gate (see above). Before the promotion `main` was v2.0.16's (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor |
 | Docker Hub | `:v2.0.20` = `:latest` (= prod, `f617c9ca…`; `:latest` moved 2026-10-06 22:52 ET) · `:v2.0.19` · `:v2.0.16` |
-| Trackers | repo: #440 (designed, DEC-0211; build is S154's job 2), #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
+| Trackers | repo: #440 (designed, DEC-0211; build is S154's job 2), #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #358 owner remainder · #404 owner step, then weewx · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
 
 ## Blockers
 
@@ -102,4 +104,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-10 (S153). v2.0.20 steady in prod; #440 designed (DEC-0211), the build is next on Sonnet._
+_Last updated: 2026-10-10 (S153, after #444). v2.0.20 steady in prod; #440 designed (DEC-0211), the build is next on Sonnet; ops#404 waits on the owner._
