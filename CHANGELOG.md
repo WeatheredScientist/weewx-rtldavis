@@ -18,6 +18,9 @@ under [Pre-S16].
   recommendations". Prod untouched; the build is one Sonnet session.
 - `#440`'s `dayRain_in` and `loopSpeed_mph` are dashboard-side keys, not writer keys; said on the
   issue. S150 rolled to the archive verbatim.
+- **`docs/ARCHITECTURE.md` §4 reads `BIAS_TEE` from `weewx.service`, not `inspect`'s `Config.Env`**,
+  which prints every value as `<REDACTED>` since MARVIN-DEC-0198 (#443, rung from heartofgold). The
+  unit-file `grep` was run and shows `BIAS_TEE=0`. Docs only.
 
 ## [S152] — 2026-10-10 — LoopJsonWriter's service placement and the deploy note corrected (`eaglehunt-ops#395`, #441)
 

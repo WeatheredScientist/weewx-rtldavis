@@ -104,10 +104,12 @@ find /opt/weewx-venv -name "*.pyc" -path "*/user/*" -delete
 `entrypoint.sh` reads `BIAS_TEE` (default `1`) and drives the RTL-SDR's bias-tee accordingly
 (`rtl_biast -b 1` / `-b 0`) before launching `weewxd`; the off-branch drives the tee off explicitly
 rather than relying on the power-on default, since tee state can survive a warm restart.
-**Live value is currently `BIAS_TEE=0`** (verified in the running container's env, 2026-09-19) — the
-LNA has been out of circuit since 2026-08-02 (DEC-0081/0083; see `CONSTANTS.md`'s hardware timeline).
-Re-check this directly (`marvinctl --tenant weewx inspect weewx-rtldavis-v2` → `Config.Env`) rather
-than trusting this line if the LNA is ever reinstalled.
+**Live value is currently `BIAS_TEE=0`** (verified on `weewx.service`'s command line, 2026-10-10) —
+the LNA has been out of circuit since 2026-08-02 (DEC-0081/0083; see `CONSTANTS.md`'s hardware
+timeline). Re-check it at its source, the unit file that sets it, rather than trusting this line if
+the LNA is ever reinstalled: `marvinctl --tenant weewx grep BIAS_TEE /etc/systemd/system/weewx.service`.
+`marvinctl inspect` no longer shows it: since MARVIN-DEC-0198 (2026-10-10) every `Config.Env` value
+prints as `<REDACTED>` (#443).
 
 ## 5. Config vs image — what a change requires
 
