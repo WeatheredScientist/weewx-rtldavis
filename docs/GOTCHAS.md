@@ -334,6 +334,21 @@ alone did not catch.
   image, whose `--cap-drop ALL` plus no-new-privileges shape is the evidence that matters for a flag
   question. A denial covers the outcome, so do not reach the same read by another route: measure what
   the allowed path gives, and name the gap in the reply.
+- **Small marvin-read traps (S151, S152).**
+  - `marvinctl exec-ro` rejects `{}` and any multi-token argument; zsh needs `${=var}` to word-split
+    a file list. `soak_check.sh` inside the post-restart acquisition gap (~3 min) reads ARCHIVE
+    STALLED: re-run after the first record, don't act on it.
+  - A bare `marvinctl tail` of `weewx.log`'s startup block prints every uploader's station
+    identifier and the InfluxDB LAN IP into the transcript; filter with `grep` on the signal wanted.
+  - The live log is `/srv/docker/weewx/logs/weewx.log`. `weewx-data/logs/` does not exist, so
+    `marvinctl grep` there answers "path does not exist" (S152).
+  - The secret-read guard keys on the conf's file NAME in a command string, even for the public
+    `.example` copy (read that with the Read tool), and a trailing `| head` after `marvinctl conf
+    <live conf> SECTION` trips it even though that reader is redacting. Drop the pipe (S152).
+  - `gh pr merge … -R owner/repo` trips the Class C guard (it can't read the repo from `-R`); the
+    bare form in the check-gated checkout is advisory.
+  - `soak_check.sh` with `EXPECT_IMAGE=v2.0.20` WARNs "not present as a local image": it wants the
+    full local tag (`weatheredscientist/weewx-rtldavis:v2.0.20`), not the bare version (S152).
 
 ## §4 Liveness and deployment — proving a thing is actually running
 

@@ -6,6 +6,24 @@ under [Pre-S16].
 
 ---
 
+## [S152] — 2026-10-10 — LoopJsonWriter's service placement and the deploy note corrected (`eaglehunt-ops#395`, #441)
+
+- **`docs/ARCHITECTURE.md` §1 and §2 now put `LoopJsonWriter` last in `process_services`, with
+  `data_services` empty.** That is what the live `weewx.conf` (read redacted, `marvinctl conf … Engine`)
+  and `weewx.conf.example` both say, and has been since 2026-07-12; the docs had said `data_services`
+  since S16 until the dashboard's public how-it-works audit found it. `loop_json_writer.py`'s DEPLOY
+  docstring now describes the tenant-root checkout and `marvinctl pull` plus a restart (DEC-0150)
+  instead of the NAS `scp`; the decoy-copy warning stays. Docs and a docstring only: no image, no
+  deploy, prod untouched. `DRIFT_REPORT.md` Q3 keeps its S-early reading as a dated record.
+- **Ops check-in (ops S77):** no cutover in flight, nothing Class C; `eaglehunt-ops#357` is HLF's to
+  accept and ops's to close, `#358` waits on the owner's off-screen address check, `#110` stays
+  deferred. `weewx#440` (the dashboard's ask to package `loop_json_writer.py` as an installable
+  extension) is weewx's own; design first, no deadline.
+- Watches: `soak_check.sh` 14 passed, 5 warnings (all expected), 0 failures; no `bar_absolute` fallback
+  warning in `weewx.log`, and `station pressure` still arrives each fetch. The new small traps are in
+  `docs/GOTCHAS.md` §3, with S151's, which had been sitting in `BOOT.md`. S149 and S148 rolled to the
+  archive verbatim.
+
 ## [S151] — 2026-10-07 — the secret gate's four detector holes closed (#421, DEC-0210)
 
 - **`scripts/check_secrets.sh` now scans quoted key names, knows `secret_key`/`access_key`/`private_key`,
@@ -52,35 +70,3 @@ under [Pre-S16].
   structure 19) reads `bar_absolute = 29.534` beside `bar_sea_level = 30.127`, `bar_offset = 0`,
   inHg — one record, the shape the code assumes. The probe printed key names and `bar_*` values
   only.
-
-## [S149] — 2026-10-02 — v2.0.19 in prod (DEC-0208): weewx 5.5.2, the rapidfire endpoint confirmed live
-
-- **weewx 5.5.0 → 5.5.2 is live as `:v2.0.19` since 2026-10-02 00:18:38 ET.** PR #429 moved the
-  Dockerfile stamp and `soak_check.sh`'s fallback (`ws.6` canary unchanged: no driver change); built
-  on marvin from `dev`@`fee78e3`. `exec-ro` against v2.0.18: the Go binary and the five baked
-  modules are sha-identical, only the engine differs. `soak_check.sh`: 19 passed. Tagged `v2.0.19`
-  with a GitHub release.
-- **`:v2.0.19` is on Docker Hub: the first real `marvinctl --tenant weewx push`** (00:31 ET, exit 0).
-  The manifest's `publish` line had been ratified since 2026-09-04, so `eaglehunt-ops#265`'s trigger
-  fired; commented there. Hub's digest equals prod's index digest. `:latest` stays at v2.0.13 (owner
-  route); v2.0.17 and v2.0.18 were never pushed.
-- **The one prod-visible change is confirmed.** The rapidfire thread now posts to
-  `rtupdate.wunderground.com`. Its failures never reach `weewx.log`, so the check was external: the
-  station's public wunderground.com page read CONNECTED, 2 seconds old, after the restart.
-
-## [S148] — 2026-09-30/10-01 — #423's swap path proved end to end as `t-weewx`; `weewx.service` under #360's flags, accepted
-
-- **No campaign was queued** (the schedule has been empty since DEC-0128), so the owner chose a
-  test-only one: new arm `T` (prod's cmd plus an explicit `-ex 0`, the flag's default), then
-  `BASELINE`, driven by two hand-started passes of `weewx-rx-experiment.service`. No timer and no
-  `install`: the tenant-root snapshot was verified byte-identical to the live conf, and the state
-  file was seeded over sftp. PR #427; its dates moved once when it sat unmerged past the first
-  terminator.
-- **Both passes worked.** 2026-10-01 21:04:30 ET, `NONE -> T`: config write verified, restart through
-  `sudo -n marvin-own weewx restart`, healthy in 106 s via `systemctl is-active`. 22:31:22,
-  `T -> BASELINE`: live conf restored byte-exact (mode 0600 kept), harvest wrote 17 rx and 85 dup
-  rows under `T`, no mail failure. Schedule stood down again on the closeout PR.
-- **`eaglehunt-ops#360`: the 21:04:30 restart was also `weewx.service`'s flag restart.**
-  `NoNewPrivs: 1`, every capability set 0, uid 996. One record lost (21:05), 21:06 partial with
-  `rxCheckPercent` NULL, 21:07 at 100%. Posted; heartofgold confirmed on the box.
-- `GOTCHAS.md` §3: `marvinctl grep` also refuses `/` in a pattern. S144 rolled to the archive.

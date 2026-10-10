@@ -7,6 +7,38 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S149] — 2026-10-02 — v2.0.19 in prod (DEC-0208): weewx 5.5.2, the rapidfire endpoint confirmed live
+
+- **weewx 5.5.0 → 5.5.2 is live as `:v2.0.19` since 2026-10-02 00:18:38 ET.** PR #429 moved the
+  Dockerfile stamp and `soak_check.sh`'s fallback (`ws.6` canary unchanged: no driver change); built
+  on marvin from `dev`@`fee78e3`. `exec-ro` against v2.0.18: the Go binary and the five baked
+  modules are sha-identical, only the engine differs. `soak_check.sh`: 19 passed. Tagged `v2.0.19`
+  with a GitHub release.
+- **`:v2.0.19` is on Docker Hub: the first real `marvinctl --tenant weewx push`** (00:31 ET, exit 0).
+  The manifest's `publish` line had been ratified since 2026-09-04, so `eaglehunt-ops#265`'s trigger
+  fired; commented there. Hub's digest equals prod's index digest. `:latest` stays at v2.0.13 (owner
+  route); v2.0.17 and v2.0.18 were never pushed.
+- **The one prod-visible change is confirmed.** The rapidfire thread now posts to
+  `rtupdate.wunderground.com`. Its failures never reach `weewx.log`, so the check was external: the
+  station's public wunderground.com page read CONNECTED, 2 seconds old, after the restart.
+
+## [S148] — 2026-09-30/10-01 — #423's swap path proved end to end as `t-weewx`; `weewx.service` under #360's flags, accepted
+
+- **No campaign was queued** (the schedule has been empty since DEC-0128), so the owner chose a
+  test-only one: new arm `T` (prod's cmd plus an explicit `-ex 0`, the flag's default), then
+  `BASELINE`, driven by two hand-started passes of `weewx-rx-experiment.service`. No timer and no
+  `install`: the tenant-root snapshot was verified byte-identical to the live conf, and the state
+  file was seeded over sftp. PR #427; its dates moved once when it sat unmerged past the first
+  terminator.
+- **Both passes worked.** 2026-10-01 21:04:30 ET, `NONE -> T`: config write verified, restart through
+  `sudo -n marvin-own weewx restart`, healthy in 106 s via `systemctl is-active`. 22:31:22,
+  `T -> BASELINE`: live conf restored byte-exact (mode 0600 kept), harvest wrote 17 rx and 85 dup
+  rows under `T`, no mail failure. Schedule stood down again on the closeout PR.
+- **`eaglehunt-ops#360`: the 21:04:30 restart was also `weewx.service`'s flag restart.**
+  `NoNewPrivs: 1`, every capability set 0, uid 996. One record lost (21:05), 21:06 partial with
+  `rxCheckPercent` NULL, 21:07 at 100%. Posted; heartofgold confirmed on the box.
+- `GOTCHAS.md` §3: `marvinctl grep` also refuses `/` in a pattern. S144 rolled to the archive.
+
 ## [S147] — 2026-09-30 — `rx_experiment.sh` runs as `t-weewx` (#423, MARVIN-DEC-0189)
 
 - **Campaigns would have refused at preflight, and then aborted.** marvin moved
