@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S151 → S152)
+## ▶ Resume here (S152 → S153)
 
 ### What's settled (do not re-derive)
 
@@ -20,31 +20,42 @@ is a **separate repo** — don't make dashboard changes here.
 is weewx's `pressure`, `altimeter` derives from it, nothing else changed** (of the seven baked
 modules only `pressure_service.py` differs from v2.0.19; engine 5.5.2, banner `0.20+ws.6`). The
 archive's `pressure` is measured from **22:18:00 ET** (DISC-0002: +0.008 inHg step, `barometer`
-unchanged). Zero WARNING/ERROR lines, soak 19/0/0. Tagged `v2.0.20` on `9a86c97` with a GitHub
-release; `:v2.0.20` on Docker Hub (digest = prod's). `eaglehunt-ops#357` closed on weewx's side
-with the boundary timestamp; HLF gates its mapping on it. Rollback: retag `:v2.0.19` + restart —
-that puts the columns back on the derived path. **The same night: `dev` promoted to `main`
-(`prod-baseline-20261006`, #436; `main` had been v2.0.16, not v2.0.13) and Docker Hub `:latest`
-moved to v2.0.20.** `main` lags `dev` only by the closeout docs.
+unchanged). Zero WARNING/ERROR lines, soak 19/0/0 at the release. Tagged `v2.0.20` on `9a86c97`
+with a GitHub release; `:v2.0.20` on Docker Hub (digest = prod's). `eaglehunt-ops#357` closed on
+weewx's side with the boundary timestamp; HLF gates its mapping on it. Rollback: retag `:v2.0.19` +
+restart — that puts the columns back on the derived path. **The same night: `dev` promoted to
+`main` (`prod-baseline-20261006`, #436; `main` had been v2.0.16, not v2.0.13) and Docker Hub
+`:latest` moved to v2.0.20.** `main` lags `dev` by the closeout docs, S151's secret-gate fix (#439)
+and S152's docs fix (#441): nothing that changes the image or prod.
 
 **#423's swap path is proved end to end as `t-weewx` (S148).** Schedule stood down, arm `T` kept in
 `arm_cmd`, timer not installed. **`eaglehunt-ops#360` is done on weewx's side** (both units under
 `--cap-drop ALL` + `no-new-privileges`). The S145 audit's ten high items shipped; 29 medium/low
-stay in `docs/CODE_REVIEW_S145.md`. **The secret gate's four detector holes (#421) are fixed in S151 (DEC-0210): quoted key names, `secret_key`/`access_key`/`private_key`, `os.getenv(`, and the allow-list now judged per match; PR open until merged.** ROADMAP next check: S156.
+stay in `docs/CODE_REVIEW_S145.md`. **The secret gate's four detector holes (#421) are closed
+(S151, DEC-0210, merged as #439).** **`LoopJsonWriter` runs last in `process_services`, with
+`data_services` empty, since 2026-07-12 (S152 re-read the live conf); `ARCHITECTURE.md` and the
+writer's deploy docstring now say so (`eaglehunt-ops#395`, #441).** ROADMAP next check: S156.
 
-### ▶▶ S152 JOB LIST
+### ▶▶ S153 JOB LIST
 
-1. **Watch, no action unless it fires** (S151 checked: soak 19/0/0, no fallback warning): the measured `pressure` keeps arriving (a `no bar_absolute`
+1. **Watch, no action unless it fires** (S152 checked: soak 14 passed / 0 failures, no
+   `bar_absolute` fallback warning): the measured `pressure` keeps arriving (a `no bar_absolute`
    WARNING in `weewx.log` means the fallback ran and the column went derived again — then DISC-0002
    needs a second boundary) · WU gold star (≥ 5 uninterrupted days; the clean run restarted at
    the 10-06 22:15 restart) · OWM and Windy rain in millimeters (needs rain; ERR-0010) · the first
    `frame failed message-type proof` line · freeze lead (blocker 1), measure at the next freeze.
-2. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI; the
-   remainder of `eaglehunt-ops#358`.
-3. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
+2. **`weewx#440` — package `loop_json_writer.py` as an installable WeeWX extension** (the
+   dashboard's DEC-0348 ask; no deadline, its adopter recipe cites the install command once it
+   exists). **Design first** (PRINCIPLES §8): release artifact of this repo vs its own small repo;
+   `install.py` plus the `[LoopJsonWriter]` stanza; a README on the fields, units and cadence; the
+   field map stays byte-identical, and a version string in the output lets the dashboard detect an
+   old writer. Name the model tier at its start.
+3. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI; the
+   remainder of `eaglehunt-ops#358` (the owner's off-screen address check).
+4. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry.
 
-## Current state (S150 close)
+## Current state (S150 close; trackers S152)
 
 | Thing | State |
 |---|---|
@@ -53,9 +64,9 @@ stay in `docs/CODE_REVIEW_S145.md`. **The secret gate's four detector holes (#42
 | weewx-monitor | sha `5cd09917…`, running since 2026-09-29 09:31:16 ET; `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed |
-| `main`/`dev` | **`main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150).** Before it `main` was v2.0.16's promotion (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor (all docs, plus `ops/campaign_analyze.py`); #339 had already brought `dev` to parity with #338 |
+| `main`/`dev` | `main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150); `dev` is ahead only by docs and the secret gate (see above). Before the promotion `main` was v2.0.16's (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor |
 | Docker Hub | `:v2.0.20` = `:latest` (= prod, `f617c9ca…`; `:latest` moved 2026-10-06 22:52 ET) · `:v2.0.19` · `:v2.0.16` |
-| Trackers | repo: #421 closes with its PR (S151), #380 informational · ops: #357 weewx side done, HLF's mapping pending on their side · #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
+| Trackers | repo: #440 (dashboard's extension ask, design first), #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
 
 ## Blockers
 
@@ -64,27 +75,17 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 ## Model tier
 
-**S150 ran on Sonnet 5.5 for the check-in, then Fable 5.1 for DEC-0209's design and, on the
-owner's go, the release** (a bare `/model` in the desktop app — it persists; the owner restores
-Sonnet from the model menu). **Start S151 on Sonnet:** nothing frontier-shaped is queued.
+**S152 ran on Sonnet 5.5 throughout** (ops check-in, #395, the closeout); no bare `/model` switch,
+nothing to restore. **Start S153 on Sonnet** unless the first job is #440's design discussion, which
+is the one judgment-shaped item queued: say so in the first reply and name the tier.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
 any NAS, marvin or campaign task (§3) · judging a component live, dead, or shipped (§4). **Read §3
-before the marvin task, not after.** **New this session:**
-- §3: the auto-mode classifier can deny a floor-allowed `marvinctl exec` into the live container as
-  a production read (it did for the WeatherLink probe; it allowed a read-only sqlite probe an hour
-  later — independent draws). The denial covers every other route to the same read; the owner ran
-  the one-liner. A one-off script needs the venv interpreter (`/opt/weewx-venv/bin/python3`).
-- §3: `marvinctl exec-ro` rejects `{}` and any multi-token argument; zsh needs `${=var}` to
-  word-split a file list. `soak_check.sh` inside the post-restart acquisition gap (~3 min) reads
-  ARCHIVE STALLED — re-run after the first record, don't act on it.
-- §1: a bare `marvinctl tail` of `weewx.log`'s startup block prints every uploader's station
-  identifier and the InfluxDB LAN IP into the transcript; filter with `grep` on the signal wanted.
-- The secret-read guard keys on the conf's file NAME in a command string, even for the public
-  `.example` copy; read that with the Read tool. `gh pr merge … -R owner/repo` trips the Class C
-  guard (it can't read the repo from `-R`); the bare form in the check-gated checkout is advisory.
+before the marvin task, not after.** S151's and S152's small marvin-read traps (the live log path,
+the secret-read guard on a trailing pipe, `exec-ro` argument limits, the classifier on container
+reads) are in §3's last bullets.
 
 ## Files needed at session start
 
@@ -96,4 +97,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-07 (S151). v2.0.20 in prod, on `main`, and `:latest`; the secret gate's four holes closed on a PR. Nothing queued but watches, the owner-only items and the 29 audit leftovers._
+_Last updated: 2026-10-10 (S152). v2.0.20 steady in prod; ops#395's docs drift fixed on #441; nothing queued but #440's design, the watches and the owner-only items._
