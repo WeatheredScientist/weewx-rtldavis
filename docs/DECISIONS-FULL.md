@@ -11494,3 +11494,85 @@ controls red.
 - Not changed: a default literal inside a lookup (`os.getenv('X', '<literal>')`) is still excused
   as a runtime lookup. That is the existing `os.environ.get('K', '')` behaviour, now applied to
   getenv.
+
+## DEC-0211 — `loop_json_writer.py` ships as a WeeWX extension from this repo (#440)
+
+**Date:** 2026-10-10 (S153, Opus 5.5; owner: "go with all your recommendations"). **Status:**
+accepted, build pending (one Sonnet session). Answers `weewx#440`, the dashboard's ask under its
+DEC-0348. Applies DEC-0006 and DEC-0202; extends DEC-0093.
+
+### Context
+
+The dashboard is being generalized so other stations can adopt it (dash DEC-0348). Its live-data
+contract is this repo's loop JSON (INTERFACES §1), written by `LoopJsonWriter`, a `StdService` that
+works with any driver. The only way to get it today is to clone this repo and copy the file. #440
+asks for a `weectl extension install` path, a README on the fields, units and cadence, a field map
+kept as it is, and a version string in the output. Where it ships was left to this repo.
+
+Checked before deciding (WeeWX 5.5.2 source, `weecfg/extension.py` and `weecfg/__init__.py`, plus
+live HTTP headers and the dashboard's code):
+
+- `weectl extension install <URL>` takes the archive type from the download's Content-Disposition
+  filename and needs one root directory in the archive. GitHub release assets and tag archives both
+  send the filename.
+- A service named under `process_services` in `install.py` is appended to the end of that list,
+  which is where this writer must run (ARCHITECTURE §1, S152). An extension installed later into
+  the same list lands after it.
+- At runtime `config_dict['WEEWX_ROOT']` is always absolute: a relative or missing value is resolved
+  against the config file's directory.
+- The dashboard's `/loopdata` route passes the file through with an object spread, so a new string
+  key reaches the client untouched.
+
+### Decision
+
+1. **Ship from this repo, not a new one.** The repo-root `loop_json_writer.py` stays the only copy,
+   since it is prod's mount source. `extensions/loopjson/` holds `install.py` and an adopter README.
+   A CI workflow packs those two plus the root file into `weewx-loopjson-X.Y.Z.zip` (one root
+   directory, `weewx-loopjson/`) and, on a pushed `loopjson-vX.Y.Z` tag, attaches it to a GitHub
+   release created with `--latest=false`, so the image releases keep "Latest". Rejected: a separate
+   `weewx-loopjson` repo. It needs either a second copy of the file or a change to prod's mount
+   source on marvin, plus its own governance scaffold, for one consumer. It can still be split out
+   later, with history, if outside adopters show up.
+2. **`install.py`:** extension name `loopjson`; adds `user.loop_json_writer.LoopJsonWriter` to
+   `process_services`; injects `[LoopJsonWriter]` with `path = feed/loop-data.txt`,
+   `current_path = feed/current.json`, `current_interval = 60`, `ttl_default = 300`.
+3. **Three code changes, each a no-op under prod's config:**
+   - Relative `path` and `current_path` resolve against `WEEWX_ROOT`, and the defaults become
+     `loop-data.txt` and `current.json`. In this image `WEEWX_ROOT` is `/opt/weewx-data`, so those
+     are the same files as today's absolute defaults; prod sets absolute paths (CONSTANTS).
+   - The writer creates its output directory at startup if it is missing. Today a missing
+     directory is an ERROR on every packet.
+   - `barometer_inHg`'s long TTL (2 × `[DavisPressure] fetch_interval`) applies only when a
+     `[DavisPressure]` section exists; otherwise the field uses `ttl_default`. Without this, a station
+     with no such section gets 7,200 s, which serves a dead barometer stale for two hours (DEC-0006).
+4. **Version.** `__version__ = '1.0.0'` in the module, and every write to both files carries
+   `"writer": "loop_json_writer/<version>"`. Semver against the contract: major for a key renamed,
+   removed or given new units; minor for a new optional key; patch for a behavior fix. CI fails if
+   the release tag, `__version__` and `install.py`'s version disagree. The key is additive, so it
+   is not a break under INTERFACES' change discipline, and the consumer asked for it.
+5. **Docs.** The field table stays in INTERFACES §1, the contract of record. The extension README
+   covers install, the last-in-`process_services` rule, paths, and cadence (every packet vs
+   `current_interval`, atomic rename, mount the directory), and links to §1 at the release tag: one
+   table, nothing to drift. It also says the extension is not interchangeable with chaunceygardiner's
+   weewx-loopdata, which writes a file of the same name (`loop-data.txt`) with a different key shape;
+   this repo ran it until S47 (DEC-0005). INTERFACES §1's opening still calls the writer a
+   `data_service` and says both files are written every packet; #441 fixed ARCHITECTURE but not
+   this, so the same change corrects it.
+6. **CI proof on every PR.** Install WeeWX 5.5.2 from PyPI, `weectl station create`, install the
+   built zip, assert the writer is last in `process_services` and the stanza is present, then run
+   `weewxd` with the Simulator driver for about 20 s and assert `feed/loop-data.txt` carries
+   `dateTime` and `writer`. That measures the "works with any driver" claim instead of asserting it.
+
+### Consequences
+
+- Prod sees one change: the `writer` key in both files. The file is mounted, so the deploy is
+  `marvinctl pull` plus a `weewx.service` restart (a brief `/loopdata` 503), with no image build and
+  no v2.0.x bump.
+- Two keys #440 listed are not writer keys and will not be documented as such: `dayRain_in` comes
+  from the dashboard's InfluxDB snapshot (`eh-ui.js` `_distributeLiveSnapshot`) and `loopSpeed_mph`
+  is a dashboard cache key. Said on #440, with an FYI that `eh-ui.js`'s comment claiming the writer
+  emits no cloud base or wind chill is stale (it emits `cloudbase_foot` and `windchill_F`).
+- The release tag and `gh release create` ride the PR that sets or bumps `__version__`, the same
+  rule as image releases (CLAUDE.md closeout step 0), except that the workflow creates the release.
+- The published image is unchanged: it still does not bake the writer, and docker-compose keeps
+  mounting it.

@@ -832,6 +832,10 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       (the SQLite archive's own missing correction flag) stays in `DATA_ERRATA.md` on purpose —
       INTERFACES.md scopes itself to the two *published* surfaces, and SQLite is neither. This item
       is about closing what remains, not starting from zero.)
+- [ ] Ship `loop_json_writer.py` as an installable WeeWX extension (`weewx#440`, the dashboard's
+      DEC-0348 ask) — **designed S153 (DEC-0211)**: a `loopjson-vX.Y.Z` release asset of this repo,
+      a `writer` version key, three no-op-for-prod code changes, CI proof on the Simulator. Build is
+      one Sonnet session; prod sees only the new key.
 - [x] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005) — done S47.
 
 ---

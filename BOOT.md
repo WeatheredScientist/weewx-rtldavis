@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S152 → S153)
+## ▶ Resume here (S153 → S154)
 
 ### What's settled (do not re-derive)
 
@@ -25,37 +25,42 @@ with a GitHub release; `:v2.0.20` on Docker Hub (digest = prod's). `eaglehunt-op
 weewx's side with the boundary timestamp; HLF gates its mapping on it. Rollback: retag `:v2.0.19` +
 restart — that puts the columns back on the derived path. **The same night: `dev` promoted to
 `main` (`prod-baseline-20261006`, #436; `main` had been v2.0.16, not v2.0.13) and Docker Hub
-`:latest` moved to v2.0.20.** `main` lags `dev` by the closeout docs, S151's secret-gate fix (#439)
-and S152's docs fix (#441): nothing that changes the image or prod.
+`:latest` moved to v2.0.20.** `main` lags `dev` by the closeout docs, S151's secret-gate fix (#439),
+S152's docs fix (#441) and S153's design records: nothing that changes the image or prod.
 
 **#423's swap path is proved end to end as `t-weewx` (S148).** Schedule stood down, arm `T` kept in
 `arm_cmd`, timer not installed. **`eaglehunt-ops#360` is done on weewx's side** (both units under
 `--cap-drop ALL` + `no-new-privileges`). The S145 audit's ten high items shipped; 29 medium/low
 stay in `docs/CODE_REVIEW_S145.md`. **The secret gate's four detector holes (#421) are closed
-(S151, DEC-0210, merged as #439).** **`LoopJsonWriter` runs last in `process_services`, with
-`data_services` empty, since 2026-07-12 (S152 re-read the live conf); `ARCHITECTURE.md` and the
-writer's deploy docstring now say so (`eaglehunt-ops#395`, #441).** ROADMAP next check: S156.
+(S151, DEC-0210, merged as #439).** `LoopJsonWriter` runs last in `process_services`, with
+`data_services` empty, since 2026-07-12 (S152, #441). **`weewx#440` is designed (S153, DEC-0211):
+the writer ships as a WeeWX extension, a release asset of this repo.** ROADMAP next check: S156.
 
-### ▶▶ S153 JOB LIST
+### ▶▶ S154 JOB LIST
 
-1. **Watch, no action unless it fires** (S152 checked: soak 14 passed / 0 failures, no
+1. **Watch, no action unless it fires** (last checked S152: soak 14 passed / 0 failures, no
    `bar_absolute` fallback warning): the measured `pressure` keeps arriving (a `no bar_absolute`
    WARNING in `weewx.log` means the fallback ran and the column went derived again — then DISC-0002
    needs a second boundary) · WU gold star (≥ 5 uninterrupted days; the clean run restarted at
    the 10-06 22:15 restart) · OWM and Windy rain in millimeters (needs rain; ERR-0010) · the first
    `frame failed message-type proof` line · freeze lead (blocker 1), measure at the next freeze.
-2. **`weewx#440` — package `loop_json_writer.py` as an installable WeeWX extension** (the
-   dashboard's DEC-0348 ask; no deadline, its adopter recipe cites the install command once it
-   exists). **Design first** (PRINCIPLES §8): release artifact of this repo vs its own small repo;
-   `install.py` plus the `[LoopJsonWriter]` stanza; a README on the fields, units and cadence; the
-   field map stays byte-identical, and a version string in the output lets the dashboard detect an
-   old writer. Name the model tier at its start.
+2. **Build `weewx#440` per DEC-0211 — Sonnet, one session.** The design is settled: read
+   DEC-0211's full body, don't re-derive it. (a) `loop_json_writer.py`: `__version__ = '1.0.0'` and
+   the `writer` key in both files; relative paths against `config_dict['WEEWX_ROOT']`; create the
+   output directories at startup; barometer TTL from `[DavisPressure]` only when that section
+   exists. A test for each. (b) `extensions/loopjson/install.py` + README. (c) CI: build the zip,
+   install it into WeeWX 5.5.2 from PyPI, Simulator run, tag/`__version__`/`install.py` agreement;
+   a release job on `loopjson-v*` tags with `--latest=false`. (d) INTERFACES §1: the `writer` row,
+   and fix the opening's stale `data_service` / every-packet text; a pointer in `README.md`.
+   (e) Ship: merge, `marvinctl pull` + restart `weewx.service`, confirm `writer` in
+   `feed/loop-data.txt`; push `loopjson-v1.0.0`, confirm `weectl extension install <asset URL>`
+   works; post the command on #440, close it with a comment, ring the dashboard's session.
 3. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI; the
    remainder of `eaglehunt-ops#358` (the owner's off-screen address check).
 4. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry.
 
-## Current state (S150 close; trackers S152)
+## Current state (S150 close; trackers S153)
 
 | Thing | State |
 |---|---|
@@ -66,7 +71,7 @@ writer's deploy docstring now say so (`eaglehunt-ops#395`, #441).** ROADMAP next
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed |
 | `main`/`dev` | `main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150); `dev` is ahead only by docs and the secret gate (see above). Before the promotion `main` was v2.0.16's (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor |
 | Docker Hub | `:v2.0.20` = `:latest` (= prod, `f617c9ca…`; `:latest` moved 2026-10-06 22:52 ET) · `:v2.0.19` · `:v2.0.16` |
-| Trackers | repo: #440 (dashboard's extension ask, design first), #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
+| Trackers | repo: #440 (designed, DEC-0211; build is S154's job 2), #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
 
 ## Blockers
 
@@ -75,9 +80,9 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 ## Model tier
 
-**S152 ran on Sonnet 5.5 throughout** (ops check-in, #395, the closeout); no bare `/model` switch,
-nothing to restore. **Start S153 on Sonnet** unless the first job is #440's design discussion, which
-is the one judgment-shaped item queued: say so in the first reply and name the tier.
+**S153 ran on Opus 5.5** for #440's design (judgment work); no bare `/model` switch was made, but the
+desktop app keeps the last-selected model, so **switch S154 to Sonnet**: the build is execution of a
+locked design.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -97,4 +102,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-10 (S152). v2.0.20 steady in prod; ops#395's docs drift fixed on #441; nothing queued but #440's design, the watches and the owner-only items._
+_Last updated: 2026-10-10 (S153). v2.0.20 steady in prod; #440 designed (DEC-0211), the build is next on Sonnet._
