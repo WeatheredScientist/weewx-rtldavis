@@ -11576,3 +11576,55 @@ live HTTP headers and the dashboard's code):
   rule as image releases (CLAUDE.md closeout step 0), except that the workflow creates the release.
 - The published image is unchanged: it still does not bake the writer, and docker-compose keeps
   mounting it.
+
+## DEC-0212 — History is scanned with the whole current gate; "never leaked" in DEC-0076 and DEC-0084 is superseded (ops#404)
+
+**Date:** 2026-10-12 (S154, Sonnet 5.5). **Status:** accepted, shipped. Supersedes the "never
+leaked" statements in DEC-0076 and DEC-0084. Applies DEC-0012 and DEC-0045.
+
+### Context
+
+S153 ran the current `check_secrets.sh` over every unique blob in history and found an app password
+for the monitor's mail account, held as a quoted literal in the monitor daemon for a short stretch
+in May and public since. DEC-0076 and DEC-0084 had each recorded "never leaked" after a history
+search, but each searched only the spelling it had just fixed. A search for one shape finds that
+shape and says nothing about the rest, so both claims were false zeros (GOTCHAS §1).
+
+The owner's account showed the leaked value was already dead: it was revoked in July 2026, when the
+July app password replaced it (the May date is the commit's, not a creation date). The July one was
+rotated anyway on 2026-10-11, because the same pass that found the
+literal also printed it into a session transcript. The new value is on the host only, the old one
+is revoked, and the monitor was restarted and sent its start mail with no auth errors.
+
+### Decision
+
+1. **The "never leaked" lines in DEC-0076 and DEC-0084 are superseded.** The corrected fact: those
+   searches were spelling-specific, and history held one such value, since dead and since rotated.
+   Nothing else in this DEC locates it.
+2. **`scripts/scan_history.sh` runs the whole gate over every `(blob, path)` pair that
+   `git rev-list --all --objects` reaches, and prints only the gate's own `SECRET-SCAN:` header
+   lines** (a kind and a path, never a matched line). It requires the identifier list
+   (`CHECK_SECRETS_REQUIRE_IDENTIFIERS=1`), so a worktree without the gitignored list fails loudly
+   instead of skipping the check.
+3. **`scripts/history_scan_known.txt` is the positive control.** History is immutable, so its
+   findings never go away; the list holds each as `count<TAB>header`. A finding not in the list
+   exits 1. A listed finding that is no longer reported, or whose count changed, exits 3 ("control
+   dead"), because a gate that stops catching what it used to catch is the failure this exists to
+   expose. The two identifier hits in `weewx.conf.example` are the control for the identifier
+   check. Verified S154 by deleting a line (exit 1) and adding a phantom one (exit 3).
+4. **Run it after any change to `check_secrets.sh`**, and treat a new header as a finding to triage
+   before the change merges (CONVENTIONS, Secrets).
+5. **Any redacting printer fingerprints every value-like token, whatever its length.** S153's
+   triage printer redacted only tokens of six or more characters, and the credential's four-letter
+   groups passed through. Short tokens are the dangerous ones, because app passwords and PINs are
+   short. Fingerprint plus length is enough to compare two values without showing either.
+
+### Consequences
+
+- First full run, 1,731 blobs: 7 distinct headers, all triaged with the fingerprinting printer.
+  Six are benign (the gate's own documented examples in `check_secrets.sh`, placeholders, all-letter
+  prose, test fixtures); the seventh is the monitor daemon's two blobs. The run takes about 2.5
+  minutes, so it is a manual step after a detector change, not a CI job.
+- No history rewrite: GitHub keeps old commits reachable by SHA, and the value is dead.
+- The private-range addresses planted by the gate's own test history are `eaglehunt-ops#358`, not
+  this DEC.

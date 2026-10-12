@@ -6,6 +6,17 @@ under [Pre-S16].
 
 ---
 
+## [S154] — 2026-10-12 — `scripts/scan_history.sh` and the "never leaked" correction (ops#404, DEC-0212)
+
+- **`scripts/scan_history.sh`** runs the whole `check_secrets.sh` over every `(blob, path)` pair in
+  history (1,731 blobs, about 2.5 minutes) and prints only `SECRET-SCAN:` header lines.
+  `scripts/history_scan_known.txt` is the positive control: a new finding exits 1, a known one no
+  longer reported exits 3. Both exits proved by deleting and adding a list line. First run: 7 headers,
+  six benign, one the dead monitor-mail app password (rotated 2026-10-11 by ops).
+- **DEC-0212** supersedes the "never leaked" lines in DEC-0076 and DEC-0084 and adds the CONVENTIONS
+  rules: run the scan after any detector change; a redacting printer fingerprints every value-like
+  token, whatever its length.
+
 ## [S153] — 2026-10-10 — `weewx#440` designed: the loop writer ships as a WeeWX extension from this repo (DEC-0211)
 
 - **Design only, no code.** `loop_json_writer.py` stays the only copy; `extensions/loopjson/` will hold
