@@ -11590,9 +11590,9 @@ in May and public since. DEC-0076 and DEC-0084 had each recorded "never leaked" 
 search, but each searched only the spelling it had just fixed. A search for one shape finds that
 shape and says nothing about the rest, so both claims were false zeros (GOTCHAS §1).
 
-The owner's account showed the leaked value was already dead: no app password from that period
-existed any more, because the one then in use dated from July and a May commit cannot hold a July
-password. The July one was rotated anyway on 2026-10-11, because the same pass that found the
+The owner's account showed the leaked value was already dead: it was revoked in July 2026, when the
+July app password replaced it (the May date is the commit's, not a creation date). The July one was
+rotated anyway on 2026-10-11, because the same pass that found the
 literal also printed it into a session transcript. The new value is on the host only, the old one
 is revoked, and the monitor was restarted and sent its start mail with no auth errors.
 
