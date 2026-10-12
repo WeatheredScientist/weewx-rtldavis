@@ -77,6 +77,16 @@ gitignored local-infra doc (DEC-0012).
 - **Token-pattern grep before every commit** — over the staged diff and the whole tracked tree.
   Also sweep for personal identifiers: the WU PWS id, place names, coordinates, the org name, the
   NAS IP/user (the exact patterns live in gitignored `scripts/.identifiers`).
+- **After any change to `scripts/check_secrets.sh`, run `bash scripts/scan_history.sh`** (about
+  2.5 minutes; needs the gitignored `scripts/.identifiers`, so run it in the main checkout or copy
+  the list into a worktree). It runs the whole gate over every blob in history and prints only
+  `SECRET-SCAN:` headers. Exit 0 means history matches `scripts/history_scan_known.txt`; 1 is a
+  new finding to triage before the change merges; 3 means a known finding vanished and the gate
+  has gone blind (DEC-0212). A search for the spelling you just fixed proves nothing about the
+  rest. DEC-0076 and DEC-0084 both claimed "never leaked" that way.
+- **A redacting printer fingerprints every value-like token, whatever its length** (hash prefix plus
+  length). Never a length floor: short tokens such as four-letter app-password groups are the ones
+  that slip under one (S153).
 - **Never paste a live secret into an LLM chat.** Treat anything that reaches a prompt as compromised;
   rotate it server-side. `gh`/SSH creds live in the OS keychain — an assistant runs `gh`/`git`/`scp`
   against that auth and never needs the raw value.
