@@ -2,8 +2,9 @@
 """
 loop_json_writer.py
 Eagle Hunt PWS — expanded LOOP packet JSON writer.
-Writes all real-time fields to /opt/weewx-data/loop-data.txt on every
-LOOP packet (~2.5s for Davis VP2+), and the same payload to a second path
+Writes all real-time fields to loop-data.txt on every LOOP packet (~2.5s
+for Davis VP2+; a relative path resolves against WEEWX_ROOT, so the default is
+/opt/weewx-data/loop-data.txt in the Docker image), and the same payload to a second path
 (current.json) at a SLOWER, independent cadence. Atomic write via
 tmp+rename on both.
 
@@ -41,6 +42,9 @@ Fields written (None → omitted, last known value used for sparse fields):
   radiation_Wpm2, UV, cloudbase_foot
   dateTime
   barometer_fetch_epoch (#172 — passthrough, NOT cached/TTL'd; see new_loop)
+  writer ("loop_json_writer/<__version__>", DEC-0211; semver against the
+  contract: major = a key renamed, removed or given new units, minor = a new
+  optional key, patch = a behavior fix)
 
 NOTE: Packet is explicitly normalized to US (imperial) units before extraction
 so that output key names (outTemp_F, barometer_inHg, etc.) always reflect
@@ -66,6 +70,11 @@ import weewx.units
 from weewx.engine import StdService
 
 log = logging.getLogger(__name__)
+
+# Contract version (DEC-0211), stamped into every write as the "writer" key.
+# Keep it equal to extensions/loopjson/install.py's version; CI checks the pair
+# against the release tag.
+__version__ = '1.0.0'
 
 # How long a cached value may stand in for a missing reading. The ISS rotates
 # its sensors across message types (one reading each ~25-60 s at this station's
@@ -120,12 +129,28 @@ class LoopJsonWriter(StdService):
     def __init__(self, engine, config_dict):
         super().__init__(engine, config_dict)
         cfg = config_dict.get('LoopJsonWriter', {})
-        self.path = cfg.get('path', '/opt/weewx-data/loop-data.txt')
-        self.current_path = cfg.get('current_path', '/opt/weewx-data/current.json')
+        # Relative paths resolve against WEEWX_ROOT (always absolute at
+        # runtime); an absolute path, as prod sets, passes through unchanged.
+        root = config_dict.get('WEEWX_ROOT', '')
+        self.path = os.path.join(root, cfg.get('path', 'loop-data.txt'))
+        self.current_path = os.path.join(root, cfg.get('current_path', 'current.json'))
+        for p in (self.path, self.current_path):
+            out_dir = os.path.dirname(p)
+            try:
+                if out_dir:
+                    os.makedirs(out_dir, exist_ok=True)
+            except OSError as e:
+                log.error('LoopJsonWriter: cannot create %s: %s' % (out_dir, e))
         self.ttl_default = int(cfg.get('ttl_default', _TTL_DEFAULT_SECONDS))
-        fetch_interval = int(config_dict.get('DavisPressure', {}).get(
-            'fetch_interval', _BAROMETER_FETCH_DEFAULT))
-        self.ttls = {_BAROMETER_KEY: _BAROMETER_TTL_FACTOR * fetch_interval}
+        # The long barometer TTL exists because DavisPressureFetcher refreshes
+        # it only every fetch_interval. Without that section the barometer is
+        # an ordinary loop field, so it takes ttl_default instead of a 7,200 s
+        # default that would serve a dead barometer stale for two hours.
+        self.ttls = {}
+        if 'DavisPressure' in config_dict:
+            fetch_interval = int(config_dict['DavisPressure'].get(
+                'fetch_interval', _BAROMETER_FETCH_DEFAULT))
+            self.ttls[_BAROMETER_KEY] = _BAROMETER_TTL_FACTOR * fetch_interval
         # current.json cadence (DEC-0093). 0 (or negative) restores the old
         # write-on-every-packet behavior, which is what shipped S43-S84.
         self.current_interval = int(cfg.get('current_interval',
@@ -148,7 +173,7 @@ class LoopJsonWriter(StdService):
                     ('%d s' % self.current_interval)
                     if self.current_interval > 0 else 'packet',
                     self.ttl_default, _BAROMETER_KEY,
-                    self.ttls[_BAROMETER_KEY]))
+                    self._ttl(_BAROMETER_KEY)))
 
     def _ttl(self, out_key):
         """Seconds a cached value for out_key may still be served."""
@@ -231,6 +256,7 @@ class LoopJsonWriter(StdService):
         if fe is not None:
             data['barometer_fetch_epoch'] = fe
         data['dateTime'] = pkt.get('dateTime')
+        data['writer'] = 'loop_json_writer/' + __version__
 
         # loop-data.txt on EVERY packet -- it carries the liveness signal.
         # current.json only when its interval has elapsed (DEC-0093). The first

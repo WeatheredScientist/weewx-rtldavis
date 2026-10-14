@@ -1,7 +1,7 @@
 # Interfaces — weewx-rtldavis
 
 **Status:** Source of truth (the contract consumers depend on)
-**Last updated:** 2026-08-20 (S97)
+**Last updated:** 2026-10-14 (S155)
 
 This repo's real product is **data**, not weewx internals. Two published surfaces make up the
 contract; changing either can break downstream consumers (currently: the Eagle Hunt dashboard, dev
@@ -16,14 +16,21 @@ eventually CumulusMX can satisfy them (PRINCIPLES §1, DEC-0010).
 
 ## 1. Loop-JSON — real-time surface
 
-Written by `loop_json_writer.py` (a WeeWX `data_service`, DEC-0005) to
-`/opt/weewx-data/loop-data.txt` **and** `/opt/weewx-data/current.json` on **every LOOP packet
-(~2.5 s** for the VP2+), via atomic tmp-write + `os.replace`. Both files carry identical content —
-only the path differs. `loop-data.txt` is served to the dashboard's ongoing polling at `/loopdata`
-by the eh-proxy (which lives in the dashboard's deployment, not this repo).
+Written by `loop_json_writer.py` (a WeeWX `StdService` that runs last in `process_services`,
+DEC-0005, S152) to `loop-data.txt` **and** `current.json`, by atomic tmp-write + `os.replace`.
+Both files carry identical content when written, and only the path and the cadence differ:
+`loop-data.txt` is rewritten on **every LOOP packet (~2.5 s** for the VP2+), `current.json` at most
+once per `current_interval` (below). `loop-data.txt` is served to the dashboard's ongoing polling at
+`/loopdata` by the eh-proxy (which lives in the dashboard's deployment, not this repo).
 
-Both paths are configurable (`[LoopJsonWriter]` `path` and `current_path`). The defaults above are
-what a stock install writes. **A consumer that bind-mounts these files must mount their directory,
+**Anyone running another driver can install it as a WeeWX extension (DEC-0211, #440):**
+`weectl extension install` on the `weewx-loopjson-X.Y.Z.zip` asset of a `loopjson-vX.Y.Z` release.
+The extension's README covers install, placement and paths. This section stays the one field table.
+
+Both paths are configurable (`[LoopJsonWriter]` `path` and `current_path`); a relative path resolves
+against `WEEWX_ROOT`, and the writer creates the directory at startup. The defaults are
+`loop-data.txt` and `current.json` under `WEEWX_ROOT` (`/opt/weewx-data` in this repo's image); the
+extension installs `feed/loop-data.txt` and `feed/current.json`. **A consumer that bind-mounts these files must mount their directory,
 not the files.** Every write replaces a file by rename, and a single-file bind pins the original
 inode, so the consumer would read a frozen file forever. This project's own deployment writes both
 files into `weewx-data/feed/`, a directory holding nothing else, and the eh-proxy mounts that
@@ -69,7 +76,13 @@ not this repo's.
     `dewpoint_service.CACHE_TIMEOUT_SECONDS`. Overridable via `[LoopJsonWriter] ttl_default`.
   - **2 × `[DavisPressure] fetch_interval`** (7200 s at the shipped hourly setting) for
     `barometer_inHg`, which comes from the WeatherLink API fetch, *not* the ISS rotation. Derived
-    from that service's own config so the two cannot drift apart.
+    from that service's own config so the two cannot drift apart. **Only when a `[DavisPressure]`
+    section exists (DEC-0211):** a station without one gets `ttl_default` for the barometer too, so a
+    dead barometer is not served stale for two hours.
+- **`writer` — the contract version (DEC-0211, v1.0.0).** Every write to both files carries
+  `"writer": "loop_json_writer/<version>"`. Semver against this contract: major when a key is
+  renamed, removed or given new units; minor for a new optional key; patch for a behavior fix. A
+  consumer passes it through or ignores it.
 - **`barometer_inHg` is a corrected-upstream passthrough, not an ISS decode (S77).** The VP2+ ISS
   never transmits pressure over 915 MHz. `pressure_service.py`'s `DavisPressureFetcher` polls
   `api.weatherlink.com/v2/current/<station_id>` directly and prefers `bar_sea_level` — **already
