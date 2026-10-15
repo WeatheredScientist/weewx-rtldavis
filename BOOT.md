@@ -51,8 +51,8 @@ ROADMAP next check: S156.
    `loopjson-v1.0.0`, confirm the workflow published the zip with `--latest=false` and that
    `weectl extension install <asset URL>` works on a clean WeeWX; post the command on #440 and
    `eaglehunt-weather-dashboard#842`, close #440 with a comment, ring the dashboard's session.
-3. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI; the
-   remainder of `eaglehunt-ops#358` (the owner's off-screen address check).
+3. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI.
+   (`eaglehunt-ops#358` closed S155: some replaced test addresses were live hosts; no history rewrite.)
 4. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry.
 
@@ -67,7 +67,7 @@ ROADMAP next check: S156.
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed |
 | `main`/`dev` | `main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150); `dev` is ahead only by docs and the secret gate (see above). Before the promotion `main` was v2.0.16's (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor |
 | Docker Hub | `:v2.0.20` = `:latest` (= prod, `f617c9ca…`; `:latest` moved 2026-10-06 22:52 ET) · `:v2.0.19` · `:v2.0.16` |
-| Trackers | repo: #440 (built S155, PR open; ship is S156's job 2), #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
+| Trackers | repo: #440 (built S155, PR open; ship is S156's job 2), #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
 
 ## Blockers
 
