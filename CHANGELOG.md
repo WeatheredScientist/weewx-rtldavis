@@ -16,7 +16,7 @@ under [Pre-S16].
   (fails if module, `install.py` and tag versions disagree), `scripts/prove_loopjson.sh` (installs the
   zip into a fresh WeeWX 5.5.2 and runs the Simulator), `.github/workflows/loopjson.yml` (every PR
   proves it; a `loopjson-v*` tag publishes the zip with `--latest=false`). Proved locally on 5.5.2,
-  plus two failing controls (tag mismatch, missing `writer` key). INTERFACES §1: the `writer` row and
+  shipped the same night (PR #447; prod `git pull` + `weewx.service` restart 21:22 ET, `writer` key live; tag `loopjson-v1.0.0`, release not-latest, asset URL install tested on a clean station), plus two failing controls (tag mismatch, missing `writer` key). INTERFACES §1: the `writer` row and
   the stale `data_service` / every-packet opening fixed.
 
 ## [S154] — 2026-10-12 — `scripts/scan_history.sh` and the "never leaked" correction (ops#404, DEC-0212)
