@@ -567,6 +567,7 @@ sleep 2
 | `wcloud.py` | WeatherCloud uploader |
 | `windy.py` | Windy.com uploader |
 | `owm.py` | OpenWeatherMap uploader |
+| `loop_json_writer.py` | Writes the live loop-JSON feed the dashboard reads. Also installable on its own, with any driver, as a WeeWX extension: see [extensions/loopjson/README.md](extensions/loopjson/README.md) |
 | `weewx_monitor.py` | NAS-side USB watchdog, service alert monitor, and RF reception tracker |
 | `usb_reset.sh` | USB dongle reset script — called via sudo by weewx_monitor.py |
 | `monitor.env.example` | Template for monitor email credentials |

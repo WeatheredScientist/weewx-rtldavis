@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S154 → S155)
+## ▶ Resume here (S155 → S156)
 
 ### What's settled (do not re-derive)
 
@@ -33,10 +33,11 @@ S152's docs fix (#441) and S153's design records: nothing that changes the image
 `--cap-drop ALL` + `no-new-privileges`). The S145 audit's ten high items shipped; 29 medium/low
 stay in `docs/CODE_REVIEW_S145.md`. **The secret gate's four detector holes (#421) are closed
 (S151, DEC-0210, merged as #439).** `LoopJsonWriter` runs last in `process_services`, with
-`data_services` empty, since 2026-07-12 (S152, #441). **`weewx#440` is designed (S153, DEC-0211):
-the writer ships as a WeeWX extension, a release asset of this repo.** ROADMAP next check: S156.
+`data_services` empty, since 2026-07-12 (S152, #441). **`weewx#440` is built (S155, DEC-0211):
+the writer ships as a WeeWX extension, a release asset of this repo; the PR is open, unshipped.**
+ROADMAP next check: S156.
 
-### ▶▶ S155 JOB LIST
+### ▶▶ S156 JOB LIST
 
 1. **Watch, no action unless it fires** (last checked S152: soak 14 passed / 0 failures, no
    `bar_absolute` fallback warning): the measured `pressure` keeps arriving (a `no bar_absolute`
@@ -44,19 +45,14 @@ the writer ships as a WeeWX extension, a release asset of this repo.** ROADMAP n
    needs a second boundary) · WU gold star (≥ 5 uninterrupted days; the clean run restarted at
    the 10-06 22:15 restart) · OWM and Windy rain in millimeters (needs rain; ERR-0010) · the first
    `frame failed message-type proof` line · freeze lead (blocker 1), measure at the next freeze.
-2. **Build `weewx#440` per DEC-0211 — Sonnet, one session.** The design is settled: read
-   DEC-0211's full body, don't re-derive it. (a) `loop_json_writer.py`: `__version__ = '1.0.0'` and
-   the `writer` key in both files; relative paths against `config_dict['WEEWX_ROOT']`; create the
-   output directories at startup; barometer TTL from `[DavisPressure]` only when that section
-   exists. A test for each. (b) `extensions/loopjson/install.py` + README. (c) CI: build the zip,
-   install it into WeeWX 5.5.2 from PyPI, Simulator run, tag/`__version__`/`install.py` agreement;
-   a release job on `loopjson-v*` tags with `--latest=false`. (d) INTERFACES §1: the `writer` row,
-   and fix the opening's stale `data_service` / every-packet text; a pointer in `README.md`.
-   (e) Ship: merge, `marvinctl pull` + restart `weewx.service`, confirm `writer` in
-   `feed/loop-data.txt`; push `loopjson-v1.0.0`, confirm `weectl extension install <asset URL>`
-   works; post the command on #440, close it with a comment, ring the dashboard's session.
-3. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI; the
-   remainder of `eaglehunt-ops#358` (the owner's off-screen address check).
+2. **Ship `weewx#440` (built S155, PR open against `dev`).** After the owner merges: `marvinctl
+   --tenant weewx pull` + restart `weewx.service` (the writer is a mount, no image build), confirm
+   `writer: loop_json_writer/1.0.0` in `feed/loop-data.txt` (#440's step e). Then push the tag
+   `loopjson-v1.0.0`, confirm the workflow published the zip with `--latest=false` and that
+   `weectl extension install <asset URL>` works on a clean WeeWX; post the command on #440 and
+   `eaglehunt-weather-dashboard#842`, close #440 with a comment, ring the dashboard's session.
+3. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI.
+   (`eaglehunt-ops#358` closed S155: some replaced test addresses were live hosts; no history rewrite.)
 4. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry.
 
@@ -71,7 +67,7 @@ the writer ships as a WeeWX extension, a release asset of this repo.** ROADMAP n
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed |
 | `main`/`dev` | `main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150); `dev` is ahead only by docs and the secret gate (see above). Before the promotion `main` was v2.0.16's (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor |
 | Docker Hub | `:v2.0.20` = `:latest` (= prod, `f617c9ca…`; `:latest` moved 2026-10-06 22:52 ET) · `:v2.0.19` · `:v2.0.16` |
-| Trackers | repo: #440 (designed, DEC-0211; build is S155's job 2), #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #358 owner remainder · #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
+| Trackers | repo: #440 (built S155, PR open; ship is S156's job 2), #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
 
 ## Blockers
 
@@ -80,8 +76,8 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 ## Model tier
 
-**S154 ran on Sonnet 5.5** (the history scan and its docs: execution), no `/model` switch. S155's
-build of #440 is execution of a locked design: Sonnet.
+**S155 ran on Sonnet 5.5** (the #440 build: execution of a locked design), no `/model` switch.
+S156's ship steps are execution too: Sonnet.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -101,4 +97,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-12 (S154). v2.0.20 steady in prod; ops#404's three follow-ups landed (DEC-0212); the #440 build is next on Sonnet._
+_Last updated: 2026-10-14 (S155). v2.0.20 steady in prod; #440's extension built and proved on WeeWX 5.5.2, shipping is next._

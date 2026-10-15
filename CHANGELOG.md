@@ -6,6 +6,19 @@ under [Pre-S16].
 
 ---
 
+## [S155] — 2026-10-14 — `loop_json_writer.py` 1.0.0 and the `loopjson` WeeWX extension (#440, DEC-0211)
+
+- **Writer** (no-op under prod's config except the new key): `__version__ = '1.0.0'` and a
+  `writer: loop_json_writer/1.0.0` key in both files; relative `path`/`current_path` resolve against
+  `WEEWX_ROOT` (defaults `loop-data.txt`, `current.json`); the output directories are created at
+  startup; the long barometer TTL applies only when `[DavisPressure]` exists. 7 new tests, 1 updated.
+- **Extension:** `extensions/loopjson/` (`install.py`, README), `scripts/build_loopjson_zip.sh`
+  (fails if module, `install.py` and tag versions disagree), `scripts/prove_loopjson.sh` (installs the
+  zip into a fresh WeeWX 5.5.2 and runs the Simulator), `.github/workflows/loopjson.yml` (every PR
+  proves it; a `loopjson-v*` tag publishes the zip with `--latest=false`). Proved locally on 5.5.2,
+  plus two failing controls (tag mismatch, missing `writer` key). INTERFACES §1: the `writer` row and
+  the stale `data_service` / every-packet opening fixed.
+
 ## [S154] — 2026-10-12 — `scripts/scan_history.sh` and the "never leaked" correction (ops#404, DEC-0212)
 
 - **`scripts/scan_history.sh`** runs the whole `check_secrets.sh` over every `(blob, path)` pair in
