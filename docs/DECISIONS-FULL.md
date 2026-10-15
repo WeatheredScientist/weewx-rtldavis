@@ -11498,7 +11498,7 @@ controls red.
 ## DEC-0211 — `loop_json_writer.py` ships as a WeeWX extension from this repo (#440)
 
 **Date:** 2026-10-10 (S153, Opus 5.5; owner: "go with all your recommendations"). **Status:**
-accepted, built S155 (PR open, ship pending). Answers `weewx#440`, the dashboard's ask under its
+accepted, shipped S155 (`loopjson-v1.0.0`, PR #447). Answers `weewx#440`, the dashboard's ask under its
 DEC-0348. Applies DEC-0006 and DEC-0202; extends DEC-0093.
 
 ### Context
