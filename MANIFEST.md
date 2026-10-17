@@ -33,6 +33,7 @@ number held here.
 | `ops/*` + `scripts/*` + root-level NAS scripts (`usb_reset.sh`, `entrypoint.sh`) — the harness, plus runbooks `docs/CAMPAIGN-B-RUNBOOK.md`/`docs/INFLUXDB-MIGRATION.md` | any ops task, the swap night, the InfluxDB cutover window. Each script's header is its manual. `ops/campaign_analyze.py` is the only sanctioned campaign readout (DEC-0069); `usb_reset.sh` runs as root under a path-scoped sudo grant (DEC-0075) |
 | `extensions/loopjson/` — the WeeWX extension (`install.py`, adopter README) that packages `loop_json_writer.py` for other stations (DEC-0211); built by `scripts/build_loopjson_zip.sh`, proved by `scripts/prove_loopjson.sh`, released from `.github/workflows/loopjson.yml` on a `loopjson-v*` tag | changing the writer's version, paths or install behavior; cutting a loopjson release |
 | `README.md` · `CONTRIBUTING.md` · `SECURITY.md` · `AGENTS.md` · `LICENSE` — the public face | changing anything user-visible, handling a report, or when another agent tool is involved |
+| `docs/DEPLOY.md` + `examples/` — the adopter's deploy guide (systemd recommended, Synology kept) and sanitized example units, plus `docker-compose.yml`. Written to the dashboard's public-release scrub rules: no host, tenant, unit or network names. Prod's real units live in `ops/` and heartofgold | changing how an adopter installs or runs it; a prod unit change that an example should mirror |
 
 ## Not in a clone, never in the load path
 

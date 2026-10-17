@@ -1,73 +1,31 @@
 #
-# docker-compose.yml for weewx-rtldavis
+# docker-compose.yml for weewx-rtldavis: the WeeWX + RTL-SDR receiver only.
 #
-# Driver-only compose. This defines ONLY the WeeWX + RTL-SDR receiver container.
-# Downstream consumers (InfluxDB, a dashboard proxy, other data sinks) are
-# intentionally NOT defined here — this repo's contract is the data it produces
-# (the loop-JSON file + the InfluxDB line-protocol schema), not a specific
-# consumer. Point the uploaders in weewx.conf at whatever backend you run.
+# Downstream consumers (InfluxDB, a dashboard) are not defined here; point the
+# uploaders in weewx.conf at whatever you run. See README.md for the steps
+# this assumes: the udev rule that lets your user open the dongle, and the
+# starter config copied out of the image into weewx-data/.
 #
-# Usage:
-#   cp weewx.conf.example weewx-data/weewx.conf   # then fill in your secrets
-#   docker compose up -d
+# Usage: edit the values marked below, then `docker compose up -d`.
 #
-# Volumes:
-#   weewx-data  — weewx.conf, database, skins  (bind-mounted so config/gain
-#                 edits need only a container restart, not an image rebuild)
-#   logs        — weewx log files (also read by weewx_monitor.py on Synology)
-#
-# Volume-mounted Python extensions (hot-swappable — edit + clear pyc + restart,
-# no rebuild). Everything else lives baked in the image. After editing any of
-# these on a running system, clear the venv pyc cache:
-#   find /opt/weewx-venv -name '*.pyc' -path '*/user/*' -delete
-#
-# NOTE: If switching from another weewx-rtldavis container version,
-# reset the USB dongle first to ensure clean device handoff:
-#   echo '1-3' | sudo tee /sys/bus/usb/drivers/usb/unbind && sleep 2
-#   echo '1-3' | sudo tee /sys/bus/usb/drivers/usb/bind && sleep 2
-# (device path '1-3' is Synology DS918+ specific — check yours with lsusb)
+# The driver is baked into the image. Don't bind-mount rtldavis.py over it:
+# the copy `weectl extension install` leaves in weewx-data/bin/user/ is the
+# stock upstream driver, and mounting it silently undoes every fix.
 #
 services:
   weewx-rtldavis:
     container_name: weewx-rtldavis
-    image: weatheredscientist/weewx-rtldavis:latest
+    image: weatheredscientist/weewx-rtldavis:v2.0.20
     restart: unless-stopped
-    privileged: true
-    environment:
-      - TZ=America/New_York    # Set to your local timezone (e.g. America/Los_Angeles, Europe/London)
+    user: "1000:1000"            # your uid:gid (`id -u`, `id -g`)
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     devices:
-      - '/dev/bus/usb:/dev/bus/usb'
+      - /dev/bus/usb:/dev/bus/usb
+    environment:
+      - HOME=/tmp
+      - TZ=America/New_York      # your time zone, so daily rain resets at local midnight
+      - BIAS_TEE=0               # 1 only if an LNA is powered through the dongle
     volumes:
-      # --- Adjust the host side of each path for your system. ---
-      # Core data + logs
-      - /your/path/weewx-rtldavis/weewx-data:/opt/weewx-data
-      - /your/path/weewx-rtldavis/logs:/var/log/weewx
-      #
-      # DO NOT mount rtldavis.py here. The driver is BAKED into the image
-      # (Dockerfile COPYs the patched rtldavis.py into the venv, which is where
-      # weewx actually imports user.* from). This file used to carry:
-      #
-      #   - .../weewx-data/bin/user/rtldavis.py:/opt/weewx-venv/.../user/rtldavis.py:ro
-      #
-      # and that line mounted the host's copy -- which for most installs is the
-      # STOCK driver that `weectl extension install` lays down -- straight over
-      # the patched, baked one. The result was silent: the container ran the
-      # stock driver, with no rain-glitch filter and no SensorQC, while every
-      # log line and version tag insisted otherwise. It cost us two sessions of
-      # "the fix isn't live" (S30, DEC-0029). Bake the driver; don't mount it.
-      #
-      # Hot-swappable extensions (see note above). These ARE safe to mount --
-      # they are services/uploaders, not the driver, so nothing bakes over them.
-      - /your/path/weewx-rtldavis/influx.py:/opt/weewx-venv/lib/python3.14/site-packages/user/influx.py:ro
-      - /your/path/weewx-rtldavis/loop_json_writer.py:/opt/weewx-venv/lib/python3.14/site-packages/user/loop_json_writer.py:ro
-      - /your/path/weewx-rtldavis/weewx-data/bin/user/ogoxeUploader.py:/opt/weewx-venv/lib/python3.14/site-packages/user/ogoxeUploader.py:ro
-    networks:
-      - weather-net
-
-# InfluxDB uploader (user.influx.Influx) expects a reachable InfluxDB 2.x.
-# It is NOT defined here — run it wherever you like and set [[Influx]]
-# server_url/token in weewx.conf. If you co-locate it on this Docker network,
-# give it container_name/hostname 'influxdb' and it resolves over weather-net.
-networks:
-  weather-net:
-    driver: bridge
+      - ./weewx-data:/opt/weewx-data
+      - ./logs:/var/log/weewx

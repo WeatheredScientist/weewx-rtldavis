@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S155 → S156)
+## ▶ Resume here (S156 → S157)
 
 ### What's settled (do not re-derive)
 
@@ -35,9 +35,13 @@ stay in `docs/CODE_REVIEW_S145.md`. **The secret gate's four detector holes (#42
 (S151, DEC-0210, merged as #439).** `LoopJsonWriter` runs last in `process_services`, with
 `data_services` empty, since 2026-07-12 (S152, #441). **`weewx#440` is closed (S155, DEC-0211):
 the writer ships as a WeeWX extension, release `loopjson-v1.0.0` of this repo; prod runs the new writer (a mount, no image change).**
-ROADMAP next check: S156.
+ROADMAP next check: S166 (S156 ran the full pass). **The public face is rewritten for a new user
+(S156, DEC-0213):** README 634 → 211 lines with an unprivileged quickstart that seeds the baked
+config (the old one could not start), `docs/DEPLOY.md` (systemd recommended, Synology kept),
+`examples/systemd/`, a hardened compose file. User-facing text follows the dashboard's
+public-release scrub rules; the internal records keep their machine names (owner call).
 
-### ▶▶ S156 JOB LIST
+### ▶▶ S157 JOB LIST
 
 1. **Watch, no action unless it fires** (last checked S152: soak 14 passed / 0 failures, no
    `bar_absolute` fallback warning): the measured `pressure` keeps arriving (a `no bar_absolute`
@@ -45,13 +49,17 @@ ROADMAP next check: S156.
    needs a second boundary) · WU gold star (≥ 5 uninterrupted days; the clean run restarted at
    the 10-06 22:15 restart) · OWM and Windy rain in millimeters (needs rain; ERR-0010) · the first
    `frame failed message-type proof` line · freeze lead (blocker 1), measure at the next freeze.
-2. **Re-verify `loopjson` once** (shipped S155, 2026-10-14: `loopjson-v1.0.0`, release not-latest, the
-   asset URL installs on a clean WeeWX 5.5.2, prod writes `writer: loop_json_writer/1.0.0`): confirm
-   the writer logged no ERROR after the 21:22 ET restart, beyond the usual TTL WARNING lines. The
-   dashboard side is `eaglehunt-weather-dashboard#842`; weewx owes nothing there.
-3. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI.
+2. **Re-verify `loopjson` once** (still not run; shipped S155, 2026-10-14): confirm the writer
+   logged no ERROR after the 21:22 ET restart, beyond the usual TTL WARNING lines.
+3. **Prove DEC-0213's quickstart on a fresh host** (the seed step and the non-root recipe follow
+   prod's flags but were never run end to end; no Docker daemon on the laptop). Then the GitHub
+   About text and topics (owner's go; a visible setting). The Hub overview syncs from README on
+   the next push to `main`, if the Hub secrets are set.
+4. **The arm64 image and the `src.tgz` pin** run in their own session (S156's proposal,
+   `weewx-arm64-image-build`); pick up its branch or PR.
+5. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI.
    (`eaglehunt-ops#358` closed S155: some replaced test addresses were live hosts; no history rewrite.)
-4. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
+6. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry.
 
 ## Current state (S150 close; trackers S154)
@@ -74,8 +82,9 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 ## Model tier
 
-**S155 ran on Sonnet 5.5** (the #440 build: execution of a locked design), no `/model` switch.
-S156 is watches plus the next backlog pick: Sonnet unless the pick is judgment work.
+**S156 ran on Opus 5.5** (positioning, attribution and the public docs: judgment work), switched
+with a bare `/model`, which persists: restore the Sonnet floor at close. S157 is watches plus job 3:
+Sonnet.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -95,4 +104,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-14 (S155). v2.0.20 steady in prod; #440's extension built and proved on WeeWX 5.5.2, shipped and closed._
+_Last updated: 2026-10-17 (S156). v2.0.20 steady in prod; README, DEPLOY and examples rewritten for a new user (DEC-0213); ROADMAP reconciled._
