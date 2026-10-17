@@ -2,8 +2,9 @@ name: image
 
 # DEC-0214: build the Docker image natively on amd64 AND arm64 (a Raspberry Pi is the most common
 # RTL-SDR host), then smoke-test what was built. This PROVES the build; it publishes nothing.
-# Docker Hub images are still built on marvin and pushed by marvinctl, so Hub's amd64 digest keeps
-# equaling prod's. No secrets here, on purpose: this is a public repo.
+# Docker Hub's amd64 images are still built on marvin and pushed by marvinctl, so Hub's amd64
+# digest keeps equaling prod's; arm64 is published by image-publish.yml on a release tag (DEC-0215).
+# No secrets here, on purpose: this is a public repo.
 #
 # GitHub-hosted runners only. Never a self-hosted runner (OPS-DEC-0117): on a public repo any PR
 # could run code on it.
@@ -48,21 +49,6 @@ jobs:
       - name: Build
         run: docker build --progress=plain -t weewx-rtldavis:ci .
 
-      - name: Image runs on this architecture
-        run: test "$(docker run --rm weewx-rtldavis:ci uname -m)" = "${{ matrix.uname }}"
-
-      - name: rtldavis binary links
-        run: |
-          docker run --rm weewx-rtldavis:ci ldd /usr/local/bin/rtldavis | tee ldd.txt
-          ! grep -q "not found" ldd.txt
-
-      - name: WeeWX is the pinned version
-        run: |
-          want="$(sed -n 's/^weewx==//p' requirements.txt)"
-          docker run --rm weewx-rtldavis:ci /opt/weewx-venv/bin/weectl --version | tee version.txt
-          grep -q "$want" version.txt
-
-      - name: The patched driver imports
-        run: >
-          docker run --rm weewx-rtldavis:ci /opt/weewx-venv/bin/python3 -c
-          "import user.rtldavis as d; print('driver', d.DRIVER_VERSION)"
+      # The same checks run on the arm64 image before image-publish.yml pushes it (DEC-0215).
+      - name: Smoke test
+        run: scripts/smoke_image.sh weewx-rtldavis:ci ${{ matrix.uname }} requirements.txt

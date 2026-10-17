@@ -11728,3 +11728,97 @@ bytes differ only by the top directory's name).
   so the pin alone changes no behavior.
 - Until arm64 images are published, a Pi user builds from source; the README says so and CI proves
   that build.
+
+## DEC-0215 — Ready-made arm64 images: CI → GHCR, joined into Docker Hub's multi-arch tag (S156)
+
+**Date:** 2026-10-17 (S156, Opus 5.5). **Status:** accepted (the owner chose the shape, the tag
+scheme and the backfill in chat). Amends DEC-0214 item 5 and the CONSTANTS Docker Hub check. Applies
+OPS-DEC-0117 and OPS-DEC-0254.
+
+### Context
+
+DEC-0214 proved the image builds and runs on arm64 but published nothing. The owner wants
+ready-made Pi images, because the point of this project is the widest possible reach. Three fixed
+constraints: Hub's amd64 image must stay byte-identical to prod's (marvin builds it, `marvinctl
+push` publishes it, a tag that exists remotely is refused, `:latest` moves only by the owner's
+gesture); no self-hosted runner, ever; no metered service in a public path.
+
+Measured 2026-10-17:
+- Hub `:v2.0.20` is an OCI index holding one linux/amd64 manifest (`sha256:5dc8c3ae…`) and one
+  BuildKit attestation manifest. Any multi-arch index has a new index digest, so "Hub index digest
+  = prod's image ID" cannot hold on a multi-arch tag. The amd64 manifest inside it can.
+- A Docker Hub personal access token has one permission level across every repository the account
+  reaches; tokens scoped to one repository exist only for paid Team/Business organizations. This
+  account has one repository, so a PAT means write on it, `:latest` included.
+- `buildx imagetools create` copies each source's manifests to the target (`Resolver.Copy`),
+  so a ghcr.io source and a docker.io target should join directly. The docs show only same-repo
+  examples, so the first run is the proof; the fallback is pull, tag and push of the arm64 image to
+  Hub, then a same-repo join.
+- The repo has no Actions secrets, so `dockerhub-description.yml` has never run.
+- `workflow_dispatch` works only for a workflow on the default branch, which here is `main`
+  (production truth). So the backfill uses a tag trigger instead.
+
+### Options weighed
+
+1. **Actions pushes arm64 to Hub with a stored token.** The token is account-wide and can move
+   `:latest`. A GitHub environment with a required reviewer narrows the window but leaves a
+   long-lived write credential in a public repo's Actions. It still needs the join step, because
+   only marvin has the amd64 half, so it saves nothing over option 3.
+2. **The owner's arm64 Mac builds and pushes.** No CI credential, but no public build log, the
+   laptop's Docker state decides the bytes, every smoke test is a Class C `docker run`, and the
+   placement rule keeps long jobs off a sleeping Mac.
+3. **Actions pushes arm64 to GHCR with the job's own `GITHUB_TOKEN`; the laptop joins it into
+   Hub.** Chosen. The token is ephemeral and scoped to this repo's packages. The worst a compromised
+   job can do is publish a bad GHCR image, and that reaches Hub only through the join's checks and a
+   human go.
+
+### Decision
+
+1. **Tags on Docker Hub per release.** `:vX.Y.Z-amd64` is marvin's image, pushed with `marvinctl
+   push` (it replaces pushing `:vX.Y.Z` from marvin). Its index digest equals prod's image ID, which
+   is today's index-to-index check, unchanged. `:vX.Y.Z` is the joined multi-arch index: marvin's
+   amd64 manifest and its attestation, plus CI's arm64 manifest. Its linux/amd64 entry is prod's
+   amd64 manifest, checked at manifest level. `:latest` stays the owner's gesture after prod proof
+   (`imagetools create -t …:latest …:vX.Y.Z` copies the multi-arch index).
+2. **`.github/workflows/image-publish.yml`** runs on a pushed `vX.Y.Z` tag, a `backfill-vX.Y.Z` tag
+   (it builds the tree of the existing tag `vX.Y.Z`), or `workflow_dispatch` once the file is on
+   `main`. On GitHub-hosted `ubuntu-24.04-arm` it checks that the Dockerfile header names the
+   version, builds the tagged tree with the `org.opencontainers.image.revision`/`.version`/`.source`
+   labels, runs `scripts/smoke_image.sh` (shared with `image.yml`), and only then pushes
+   `ghcr.io/weatheredscientist/weewx-rtldavis:vX.Y.Z-arm64`. It refuses to overwrite an existing
+   tag. Permissions are `contents: read` and `packages: write`; there are no stored secrets, and both
+   checkouts are pinned to a commit. It never runs on a pull request. A tree from before DEC-0214
+   (unpinned) is built only if upstream's `main` `src.tgz` still hashes to DEC-0214's pin and
+   weewx-influx2's `master` is still the pinned commit.
+3. **`scripts/join_multiarch.sh vX.Y.Z`** runs on the laptop, which holds the Hub login. It is a dry
+   run by default. It checks that Hub's `-amd64` is linux/amd64 only (with `--expect-amd64`, that
+   its index digest equals prod's image ID), and that GHCR's `-arm64` is linux/arm64 only, labeled
+   with `git rev-parse vX.Y.Z^{commit}`. It prints the index, and refuses to overwrite an existing
+   `:vX.Y.Z` without `--replace`. With `--apply` (only after the owner's go in chat) it creates the
+   index from digest-pinned sources, then re-reads Hub and confirms both manifest digests.
+   `--amd64-only` makes `:vX.Y.Z` a carbon copy of `-amd64` (index digest = prod's) when a release
+   has no arm64. `--seed-amd64` is for the backfill.
+4. **First multi-arch tag: v2.0.20, backfilled.** Push a `backfill-v2.0.20` tag on a `dev` commit
+   that carries the workflow; once GHCR holds `:v2.0.20-arm64`, run `join_multiarch.sh v2.0.20
+   --seed-amd64 --replace --expect-amd64 sha256:f617c9ca…`. That carbon-copies `:v2.0.20` to
+   `:v2.0.20-amd64` (same digest, prod's), then re-points `:v2.0.20` at the joined index. The amd64
+   bytes don't change, and prod pulls nothing from Hub. Then the owner moves `:latest`, and the
+   backfill tag is deleted. This is the one time a published tag is rewritten.
+5. **One-time owner steps:** make the GHCR package public after its first push, if GitHub created
+   it private (the laptop's join and any reader then pull it anonymously). Optional: Hub's
+   immutable-tags setting for `^v[0-9]+\.[0-9]+\.[0-9]+(-amd64)?$` after the backfill, which keeps
+   `latest` mutable.
+
+### Consequences
+
+- A Pi on a 64-bit OS (Pi 3, 4, 5) pulls the same tag as everyone else. 32-bit Raspberry Pi OS
+  (armv7) is not covered.
+- The two halves share a commit, the DEC-0214 pins and the Dockerfile, but they are separate builds
+  at different times: the base image and apt packages float, so they are "same source, same
+  recipe", not one build.
+- The arm64 image is proved by CI's smoke test, not by a station: no one runs it on a live ISS
+  here. The README says so.
+- The release session gains two commands (`marvinctl tag` + `push` of `-amd64`, then the join) and
+  waits about one CI run for the arm64 image.
+- `dockerhub-description.yml` needs a Hub token this decision keeps out of GitHub. Replacing it with
+  a laptop-run sync, or deleting it, is a separate follow-up.
