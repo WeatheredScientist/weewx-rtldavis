@@ -11628,3 +11628,56 @@ is revoked, and the monitor was restarted and sent its start mail with no auth e
 - No history rewrite: GitHub keeps old commits reachable by SHA, and the value is dead.
 - The private-range addresses planted by the gate's own test history are `eaglehunt-ops#358`, not
   this DEC.
+
+## DEC-0214 — Pin the image's upstream downloads; prove the build on amd64 and arm64 in CI (S156)
+
+**Date:** 2026-10-17 (S156, Opus 5.5). **Status:** accepted. Amends DEC-0078's backlogged "CI
+builds" (built and proved here, not published). Applies OPS-DEC-0117.
+
+### Context
+
+The adopter pass that rewrote the README (S156) found two image-level gaps. First, the Dockerfile
+fetched `src.tgz` from `weewx-contrib/weewx-rtldavis` at `refs/heads/main` and installed
+`david-lutz/weewx-influx2` from `archive/master.zip`, with no checksum on either: a public build got
+whatever upstream held that day, and a replaced file would have slipped in silently. Second, Docker
+Hub has carried amd64-only images since v2.0.1, while a Raspberry Pi is the most common RTL-SDR
+host, and no one had built the image on arm64.
+
+Measured 2026-10-17: the last commit touching `src.tgz` is `bfa9e3d` (2026-01-03), and the file at
+that commit is byte-identical to today's `refs/heads/main` copy (sha256 `7c1a7de1…`), so v2.0.20 was
+built from these bytes. The Go dependencies are vendored inside it, so `go install` does not touch
+the network. `weewx-influx2`'s master has not moved since `f791f2e` (2021-02-11); its archive zip
+hashed the same on two downloads (`33b819e7…`) and its contents match `master.zip` exactly (the
+bytes differ only by the top directory's name).
+
+### Decision
+
+1. **Each download names one commit and its sha256**, as `ARG` defaults in the base stage, fetched
+   with `curl -fsSL` and checked with `sha256sum -c` before use. Moving a pin is a deliberate change:
+   a new commit and a new sha256 in the same PR. The dupgate assertion (DEC-0135) is unchanged.
+2. **A raw file at a commit is a git blob**, so `src.tgz` cannot change under its pin. GitHub
+   generates archive zips on request and does not promise their bytes; if it ever regenerates the
+   influx2 zip, the check fails closed and the fix is to vendor the 22 KB zip.
+3. **`tests/test_dockerfile_pins.py` guards the shape**: no branch-tracking URL, every GitHub fetch
+   names a `_COMMIT` arg, every pin is a full commit id with a full sha256, every downloaded file is
+   checked, and the dupgate assertion is present. Against `dev`'s unpinned Dockerfile, four of its
+   five tests fail.
+4. **`.github/workflows/image.yml` builds the image natively** on GitHub-hosted `ubuntu-24.04`
+   (amd64) and `ubuntu-24.04-arm` (arm64), with no QEMU, then checks that the image reports the
+   runner's architecture, that `rtldavis` links, that `weectl` is the `requirements.txt` version, and
+   that the patched driver imports. It runs on every PR and push to `main`/`dev` (CI is free on a
+   public repo) and weekly, because the base stage's apt packages still float. Never a self-hosted
+   runner (OPS-DEC-0117).
+5. **CI publishes nothing (the owner's call, S156).** Docker Hub stays built on marvin and pushed by
+   `marvinctl`, so Hub's amd64 digest keeps equaling prod's, and no Hub credential enters a public
+   repo's Actions. The owner wants ready-made arm64 images on Hub soon, because the goal is the
+   widest possible reach. That publishing path is its own design; one shape that keeps the digest
+   invariant is to push an arm64 image separately and join it with marvin's amd64 image into one
+   multi-arch tag with `docker buildx imagetools create`.
+
+### Consequences
+
+- The next image built on marvin carries the pins. The bytes it fetches are the ones v2.0.20 used,
+  so the pin alone changes no behavior.
+- Until arm64 images are published, a Pi user builds from source; the README says so and CI proves
+  that build.

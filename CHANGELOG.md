@@ -6,6 +6,13 @@ under [Pre-S16].
 
 ---
 
+## [S156] — 2026-10-17 — image downloads pinned; amd64 and arm64 builds proved in CI (DEC-0214)
+
+- `src.tgz` and `weewx-influx2` are fetched at one commit each and checked against a sha256 (same
+  bytes as v2.0.20's build); `tests/test_dockerfile_pins.py` guards it. `.github/workflows/image.yml`
+  builds natively on GitHub-hosted amd64 and arm64 runners and smoke-tests the image; it publishes
+  nothing (arm64 images on Hub are a wanted follow-up).
+
 ## [S155] — 2026-10-14 — `loop_json_writer.py` 1.0.0 and the `loopjson` WeeWX extension (#440, DEC-0211)
 
 - **Writer** (no-op under prod's config except the new key): `__version__ = '1.0.0'` and a

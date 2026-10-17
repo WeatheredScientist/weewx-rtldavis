@@ -41,13 +41,28 @@ RUN mkdir -p /etc/modprobe.d && \
     echo "blacklist dvb_usb_rtl28xxu" > /etc/modprobe.d/blacklist_rtlsdr.conf
 
 #--------------------------------------------
+# Upstream sources, pinned (DEC-0214). Each download names one commit and its sha256, so a public
+# build gets the same bytes every time, and a changed or replaced upstream file stops the build
+# instead of slipping in. Moving a pin is a deliberate change: new commit, new sha256, same PR.
+#   src.tgz: the last commit that touched the file (2026-01-03). A raw file at a commit is a git
+#     blob, so its bytes cannot change. v2.0.20 was built from these same bytes off `main`.
+#   weewx-influx2: master's tip, unchanged since 2021-02-11. GitHub generates archive zips on
+#     request; if it ever regenerates this one, the check fails closed and the fix is to vendor it.
+#--------------------------------------------
+ARG RTLDAVIS_SRC_COMMIT=bfa9e3d9e1a9fc198fcf81124b709d63d8c30a1f
+ARG RTLDAVIS_SRC_SHA256=7c1a7de1923d2c96844adfba51ec0497f5e8f0a629cc3a6ba64a86d62f26e368
+ARG INFLUX2_COMMIT=f791f2e1a7a4dd11835983acee6b03345aba74c6
+ARG INFLUX2_SHA256=33b819e701fe8f5e871388f9924afe10c72e8835fd61a54763f65fb54f3f7e7a
+
+#--------------------------------------------
 # Build librtlsdr and rtldavis Go binary from src.tgz
 # librtlsdr is bundled in src.tgz — no git clone needed
 #--------------------------------------------
 COPY patch/rtldavis-dupgate.patch /tmp/rtldavis-dupgate.patch
 
-RUN curl -L -o /tmp/src.tgz \
-    https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz && \
+RUN curl -fsSL -o /tmp/src.tgz \
+    "https://github.com/weewx-contrib/weewx-rtldavis/raw/${RTLDAVIS_SRC_COMMIT}/src.tgz" && \
+    echo "${RTLDAVIS_SRC_SHA256}  /tmp/src.tgz" | sha256sum -c - && \
     cd /tmp && tar zxf src.tgz && \
     cd /tmp/src/librtlsdr && \
     mkdir build && cd build && \
@@ -64,12 +79,15 @@ RUN curl -L -o /tmp/src.tgz \
 # Install weewx and configure for rtldavis
 #--------------------------------------------
 COPY requirements.txt /tmp/requirements.txt
-RUN python3 -m venv --copies /opt/weewx-venv && \
+RUN curl -fsSL -o /tmp/weewx-influx2.zip \
+    "https://github.com/david-lutz/weewx-influx2/archive/${INFLUX2_COMMIT}.zip" && \
+    echo "${INFLUX2_SHA256}  /tmp/weewx-influx2.zip" | sha256sum -c - && \
+    python3 -m venv --copies /opt/weewx-venv && \
     /opt/weewx-venv/bin/pip install -q -r /tmp/requirements.txt && \
     /opt/weewx-venv/bin/weectl station create /opt/weewx-data --no-prompt && \
     /opt/weewx-venv/bin/weectl extension install /tmp/src/weewx-rtldavis \
         --yes --config=/opt/weewx-data/weewx.conf && \
-    /opt/weewx-venv/bin/weectl extension install https://github.com/david-lutz/weewx-influx2/archive/master.zip --yes --config=/opt/weewx-data/weewx.conf && \
+    /opt/weewx-venv/bin/weectl extension install /tmp/weewx-influx2.zip --yes --config=/opt/weewx-data/weewx.conf && \
     /opt/weewx-venv/bin/weectl station reconfigure \
         --driver=user.rtldavis --no-prompt --config=/opt/weewx-data/weewx.conf && \
     sed -i 's/frequency = EU/frequency = US/' /opt/weewx-data/weewx.conf && \
