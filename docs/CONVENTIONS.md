@@ -39,6 +39,13 @@ gitignored local-infra doc (DEC-0012).
   both exist. Five releases (v2.0.12–v2.0.16) shipped to prod and Docker Hub with no `vX.Y.Z` tag
   and no GitHub release for weeks before this line existed (#331) — nothing in the promotion path
   named the step, so no session was ever prompted to do it.
+- **Docker Hub release tags are multi-arch (DEC-0215).** After marvin's build is verified:
+  `marvinctl tag …:vX.Y.Z …:vX.Y.Z-amd64` and `marvinctl push …:vX.Y.Z-amd64` (never `:vX.Y.Z`
+  from marvin). Pushing the `vX.Y.Z` tag starts `image-publish.yml`, which builds, smoke-tests and
+  pushes `ghcr.io/weatheredscientist/weewx-rtldavis:vX.Y.Z-arm64`. Then, from the laptop,
+  `scripts/join_multiarch.sh vX.Y.Z --expect-amd64 <prod's image ID>` (a dry run) and, after the
+  owner's go in chat, the same with `--apply`. That creates `:vX.Y.Z` with both platforms. If the
+  arm64 run failed, `--amd64-only` publishes amd64 alone. `:latest` stays the owner's gesture.
 - **Start of session:** `git fetch && git status`. **End:** `git status` shows *up to date*.
 - **Pause for approval before every commit and before any push.** Show `git status` + a diff summary
   first; show `git log --oneline --all` before any push.

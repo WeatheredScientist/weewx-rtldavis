@@ -12,6 +12,12 @@ under [Pre-S16].
   bytes as v2.0.20's build); `tests/test_dockerfile_pins.py` guards it. `.github/workflows/image.yml`
   builds natively on GitHub-hosted amd64 and arm64 runners and smoke-tests the image; it publishes
   nothing (arm64 images on Hub are a wanted follow-up).
+- **arm64 on Docker Hub (DEC-0215):** `.github/workflows/image-publish.yml` builds, smoke-tests and
+  pushes `ghcr.io/…:vX.Y.Z-arm64` on a release (or `backfill-vX.Y.Z`) tag with the job's own token;
+  `scripts/join_multiarch.sh` joins it with marvin's `:vX.Y.Z-amd64` into Hub's multi-arch
+  `:vX.Y.Z`; `scripts/smoke_image.sh` is now shared by both workflows; `tests/test_image_publish.py`
+  guards the workflows' security shape (positive-controlled: 6 red). Not yet published: v2.0.20's
+  backfill waits for the owner's go.
 
 ## [S155] — 2026-10-14 — `loop_json_writer.py` 1.0.0 and the `loopjson` WeeWX extension (#440, DEC-0211)
 
