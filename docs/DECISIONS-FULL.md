@@ -249,7 +249,7 @@ WeatherLink Live console). Defense in depth:
 
 *Rationale:* honest null > fabricated rain (DEC-0006). The cap thresholds are physically grounded
 (world 1-min rainfall record ~1.23"; local worst ~1.8"/hr sustained) with generous leeway, so they
-catch the characteristic 64/128 glitches without ever clipping real Chester-County rain. CRC is
+catch the characteristic 64/128 glitches without ever clipping real local rain. CRC is
 enforced, so these are multi-bit/mis-decode glitches that pass CRC — the filter is defensive against
 the *class* of implausible value, not a specific bit. The rainRate bound is minor insurance: the
 driver fix already closes the main rainRate-pollution path (StdRainRater computing from phantom rain).
@@ -11628,3 +11628,50 @@ is revoked, and the monitor was restarted and sent its start mail with no auth e
 - No history rewrite: GitHub keeps old commits reachable by SHA, and the value is dead.
 - The private-range addresses planted by the gate's own test history are `eaglehunt-ops#358`, not
   this DEC.
+
+## DEC-0213 — The public face is written for a new user; systemd recommended, Synology kept
+
+**Date:** 2026-10-17 (S156, Opus 5.5). **Status:** accepted. Applies DEC-0012; extends DEC-0010.
+
+### Context
+
+The dashboard is preparing to go public, and its own public-release material (`how-it-works.md`
+and the deck) points readers at this repo's README first. That README had grown to 634 lines,
+mostly per-release notes, with about ten stale version references (`:latest` "still v2.0.13", a
+"current version" of v2.0.16). Its quickstart ran `--privileged`, and it could not have worked:
+it bind-mounted an empty host directory over `/opt/weewx-data`, which hides the `weewx.conf` the
+image bakes there, so `weewxd` starts with no config. The monitor setup was Synology-only, though
+prod has run on a Debian host under systemd since DEC-0118, unprivileged since #360.
+
+### Decision
+
+1. **README is for a new user.** What it is, what differs from stock (pointing to
+   CHANGES-FROM-UPSTREAM), requirements, a six-step quickstart, uploads, the data contract, pressure,
+   versions, troubleshooting, credits. Release history lives on the Releases page; service
+   registration detail lives in `weewx.conf.example`.
+2. **The quickstart seeds the config** by copying `/opt/weewx-data` out of a created, never-run
+   container (`docker create` + `docker cp`), which also makes the files the invoking user's.
+3. **Every user-facing run recipe is unprivileged**, in prod's shape: `--user`, `--cap-drop ALL`,
+   `no-new-privileges`, `--device /dev/bus/usb`, `HOME=/tmp`, plus a udev rule giving the user's
+   group the dongle (`0bda:2838`). `--privileged` is mentioned only as the Synology fallback.
+4. **`docs/DEPLOY.md`: systemd recommended, Synology kept.** The Synology path (Task Scheduler, the
+   limited monitor user, the sudo-scoped USB reset, logrotate) is preserved for anyone running a
+   NAS, marked as how the station ran through August 2026, with non-root on DSM marked untested.
+5. **`examples/systemd/`** holds the two units, cleaned from prod's: no host, tenant, slice, unit or
+   network names, placeholders listed in each header. The monitor example starts in
+   `REMEDY_MODE=none`. `docker-compose.yml` takes the same hardened shape and drops the per-file
+   mounts, which on a fresh install would make Docker create directories where files belong.
+6. **Scrub line.** User-facing text follows the dashboard's public-release rules (its Appendix A).
+   The internal records (BOOT, CONSTANTS, DECISIONS, CHANGELOG, `ops/`) keep their machine names:
+   the owner's call, since they have been public for months, are permanent in history, and carry
+   no addresses. Fixed now: a home-directory path in `.claude/settings.json`, a county name in
+   DEC-0021's body (history keeps it; no rewrite, per `eaglehunt-ops#358`), and the station's own
+   ISS channel in `weewx.conf.example` (5 → 1, the factory default).
+
+### Consequences
+
+- The seed step and the non-root recipe follow prod's proven flags but were not run end to end on
+  a fresh host this session (no Docker daemon on the laptop). The first adopter report, or a test
+  on a spare host, confirms them.
+- The Docker Hub overview syncs from README only on a push to `main` with the Hub secrets set.
+- Out of scope, proposed separately: arm64 images and pinning the upstream `src.tgz`.
