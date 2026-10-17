@@ -334,6 +334,39 @@ are fixed (PRs #412–#418) and **shipped**: the monitor's fixes (#413) went liv
 #421. Same shape as P0.6 above
 (`docs/CODE_REVIEW_S24.md`).
 
+## P0.8 — Public readiness (S156–) — 🔶 OPEN, ordered by what a new user hits first
+Follows DEC-0213 (the README, `docs/DEPLOY.md` and `examples/` rewritten for a new user, PR #449).
+The announcement waits for phases 1 and 2 and for the dashboard going public. Phases run in order;
+items inside a phase don't depend on each other.
+
+- [ ] **Phase 1 — what a new user copies.** No image change.
+  - [ ] #451 `pressure_service.py` crashes WeeWX on the example's placeholder `station_id` (audit 19).
+  - [ ] #452 `weewx.conf.example`: this station's gain, dead `[LoopData]`, orphan sections, missing
+        `[LoopJsonWriter]` (audit 17).
+  - [ ] #453 Monitor defaults assume Synology (`REMEDY_MODE=usb_reset`, `/volume1`, the USB port).
+        Design check and a DEC before code; prod's unit gets `WEEWX_CONTAINER` first.
+  - [ ] #454 `CHANGES-FROM-UPSTREAM.md` lags the code (audit 10).
+  - [ ] #455 Retired NAS wording in adopter-facing files; patched uploaders unlinted (audit 11, 12).
+  - [ ] Prove the quickstart on a fresh Linux host (BOOT job 3): config seeding and non-root writes
+        need no dongle.
+- [ ] **Phase 2 — the image, one release (v2.0.21).** #450 (both downloads pinned; CI proves the
+      amd64 and arm64 builds, no Hub publishing from CI), plus audit 15 (the Dockerfile's brace
+      expansion under `/bin/sh` leaves both cleanups as no-ops). Driver edits that ride along bump
+      `ws.7`. Raspberry Pi specifics wait on the arm64 session's design.
+- [ ] **Phase 3 — tests that cannot fail, then the bugs they hide.** #456: audit 29 and 33–39 first
+      (each fix proved by a mutation turning it red), then audit 32 (the US init time against the
+      150 s watchdog, check real logs first) and audit 20 (lease JSON kills the Influx thread).
+- [ ] **Phase 4 — upstream, in the owner's voice; nothing posted without a go.** Offer the four
+      unoffered driver fixes, highest value first: the `[options]` token's silent EU fallback (14),
+      zombie reaping (12), windDir (2), `NameError` and `rxCheckPercent` (3, 4). The driver repos have
+      been quiet since 2023, so the first move is one courtesy note to weewx-contrib, the package
+      everyone installs. Answer the reviewer note on david-lutz/weewx-influx2#1 (`verify_ssl`).
+- [ ] **Phase 5 — cleanup, no user-visible change.** Audit 21–28 and 30–31: duplication in the
+      monitor, `ops/` and the OWM/Windy pair, SPDX gaps, CI pinning. Audit 28 (the
+      `-or-later` tags on three uploaders) is an owner read, not a code fix.
+
+The decoder's double-decode root cause is research, not a phase: `BACKLOG.md`.
+
 ## P1 — Data integrity & Sensor-QC hardening (S18–S55c) — ✅ DONE, watch-only
 One continuous arc, not several separate efforts: RF/decode corruption that passes CRC has produced
 impossible values (rain, wind, humidity, temperature) since S18, and each release below closed one
