@@ -51,7 +51,7 @@
       "Bash(env -u GH_TOKEN gh search*)",
       "Bash(curl -s \"https://hub.docker.com/v2/repositories/weatheredscientist/weewx-rtldavis/*\")",
       "Skill(claude-api)",
-      "Read(//Users/mboss/Projects/**)"
+      "Read(~/Projects/**)"
     ],
     "ask": [
       "Bash(git commit *)",

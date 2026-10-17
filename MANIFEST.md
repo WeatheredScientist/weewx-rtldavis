@@ -34,6 +34,7 @@ number held here.
 | `extensions/loopjson/` — the WeeWX extension (`install.py`, adopter README) that packages `loop_json_writer.py` for other stations (DEC-0211); built by `scripts/build_loopjson_zip.sh`, proved by `scripts/prove_loopjson.sh`, released from `.github/workflows/loopjson.yml` on a `loopjson-v*` tag | changing the writer's version, paths or install behavior; cutting a loopjson release |
 | `.github/workflows/image.yml` + `image-publish.yml`, `scripts/join_multiarch.sh` (+ `oci_platforms.py`, `smoke_image.sh`) — the image proved on amd64 and arm64 (DEC-0214) and the arm64 half published and joined into Hub's multi-arch tag (DEC-0215) | cutting a release (the Docker Hub steps in `docs/CONVENTIONS.md`), changing the Dockerfile, or anything a Pi user pulls |
 | `README.md` · `CONTRIBUTING.md` · `SECURITY.md` · `AGENTS.md` · `LICENSE` — the public face | changing anything user-visible, handling a report, or when another agent tool is involved |
+| `docs/DEPLOY.md` + `examples/` — the adopter's deploy guide (systemd recommended, Synology kept) and sanitized example units, plus `docker-compose.yml`. Written to the dashboard's public-release scrub rules: no host, tenant, unit or network names. Prod's real units live in `ops/` and heartofgold | changing how an adopter installs or runs it; a prod unit change that an example should mirror |
 
 ## Not in a clone, never in the load path
 
