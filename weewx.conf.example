@@ -76,8 +76,9 @@ version = 5.3.1
     transceiver_frequency = US
 
     # Used channels: 0=not present, 1-8)
-    # The channel of the Vantage Vue ISS or Vantage Pro or Pro2 ISS
-    iss_channel = 5
+    # The channel of the Vantage Vue ISS or Vantage Pro or Pro2 ISS: match the
+    # ISS's DIP switches (factory default 1)
+    iss_channel = 1
     # The values below only apply for Vantage Pro or Pro2
     anemometer_channel = 0
     leaf_soil_channel = 0
