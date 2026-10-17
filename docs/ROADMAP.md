@@ -365,7 +365,8 @@ items inside a phase don't depend on each other.
       monitor, `ops/` and the OWM/Windy pair, SPDX gaps, CI pinning. Audit 28 (the
       `-or-later` tags on three uploaders) is an owner read, not a code fix.
 
-The decoder's double-decode root cause is research, not a phase: `BACKLOG.md`.
+Errors in the Go decoder itself are their own track, P1.9 below; its image changes ride phase 2's
+release or the one after.
 
 ## P1 — Data integrity & Sensor-QC hardening (S18–S55c) — ✅ DONE, watch-only
 One continuous arc, not several separate efforts: RF/decode corruption that passes CRC has produced
@@ -440,6 +441,37 @@ NAS dependency observed, zero stall through the restore.
 ---
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
+
+## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–) — 🔶 OPEN
+P1 closed every corruption class with filters in the Python driver; the source is in the Go decoder
+and is still there. What the Go side has shown, and where each stands:
+
+- **Repeat packets booked as misses** (DEC-0134): fixed by our `-dupwindow` time gate
+  (`patch/rtldavis-dupgate.patch`, DEC-0135, v2.0.15), offered as lheijst/rtldavis#7. Done.
+- **One burst decoded twice, the second copy sometimes corrupted** (DEC-0033, DEC-0035): the clean
+  copy is dropped as a duplicate; a corrupted one differs, so it passes the filter, and about 1 in
+  65,536 also passes CRC and arrives as a valid-looking frame. Only the Python filters catch it, and
+  only when the value is impossible. Open.
+- **CRC failures are dropped silently** (`protocol.go` ~L218): no count exists, so the size of the
+  problem above is unmeasured. Open.
+- **Which upstream version the bundled source is** (`BACKLOG.md`, open since S21): #450 pins it;
+  nobody has diffed it against `lheijst/rtldavis` master. Open.
+
+Steps, in order:
+
+- [ ] #458 **Measure.** Count CRC failures per hop slot and how many fall within ~100 ms of an
+      accepted frame; surface it through the driver's counter line; diff the pinned source against
+      upstream. Log only, no data change. A day of production counts is the baseline.
+- [ ] #459 **Fix.** A content-agnostic burst gate in Go, keyed on the receiver's own hop slot (the
+      frame's ID can be the corrupted part), designed against #458's numbers. Credits LloydR's
+      lheijst/rtldavis#2, which gates at 2 s on the frame ID. The Python filters stay as the
+      backstop. Design first (tier: frontier).
+- [ ] **Offer upstream** (owner's go): a comment on lheijst/rtldavis#2 or a follow-on PR, joining P0.8
+      phase 4.
+
+Not here on purpose: the RF-dead episodes (`BOOT.md` blocker 2, DEC-0081), where the Go child goes
+silent and recovers with time. Nothing has shown a decoder bug behind them yet; if #458's counters
+or a capture do, it gets a step here.
 
 ## P2 — RF optimization, done honestly (PRINCIPLES §3) — **✅ CLOSED (S116, DEC-0134/DEC-0135; DEPLOYED S117, DEC-0136): there was never an RF problem to optimize**
 
