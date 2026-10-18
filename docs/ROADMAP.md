@@ -349,10 +349,12 @@ items inside a phase don't depend on each other.
   - [ ] #455 Retired NAS wording in adopter-facing files; patched uploaders unlinted (audit 11, 12).
   - [ ] Prove the quickstart on a fresh Linux host (BOOT job 3): config seeding and non-root writes
         need no dongle.
-- [ ] **Phase 2 — the image, one release (v2.0.21).** #450 (both downloads pinned; CI proves the
-      amd64 and arm64 builds, no Hub publishing from CI), plus audit 15 (the Dockerfile's brace
-      expansion under `/bin/sh` leaves both cleanups as no-ops). Driver edits that ride along bump
-      `ws.7`. Raspberry Pi specifics wait on the arm64 session's design.
+- [ ] **Phase 2 — the image, one release (v2.0.21).** Merged S156: #450 (both downloads pinned;
+      CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
+      and joins it into Docker Hub's multi-arch tag, DEC-0215; `:latest` and `:v2.0.20` multi-arch
+      since 2026-10-17 18:41 ET). Left: audit 15 (the Dockerfile's brace expansion under `/bin/sh`
+      leaves both cleanups as no-ops), and the first arm64 run against a live radio. Driver edits
+      that ride along bump `ws.7`.
 - [ ] **Phase 3 — tests that cannot fail, then the bugs they hide.** #456: audit 29 and 33–39 first
       (each fix proved by a mutation turning it red), then audit 32 (the US init time against the
       150 s watchdog, check real logs first) and audit 20 (lease JSON kills the Influx thread).
