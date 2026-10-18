@@ -347,6 +347,31 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     return delta
 
 
+_CRC_STATS = re.compile(r"crc_stats: crc_fail=(\d+) near=(\d+) slots=(-|\d+:\d+(?:,\d+:\d+)*)\s*$")
+
+
+def parse_crc_stats(line):
+    """Parse Go's `crc_stats: crc_fail=N near=M slots=S:N,...` summary (#458).
+
+    Returns (crc_fail, near, {slot: n}) or None for any other line. Strict on
+    purpose: a malformed or foreign line is ignored, never half-counted, and
+    near > crc_fail (impossible from a correct Go) is refused rather than logged.
+    Pure function (no I/O) so it is unit-testable -- tests/test_crc_stats.py.
+    """
+    m = _CRC_STATS.search(line)
+    if m is None:
+        return None
+    fail, near = int(m.group(1)), int(m.group(2))
+    if near > fail:
+        return None
+    slots = {}
+    if m.group(3) != "-":
+        for part in m.group(3).split(","):
+            slot, n = part.split(":")
+            slots[int(slot)] = int(n)
+    return fail, near, slots
+
+
 def dedup_key(data):
     """The identity of a reading, for deciding whether a packet repeats the last one.
 
@@ -1661,7 +1686,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             'pct_good': [None] * 4,    # percentage of good messages per transmitter
             'pct_good_all': None,      # percentage of good messages for all transmitters
             'dup_count': 0,            # DEC-0035 (S43): Go demodulator double-decodes this period
-            'repeat_count': 0}         # DEC-0135 (S116): transmitter re-sent an unchanged payload
+            'repeat_count': 0,         # DEC-0135 (S116): transmitter re-sent an unchanged payload
+            'crc_fail': 0,             # #458: CRC-failing frames Go dropped this period
+            'crc_near': 0,             # #458: of those, within 100 ms of an accepted frame
+            'crc_slots': {}}           # #458: failures per receiver hop slot this period
 
     def _reset_stats(self):
         self.stats['last_ts'] = self.stats['curr_ts']
@@ -1671,6 +1699,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self.stats['pct_good_all'] = None
         self.stats['dup_count'] = 0
         self.stats['repeat_count'] = 0
+        self.stats['crc_fail'] = 0
+        self.stats['crc_near'] = 0
+        self.stats['crc_slots'] = {}
 
     def _update_stats(self, curr_cnt0, curr_cnt1, curr_cnt2, curr_cnt3):
         # update the statistics
@@ -1711,6 +1742,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         # these were counted as duplicates AND booked as misses; dup_count was
         # roughly 10x its true value and rxCheckPercent about 26 points under.
         loginf("repeat frames this period: %d" % self.stats['repeat_count'])
+        # #458: the CRC failures Go used to drop uncounted. Measurement only --
+        # nothing reads these to decide what is accepted. `near` is the share that
+        # sits within 100 ms of an accepted frame: the corrupted-second-decode
+        # signature of DEC-0033/DEC-0035.
+        loginf("crc failures this period: %d (near an accepted frame: %d) slots: %s" % (
+            self.stats['crc_fail'], self.stats['crc_near'],
+            ",".join("%d:%d" % kv for kv in sorted(self.stats['crc_slots'].items())) or "-"))
         # if not the first time since startup
         if self.stats['last_ts'] > 0:
             total_count = 0
@@ -1996,6 +2034,14 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # (no debug gate); summarized once per archive period
                         # by _update_summaries().
                         self.stats['dup_count'] += 1
+                    _crc = parse_crc_stats(_line)
+                    if _crc is not None:
+                        # #458: Go's once-a-minute CRC-failure summary, summed
+                        # into this archive period; reported by _update_summaries().
+                        self.stats['crc_fail'] += _crc[0]
+                        self.stats['crc_near'] += _crc[1]
+                        for _slot, _n in _crc[2].items():
+                            self.stats['crc_slots'][_slot] = self.stats['crc_slots'].get(_slot, 0) + _n
                     if "repeat packet:" in _line:
                         # DEC-0135 (S116): Go accepted an identical payload that
                         # arrived a full loop period later -- a real transmission

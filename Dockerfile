@@ -59,6 +59,7 @@ ARG INFLUX2_SHA256=33b819e701fe8f5e871388f9924afe10c72e8835fd61a54763f65fb54f3f7
 # librtlsdr is bundled in src.tgz — no git clone needed
 #--------------------------------------------
 COPY patch/rtldavis-dupgate.patch /tmp/rtldavis-dupgate.patch
+COPY patch/rtldavis-crcstats.patch /tmp/rtldavis-crcstats.patch
 
 RUN curl -fsSL -o /tmp/src.tgz \
     "https://github.com/weewx-contrib/weewx-rtldavis/raw/${RTLDAVIS_SRC_COMMIT}/src.tgz" && \
@@ -73,6 +74,9 @@ RUN curl -fsSL -o /tmp/src.tgz \
     patch -p1 --batch --forward < /tmp/rtldavis-dupgate.patch && \
     echo "dupgate (DEC-0135): the duplicate filter is time-gated; -dupwindow must appear twice below:" && \
     test "$(grep -c dupwindow main.go)" = "2" && \
+    patch -p1 --batch --forward < /tmp/rtldavis-crcstats.patch && \
+    echo "crcstats (#458): CRC failures are counted, measurement only; crc_stats must be built into main.go and crcstat/crcstat.go:" && \
+    test "$(grep -c crcT main.go)" = "4" && test -f crcstat/crcstat.go && \
     GOBIN=/usr/local/bin go install -buildvcs=false -v .
 
 #--------------------------------------------

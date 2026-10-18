@@ -1,0 +1,203 @@
+From: weewx-rtldavis (WeatheredScientist fork)
+Subject: rtldavis: count CRC failures (measurement only)
+
+ROADMAP P1.9 step 1 / #458.  The decoder drops every CRC-failing frame silently
+(protocol.go, "If the checksum fails, bail"), so how often the demodulator
+produces a corrupted second decode of one RF burst (DEC-0033, DEC-0035) has
+never been counted.  This patch counts the failures and how many fall within
+100 ms of an accepted frame, in either order, and prints one line a minute:
+
+    crc_stats: crc_fail=N near=M slots=17:3,22:1
+
+MEASUREMENT ONLY.  No accept, drop or hop decision reads any of it, and the only
+line the patch removes is the loop header that is rewritten to take Parse's
+result first.  tests/test_crcstats_patch.py pins both facts, and tests/go/crcstat_test.go
+checks the counting against a brute-force oracle.
+The tracker lives in its own package (crcstat/) because package main parses flags
+and links librtlsdr at init, which makes it untestable.
+
+Note: main.go builds against the VENDORED protocol package
+(vendor/github.com/lheijst/rtldavis/protocol), not the top-level protocol/
+directory, which is dead code for this build.  The CRC hook is therefore in the
+vendored copy.
+
+Applies AFTER rtldavis-dupgate.patch, to the rtldavis source bundled in src.tgz.
+
+--- a/crcstat/crcstat.go
++++ b/crcstat/crcstat.go
+@@ -0,0 +1,98 @@
++package crcstat
++
++// Modified by the weewx-rtldavis project (WeatheredScientist): CRC-failure
++// statistics, ROADMAP P1.9 / #458. MEASUREMENT ONLY.
++//
++// The decoder drops every CRC-failing frame silently, so how often the
++// demodulator produces a corrupted second decode of one RF burst has never been
++// counted -- only the rare CRC-valid survivors show up, as phantom readings
++// (DEC-0033, DEC-0035). Tracker counts the failures and how many of them
++// fall within `window` of an ACCEPTED frame, in either order.
++//
++// It is write-only with respect to the receive path: no method returns a value
++// that any accept/drop/hop decision reads. Report() returns a string for the
++// log and nothing else. patch/crcstats_test.go pins that, and
++// tests/test_crcstats_patch.py pins that the patch removes no data-path line.
++
++import (
++	"fmt"
++	"strings"
++)
++
++const crcSlots = 64 // protocol maxCh is 51; one spare bucket catches anything out of range
++
++type Tracker struct {
++	window     int64 // ns; a failure this close to an accepted frame is "near"
++	every      int64 // ns between summary lines
++	fails      int
++	near       int
++	perSlot    [crcSlots]int
++	lastAccept int64   // ns of the last accepted frame; 0 = none yet
++	pending    []int64 // failures not yet near an accepted frame, oldest first
++	lastReport int64
++}
++
++func New(windowNs, everyNs int64) *Tracker {
++	return &Tracker{window: windowNs, every: everyNs}
++}
++
++// Fail records one CRC failure at time now (ns) while tuned to hop slot `slot`.
++func (t *Tracker) Fail(now int64, slot int) {
++	t.fails++
++	if slot < 0 || slot >= crcSlots {
++		slot = crcSlots - 1
++	}
++	t.perSlot[slot]++
++	if t.lastAccept != 0 && now-t.lastAccept < t.window {
++		t.near++ // the accepted frame came first
++		return
++	}
++	// Not near an earlier accept: it may still precede one. Keep only the
++	// failures still inside the window, and cap the list.
++	keep := t.pending[:0]
++	for _, ts := range t.pending {
++		if now-ts < t.window {
++			keep = append(keep, ts)
++		}
++	}
++	t.pending = append(keep, now)
++	if len(t.pending) > 256 {
++		t.pending = t.pending[len(t.pending)-256:]
++	}
++}
++
++// Accept records an accepted (non-duplicate) frame at time now (ns).
++func (t *Tracker) Accept(now int64) {
++	for _, ts := range t.pending {
++		if now-ts < t.window {
++			t.near++ // the failure came first
++		}
++	}
++	t.pending = t.pending[:0]
++	t.lastAccept = now
++}
++
++// Report returns the summary line once per `every` and resets the interval
++// counters. The first call only starts the clock.
++func (t *Tracker) Report(now int64) (string, bool) {
++	if t.lastReport == 0 {
++		t.lastReport = now
++		return "", false
++	}
++	if now-t.lastReport < t.every {
++		return "", false
++	}
++	var slots []string
++	for i, n := range t.perSlot {
++		if n > 0 {
++			slots = append(slots, fmt.Sprintf("%d:%d", i, n))
++		}
++	}
++	line := fmt.Sprintf("crc_stats: crc_fail=%d near=%d slots=%s", t.fails, t.near, strings.Join(slots, ","))
++	if len(slots) == 0 {
++		line = fmt.Sprintf("crc_stats: crc_fail=%d near=%d slots=-", t.fails, t.near)
++	}
++	t.fails, t.near, t.perSlot = 0, 0, [crcSlots]int{}
++	t.lastReport = now
++	return line, true
++}
+--- a/main.go
++++ b/main.go
+@@ -44,6 +44,7 @@
+     "fmt"
+ 
+     "github.com/lheijst/rtldavis/protocol"
++    "lheijst/rtldavis/crcstat"
+     "github.com/jpoirier/gortlsdr"
+ )
+ 
+@@ -114,6 +115,7 @@
+ 
+     // msg handling
+     lastRecMsg        string         // string of last received raw code
++    crcT              = crcstat.New(int64(100 * time.Millisecond), int64(60 * time.Second)) // #458 CRC-failure stats
+     lastRecTime       int64          // curTime of the last ACCEPTED packet (not of a dropped duplicate)
+ 
+     // test
+@@ -385,7 +387,18 @@
+         default:
+             in.Read(block)
+             handleNxtPacket = false
+-            for _, msg := range p.Parse(p.Demodulate(block)) {
++            parsed := p.Parse(p.Demodulate(block))
++            // #458: measurement only. Tally the CRC failures Parse dropped; nothing
++            // below reads the tracker, so what is accepted, dropped or hopped on is
++            // unchanged.
++            for _, ft := range p.CRCFailTimes {
++                crcT.Fail(ft, nextHopChan)
++            }
++            p.CRCFailTimes = p.CRCFailTimes[:0]
++            if line, ok := crcT.Report(time.Now().UnixNano()); ok {
++                log.Print(line)
++            }
++            for _, msg := range parsed {
+                 if testFreq {
+                     if testNumber > 0 {
+                         if msgIdToChan[int(msg.ID)] != 9 {
+@@ -434,6 +447,7 @@
+                 }
+                 lastRecMsg = seen
+                 lastRecTime = curTime
++                crcT.Accept(curTime)
+                 // check if msg comes from undefined sensor
+                 if msgIdToChan[int(msg.ID)] == 9 {
+                     if *undefined {
+--- a/vendor/github.com/lheijst/rtldavis/protocol/protocol.go
++++ b/vendor/github.com/lheijst/rtldavis/protocol/protocol.go
+@@ -34,6 +34,7 @@
+ 	"log"
+ 	"math"
+ 	"math/rand"
++	"time"
+ 
+ 	"github.com/lheijst/rtldavis/crc"
+ 	"github.com/lheijst/rtldavis/dsp"
+@@ -57,6 +58,10 @@
+ 
+ type Parser struct {
+ 	dsp.Demodulator
++	// CRCFailTimes: UnixNano of each CRC failure Parse dropped since the caller last
++	// drained it (weewx-rtldavis #458, measurement only; nothing here changes what
++	// Parse returns).
++	CRCFailTimes []int64
+ 	crc.CRC
+ 	Cfg dsp.PacketConfig
+ 	ChannelCount 	int
+@@ -216,6 +221,9 @@
+ 
+ 		// If the checksum fails, bail.
+ 		if p.Checksum(pkt.Data[2:]) != 0 {
++			if len(p.CRCFailTimes) < 1024 {
++				p.CRCFailTimes = append(p.CRCFailTimes, time.Now().UnixNano())
++			}
+ 			continue
+ 		}
+ 		// Thanks to Steve Wormley for an improved calculation of freqError.
