@@ -41,9 +41,10 @@ The bug fixes are offered upstream:
 - A Davis Vantage Pro, Pro2 or Vue ISS. US 915 MHz is what this is tested on; the driver also
   supports EU and NZ.
 - An RTL-SDR dongle (tested: RTL-SDR Blog V3, USB id `0bda:2838`) and a vertical 915 MHz antenna.
-- A Linux host with Docker. Images are amd64. On arm64 (a Raspberry Pi), build from source;
-  that path is untested here. Windows and macOS pass USB through a VM, and the added timing jitter
-  can break the radio's hop tracking.
+- A Linux host with Docker, amd64 or arm64 (a Raspberry Pi pulls the same tag; multi-arch from
+  v2.0.20). The arm64 image is built and smoke-tested on every change but has not yet run against a
+  live radio. Windows and macOS pass USB through a VM, and the added timing jitter can break the
+  radio's hop tracking.
 
 ## Quick start
 
