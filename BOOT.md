@@ -39,7 +39,14 @@ ROADMAP next check: S166 (S156 ran the full pass). **The public face is rewritte
 (S156, DEC-0213):** README 634 → 211 lines with an unprivileged quickstart that seeds the baked
 config (the old one could not start), `docs/DEPLOY.md` (systemd recommended, Synology kept),
 `examples/systemd/`, a hardened compose file. User-facing text follows the dashboard's
-public-release scrub rules; the internal records keep their machine names (owner call).
+public-release scrub rules; the internal records keep their machine names (owner call). **Images
+are multi-arch from v2.0.20 (DEC-0214, DEC-0215):** both downloads pinned with sha256s, CI builds
+and smoke-tests amd64 and arm64, CI pushes arm64 to GHCR and `scripts/join_multiarch.sh` joins it
+with marvin's `:vX.Y.Z-amd64`; the v2.0.20 backfill ran 2026-10-17 18:41 ET (`:latest` multi-arch,
+`:v2.0.20-amd64` = prod's digest). **The plan is ROADMAP P0.8 (public readiness: five phases,
+issues #451–#456) and P1.9 (decoder fixes in Go: #458 measure CRC failures, #459 burst gate)**,
+on #457. Non-Davis platform research is `eaglehunt-weather-dashboard#936`, dash's to run; weewx
+files issues from its section A.
 
 ### ▶▶ S157 JOB LIST
 
@@ -51,12 +58,13 @@ public-release scrub rules; the internal records keep their machine names (owner
    `frame failed message-type proof` line · freeze lead (blocker 1), measure at the next freeze.
 2. **Re-verify `loopjson` once** (still not run; shipped S155, 2026-10-14): confirm the writer
    logged no ERROR after the 21:22 ET restart, beyond the usual TTL WARNING lines.
-3. **Prove DEC-0213's quickstart on a fresh host** (the seed step and the non-root recipe follow
-   prod's flags but were never run end to end; no Docker daemon on the laptop). Then the GitHub
-   About text and topics (owner's go; a visible setting). The Hub overview syncs from README on
-   the next push to `main`, if the Hub secrets are set.
-4. **The arm64 image and the `src.tgz` pin** run in their own session (S156's proposal,
-   `weewx-arm64-image-build`); pick up its branch or PR.
+3. **P0.8 phase 1** (#451–#455, Sonnet; #453 is a design check and a DEC before code, and prod's
+   unit gets `WEEWX_CONTAINER` first, an owner step). With it, prove DEC-0213's quickstart on a
+   fresh Linux host (never run end to end; no dongle needed for the seed and permission checks),
+   then the GitHub About text and topics (owner's go). The Hub overview syncs from README on the
+   next push to `main`, if the Hub secrets are set.
+4. **First arm64 run against a live radio** (any Pi with a dongle); until then README says
+   smoke-tested only. Then P0.8 phase 2's v2.0.21 (audit 15) and P1.9's #458.
 5. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI.
    (`eaglehunt-ops#358` closed S155: some replaced test addresses were live hosts; no history rewrite.)
 6. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
@@ -72,7 +80,7 @@ public-release scrub rules; the internal records keep their machine names (owner
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed |
 | `main`/`dev` | `main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150); `dev` is ahead only by docs and the secret gate (see above). Before the promotion `main` was v2.0.16's (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor |
-| Docker Hub | `:v2.0.20` = `:latest` (= prod, `f617c9ca…`; `:latest` moved 2026-10-06 22:52 ET) · `:v2.0.19` · `:v2.0.16` |
+| Docker Hub | `:v2.0.20` = `:latest`, multi-arch `4e9d840b…` since 2026-10-17 18:41 ET; `:v2.0.20-amd64` = prod (`f617c9ca…`) · `:v2.0.19` · `:v2.0.16` |
 | Trackers | repo: #380 informational (#440 closed S155) · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
 
 ## Blockers
@@ -83,8 +91,8 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 ## Model tier
 
 **S156 ran on Opus 5.5** (positioning, attribution and the public docs: judgment work), switched
-with a bare `/model`, which persists: restore the Sonnet floor at close. S157 is watches plus job 3:
-Sonnet.
+with a bare `/model`, which persists: **the Sonnet floor is the owner's to restore** (not done at
+S156's close). S157 is watches plus job 3: Sonnet, Opus for #453's design.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -104,4 +112,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-17 (S156). v2.0.20 steady in prod; README, DEPLOY and examples rewritten for a new user (DEC-0213); ROADMAP reconciled._
+_Last updated: 2026-10-18 (S156 close). v2.0.20 steady in prod; public docs rewritten (DEC-0213); images multi-arch (DEC-0214/0215); ROADMAP P0.8 + P1.9 planned with issues._

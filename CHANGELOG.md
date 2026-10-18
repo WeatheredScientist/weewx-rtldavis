@@ -16,8 +16,9 @@ under [Pre-S16].
   pushes `ghcr.io/…:vX.Y.Z-arm64` on a release (or `backfill-vX.Y.Z`) tag with the job's own token;
   `scripts/join_multiarch.sh` joins it with marvin's `:vX.Y.Z-amd64` into Hub's multi-arch
   `:vX.Y.Z`; `scripts/smoke_image.sh` is now shared by both workflows; `tests/test_image_publish.py`
-  guards the workflows' security shape (positive-controlled: 6 red). Not yet published: v2.0.20's
-  backfill waits for the owner's go.
+  guards the workflows' security shape (positive-controlled: 6 red). v2.0.20's backfill ran
+  2026-10-17 18:41 ET on the owner's go: `:v2.0.20` and `:latest` are multi-arch (amd64 + arm64),
+  `:v2.0.20-amd64` keeps prod's digest.
 
 ## [S156] — 2026-10-17 — README for a new user, `docs/DEPLOY.md`, cleaned systemd examples (DEC-0213)
 
@@ -28,6 +29,11 @@ under [Pre-S16].
   **`docker-compose.yml`**: hardened, per-file mounts dropped.
 - Scrub: a home-directory path in `.claude/settings.json`, a county name in DEC-0021, the station's
   own `iss_channel` in `weewx.conf.example` (now 1). Internal records keep their machine names.
+- **ROADMAP P0.8 (public readiness, five phases) and P1.9 (decoder fixes in Go)** with issues
+  #451–#456 and #458–#459 (#457). Filed `eaglehunt-weather-dashboard#936`: one Opus research
+  session on non-Davis platforms, with a weewx section (the live feed's fixed 13-field list, the
+  InfluxDB uploader as an extension, driver-agnostic filters, an rtl_433 sibling image);
+  `eaglehunt-ops#422` for visibility. README's Requirements line now says multi-arch.
 
 ## [S155] — 2026-10-14 — `loop_json_writer.py` 1.0.0 and the `loopjson` WeeWX extension (#440, DEC-0211)
 
