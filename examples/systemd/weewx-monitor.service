@@ -1,0 +1,48 @@
+# weewx_monitor.py as a systemd service: email alerts for uploader outages,
+# reception drops, a low ISS battery and its own stale input. See docs/DEPLOY.md.
+#
+# Before enabling, replace in this file:
+#   weewx        the host user that owns /srv/weewx
+#   /srv/weewx   the same directory as in weewx-rtldavis.service
+#
+# Install: sudo install -m 0644 weewx-monitor.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now weewx-monitor
+
+[Unit]
+Description=weewx-rtldavis monitor (alerts by email)
+# Ordering only: the monitor must keep running when weewx is down, since
+# that is when it is useful.
+After=weewx-rtldavis.service
+Wants=weewx-rtldavis.service
+
+[Service]
+Type=simple
+User=weewx
+Group=weewx
+# ALERT_FROM, ALERT_TO, GMAIL_PASS, STATION_NAME (see monitor.env.example).
+# Keep it 0600 and owned by root or the weewx user; never commit it.
+EnvironmentFile=/srv/weewx/monitor.env
+Environment=WEEWX_RTLDAVIS_DIR=/srv/weewx
+Environment=WEEWX_LOG=/srv/weewx/logs/weewx.log
+Environment=WEEWX_ARCHIVE_DB=/srv/weewx/weewx-data/archive/weewx.sdb
+Environment=WEEWX_CONTAINER=weewx-rtldavis
+# Detect and email, never act. 'restart_unit' lets it restart
+# weewx-rtldavis.service on a stall, which needs a sudoers line for
+# `systemctl restart weewx-rtldavis.service` (see REMEDY_SYSTEMCTL in
+# weewx_monitor.py). 'usb_reset' is the Synology remedy; don't use it here.
+Environment=REMEDY_MODE=none
+Environment=REMEDY_UNIT=weewx-rtldavis.service
+ExecStart=/usr/bin/python3 /srv/weewx/weewx_monitor.py
+Restart=always
+RestartSec=30
+MemoryMax=192M
+CPUQuota=10%
+# Set to false if you choose REMEDY_MODE=restart_unit: sudo needs it.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/weewx/logs
+
+[Install]
+WantedBy=multi-user.target

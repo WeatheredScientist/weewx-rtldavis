@@ -1,0 +1,141 @@
+name: image publish (arm64)
+
+# DEC-0215: ready-made linux/arm64 images (a Raspberry Pi on a 64-bit OS). On a release tag this
+# builds the tagged tree natively on a GitHub-hosted arm64 runner, smoke-tests it, and pushes it to
+# GitHub's registry as ghcr.io/weatheredscientist/weewx-rtldavis:vX.Y.Z-arm64. That is a staging
+# copy: the release session joins it with marvin's amd64 image into Docker Hub's multi-arch
+# :vX.Y.Z with scripts/join_multiarch.sh, from the owner's laptop, after a go in chat.
+#
+# No stored secret: the only credential is the job's own GITHUB_TOKEN, scoped to this repo's
+# packages and expired when the job ends. Docker Hub write access never enters GitHub, because a
+# Hub token cannot be limited to one repository and could move :latest.
+#
+# Never runs on a pull request (a PR must not reach the push step) and never on a self-hosted
+# runner (OPS-DEC-0117).
+#
+# Triggers:
+#   vX.Y.Z           a release tag: builds that tag's tree.
+#   backfill-vX.Y.Z  builds the tree of the EXISTING tag vX.Y.Z, for releases cut before this
+#                    workflow existed. Push it on a dev commit that carries this file; delete it
+#                    once the image is published.
+#   workflow_dispatch  re-runs by hand; GitHub offers it only once this file is on main.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "backfill-v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build, e.g. v2.0.21"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: image-publish-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04-arm
+    env:
+      GHCR_IMAGE: ghcr.io/weatheredscientist/weewx-rtldavis
+    steps:
+      - name: Resolve the release to build
+        id: rel
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          name="${INPUT_TAG:-$REF_NAME}"
+          version="${name#backfill-}"
+          if ! grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' <<<"$version"; then
+            echo "::error::not a release tag: $name"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # This workflow's own commit: the smoke script and DEC-0214's pins come from here, so a
+      # backfill of an older tree is checked with today's tools.
+      # Actions are pinned to a commit in this job because it holds a write token.
+      - name: Check out the workflow's commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          path: tools
+          persist-credentials: false
+
+      - name: Check out the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: refs/tags/${{ steps.rel.outputs.version }}
+          path: src
+          persist-credentials: false
+
+      - name: The Dockerfile names this version
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+        run: grep -qx "# weewx-rtldavis ${VERSION}" src/Dockerfile
+
+      # A tree from before DEC-0214 fetches upstream's branch heads. Build it only if those heads
+      # still hold the pinned bytes (src.tgz) and the pinned commit (weewx-influx2, whose zip bytes
+      # differ from the commit archive's only by the top directory's name).
+      - name: Unpinned tree, upstream still matches the pins
+        run: |
+          if grep -q '^ARG RTLDAVIS_SRC_SHA256=' src/Dockerfile; then
+            echo "tree is pinned (DEC-0214); its build checks the sha256 itself"; exit 0
+          fi
+          src_sha="$(sed -n 's/^ARG RTLDAVIS_SRC_SHA256=//p' tools/Dockerfile)"
+          influx_commit="$(sed -n 's/^ARG INFLUX2_COMMIT=//p' tools/Dockerfile)"
+          curl -fsSL -o "$RUNNER_TEMP/src.tgz" \
+            https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz
+          echo "${src_sha}  $RUNNER_TEMP/src.tgz" | sha256sum -c -
+          head="$(git ls-remote https://github.com/david-lutz/weewx-influx2 refs/heads/master | cut -f1)"
+          test "$head" = "$influx_commit"
+
+      - name: Build
+        id: build
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+        run: |
+          rev="$(git -C src rev-parse HEAD)"
+          echo "revision=$rev" >> "$GITHUB_OUTPUT"
+          docker build --progress=plain \
+            --label "org.opencontainers.image.source=https://github.com/WeatheredScientist/weewx-rtldavis" \
+            --label "org.opencontainers.image.revision=${rev}" \
+            --label "org.opencontainers.image.version=${VERSION}" \
+            -t weewx-rtldavis:ci src
+
+      - name: Smoke test
+        run: tools/scripts/smoke_image.sh weewx-rtldavis:ci aarch64 src/requirements.txt
+
+      - name: Push to GHCR
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          ref="${GHCR_IMAGE}:${VERSION}-arm64"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          # A published tag is never overwritten. To redo one, delete that package version first.
+          if docker manifest inspect "$ref" >/dev/null 2>&1; then
+            echo "::error::$ref already exists"; exit 1
+          fi
+          docker tag weewx-rtldavis:ci "$ref"
+          docker push "$ref"
+          docker logout ghcr.io
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+          REV: ${{ steps.build.outputs.revision }}
+        run: |
+          {
+            echo "Pushed \`${GHCR_IMAGE}:${VERSION}-arm64\` built from \`${REV}\`."
+            echo
+            echo "Join it into Docker Hub from the laptop (dry run first, then \`--apply\`):"
+            echo
+            echo "    scripts/join_multiarch.sh ${VERSION}"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -3,7 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-29 (S146 — **scheduled full reconciliation, tripwire fired exactly on
+**Last updated:** 2026-10-17 (S156 — **scheduled full reconciliation, tripwire fired exactly on
+time**: three lines moved, detail in the guardrail section. Next check: S166.)
+Prior: 2026-09-29 (S146 — **scheduled full reconciliation, tripwire fired exactly on
 time**: every open P0–P3 item read against `BOOT.md`/`DECISIONS.md`/`CHANGELOG.md` fresh, plus
 DEC-0196 through DEC-0205 classed one by one. **Four lines moved.** (1) The P0 freeze item gained
 S144's lead (corrupt CRC-valid frames sit at outage onsets), marked a lead; the rate and the
@@ -133,11 +135,18 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S156** (~10 sessions out). If the session counter is
-  at or past S156 and this line still says S156, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136 and S146 did (diff every
+- **Next scheduled reconciliation check: by S166** (~10 sessions out). If the session counter is
+  at or past S166 and this line still says S166, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146 and S156 did (diff every
   open/pending item here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S146, 2026-09-29** — tripwire fired exactly on time. **Four lines
+- Last full reconciliation: **S156, 2026-10-17** — tripwire fired exactly on time. **Three lines
+  were behind and are fixed.** P3's extension item shipped at S155 (DEC-0211) but was still
+  unchecked; P3's INTERFACES line lacked DEC-0211's `writer` row; P0.7 still called #421 open
+  (closed S151, DEC-0210). Classed, no line: DEC-0206 and DEC-0208 (releases of items already
+  here), DEC-0207 (engine-bump tooling), DEC-0209 (already on P3's line), DEC-0212 (history scan),
+  DEC-0213 (adopter docs). Verified current: the P0 freeze row (`BOOT.md` blocker 1 unchanged),
+  the DB-lock row, P1, P1.8, P2's header.
+- Prior full reconciliation: **S146, 2026-09-29** — tripwire fired exactly on time. **Four lines
   were behind and are fixed; nothing else stale.** The pass also classed every DEC since S136
   (DEC-0196 to DEC-0205) instead of trusting the banner. Moved: the P0 freeze item (S144's lead,
   labeled a lead: the reverse rate is unmeasured, so neither the 1.31/day figure nor "mechanism
@@ -330,8 +339,8 @@ re-verified by the main thread before filing. The ten high items (#402–#411, `
 are fixed (PRs #412–#418) and **shipped**: the monitor's fixes (#413) went live with a restart on
 2026-09-29 09:31 ET, and the driver and uploader fixes (#412, #414) as the v2.0.18 image at
 16:37 ET (DEC-0206). The 29 medium/low items are the open cleanup queue in
-`docs/CODE_REVIEW_S145.md`: unordered, not scheduled; the secret gate's four detector holes are
-#421. Same shape as P0.6 above
+`docs/CODE_REVIEW_S145.md`: unordered, not scheduled. The secret gate's four detector holes (#421)
+are closed (S151, DEC-0210). Same shape as P0.6 above
 (`docs/CODE_REVIEW_S24.md`).
 
 ## P0.8 — Public readiness (S156–) — 🔶 OPEN, ordered by what a new user hits first
@@ -892,17 +901,19 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       of rows, found when HLF read the bucket. The doc now says so.
       **Built S150 (DEC-0209):** `eaglehunt-ops#357`'s ask for WeatherLink's `bar_absolute` as a
       measured station pressure is option (A) — it becomes weewx's own `pressure`, `altimeter`
-      derives from it; ships with v2.0.20, boundary in `DATA_ERRATA.md` DISC-0002. **Corrected S97:** this line
+      derives from it; ships with v2.0.20, boundary in `DATA_ERRATA.md` DISC-0002. **S155
+      (DEC-0211)** added the `writer` version row to §1 and fixed its stale `data_service` opening.
+      **Corrected S97:** this line
       previously also claimed DEC-0053's station-identity finding was documented — it was not; only
       DEC-0053's cache-bounding finding (Finding 1) had actually made it into the doc. §2 now carries
       the missing station-identity/series-key trap (Finding 2), closing that gap for real. Finding 3
       (the SQLite archive's own missing correction flag) stays in `DATA_ERRATA.md` on purpose —
       INTERFACES.md scopes itself to the two *published* surfaces, and SQLite is neither. This item
       is about closing what remains, not starting from zero.)
-- [ ] Ship `loop_json_writer.py` as an installable WeeWX extension (`weewx#440`, the dashboard's
-      DEC-0348 ask) — **designed S153 (DEC-0211)**: a `loopjson-vX.Y.Z` release asset of this repo,
-      a `writer` version key, three no-op-for-prod code changes, CI proof on the Simulator. Build is
-      one Sonnet session; prod sees only the new key.
+- [x] Ship `loop_json_writer.py` as an installable WeeWX extension (`weewx#440`, the dashboard's
+      DEC-0348 ask) — **designed S153, shipped S155 (DEC-0211)**: release `loopjson-v1.0.0` of this
+      repo, proved on a clean WeeWX 5.5.2; prod writes `writer: loop_json_writer/1.0.0`. The
+      adopter README is `extensions/loopjson/README.md`, linked from the main README since S156.
 - [x] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005) — done S47.
 
 ---

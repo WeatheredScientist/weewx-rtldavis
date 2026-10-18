@@ -1,634 +1,211 @@
 # weewx-rtldavis
 
-An unofficial Docker distribution of a Davis Vantage receiver stack: [weewx](https://weewx.com/) plus a **patched** version of Luc Heijst's [rtldavis](https://github.com/lheijst/weewx-rtldavis) driver. It intercepts a Davis Vantage station off the air with an RTL-SDR USB dongle and uploads to multiple weather services — no proprietary Davis hardware required.
+Run a Davis Vantage weather station in [WeeWX](https://weewx.com/) with an inexpensive RTL-SDR USB
+radio instead of a Davis console.
 
-> **This is not stock upstream.** The driver shipped here is a fork of rtldavis v0.20 and reports
-> itself as `0.20+ws.6` (`ws.5` in the older v2.0.16 image on Docker Hub). It carries a rain-counter glitch filter, a decode-layer sensor plausibility
-> filter, and five bug fixes that do not exist upstream — see
-> **[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)** for every divergence, why it is there, and
-> whether it is headed upstream.
->
-> This project is **not affiliated with or endorsed by** Luc Heijst, Vince Skahan, or the weewx
-> project. It is built on their work (see [Credits](#credits)); its bugs are its own. GPLv3.
+A Davis Vantage Pro2's outdoor sensor suite (the ISS) broadcasts its readings on 915 MHz. The
+console is the only receiver Davis sells, but the broadcast is a plain radio signal. This project
+packages WeeWX with Luc Heijst's [rtldavis](https://github.com/lheijst/weewx-rtldavis) decoder and
+driver in one Docker image, so a dongle can stand in for the console and the data stays yours.
 
-📦 **Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
+It is an unofficial distribution, and it is not stock upstream: the driver carries fixes and
+data-quality filters that upstream does not have. Every divergence, and why, is in
+[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md). It is not affiliated with or endorsed by the
+upstream authors (see [Credits](#credits)), and its bugs are its own. GPLv3.
+
+**Docker Hub:** [`weatheredscientist/weewx-rtldavis`](https://hub.docker.com/r/weatheredscientist/weewx-rtldavis)
+
+## What's different from stock rtldavis
+
+- **Upstream bugs fixed.** Phantom rain from the rain-counter wraparound handler. Outside
+  temperatures below 0 °F decoded as about +400 °F. A default config line that silently drops the
+  radio to the EU band. A reception percentage that read about 73% on a healthy link, because the
+  decoder booked the station's own repeat packets as misses. Leftover decoder processes after
+  every stall.
+- **The CRC is not trusted alone.** A corrupt frame can pass its CRC. Every reading is checked
+  against the sensor's physical limits, and one impossible value discards the whole frame. A
+  rejected reading becomes empty, never a substituted value.
+- **Runs unprivileged.** No `--privileged`: it runs as a non-root user with every capability
+  dropped.
+- **Extras.** Uploaders for Windy, OpenWeatherMap and WeatherCloud; an InfluxDB 2 uploader with
+  TLS verification on; a WeatherLink pressure fetch; a live JSON feed; a host-side monitor.
+
+The bug fixes are offered upstream:
+[lheijst/weewx-rtldavis#22](https://github.com/lheijst/weewx-rtldavis/pull/22) (rain),
+[#23](https://github.com/lheijst/weewx-rtldavis/pull/23) (temperature),
+[lheijst/rtldavis#7](https://github.com/lheijst/rtldavis/pull/7) (repeat packets),
+[david-lutz/weewx-influx2#1](https://github.com/david-lutz/weewx-influx2/pull/1) (TLS).
+
+## Requirements
+
+- A Davis Vantage Pro, Pro2 or Vue ISS. US 915 MHz is what this is tested on; the driver also
+  supports EU and NZ.
+- An RTL-SDR dongle (tested: RTL-SDR Blog V3, USB id `0bda:2838`) and a vertical 915 MHz antenna.
+- A Linux host with Docker. Images are amd64. On arm64 (a Raspberry Pi), build from source;
+  that path is untested here. Windows and macOS pass USB through a VM, and the added timing jitter
+  can break the radio's hop tracking.
+
+## Quick start
+
+**1. Plug in the dongle and check it.** `lsusb | grep 0bda:2838` should show it. On Debian and
+Ubuntu the kernel's TV driver claims the dongle first; turn it off:
+
 ```bash
-docker pull weatheredscientist/weewx-rtldavis:v2.0.19
+echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/blacklist-rtl-sdr.conf
 ```
-Pin a version tag (`:v2.0.19`) for reproducible deploys. `:latest` is not moved automatically and
-still points at v2.0.13; v2.0.17 and v2.0.18 were never published as images, so build those from
-their tags if you need them.
 
-> **v2.0.19 (2026-10-02; on Docker Hub as `:v2.0.19`):** the weewx engine moves from 5.5.0 to 5.5.2. The driver and uploaders are unchanged.
-> With both `rapidfire` and `archive_post` on in `[[Wunderground]]`, the rapidfire thread now posts
-> to Weather Underground's own real-time endpoint (`rtupdate.wunderground.com`) instead of sharing
-> the archive URL.
->
-> **v2.0.18 (source release, 2026-09-29; no Docker Hub image, its changes are in `:v2.0.19`):** the first record after every driver start or counter reset no longer misreads
-> `rxCheckPercent` (the slot baseline was one packet off at seeding), and the OpenWeatherMap and
-> Windy uploaders now send rain in millimeters. Both had sent centimeters, 10× low, since they were
-> written, and Windy also sent one minute's rain instead of the last hour's. Driver now reports
-> `0.20+ws.6`.
->
-> **v2.0.17 (source release, 2026-09-28; no Docker Hub image, its changes are in `:v2.0.19`):** the decode filter now also treats a message type no Davis transmitter sends as
-> proof of a corrupt frame, and a corrupt frame's battery-low bit is discarded along with its
-> weather fields. Before this, corrupt frames at reception collapses produced one-minute false
-> ISS low-battery readings and, occasionally, a phantom wind gust. The host monitor also reports
-> the ISS battery flag in each reception summary, and emails once when the flag persists across
-> healthy reception. Driver still reports `0.20+ws.5`.
->
-> **Current version:** v2.0.16 — **upgrade if you are on any earlier tag.**
-> **New in v2.0.15–v2.0.16:** two data-accuracy fixes to the reception-quality metric, both
-> confirmed live in production. The Go demodulator was double-decoding a fraction of legitimate
-> transmissions and discarding the repeat as a phantom "missed" packet, so every reception
-> percentage this metric ever reported undercounted a healthy link — fixed with a time-gated
-> duplicate-suppression window (`-dupwindow`, default 500 ms). Separately, `rxCheckPercent` moved
-> from a wall-clock floor-division denominator (which structurally read up to 105% on a
-> fully-received minute) to counting each transmitter's own inter-arrival slots, so 100% is now a
-> true ceiling rather than a clamp. No sensor field, rain, or wind reading is affected by either
-> fix — see `docs/DECISIONS.md` (DEC-0134 through DEC-0139) and `docs/DATA_ERRATA.md` (DISC-0001)
-> for the full history and exact boundary timestamps. Driver → `0.20+ws.5`.
->
-> **From v2.0.14:** weewx 5.4.0 → 5.5.0; a reception-quality-correlated wind-gust guard; an
-> opt-in InfluxDB courtesy yield for stations sharing NAS/network I/O with another service.
->
-> **From v2.0.13:** hardening from an LNA-removal reception investigation — driver child-process
-> reap fixes, self-classifying stall/data-drought log diagnosis, and a persistent
-> reception-episode ledger.
->
-> **From v2.0.12:** a `BIAS_TEE` environment variable (default `1`, so behavior is unchanged if
-> you do nothing) — set `BIAS_TEE=0` when no inline LNA is in circuit, and the entrypoint drives the
-> RTL-SDR v3 bias tee explicitly off rather than trusting the power-on default. Also fixes a driver
-> logging bug that discarded rtldavis's own error output when the process failed to start: the
-> "process is not running" path formatted a Python generator's repr instead of the error text, so
-> the one message explaining *why* the decoder died never reached the log.
->
-> **From v2.0.9:** frame-level co-rejection in the decode-layer sensor filter. Davis frames carry
-> wind in every packet plus one rotating sensor payload, and a corrupt frame can pass CRC (multi-bit
-> errors). Previously each field was checked independently, so a frame whose humidity decoded to an
-> impossible 144.9% could still contribute a phantom 39 mph wind gust from its wind bytes — which is
-> exactly what happened on 2026-07-27 (published to every connected network before detection). Now a
-> provably-impossible value in ANY field of a frame rejects the whole frame's weather fields, and the
-> rain counter is not resynced to it. Zero new tunables. Also quiets a spurious once-per-calm-stretch
-> log warning in the loop-JSON writer (issue #74).
->
-> **From v2.0.8:** the driver no longer publishes frequency-hop telemetry as its own dataless LOOP
-> packet — it now rides in on the next real sensor reading instead, which removes a ~1.6x overcount in
-> published/reception metrics for every uploader (Wunderground RapidFire etc.). Also adds a permanent
-> duplicate-frame counter (one INFO log line per archive period) so how often the SDR demodulator
-> double-decodes a burst is a standing measurement, not a one-off debug session.
->
-> Still carried from v2.0.6, and still the reason to upgrade from anything older: (1) **the driver you
-> actually run** — earlier compose files bind-mounted the *stock* driver over the patched one, so the
-> rain-glitch filter and SensorQC were silently inert; (2) **StdPrint removed** — weewx's default printed
-> every LOOP packet to stdout, and (3) **the console log handler defaults to `WARNING`**. Both of those fed
-> a container-freeze hazard: stdout is a pipe, and if the Docker log consumer stalls, the next write
-> **blocks forever** — no crash, no traceback, and a container that still reports `Up`. That cost us a
-> 7-hour outage. See the [CHANGELOG](CHANGELOG.md).
-> **Developed and tested on:** Davis Vantage Pro 2 Plus ISS · Synology DS918+ NAS · DSM 7.3.2-86009 Update 3
-> **Base image:** Ubuntu 26.04 LTS · Python 3.14 · weewx 5.5.2
-> **Previous version:** [v1.0-ubuntu22](https://github.com/weatheredscientist/weewx-rtldavis/releases/tag/v1.0-ubuntu22) — Ubuntu 22.04 · Python 3.10 (stable, frozen)
-
----
-
-## Versioning — two numbers, because there are two things
-
-You will see two different version numbers in this project. They are deliberately separate and
-neither claims to supersede the other.
-
-**The image version — `v2.0.16`.** This versions *this distribution*: the Docker image, its base
-OS, the uploaders and services packaged with it. The **major digit tracks the base OS / Python
-generation**, which is the real compatibility boundary for a container — anyone who layers their
-own image on top, pins a Python wheel, or compiles against system libraries is broken by a base
-change. Hence `v1.0-ubuntu22` (Ubuntu 22.04 / Python 3.10) → `v2.0-ubuntu26` (Ubuntu 26.04 /
-Python 3.14). Patch releases within a major are ordinary fixes and features.
-
-**The driver version — `0.20+ws.6`.** This is a
-[PEP 440 local version identifier](https://peps.python.org/pep-0440/#local-version-identifiers),
-the Python-native way to say "upstream's release, plus our local patches":
-
-| Part | Meaning |
-|------|---------|
-| `0.20` | **upstream's** version — Luc Heijst's rtldavis v0.20. Ours to point at, not to claim. It moves only if we rebase onto a new upstream release. |
-| `ws` | **W**eathered**S**cientist — this fork's maintainer, matching the GitHub org and Docker Hub namespace. |
-| `N` | our patch level on top of that upstream release (`6` from v2.0.18; `5` from v2.0.13 through v2.0.17). It rises with every behavior change, per rule 1 below. |
-
-Releases v2.0.14 through v2.0.17 each changed the driver without a bump, so they all report `ws.5`;
-v2.0.18 reports `ws.6` (the slot-count fix from issue #402 plus items 14-18 of
-[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)).
-
-Two rules follow, and we hold ourselves to both:
-
-1. **`ws.N` increments whenever the file's behavior changes.** The startup banner is how you tell
-   which driver is actually running, so a release that changed the driver must be distinguishable
-   in the log. (Until 2026-07-13 this driver logged a bare `0.20` while carrying a rain filter and
-   five bug fixes — anyone debugging from those logs was misled. That is the mistake this rule
-   exists to prevent.)
-2. **Each patched file carries its own `ws.N`.** `rtldavis.py` is at `ws.6` while `influx.py` is at
-   `ws.2`, because they are different upstream works with different patch lineages. A shared counter
-   would imply changes that never happened.
-
-**We never renumber into upstream's space.** Bumping the driver to `0.21` would collide with a
-version Luc may yet publish, and two different things called `weewx-rtldavis 0.21` is precisely the
-confusion this scheme avoids. Full provenance for every borrowed component is in
-**[CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md)**.
-
----
-
-## What This Does
-
-This image lets your Davis Vantage weather station upload live data to:
-
-| Service | URL | Default interval |
-|---------|-----|-----------------|
-| Weather Underground | wunderground.com | Rapidfire (2.5s) + archive (1 min) |
-| PWSweather | pwsweather.com | 1 min |
-| CWOP/APRS | wxqa.com | 5 min — feeds NOAA/MADIS |
-| WOW Met Office | wow.metoffice.gov.uk | 5 min — **being decommissioned late 2026** |
-| WOW-BE | wow.meteo.be | 5 min — WOW successor |
-| AWEKAS | awekas.at | 5 min |
-| WeatherCloud | weathercloud.net | 10 min (Basic plan) |
-| Windy | windy.com | 5 min |
-| OpenWeatherMap | openweathermap.org | 1 min |
-
----
-
-## Hardware Requirements
-
-- **Davis Vantage Pro, Pro 2, or Vue** ISS transmitter
-- **RTL-SDR USB dongle** — tested with RTL-SDR Blog V3 (Realtek RTL2838, USB ID 0bda:2838 or similar)
-- A Linux-based computer or NAS to run Docker — tested on Synology DS918+
-
-### ⚠️ Windows and macOS — potential USB limitations
-
-The Davis ISS uses **frequency hopping spread spectrum (FHSS)** across 51 channels in the 915 MHz band. The rtldavis driver needs real-time, low-latency USB access to track these hops. On Windows, Docker Desktop passes USB through WSL2 which introduces timing jitter that can disrupt frequency hop tracking — this has been observed to cause failures. macOS has been confirmed working in some configurations despite similar USB virtualization. **Linux is the most reliable host** — either a Linux PC, server, or a Linux-based NAS such as Synology running Docker natively. Windows support is an open area of investigation; macOS may work depending on configuration.
-
-### Antenna Tips
-- Mount the antenna **vertically** — Davis ISS transmits with vertical polarization
-- Use a **USB extension cable** (1–3m) to move the dongle away from your computer/NAS to reduce RF interference
-- Avoid placing the dongle inside metal enclosures
-- For challenging RF environments (long distances, walls), consider tuning the RTL-SDR gain manually: add `-gain 400` to the `cmd` line in `weewx.conf` under `[Rtldavis]`
-
----
-
-## Quick Start
-
-### 1. Install Docker
-- **Synology NAS:** Install Container Manager from Package Center
-- **Linux:** Install [Docker Engine](https://docs.docker.com/engine/install/)
-
-### 2. Plug in your RTL-SDR dongle
-Connect the dongle to a USB port. Verify it is detected:
 ```bash
-lsusb | grep -i realtek
-# Should show a line containing: ID 0bda:2838 Realtek Semiconductor Corp.
+sudo rmmod dvb_usb_rtl28xxu
 ```
 
-> **Linux hosts:** the kernel's own DVB-T driver (`dvb_usb_rtl28xxu`) auto-loads and claims
-> this chipset by default on stock Debian/Ubuntu, which then blocks the container from
-> opening the dongle even though `lsusb` shows it fine. If step 6 below shows no data,
-> blacklist it on the **host** (not in the container) and reboot or re-plug the dongle:
-> ```bash
-> echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/blacklist-rtl-sdr.conf
-> sudo rmmod dvb_usb_rtl28xxu 2>/dev/null || true
-> ```
-> Not needed on Synology DSM — its kernel ships no DVB modules to begin with.
+**2. Let your user open the dongle**, so the container doesn't need root:
 
-### 3. Create directories
 ```bash
-mkdir -p /your/path/weewx-data
-mkdir -p /your/path/logs
+echo "SUBSYSTEM==\"usb\", ATTR{idVendor}==\"0bda\", ATTR{idProduct}==\"2838\", GROUP=\"$(id -gn)\", MODE=\"0660\"" | sudo tee /etc/udev/rules.d/60-rtl-sdr.rules
 ```
-On Synology: `/volume1/docker/weewx-rtldavis/weewx-data` and `/volume1/docker/weewx-rtldavis/logs`
 
-### 4. Run the container
 ```bash
-docker run -d \
-  --name weewx-rtldavis \
-  --privileged \
-  --restart unless-stopped \
-  -e TZ=America/New_York \
-  -v /dev/bus/usb:/dev/bus/usb \
-  -v /your/path/weewx-data:/opt/weewx-data \
-  -v /your/path/logs:/var/log/weewx \
-  weatheredscientist/weewx-rtldavis:latest
-```
-> `--privileged` is required for USB device access. Set `TZ` to your local timezone (e.g. `America/Los_Angeles`, `Europe/London`) to ensure daily rain totals reset at local midnight.
-
-### 5. Configure weewx
-The container creates a default `weewx.conf` on first run. Edit it with your station details and credentials. A fully documented template is available: [weewx.conf.example](weewx.conf.example)
-
-Key settings:
-```ini
-[Station]
-    location = Your Town, State
-    latitude = XX.XXXX
-    longitude = -XX.XXXX
-    altitude = XXX, foot
-
-[Rtldavis]
-    transceiver_frequency = US    # US, EU, or NZ
-    iss_channel = 1               # Match your ISS DIP switch setting
-    rain_bucket_type = 0          # 0 = 0.01 inch, 1 = 0.2 mm
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-### 6. Restart and verify
+**3. Copy the starter config out of the image.** A bind mount hides what the image has at that
+path, so without this WeeWX starts with no `weewx.conf` at all.
+
 ```bash
-docker restart weewx-rtldavis
-tail -f /your/path/logs/weewx.log
-```
-You should see lines like:
-```
-weewx.restx INFO Wunderground-RF: Published record ...
-weewx.restx INFO CWOP: Published record ...
+mkdir -p ~/weewx/weewx-data ~/weewx/logs
 ```
 
----
-
-## Upload Rate Reference
-
-| Service | Recommended | Maximum | Notes |
-|---------|------------|---------|-------|
-| WU Rapidfire | 2.5 sec | 2.5 sec | Every LOOP packet |
-| WU PWS archive | 60 sec | 60 sec | Every archive record |
-| PWSweather | 60 sec | 60 sec | No hard limit documented |
-| CWOP | 300 sec | 300 sec | MADIS samples every 5 min |
-| WOW | 300 sec | 300 sec | 429 error confirmed if < 5 min |
-| WOW-BE | 300 sec | 300 sec | WOW successor |
-| AWEKAS | 300 sec | 300 sec | Account minimum |
-| WeatherCloud | 600 sec | 60 sec* | *60 sec requires paid Pro/Premium plan |
-| Windy | 300 sec | 300 sec | Documented 5 min interval |
-| OWM | 60 sec | 60 sec | Matches finest aggregation bucket |
-
-> ⚠️ **WOW (Met Office) is being decommissioned in late 2026.** Use WOW-BE as the replacement.
-
----
-
-## Enabling Weather Services
-
-### Weather Underground
-1. Register at [wunderground.com/member/devices](https://www.wunderground.com/member/devices)
-2. In `weewx.conf`:
-```ini
-[[Wunderground]]
-    enable = true
-    station = YOUR_STATION_ID
-    password = YOUR_API_KEY
-    rapidfire = true
-    archive_post = true
-```
-
-### PWSweather
-1. Register at [pwsweather.com](https://pwsweather.com)
-2. In `weewx.conf`:
-```ini
-[[PWSweather]]
-    enable = true
-    station = YOUR_STATION_ID
-    password = YOUR_API_KEY
-```
-
-### CWOP (free, feeds NOAA/MADIS)
-1. Register at [wxqa.com](http://wxqa.com)
-2. In `weewx.conf`:
-```ini
-[[CWOP]]
-    enable = true
-    station = YOUR_CWOP_ID
-    passcode = -1
-    server_list = cwop.aprs.net:14580, cwop.aprs.net:23
-    post_interval = 300
-```
-
-### WOW Met Office
-> ⚠️ Being decommissioned late 2026. Use WOW-BE instead.
-1. Register at [wow.metoffice.gov.uk](https://wow.metoffice.gov.uk)
-2. In `weewx.conf`:
-```ini
-[[WOW]]
-    enable = true
-    station = YOUR_STATION_UUID
-    password = "YOUR_AWS_PIN"
-    post_interval = 300
-```
-
-### WOW-BE (Belgian Met Office — WOW successor)
-1. Register at [wow.meteo.be](https://wow.meteo.be) — create an account and register your station
-2. You will receive an email with your station ID (short and long UUID) and authentication key
-3. In `weewx.conf`:
-```ini
-[[WOW-BE]]
-    enable = true
-    station = YOUR_STATION_UUID
-    password = "YOUR_AUTH_KEY"
-    post_interval = 300
-```
-> Requires weewx 5.2.0 or higher. The endpoint `https://wow.meteo.be/api/v2/send` is configured automatically.
-
-### AWEKAS
-1. Register at [awekas.at](https://www.awekas.at)
-2. In `weewx.conf`:
-```ini
-[[AWEKAS]]
-    enable = true
-    username = YOUR_USERNAME
-    password = YOUR_PASSWORD
-    post_interval = 300
-```
-
-### WeatherCloud
-1. Register at [app.weathercloud.net](https://app.weathercloud.net)
-2. In `weewx.conf`:
-```ini
-[[WeatherCloud]]
-    enable = true
-    id = YOUR_DEVICE_ID
-    key = YOUR_DEVICE_KEY
-    post_interval = 600
-```
-
-### Windy
-1. Register at [stations.windy.com](https://stations.windy.com)
-2. In `weewx.conf`:
-```ini
-[[Windy]]
-    enable = true
-    station_id = YOUR_STATION_ID
-    password = YOUR_API_KEY
-    post_interval = 300
-```
-
-### OpenWeatherMap
-1. Create account at [openweathermap.org](https://openweathermap.org)
-2. Register your station via their [Stations API](https://openweathermap.org/api/stations)
-3. In `weewx.conf`:
-```ini
-[[OWM]]
-    enable = true
-    api_key = YOUR_API_KEY
-    station_id = YOUR_INTERNAL_STATION_ID
-```
-
-> See [weewx.conf.example](weewx.conf.example) for all services with full documentation and rate limit comments.
-
----
-
-## Synology NAS: USB Watchdog, Email Alerts & Reception Monitoring
-
-The included `weewx_monitor.py` runs on the NAS host (outside Docker) and:
-- Detects rtldavis stalls and automatically resets the USB dongle
-- Sends email alerts when any service has been down beyond its threshold
-- Sends recovery emails when services resume
-- Repeats alerts every 2 hours for ongoing outages
-- Tracks WU Rapidfire RF reception quality — alerts when packet reception drops below threshold
-- Sends a daily email summary of RF reception by hour
-- Reports the ISS battery-low flag in each reception summary, and emails once when the flag is set
-  across several minutes of healthy reception (a lone flagged minute during a reception collapse is
-  a corrupt frame, not the battery)
-
-### RF Reception Monitoring
-
-The monitor tracks how many WU Rapidfire packets are received per 60-second window (expected: ~24/min for Davis VP2). If reception drops below 60% for 5 consecutive minutes, an alert email is sent. A 5-minute summary is logged, and a full hourly breakdown is emailed daily at midnight.
-
-Default alert thresholds:
-
-| Service | Alert after |
-|---------|------------|
-| Wunderground-RF | 10 min |
-| PWSweather | 60 min |
-| CWOP | 60 min |
-| WOW | 60 min |
-| WOW-BE | 60 min |
-| AWEKAS | 60 min |
-| Windy | 60 min |
-| WeatherCloud | 30 min |
-| OWM | 60 min |
-| RF reception | 5 consecutive minutes below 60% |
-
-### Security Note
-
-The monitor needs to reset the USB dongle, which requires root access to `/sys/bus/usb/drivers/usb/`. Rather than running the entire monitor as root, the recommended setup uses a **dedicated limited user** (`weewx-monitor`) that can only run the single USB reset script via `sudo` — nothing else.
-
-The Task Scheduler script (which runs as root on boot) adds the narrow sudoers rule, then drops privileges to run the monitor as `weewx-monitor`. This means:
-- A bug or exploit in the monitor cannot affect the rest of the NAS
-- The only escalation possible is running `usb_reset.sh` — the USB bind/unbind, plus the read-only capture below
-- `usb_reset.sh` is owned by root and not writable by `weewx-monitor`
-
-`usb_reset.sh` also runs `usb_forensics.sh` before and after the reset, to record what the USB bus and the SDR process looked like on either side of it. That capture is read-only and optional — if the script is absent, the reset proceeds unchanged.
-
-Because it is invoked from inside the sudo grant, `usb_forensics.sh` runs as root too. So it must be owned by root and not writable by anyone else, on exactly the same reasoning as `usb_reset.sh`: a helper that `weewx-monitor` could rewrite would turn the narrow grant into arbitrary root execution. `usb_reset.sh` checks this itself and refuses to run a helper that fails it, reporting the refusal to the monitor log rather than skipping quietly.
-
-> Note: Synology DSM may overwrite `/etc/sudoers` on system updates. The Task Scheduler script recreates the sudoers rule on every boot, so it survives updates automatically.
-
-### Setup
-
-1. **Create a dedicated user** in DSM: Control Panel → User & Group → Create
-   - Username: `weewx-monitor`
-   - Group: `users` only (no admin, no docker, no http)
-   - No shared folder permissions
-   - No application permissions
-
-2. **Grant write access to logs directory:**
 ```bash
-sudo synoacltool -add /volume1/docker/weewx-rtldavis/logs "user:weewx-monitor:allow:rwxp-DaARWc--:fd--"
+docker create --name wx-seed weatheredscientist/weewx-rtldavis:v2.0.20
 ```
 
-3. **Create credentials file** (never commit to git — it is gitignored):
-```
-ALERT_FROM=your_gmail@gmail.com
-ALERT_TO=your_alert_destination@example.com
-GMAIL_PASS="your_gmail_app_password"
-STATION_NAME="My Weather Station"
-```
-Save as `/volume1/docker/weewx-rtldavis/monitor.env`
-
-> Gmail app password: [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (requires 2FA enabled)
-
-4. **Update Task Scheduler script** (Control Panel → Task Scheduler → edit `weewx_monitor`, set User to `root`):
 ```bash
-echo 'weewx-monitor ALL=(root) NOPASSWD: /volume1/docker/weewx-rtldavis/usb_reset.sh' >> /etc/sudoers
-set -a
-source /volume1/docker/weewx-rtldavis/monitor.env
-set +a
-rm -f /volume1/docker/weewx-rtldavis/logs/weewx_monitor.pid
-sudo -u weewx-monitor -E python3 -u /volume1/docker/weewx-rtldavis/weewx_monitor.py >> /volume1/docker/weewx-rtldavis/logs/weewx_monitor.log 2>&1 &
+docker cp wx-seed:/opt/weewx-data/. ~/weewx/weewx-data/ && docker rm wx-seed
 ```
 
-5. **Install the reset forensics** (optional; skip it and the reset still works):
+**4. Edit `~/weewx/weewx-data/weewx.conf`.** At minimum: `[Station]` (location, latitude,
+longitude, altitude) and `[Rtldavis]` (`transceiver_frequency`, `iss_channel` to match the ISS's
+DIP switches, `rain_bucket_type`). [weewx.conf.example](weewx.conf.example) documents every
+setting, including each upload service.
+
+**5. Run it.**
+
 ```bash
-sudo install -o root -g root -m 755 usb_forensics.sh /volume1/docker/weewx-rtldavis/usb_forensics.sh
-```
-Root-owned and root-only-writable is not a style preference here — see the Security Note above.
-
-> **Note:** The USB device path `1-3` is specific to the DS918+, and appears in both `usb_reset.sh` and `usb_forensics.sh` (as `USB_RESET_PORT`). Check your path with `lsusb` and update both, or the capture will document a different port from the one being reset.
-
-### Log Rotation (weewx_monitor.log)
-
-The weewx log (`weewx.log`) is rotated automatically by weewx's built-in `TimedRotatingFileHandler` — no extra setup needed.
-
-The monitor log (`weewx_monitor.log`) needs separate rotation. On Synology, use `logrotate` via DSM Task Scheduler:
-
-1. **Create the logrotate config** (run once as root):
-```bash
-tee /etc/logrotate.d/weewx-monitor << 'LREOF'
-/volume1/docker/weewx-rtldavis/logs/weewx_monitor.log {
-    daily
-    rotate 30
-    compress
-    delaycompress
-    missingok
-    notifempty
-    copytruncate
-}
-LREOF
+docker run -d --name weewx-rtldavis --restart unless-stopped --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges --device /dev/bus/usb -e HOME=/tmp -e TZ=America/New_York -e BIAS_TEE=0 -v ~/weewx/weewx-data:/opt/weewx-data -v ~/weewx/logs:/var/log/weewx weatheredscientist/weewx-rtldavis:v2.0.20
 ```
 
-2. **Add to DSM Task Scheduler** (Control Panel → Task Scheduler → Create → Scheduled Task):
-   - **Task name:** `logrotate-weewx`
-   - **Schedule:** Daily at 00:05
-   - **User:** root
-   - **Script:** `logrotate /etc/logrotate.d/weewx-monitor`
+Set `TZ` to your own zone so daily rain resets at local midnight. `BIAS_TEE=0` leaves the
+dongle's antenna power off; set it to `1` only if you run an LNA powered through the dongle.
 
-> `copytruncate` allows rotation without restarting the monitor process.
+**6. Check it.** `tail -f ~/weewx/logs/weewx.log` should show
+`driver version is 0.20+ws.6 (fork of 0.20, patched by WeatheredScientist -- not stock upstream)`,
+then `LOOP` data and, once uploads are enabled, `Published record` lines.
 
----
+To run it as a system service, see [docs/DEPLOY.md](docs/DEPLOY.md). systemd is the recommended
+path, and a Synology NAS works too.
 
-## Pressure Service (Davis WeatherLink API)
+## Uploads
 
-If your Davis station does not report barometric pressure via the ISS (e.g. ISS-only setups without a console), you can fetch pressure from the Davis WeatherLink Cloud API hourly.
+Enable any of these in `weewx.conf`; each section in [weewx.conf.example](weewx.conf.example)
+says where to register and what to set.
 
-1. Get API credentials at [weatherlink.com/develop](https://www.weatherlink.com/develop)
-2. Add to `weewx.conf`:
-```ini
-[DavisPressure]
-    api_key = YOUR_API_KEY
-    api_secret = YOUR_API_SECRET
-    station_id = YOUR_NUMERIC_STATION_ID
-    fetch_interval = 3600
-```
-3. Add `user.pressure_service.DavisPressureFetcher` to `process_services` in `weewx.conf`
+| Service | Suggested interval |
+|---|---|
+| Weather Underground | Rapidfire 2.5 s + archive 60 s |
+| PWSweather, OpenWeatherMap | 60 s |
+| CWOP (feeds NOAA MADIS), AWEKAS, Windy, WOW-BE | 5 min |
+| WOW (Met Office; being decommissioned, use WOW-BE) | 5 min |
+| WeatherCloud | 10 min (60 s needs a paid plan) |
+| InfluxDB 2 | every archive record |
 
----
+## Data for dashboards
+
+Two outputs are the project's contract with anything that reads it, specified in
+[docs/INTERFACES.md](docs/INTERFACES.md):
+
+- **A live JSON feed** (`loop-data.txt` and `current.json`), rewritten on every reading. It also
+  ships on its own as a WeeWX extension that works with any driver:
+  [extensions/loopjson](extensions/loopjson/README.md).
+- **An InfluxDB 2 time series**, one point per archive record.
+
+They were built for the Eagle Hunt Weather dashboard, and nothing in them is specific to it.
+
+## Pressure
+
+The ISS has no barometer; it is in the console. If you also have a Davis console reporting to
+WeatherLink (a WeatherLink Live, for example), `pressure_service.py` reads sea-level and station
+pressure from the WeatherLink v2 API. Get an API key at
+[weatherlink.com/develop](https://www.weatherlink.com/develop), add a `[DavisPressure]` section (see
+[weewx.conf.example](weewx.conf.example)), and add `user.pressure_service.DavisPressureFetcher` to
+`process_services`. A `fetch_interval` of 300 s uses about 1% of the API's hourly allowance.
+
+## Monitoring
+
+`weewx_monitor.py` runs on the host, outside the container, and reads the WeeWX log. It emails
+when an uploader stops publishing, when radio reception drops, when the ISS reports a low battery
+across healthy reception, and when its own input goes stale. Setup is in
+[docs/DEPLOY.md](docs/DEPLOY.md#monitoring).
+
+## Versions
+
+- **Image tags** (`v2.0.20`) version this distribution. The major number tracks the base OS and
+  Python generation (v2 is Ubuntu 26.04, Python 3.14, WeeWX 5.5). Pin a tag. `:latest` moves only
+  after a release has run in production.
+- **The driver** reports `0.20+ws.N`: upstream's 0.20 plus this project's patch level, which rises
+  with every behavior change. The startup line is how to tell which driver is running.
+
+Release notes are on the [Releases](https://github.com/WeatheredScientist/weewx-rtldavis/releases)
+page.
 
 ## Troubleshooting
 
-**Switching between container versions**
-When stopping one weewx-rtldavis container and starting another, the RTL-SDR USB device may not be released cleanly. Reset it first:
-```bash
-echo '1-3' | sudo tee /sys/bus/usb/drivers/usb/unbind
-sleep 2
-echo '1-3' | sudo tee /sys/bus/usb/drivers/usb/bind
-sleep 2
-```
-> The device path `1-3` is specific to the Synology DS918+. Check yours with `lsusb`.
+- **No data.** Check that `dvb_usb_rtl28xxu` isn't loaded (`lsmod`), the antenna is vertical, and
+  the dongle sits on a 1–3 m USB extension, away from the computer. Gain is the `-gain` value on
+  the `cmd` line in `[Rtldavis]`, in tenths of a dB.
+- **`weewx.conf` not found, container restarting.** Step 3 was skipped.
+- **Permission denied opening the dongle.** The udev rule (step 2) didn't apply. Re-plug the
+  dongle.
+- **HTTP 429 from a service.** Raise that service's `post_interval`.
+- **Switching containers.** Only one process can hold the dongle. `docker kill` the old container
+  before starting the new one.
 
-**No data / rtldavis stalled**
-- Ensure antenna is vertical and fully extended
-- Use a USB extension cable (1–3m) away from the NAS
-- Check log: `tail -f /your/path/logs/weewx.log`
-- The USB watchdog will auto-reset after 150 seconds of no data
-- **Linux hosts:** the dongle can be visible to `lsusb` but still unusable — check
-  `lsmod | grep dvb_usb_rtl28xxu`. If it's loaded, the kernel's own DVB driver has claimed
-  the device; see the blacklist step under Quick Start step 2 above
-
-**Low RF reception**
-- Normal packet reception for Davis VP2 is ~24 packets/min at close range
-- At longer distances or through walls, 60–75% reception is common and does not cause data gaps
-- Try tuning RTL-SDR gain manually: add `-gain 400` to the `cmd` line in `[Rtldavis]`
-- Ensure antenna is vertical and not inside a metal enclosure
-
-**HTTP 429 rate limit errors**
-- Reduce `post_interval` for the affected service — see rate table above
-- WOW specifically requires `post_interval = 300`
-
-**weewx.conf parse error on startup**
-- Check for duplicate `enable =` lines
-- Validate: `docker exec weewx-rtldavis /opt/weewx-venv/bin/python3 -c "import configobj; configobj.ConfigObj('/opt/weewx-data/weewx.conf', raise_errors=True)"`
-
-**No WU rapidfire updates**
-- Verify `rapidfire = true` is set under `[[Wunderground]]`
-
-**Monitor not starting**
-- Check `/your/path/logs/weewx_monitor.log` for errors
-- Verify `monitor.env` exists and credentials are correct
-- Verify `weewx-monitor` user has write access to logs directory
-
----
-
-## Files
-
-| File | Description |
-|------|-------------|
-| `Dockerfile` | Build instructions |
-| `entrypoint.sh` | Container startup script |
-| `weewx.conf.example` | Fully documented configuration template with rate limit comments |
-| `dewpoint_service.py` | Dewpoint/heatindex calculation; caches sensor values across LOOP packets; wind spike filter |
-| `pressure_service.py` | Fetches barometric pressure from Davis WeatherLink API |
-| `wcloud.py` | WeatherCloud uploader |
-| `windy.py` | Windy.com uploader |
-| `owm.py` | OpenWeatherMap uploader |
-| `loop_json_writer.py` | Writes the live loop-JSON feed the dashboard reads. Also installable on its own, with any driver, as a WeeWX extension: see [extensions/loopjson/README.md](extensions/loopjson/README.md) |
-| `weewx_monitor.py` | NAS-side USB watchdog, service alert monitor, and RF reception tracker |
-| `usb_reset.sh` | USB dongle reset script — called via sudo by weewx_monitor.py |
-| `monitor.env.example` | Template for monitor email credentials |
-
----
-
-## Building from Source
+## Building from source
 
 ```bash
-git clone https://github.com/weatheredscientist/weewx-rtldavis
-cd weewx-rtldavis
-docker build -t weewx-rtldavis .
+git clone https://github.com/WeatheredScientist/weewx-rtldavis && cd weewx-rtldavis && docker build -t weewx-rtldavis .
 ```
 
----
+The build fetches the decoder source from
+[weewx-contrib/weewx-rtldavis](https://github.com/weewx-contrib/weewx-rtldavis) and applies
+[patch/rtldavis-dupgate.patch](patch/rtldavis-dupgate.patch). If upstream's source has moved so the
+patch no longer applies, the build fails rather than shipping an unpatched decoder.
 
-## Changelog
+## Contributing
 
-The full, session-tagged history lives in **[CHANGELOG.md](CHANGELOG.md)** (single source of truth), and
-tagged releases with notes are on the **[GitHub Releases](https://github.com/WeatheredScientist/weewx-rtldavis/releases)**
-page. Highlights of the latest release are summarized at the top of `CHANGELOG.md`.
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md) and
+[SECURITY.md](SECURITY.md). The repository also holds the maintainer's operating records
+(`BOOT.md`, `docs/DECISIONS.md`, `ops/`). You don't need any of them to run the image.
 
 ## Credits
 
-- [weewx](https://weewx.com/) — Tom Keffer and Matthew Wall
-- [weewx-rtldavis weewx extension](https://github.com/lheijst/weewx-rtldavis) — Luc Heijst (driver and extension author)
-- [rtldavis](https://github.com/lheijst/rtldavis) — Luc Heijst (RTL-SDR receiver for Davis weather stations)
-- [weewx-rtldavis installer wrapper](https://github.com/weewx-contrib/weewx-rtldavis) — Vince Skahan
-- [gortlsdr](https://github.com/jpoirier/gortlsdr) — Joseph Poirier (Go wrapper for librtlsdr)
-- [librtlsdr](https://github.com/steve-m/librtlsdr) — Steve Markgraf (original author), Kacper Ludwinski (current maintainer)
+- [WeeWX](https://weewx.com/): Tom Keffer and Matthew Wall.
+- The rtldavis [driver](https://github.com/lheijst/weewx-rtldavis) and
+  [decoder](https://github.com/lheijst/rtldavis): Luc Heijst. The driver merges Matthew Wall's
+  [weewx-sdr](https://github.com/matthewwall/weewx-sdr) and
+  [weewx-meteostick](https://github.com/matthewwall/weewx-meteostick); the decoder descends from
+  [bemasher's rtldavis](https://github.com/bemasher/rtldavis).
+- Installer packaging: Vince Skahan ([weewx-contrib](https://github.com/weewx-contrib/weewx-rtldavis)).
+- [librtlsdr](https://github.com/steve-m/librtlsdr): Steve Markgraf, maintained by Kacper
+  Ludwinski. [gortlsdr](https://github.com/jpoirier/gortlsdr): Joseph Poirier.
+- InfluxDB uploader: Matthew Wall's [weewx-influx](https://github.com/matthewwall/weewx-influx),
+  ported to InfluxDB 2 by [David Lutz](https://github.com/david-lutz/weewx-influx2). WeatherCloud
+  uploader: Matthew Wall. OgoXe uploader: the OgoXe developers, Sigi Meisenbichler and Vince Skahan.
+  Wind calibration table: kobuki.
+- LloydR, whose upstream reports on duplicate frames and the temperature sign pointed the way to
+  two of the fixes here.
 
-Upstream component commits used in this image, as identified by Vince Skahan:
-
-```
-* librtlsdr - library to turn Realtek RTL2832 based DVB dongle into a SDR receiver
-  from https://github.com/steve-m/librtlsdr.git
-  commit ae0dd6d4f09088d13500a854091b45ad281ca4f0
-  Author: Kacper Ludwinski <kac...@ludwinski.dev>
-  Date:   Sun Nov 9 21:56:53 2025 +0000
-
-* gortlsdr - 'go' wrapper around librtlsdr
-  from https://github.com/jpoirier/gortlsdr.git
-  commit 075e50ef422cf3ba193d1ba6d79a0efea89491e2
-  Author: Joseph Poirier <jdpo...@gmail.com>
-  Date:   Sat May 19 12:17:06 2018 -0500
-
-* rtldavis - RTL-SDR receiver for Davis weather stations
-  from https://github.com/lheijst/rtldavis
-  commit b95d5d734e4666c90f3d7539d5e2acd9f80f7e43
-  Author: Luc Heijst <ljm.h...@gmail.com>
-  Date:   Fri Jun 5 08:43:42 2020 -0300
-
-* weewx-rtldavis - the weewx extension as of 12/20/2025
-  from https://github.com/lheijst/weewx-rtldavis/archive/master.zip
-  commit 2f3b4b344fd70ab253aabfa837b0ffc76570c075
-  Author: Luc Heijst <ljm.h...@gmail.com>
-  Date:   Sat Jan 2 13:56:04 2021 -0300
-```
-
----
+Full provenance, file by file: [CHANGES-FROM-UPSTREAM.md](CHANGES-FROM-UPSTREAM.md).
 
 ## License
 
-GPL v3
+GPLv3. See [LICENSE](LICENSE).

@@ -24,7 +24,8 @@ It exists for three reasons:
 
 We build from Vince Skahan's repackage, not from Luc Heijst's repository directly. The chain is
 verified from `Dockerfile` (which fetches `weewx-contrib/weewx-rtldavis/src.tgz` and installs
-`david-lutz/weewx-influx2`):
+`david-lutz/weewx-influx2`, each pinned to one commit and checked against a sha256 since S156,
+DEC-0214; the pins are the `ARG` lines in the base stage):
 
 | Component | Chain |
 |-----------|-------|
@@ -70,11 +71,11 @@ Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 
 widened co-rejection of item 18, all landed since the prior S97 count (**+815 / −149**, 1422 →
 2088 lines).
 
-The baseline is not vendored here — the Dockerfile fetches it at build time — so recount it rather
-than trusting this number:
+The baseline is not vendored here — the Dockerfile fetches it at build time, pinned to
+`RTLDAVIS_SRC_COMMIT` (DEC-0214) — so recount it rather than trusting this number:
 
 ```sh
-curl -sL -o /tmp/src.tgz https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz
+curl -sL -o /tmp/src.tgz https://github.com/weewx-contrib/weewx-rtldavis/raw/bfa9e3d9e1a9fc198fcf81124b709d63d8c30a1f/src.tgz
 tar -C /tmp -zxf /tmp/src.tgz src/weewx-rtldavis/bin/user/rtldavis.py
 git diff --numstat --no-index /tmp/src/weewx-rtldavis/bin/user/rtldavis.py rtldavis.py
 ```
@@ -156,7 +157,8 @@ duplicate. Do not trust a null from an instrument you have not proven can see a 
 
 **A new kind of divergence for this repo: a fork of the Go binary's source, not of a Python file.**
 The demodulator is not vendored here — `Dockerfile` fetches `src.tgz` from
-`weewx-contrib/weewx-rtldavis` at an **unpinned `refs/heads/main`** and builds it. Our change ships
+`weewx-contrib/weewx-rtldavis` and builds it. The fetch was an unpinned `refs/heads/main` until
+S156; it is now pinned to one commit with a sha256 check (DEC-0214). Our change ships
 as a tracked patch applied during the build, so the divergence stays one reviewable file.
 
 **What it changes (DEC-0135):** the duplicate-packet filter compared payload bytes with no time
