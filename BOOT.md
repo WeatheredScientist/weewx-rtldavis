@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S157 → S158)
+## ▶ Resume here (S158 → S159)
 
 ### What's settled (do not re-derive)
 
@@ -45,10 +45,10 @@ and smoke-tests amd64 and arm64, CI pushes arm64 to GHCR and `scripts/join_multi
 with marvin's `:vX.Y.Z-amd64`; the v2.0.20 backfill ran 2026-10-17 18:41 ET (`:latest` multi-arch,
 `:v2.0.20-amd64` = prod's digest). **The plan is ROADMAP P0.8 (public readiness: five phases,
 issues #451–#456) and P1.9 (decoder fixes in Go: #458 measure CRC failures, #459 burst gate)**,
-on #457. **#458 is built (S157, DEC-0216, PR #461, CI green, log-only, not deployed).** Non-Davis platform research is `eaglehunt-weather-dashboard#936`, dash's to run; weewx
+on #457. **#458 is merged (S157, DEC-0216, PR #461, log-only, not deployed). S158 did P0.8 phase 1's cheap items (#451, #452, #454, #455) and trimmed MANIFEST.md under its cap (ops#423); #451 edits the baked `pressure_service.py`, so it ships with v2.0.21.** Non-Davis platform research is `eaglehunt-weather-dashboard#936`, dash's to run; weewx
 files issues from its section A.
 
-### ▶▶ S158 JOB LIST
+### ▶▶ S159 JOB LIST
 
 1. **Watch, no action unless it fires** (last checked S152: soak 14 passed / 0 failures, no
    `bar_absolute` fallback warning): the measured `pressure` keeps arriving (a `no bar_absolute`
@@ -58,13 +58,13 @@ files issues from its section A.
    `frame failed message-type proof` line · freeze lead (blocker 1), measure at the next freeze.
 2. **Re-verify `loopjson` once** (still not run; shipped S155, 2026-10-14): confirm the writer
    logged no ERROR after the 21:22 ET restart, beyond the usual TTL WARNING lines.
-3. **P0.8 phase 1** (#451–#455, Sonnet; #453 is a design check and a DEC before code, and prod's
-   unit gets `WEEWX_CONTAINER` first, an owner step). With it, prove DEC-0213's quickstart on a
+3. **P0.8 phase 1, what is left:** #453 (Opus: a design check and a DEC before code; prod's unit
+   gets `WEEWX_CONTAINER` first, an owner step) and #456 (Sonnet). Then prove DEC-0213's quickstart on a
    fresh Linux host (never run end to end; no dongle needed for the seed and permission checks),
    then the GitHub About text and topics (owner's go). The Hub overview syncs from README on the
    next push to `main`, if the Hub secrets are set.
 4. **First arm64 run against a live radio** (any Pi with a dongle); until then README says
-   smoke-tested only. Then P0.8 phase 2's v2.0.21 (audit 15), which carries #458 (merge PR #461 first); after it deploys, collect a day of `crc failures this period` lines and design #459 from them (frontier tier, DEC first).
+   smoke-tested only. Then P0.8 phase 2's v2.0.21 (audit 15), which carries #458 and #451; after it deploys, collect a day of `crc failures this period` lines and design #459 from them (frontier tier, DEC first).
 5. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI.
    (`eaglehunt-ops#358` closed S155: some replaced test addresses were live hosts; no history rewrite.)
 6. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
@@ -92,7 +92,7 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 **S156 ran on Opus 5.5** (positioning, attribution and the public docs: judgment work), switched
 with a bare `/model`, which persists: **the Sonnet floor is the owner's to restore** (not done at
-S156's close). S157 ran on Sonnet 5.5 (#458 was a locked design). S158 is watches plus job 3: Sonnet, Opus for #453's design.
+S156's close). S157 ran on Sonnet 5.5 (#458 was a locked design). S158 ran on Sonnet 5.5 (the cheap-tier batch). S159 is watches plus #453 and #456: Sonnet, Opus for #453's design.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -112,4 +112,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-18 (S157 close). v2.0.20 steady in prod; public docs rewritten (DEC-0213); images multi-arch (DEC-0214/0215); ROADMAP P0.8 + P1.9 planned with issues; #458 CRC counters built on PR #461._
+_Last updated: 2026-10-18 (S158 close). v2.0.20 steady in prod; public docs rewritten (DEC-0213); images multi-arch (DEC-0214/0215); ROADMAP P0.8 + P1.9 planned with issues; #458 CRC counters built on PR #461._

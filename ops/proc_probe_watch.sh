@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RETIRED (NAS era, DEC-0118): kept as a record of the method. Its paths and nasctl calls no longer reach a live system.
 # proc_probe_watch.sh -- keep ops/proc_probe.py alive for a whole window.
 #
 # The probe samples a window that happens once a night (BOOT job 6 / DEC-0068).

@@ -126,7 +126,7 @@ for pid in $PIDS; do
     # NOT from `stat -c %y /proc/<pid>`. That directory's mtime tracks recent
     # ACCESS, not process start, and this script reads several files under it
     # moments earlier -- so the mtime reads as "just now" for a process that has
-    # been up for days. Measured on this NAS 2026-08-09: the mtime said 17
+    # been up for days. Measured on the original Synology host 2026-08-09: the mtime said 17
     # seconds old while field 22 said 2.88 days, and the container had been up 3
     # days with unbroken output. In a stall capture the wrong version would have
     # said "rtldavis just restarted" about a process that never did.
@@ -171,7 +171,7 @@ for pid in $PIDS; do
 done
 
 # ---------- kernel ----------
-# Bounded on purpose. An unbounded log read is what wedged this NAS for 7h18m
+# Bounded on purpose. An unbounded log read is what wedged the original Synology host for 7h18m
 # once already (DEC-0036) — that was `docker logs`, a different path, but the
 # lesson generalizes: never read a log without a limit on this box.
 sec "kernel: dmesg tail"

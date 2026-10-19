@@ -1,49 +1,43 @@
 # MANIFEST — weewx-rtldavis
 
-**Always-load, tier 1.** What to pull on demand, and when — never read at session start. *"Working
-near it" means read it.* **Classes, not instances** (rule 9): a row names a set and its convention;
-instances self-describe at source. **A file in no class gets its own row**; `docs/` rows are rule
-9's reserved exception, each already its own class. Priority under conflict (OPS-DEC-0101): coverage
-beats cap, classes before instances — verify current size with `boot-cap-check.sh` rather than a
-number held here.
+**Always-load, tier 1.** What to pull on demand, and when; never read at session start. *"Working
+near it" means read it.* A row names a class (rule 9); instances self-describe at source.
+A file in no class gets its own row. Check size with `boot-cap-check.sh`.
 
 ## Governance & history
 
 | Artifact | Load when |
 |---|---|
-| `docs/DECISIONS.md` + `docs/DECISIONS-FULL.md` — settled-decision index; full ADR bodies | before working near a settled area — scan the index, never re-litigate a listed decision; grep the DEC id in FULL rather than reading it whole |
-| `CHANGELOG.md` + `CHANGELOG-ARCHIVE.md` — what shipped when | writing a closeout entry; the archive is forensic |
-| `docs/ROADMAP.md` — the sequenced plan, P0–P3 (DEC-0058) | choosing what's next; updating a line a DEC just shipped (DEC-0057). Has its own next-check tripwire |
-| `BACKLOG.md` — open ideas · durable RF findings · standing watches · long-term direction | RF work, anything horizon-scale, or whether a watch has fired |
-| `docs/CONVENTIONS.md` — git workflow, secrets, the exact gates and the only interpreter with the tooling | before any gate; before any commit |
-| `docs/GOTCHAS.md` — how tools and signals mislead; §-indexed | before trusting any tool's zero/empty/green (§1); a PR/merge or handoff write (§2); any NAS/campaign task (§3); judging a component live or shipped (§4). New traps land here, never in `BOOT.md` |
-| `docs/PRINCIPLES.md` — durable intent · `docs/ASSESSMENT.md` — governance anchor · `docs/CODE_REVIEW_S145.md` — the S145 audit's 39 findings with fix status | weighing a new decision; picking the next cleanup (29 medium/low items open). ASSESSMENT is a dated S23 audit, pre-DEC-0063 |
-| `docs/UPSTREAM-THREADS.md` — the four open upstream threads, and the etiquette | replying upstream, or checking whether one moved |
+| `docs/DECISIONS.md` (index) + `DECISIONS-FULL.md` (ADR bodies) | before working near a settled area; never re-litigate a listed decision. Grep the DEC id in FULL |
+| `CHANGELOG.md` + `CHANGELOG-ARCHIVE.md` | writing a closeout entry |
+| `docs/ROADMAP.md` — sequenced plan, P0–P3 | choosing what's next; updating a line a DEC shipped. |
+| `BACKLOG.md` — ideas, RF findings, standing watches | RF work, horizon-scale work, or whether a watch fired |
+| `docs/CONVENTIONS.md` — git workflow, secrets, exact gates | before any gate or commit |
+| `docs/GOTCHAS.md` (§-indexed) | before trusting a tool's zero/green (§1); a PR/merge or handoff write (§2); a NAS/marvin/campaign task (§3); judging live or shipped (§4). New traps land here, not in `BOOT.md` |
+| `docs/PRINCIPLES.md`, `ASSESSMENT.md`, `CODE_REVIEW_S145.md` | weighing a decision; picking the next cleanup |
+| `docs/UPSTREAM-THREADS.md` | replying upstream, or checking whether a thread moved |
 
 ## Technical
 
 | Artifact | Load when |
 |---|---|
-| `docs/ARCHITECTURE.md` — ISS→RTL-SDR→driver→WeeWX→sinks, mounts, the pyc gotcha | touching any part of that chain |
-| `docs/INTERFACES.md` — the data contract, loop-JSON + InfluxDB schema | changing anything a consumer reads. The repo's real deliverable |
-| `docs/DATA_ERRATA.md` — known-bad observations, corrections (`ERR-####`) | a suspect historical reading, or a retrospective correction (DEC-0025) |
-| `CHANGES-FROM-UPSTREAM.md` — the fork's divergence (DEC-0034), one section per vendored-fork or our-own module | changing any such file's behavior, or confirming whether it has an upstream to check; preparing an upstream PR |
-| Repo-root WeeWX runtime modules — driver `rtldavis.py`; uploaders `influx.py`/`ogoxeUploader.py`/`wcloud.py`/`windy.py`/`owm.py`; services `pressure_service.py`/`dewpoint_service.py`; `loop_json_writer.py` | changing any such file's behavior — `CHANGES-FROM-UPSTREAM.md` for upstream-sync status, `CONSTANTS.md` deploy-layers table for which layer wins in prod |
-| **`weewx_monitor.py`** (repo ROOT, not `ops/`) — the host-side daemon: USB watchdog (`reset_dongle`, `watchdog_stall` + escalation), uploader alerter, reception tracker, ISS battery flag (#394). Runs on marvin, not in the container | any "what handles X at runtime?" question — read this BEFORE concluding a capability is missing (DEC-0074) |
-| `ops/*` + `scripts/*` + root-level NAS scripts (`usb_reset.sh`, `entrypoint.sh`) — the harness, plus runbooks `docs/CAMPAIGN-B-RUNBOOK.md`/`docs/INFLUXDB-MIGRATION.md` | any ops task, the swap night, the InfluxDB cutover window. Each script's header is its manual. `ops/campaign_analyze.py` is the only sanctioned campaign readout (DEC-0069); `usb_reset.sh` runs as root under a path-scoped sudo grant (DEC-0075) |
-| `extensions/loopjson/` — the WeeWX extension (`install.py`, adopter README) that packages `loop_json_writer.py` for other stations (DEC-0211); built by `scripts/build_loopjson_zip.sh`, proved by `scripts/prove_loopjson.sh`, released from `.github/workflows/loopjson.yml` on a `loopjson-v*` tag | changing the writer's version, paths or install behavior; cutting a loopjson release |
-| `patch/rtldavis-dupgate.patch` + `patch/rtldavis-crcstats.patch`, `tests/go/` — the two patches the image applies to the bundled Go source (the dup time-gate, DEC-0135; the CRC-failure counters, DEC-0216) and the Go tests that guard them | any change to the Go decoder |
-| `.github/workflows/image.yml` + `image-publish.yml`, `scripts/join_multiarch.sh` (+ `oci_platforms.py`, `smoke_image.sh`) — the image proved on amd64 and arm64 (DEC-0214) and the arm64 half published and joined into Hub's multi-arch tag (DEC-0215) | cutting a release (the Docker Hub steps in `docs/CONVENTIONS.md`), changing the Dockerfile, or anything a Pi user pulls |
-| `README.md` · `CONTRIBUTING.md` · `SECURITY.md` · `AGENTS.md` · `LICENSE` — the public face | changing anything user-visible, handling a report, or when another agent tool is involved |
-| `docs/DEPLOY.md` + `examples/` — the adopter's deploy guide (systemd recommended, Synology kept) and sanitized example units, plus `docker-compose.yml`. Written to the dashboard's public-release scrub rules: no host, tenant, unit or network names. Prod's real units live in `ops/` and heartofgold | changing how an adopter installs or runs it; a prod unit change that an example should mirror |
+| `docs/ARCHITECTURE.md` · `docs/INTERFACES.md` (loop-JSON + InfluxDB contract: the real deliverable) · `docs/DATA_ERRATA.md` (`ERR-####`) | touching the ISS→driver→WeeWX→sinks chain; changing anything a consumer reads; a suspect historical reading |
+| `CHANGES-FROM-UPSTREAM.md` — one section per forked or own module (DEC-0034) | changing a forked file, checking for an upstream, preparing an upstream PR |
+| Root runtime modules: driver `rtldavis.py`; uploaders `influx.py`, `ogoxeUploader.py`, `wcloud.py`, `windy.py`, `owm.py`; services `pressure_service.py`, `dewpoint_service.py`, `loop_json_writer.py` | changing any behavior. `CONSTANTS.md`'s deploy-layers table says which layer wins in prod |
+| `weewx_monitor.py` (root) — host-side watchdog, alerter, reception tracker | any "what handles X at runtime?" question; read before concluding a capability is missing (DEC-0074) |
+| `ops/*`, `scripts/*`, `usb_reset.sh`, `entrypoint.sh`, `docs/CAMPAIGN-B-RUNBOOK.md`, `docs/INFLUXDB-MIGRATION.md` | any ops task, swap night, InfluxDB cutover. A script's header is its manual; `ops/campaign_analyze.py` is the only campaign readout (DEC-0069) |
+| `extensions/loopjson/` + `scripts/build_loopjson_zip.sh`, `prove_loopjson.sh`, `.github/workflows/loopjson.yml` (DEC-0211) | changing the writer's version, paths or install; cutting a `loopjson-v*` release |
+| Go decoder: `patch/rtldavis-*.patch` (dup time-gate DEC-0135, CRC counters DEC-0216), `tests/go/` | any change to the Go decoder |
+| Image and release: `Dockerfile`, `.github/workflows/image*.yml`, `scripts/join_multiarch.sh` and its helpers (DEC-0214/0215) | cutting a release, changing the Dockerfile, anything a Pi user pulls |
+| Public face: `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `LICENSE`, `docs/DEPLOY.md`, `examples/`, `docker-compose.yml` | changing anything user-visible, an adopter install, or handling a report. Written to the dashboard's scrub rules: no host, tenant or unit names |
 
 ## Not in a clone, never in the load path
 
-| Thing | Why it is not here |
+| Thing | Why |
 |---|---|
-| `ARCHIVE/` | local-only, gitignored, never tracked — S16 dumps with credential-shaped strings (DEC-0012). Nothing once *in* the repo is lost: `git log --follow` reaches it |
-| `docs/handoffs/` | retired handoffs, kept because live docs cite them by path. Never lose `S38-cross-repo-architecture.md` — the family's agent protocol |
-| `docs/upstream/` | drafts, gitignored — never posted without an explicit go. State lives in `UPSTREAM-THREADS.md` |
-| Dashboard code and decisions | `eaglehunt-weather-dashboard` — don't change the dashboard here (DEC-0010) |
+| `ARCHIVE/` | local-only, gitignored (DEC-0012) |
+| `docs/handoffs/` | retired handoffs that live docs cite by path; keep `S38-cross-repo-architecture.md` |
+| `docs/upstream/` | gitignored drafts, never posted without an explicit go; state is in `UPSTREAM-THREADS.md` |
+| Dashboard code and decisions | `eaglehunt-weather-dashboard`; not changed here (DEC-0010) |
 | Real infra values, coordinates, security follow-ups | the gitignored local-infra doc |
-| Cross-repo coordination, shared constants, `~/.claude/` guards | `eaglehunt-ops` — private, never a prerequisite (DEC-0063) |
+| Cross-repo coordination, shared constants, `~/.claude/` guards | `eaglehunt-ops`, private, never a prerequisite (DEC-0063) |

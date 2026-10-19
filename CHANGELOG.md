@@ -6,6 +6,24 @@ under [Pre-S16].
 
 ---
 
+## [S158] — 2026-10-18 — P0.8 phase 1, the cheap items (#451, #452, #454, #455; ops#423)
+
+- **#451:** `pressure_service.py` no longer crashes WeeWX on `station_id = YOUR_STATION_ID`: a
+  non-numeric id takes the existing "missing ... not binding" path. The fetched inHg value is
+  converted to mbar for METRIC and METRICWX packets. Tests in `tests/test_pressure_injection.py`. A
+  baked file, so it rides v2.0.21; prod (US units, numeric id) is unaffected.
+- **#452:** `weewx.conf.example` starts at auto gain, says 5.5.2, drops the dead top-level
+  `[LoopData]`, `[WeatherCloud]`, `[Windy]` and `[OWM]` sections, gains `[LoopJsonWriter]`, the four
+  missing `qc_*_max_delta` keys and `hotswap_ack_file`, and recommends `fetch_interval = 300`.
+- **#454:** `CHANGES-FROM-UPSTREAM.md` recounted (`rtldavis.py` **+1316 / −167**, 1422 → 2571 at
+  `c57a964`), rows 19–26 added (#219–#222, #233, DEC-0056, Layer B, `dup_count`), the upstreaming
+  table lists the unoffered fixes, `wcloud.py` and `influx.py` edits recorded, the CRC patch noted.
+- **#455:** `loop_json_writer.py`'s deploy block is generic; "this NAS" wording reworded; a one-line
+  RETIRED header on the NAS-era ops scripts; `ruff.toml` now lints `influx.py` (E402/F401 ignored for
+  upstream's imports) and `ogoxeUploader.py` (clean). Comment and config edits only.
+- **ops#423:** `MANIFEST.md` folded into classes, 6399 → 3985 characters (cap 1000 tokens).
+- Not done: #453 (design first), #456, the fresh-host quickstart proof.
+
 ## [S157] — 2026-10-18 — CRC failures counted in the Go decoder, measurement only (#458, DEC-0216)
 
 - `patch/rtldavis-crcstats.patch` (applied after `rtldavis-dupgate.patch`) counts every CRC failure

@@ -1,10 +1,11 @@
 # Ruff configuration — weewx-rtldavis (S31, DEC-0027)
 #
-# We lint the code THIS project maintains. Third-party WeeWX uploaders that are
-# vendored verbatim from upstream (Matthew Wall's influx.py / wcloud.py, the OgoXe
-# uploader) carry intentional Python 2/3 `try/except import` shims that ruff reads
-# as unused-import / import-order errors. We do not modify vendored code, so they
-# are excluded from linting.
+# We lint the code THIS project maintains, including the patched uploaders
+# influx.py and ogoxeUploader.py (CHANGES-FROM-UPSTREAM.md lists every edit).
+# Their Python 2/3 `try/except import` shims, which ruff reads as unused-import /
+# import-order errors, are ignored per file below rather than rewritten, so a
+# mounted file's bytes do not change for a lint rule. wcloud.py is upstream's file
+# plus only an SPDX line and type-checker comments, so it stays excluded.
 #
 # Formatting is intentionally NOT enforced (CI runs `ruff check`, not
 # `ruff format --check`): the codebase uses deliberate column alignment for
@@ -12,7 +13,10 @@
 # so auto-reformatting it would churn a prod-sacred file. See DEC-0027.
 
 extend-exclude = [
-    "influx.py",
     "wcloud.py",
-    "ogoxeUploader.py",
 ]
+
+[lint.per-file-ignores]
+# Upstream's unused and late imports in influx.py (16 findings, S158). Everything
+# else in the file is linted.
+"influx.py" = ["E402", "F401"]

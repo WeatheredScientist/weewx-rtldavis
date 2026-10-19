@@ -26,14 +26,12 @@ THE TWO PATHS ARE NOT THE SAME KIND OF THING (DEC-0093, S84):
 Set [LoopJsonWriter] current_interval = 0 to restore the old
 write-on-every-packet behavior.
 
-DEPLOY (this file is MOUNTED, not baked -- verified S84, DEC-0093):
-  <tenant root>/loop_json_writer.py (/srv/docker/weewx/ on marvin) is
-  bind-mounted over the venv copy, and the Dockerfile does NOT COPY this
-  file at all. So an image rebuild is a SILENT NO-OP here. The tenant root
-  is a real `dev` checkout (DEC-0150), so shipping a change means
-  `marvinctl --tenant weewx pull` and then restarting the container
-  (`marvinctl --tenant weewx restart weewx.service`). Note the copy in
-  weewx-data/bin/user/ is a decoy -- it is not the mount source.
+INSTALL: the WeeWX extension (extensions/loopjson/) puts this file in WeeWX's
+  user directory and adds the service to process_services. Changing the file
+  takes effect only after a WeeWX restart. If you run the published image and
+  bind-mount your own copy over the one inside it, rebuilding the image does
+  nothing: the image never copies this file, so update the mounted copy and
+  restart the container.
 
 Fields written (None → omitted, last known value used for sparse fields):
   windSpeed_mph, windGust_mph, windDir
