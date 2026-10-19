@@ -90,8 +90,10 @@ comments explain `restart_unit`, which restarts the weewx service on a stall.
 
 ### On Synology
 
-The monitor resets the dongle's USB port on a stall (`REMEDY_MODE=usb_reset`, the default), which
-needs root. So it runs as a limited user that may run exactly one script as root:
+On Synology the monitor can reset the dongle's USB port on a stall (`REMEDY_MODE=usb_reset`; the
+default is `none`, so set it in `monitor.env`). `usb_reset.sh` finds the dongle by its USB id and
+refuses if it finds none or more than one, so it can't reset another device. The reset needs root,
+so the monitor runs as a limited user that may run exactly one script as root:
 
 1. In DSM, create a user `weewx-monitor`: group `users` only, no shared-folder or application
    permissions.
@@ -102,7 +104,9 @@ needs root. So it runs as a limited user that may run exactly one script as root
    ```
 
 3. Copy `weewx_monitor.py`, `usb_reset.sh` and `monitor.env` to `/volume1/docker/weewx-rtldavis/`.
-   `usb_reset.sh` must be owned by root and writable only by root. Edit its port (`1-3`) to yours.
+   `usb_reset.sh` must be owned by root and writable only by root. Add `REMEDY_MODE=usb_reset` to
+   `monitor.env`. With more than one RTL-SDR attached, set `PORT` at the top of `usb_reset.sh` to
+   the one weewx uses.
 4. In Control Panel → Task Scheduler, create a triggered task at boot, user `root`, with this
    script. DSM can rewrite `/etc/sudoers` on update, so the first line re-adds the grant at every
    boot.
@@ -116,7 +120,7 @@ needs root. So it runs as a limited user that may run exactly one script as root
 
 5. Optional: [`ops/usb_forensics.sh`](../ops/usb_forensics.sh) records the USB bus before and after
    each reset. Install it root-owned beside `usb_reset.sh`, which refuses to run a helper the
-   monitor's user could rewrite. Set `USB_RESET_PORT` to your port.
+   monitor's user could rewrite, and which tells it the port it reset.
 
 Rotate `weewx_monitor.log` with a daily DSM task running `logrotate` over a config that uses
 `copytruncate`, so the monitor needn't restart.

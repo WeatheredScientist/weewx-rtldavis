@@ -160,9 +160,9 @@ owner root gesture on marvin (DEC-0009).
 
 **`REMEDY_MODE=none` on marvin, on purpose** — the unit detects and escalates (RF reception,
 uploader alerting, input-staleness watchdog) but takes no automatic remedy action yet. The
-Foundation-era `usb_reset` remedy (`usb_reset.sh`, a driver unbind/rebind sudoers-scoped to a
-hardcoded Synology bus path) is still `weewx_monitor.py`'s own module-level default for other
-deployments, but is **not used on marvin**: its USB topology differs, and the script would either
+Foundation-era `usb_reset` remedy (`usb_reset.sh`, a sudoers-scoped driver unbind/rebind; it
+unbound a hardcoded Synology bus path until DEC-0217 made it find the RTL2832U by USB id, and it
+stopped being the module default then) is **not used on marvin**: its USB topology differs, and the script would either
 no-op or reset a different tenant's device (MARVIN-DEC-0051; see the unit file's own comment). The
 planned marvin remedy is a full container recreate (`restart_unit`, i.e. `weewx.service`'s own
 `docker run --rm` + `ExecStartPre=docker rm -f` cycle) via a path-scoped sudo grant

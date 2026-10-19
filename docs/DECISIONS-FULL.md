@@ -11869,3 +11869,93 @@ and after. Rollback is the previous image.
 - The `near` count against the CRC-valid phantom rate gives #459 its window and its baseline.
 - A wider rule that drops frames, #459, must pass the same differential test and add a case for a real
   packet inside the window.
+
+## DEC-0217 — The monitor's defaults describe no host, and `usb_reset.sh` finds the dongle by USB id (S159)
+
+**Date:** 2026-10-19 (S159, Opus 5.5). **Status:** accepted; the owner approved the design in chat,
+including discovery in place of a port read from the environment. Built on a feature branch for
+#453 (ROADMAP P0.8 phase 1). Changes no image and no running process: the monitor is a host daemon,
+and prod's unit sets every value this changes.
+
+### Context
+
+`weewx_monitor.py`'s defaults described the original Synology deployment. A monitor started with
+no environment got `REMEDY_MODE=usb_reset`, paths under `/volume1/docker/weewx-rtldavis`,
+`DOCKER_BIN=/usr/local/bin/docker`, and the maintainer's container name `weewx-rtldavis-v2`.
+`usb_reset.sh` then unbound USB port `1-3` as root, whatever device sat there. A new user who ran
+the monitor without the example unit got all of it, including a root unbind of a port that may hold
+another device. The issue proposed reading the reset port from the environment, and setting
+`WEEWX_CONTAINER` on prod's unit first because prod relied on the old default.
+
+Two findings changed that plan:
+
+- **The prod ordering step is not needed.** `WEEWX_CONTAINER` and `DOCKER_BIN` feed only
+  `build_recreate_cmd()`, the `docker inspect` behind the escalation email's recreate line.
+  heartofgold's tenant rule is "never grant the docker group" (`TENANT-ACCESS.md`), so on marvin
+  that inspect fails today and the email already says it could not build the command. Prod's unit
+  sets `REMEDY_MODE=none` and `WEEWX_RTLDAVIS_DIR` explicitly. No default changed here reaches
+  prod.
+- **A port from the environment would widen a root grant.** `usb_reset.sh` runs under a NOPASSWD
+  sudoers line scoped to its path with no arguments. Under sudo's default `env_reset` the value would
+  never arrive; under `sudo -E` or an `env_keep` entry the monitor's user could unbind any USB device
+  as root. The same holds for a command-line argument the grant does not pin.
+
+### Decision
+
+1. **`REMEDY_MODE` defaults to `none`.** Doing nothing is harmless on any host; a remedy armed by
+   default acts on hosts nobody checked, and the USB reset never demonstrably fixed a stall across
+   ~17 captured events (RESET_MAX_TRIES' comment, ERR-0005). The daemon's startup log says when
+   the variable is unset and that `usb_reset` was the old default, so an existing Synology install
+   can see why its resets stopped. `docs/DEPLOY.md` and `monitor.env.example` set it explicitly for
+   Synology. This reverses S107's "keep usb_reset as the default so an existing install doesn't
+   change silently": the log line is the mitigation, and a release note carries it.
+2. **`WEEWX_RTLDAVIS_DIR` defaults to the script's own directory.** Prod (`/srv/docker/weewx`), the
+   systemd example (`/srv/weewx`) and the Synology guide (`/volume1/docker/weewx-rtldavis`) all put
+   `weewx_monitor.py` in the directory that holds `logs/` and `weewx-data/`, so none needs the
+   variable. When the log or pidfile directory is missing, the daemon exits 2 with one line naming
+   the variable, before opening anything (it used to die on the pidfile's `FileNotFoundError`).
+   `--test-alert` imports skip the check.
+3. **Every other default follows.** `USB_RESET_SCRIPT` and `USB_FORENSICS_SCRIPT` are
+   `BASE_DIR/usb_reset.sh` and `BASE_DIR/usb_forensics.sh`; `DOCKER_BIN` is `$DOCKER_BIN`, else
+   `which docker`, else `/usr/local/bin/docker` (Synology's docker is off the default PATH);
+   `WEEWX_CONTAINER` is `weewx-rtldavis`, the README's name.
+4. **`usb_reset.sh` finds the port.** It scans `/sys/bus/usb/devices` for device entries (not
+   interfaces, not root hubs) whose `idVendor:idProduct` is an RTL2832U (`0bda:2838`, the RTL-SDR
+   Blog v3, or `0bda:2832`). Exactly one match is reset. None, or more than one, is refused on
+   stderr with exit 3 and nothing written to sysfs. With two dongles the admin sets `PORT` at the
+   top of the root-owned script; a pinned port must be a bus port name and must still carry an
+   RTL2832U id, or it is refused. `PORT` and `SYSFS` are assigned only inside the script, never read
+   from `$1` or the environment. It prints `usb_reset: port=<p> id=<vid:pid>`, which `do_reset()`
+   parses for its log line and email (there is no fixed port left for the monitor to read
+   `idVendor` from).
+5. **The forensics helper is told, not left to defaults.** `usb_reset.sh` passes the port and its
+   own directory to `usb_forensics.sh` explicitly, since sudo drops the environment, and finds the
+   helper beside itself. When the monitor runs the helper directly (the +verify capture) with no
+   port, the helper runs the same id scan read-only and records `unknown` unless exactly one dongle
+   matches; it no longer documents port `1-3` by default.
+
+### Proof
+
+`tests/test_monitor_defaults_453.py` (25 cases): defaults with every override unset; each override
+still wins; the docker PATH lookup and fallback; the daemon's exit 2 on a missing directory, with no
+traceback and nothing created; `do_reset()` parsing the discovered device; and `usb_reset.sh` run
+for real against a fake sysfs tree — discovery on any port, a generic RTL2832U, interfaces and root
+hubs skipped, refusal with nothing written for no dongle, two dongles, a pinned non-dongle and seven
+malformed port names. The fake tree is substituted into a test copy of the script's own `SYSFS=` and
+`PORT=` lines, because the real script reads neither from outside. Two mutations (falling back to
+`1-3` when nothing matches; skipping the pinned port's id check) were each caught. The existing
+reset tests in `tests/test_usb_forensics.py` moved to the same fake tree.
+
+### Not done
+
+Nothing ran on a Synology or against a real dongle: Foundation hosts no weewx workload since
+DEC-0141. Prod is unaffected (it pins every value). An existing Synology install that relied on
+the old default stops resetting after it upgrades the monitor until it sets
+`REMEDY_MODE=usb_reset`; the startup line and the release notes say so.
+
+### Consequences
+
+- The escalation email on a systemd host still offers a `docker kill/rm/run` recreate line when
+  docker is reachable, though the unit owns the container there. Out of scope here.
+- #453's remaining audit text (CODE_REVIEW_S145 item 12's other `/volume1` defaults in `ops/`
+  scripts) is maintainer tooling, not what a new user copies; left as is.

@@ -64,7 +64,8 @@ EnvironmentFile=/etc/marvin/env.d/weewx/monitor.env
 
 # Paths. Everything below derives from BASE_DIR; the Foundation default
 # (/volume1/docker/weewx-rtldavis) is what froze, so it is set explicitly here
-# rather than left to the module default.
+# rather than left to the module default. (Since DEC-0217 that default is the
+# script's own directory, which is this same path.)
 Environment=WEEWX_RTLDAVIS_DIR=/srv/docker/weewx
 Environment=WEEWX_LOG=/srv/docker/weewx/logs/weewx.log
 Environment=WEEWX_ARCHIVE_DB=/srv/docker/weewx/weewx-data/archive/weewx.sdb

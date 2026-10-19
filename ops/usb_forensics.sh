@@ -44,12 +44,25 @@
 set -u
 
 PHASE="${1:-manual}"
-BASE="${WEEWX_RTLDAVIS_DIR:-/volume1/docker/weewx-rtldavis}"
+# Deployed beside usb_reset.sh in the base directory, so that is the default
+# (DEC-0217); usb_reset.sh passes it explicitly, since sudo drops the environment.
+BASE="${WEEWX_RTLDAVIS_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 OUTDIR="${USB_FORENSICS_DIR:-$BASE/logs/usb-forensics}"
-# The port the reset acts on. Kept in step with usb_reset.sh by hand: if that
-# script's node ever changes, change this too, or the capture documents a
-# different port from the one being reset.
-USB_PORT="${USB_RESET_PORT:-1-3}"
+# The port the reset acts on. usb_reset.sh finds it by USB id and passes it in
+# (DEC-0217). The monitor's own +verify capture has no port to pass, so the same
+# id scan runs here, read-only; anything but exactly one match records "unknown".
+USB_PORT="${USB_RESET_PORT:-}"
+if [ -z "$USB_PORT" ]; then
+    _n=0
+    for _d in /sys/bus/usb/devices/*; do
+        case "${_d##*/}" in *:*|usb*) continue ;; esac
+        [ -r "$_d/idVendor" ] && [ -r "$_d/idProduct" ] || continue
+        case "$(cat "$_d/idVendor"):$(cat "$_d/idProduct")" in
+            0bda:2838|0bda:2832) USB_PORT=${_d##*/}; _n=$((_n + 1)) ;;
+        esac
+    done
+    [ "$_n" -eq 1 ] || USB_PORT=unknown
+fi
 KEEP=200                     # newest capture files retained; older ones pruned
 
 mkdir -p "$OUTDIR" 2>/dev/null || true

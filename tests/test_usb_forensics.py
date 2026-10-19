@@ -108,8 +108,9 @@ def test_reset_still_unbinds_and_rebinds():
     an unbind/rebind, and a message drifting from its action is the exact defect
     DEC-0074 was written about."""
     src = _read(RESET)
-    assert "echo '1-3' > /sys/bus/usb/drivers/usb/unbind" in src
-    assert "echo '1-3' > /sys/bus/usb/drivers/usb/bind" in src
+    assert 'echo "$PORT" > "$SYSFS/drivers/usb/unbind"' in src
+    assert 'echo "$PORT" > "$SYSFS/drivers/usb/bind"' in src
+    assert "SYSFS=/sys/bus/usb\n" in src
     assert "sleep 3" in src
 
 
@@ -124,6 +125,45 @@ def test_reset_captures_before_unbind_and_after_bind():
     assert pre < unbind < bind < post
 
 
+def _fake_sysfs(d, devices=None):
+    """A sysfs stand-in under d: devices/<port>/idVendor+idProduct for each entry,
+    plus the drivers/usb directory the unbind/bind writes land in. The default is
+    one RTL-SDR Blog v3 at port 1-3, the original Synology layout."""
+    if devices is None:
+        devices = {"1-3": ("0bda", "2838")}
+    root = os.path.join(d, "sysfs")
+    os.makedirs(os.path.join(root, "drivers", "usb"))
+    for port, ids in devices.items():
+        dev = os.path.join(root, "devices", port)
+        os.makedirs(dev)
+        if ids:
+            with open(os.path.join(dev, "idVendor"), "w") as f:
+                f.write(ids[0] + "\n")
+            with open(os.path.join(dev, "idProduct"), "w") as f:
+                f.write(ids[1] + "\n")
+    return root
+
+
+def _reset_copy(d, root, port=""):
+    """usb_reset.sh with SYSFS pointed at root (and PORT pinned, if given) by
+    rewriting the script's own lines. The real script reads neither from its
+    environment, so a test copy is the only way in -- by design (DEC-0217)."""
+    src = _read(RESET)
+    assert "\nSYSFS=/sys/bus/usb\n" in src and '\nPORT=""\n' in src
+    script = os.path.join(d, "reset.sh")
+    with open(script, "w") as f:
+        f.write(src.replace("\nSYSFS=/sys/bus/usb\n", f"\nSYSFS={root}\n")
+                   .replace('\nPORT=""\n', f'\nPORT="{port}"\n')
+                   .replace("sleep 3", "true"))
+    os.chmod(script, 0o755)
+    return script
+
+
+def _written(root, name):
+    path = os.path.join(root, "drivers", "usb", name)
+    return _read(path).strip() if os.path.exists(path) else None
+
+
 def test_reset_tolerates_a_broken_capture():
     """Run the real script with a forensics helper that exits non-zero, against
     fake sysfs targets, and prove the unbind/rebind still happened."""
@@ -133,20 +173,15 @@ def test_reset_tolerates_a_broken_capture():
             f.write("#!/bin/sh\nexit 9\n")
         os.chmod(broken, 0o755)
 
-        # Rewrite the two sysfs writes to land in the temp dir instead.
-        script = os.path.join(d, "reset.sh")
-        with open(script, "w") as f:
-            f.write(_read(RESET)
-                    .replace("/sys/bus/usb/drivers/usb/", d + "/")
-                    .replace("sleep 3", "true"))
-        os.chmod(script, 0o755)
+        root = _fake_sysfs(d)
+        script = _reset_copy(d, root)
 
         r = subprocess.run(["/bin/sh", script],
                            env={**os.environ, "USB_FORENSICS_SCRIPT": broken},
                            capture_output=True, text=True, timeout=30)
         assert r.returncode == 0, r.stderr
-        assert _read(os.path.join(d, "unbind")).strip() == "1-3"
-        assert _read(os.path.join(d, "bind")).strip() == "1-3"
+        assert _written(root, "unbind") == "1-3"
+        assert _written(root, "bind") == "1-3"
 
 
 def _reset_harness(d, helper_body="#!/bin/sh\ntouch \"$MARKER\"\n", mode=0o755):
@@ -156,12 +191,7 @@ def _reset_harness(d, helper_body="#!/bin/sh\ntouch \"$MARKER\"\n", mode=0o755):
     with open(helper, "w") as f:
         f.write(helper_body)
     os.chmod(helper, mode)
-    script = os.path.join(d, "reset.sh")
-    with open(script, "w") as f:
-        f.write(_read(RESET)
-                .replace("/sys/bus/usb/drivers/usb/", d + "/")
-                .replace("sleep 3", "true"))
-    os.chmod(script, 0o755)
+    script = _reset_copy(d, _fake_sysfs(d))
     marker = os.path.join(d, "ran")
     r = subprocess.run(["/bin/sh", script],
                        env={**os.environ, "USB_FORENSICS_SCRIPT": helper,
@@ -186,7 +216,7 @@ def test_reset_refuses_a_helper_it_does_not_own():
             "a non-root-owned helper was executed under the sudo grant"
         assert "FORENSICS REFUSED" in r.stderr
         # and the reset itself still happened -- evidence is never load-bearing
-        assert _read(os.path.join(d, "bind")).strip() == "1-3"
+        assert _written(os.path.join(d, "sysfs"), "bind") == "1-3"
 
 
 def test_reset_refusal_is_loud_not_silent():
@@ -219,18 +249,14 @@ def test_monitor_logs_the_reset_scripts_output_on_success():
 def test_reset_tolerates_a_missing_capture():
     """The normal state of any box where the S68 deploy has not landed."""
     with tempfile.TemporaryDirectory() as d:
-        script = os.path.join(d, "reset.sh")
-        with open(script, "w") as f:
-            f.write(_read(RESET)
-                    .replace("/sys/bus/usb/drivers/usb/", d + "/")
-                    .replace("sleep 3", "true"))
-        os.chmod(script, 0o755)
+        root = _fake_sysfs(d)
+        script = _reset_copy(d, root)
         r = subprocess.run(["/bin/sh", script],
                            env={**os.environ,
                                 "USB_FORENSICS_SCRIPT": os.path.join(d, "nope.sh")},
                            capture_output=True, text=True, timeout=30)
         assert r.returncode == 0, r.stderr
-        assert _read(os.path.join(d, "bind")).strip() == "1-3"
+        assert _written(root, "bind") == "1-3"
 
 
 # --- 3. it completes and self-describes when the reads fail ---
