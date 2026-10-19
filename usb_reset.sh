@@ -20,7 +20,24 @@
 # the capture is only evidence about it. Hence `|| true` on both calls, and no
 # `set -e` in this file.
 
-FORENSICS="${USB_FORENSICS_SCRIPT:-/volume1/docker/weewx-rtldavis/usb_forensics.sh}"
+#
+# WHICH DEVICE (DEC-0217, #453). This script used to unbind a hardcoded port,
+# `1-3`, which was the dongle's port on the original Synology. On any other host
+# that port can be a different device, and this runs as root. So it now finds the
+# port itself: the one USB device whose id is an RTL2832U. If it finds none, or
+# more than one, it refuses and exits non-zero; it never guesses. With two dongles
+# attached, set PORT below to the one weewx uses. The id check still applies to a
+# pinned port, so a wrong PORT is refused rather than reset.
+#
+# The port is deliberately NOT read from the environment or the command line. The
+# sudoers grant is scoped to this path with no arguments, so an input the monitor's
+# user controls would let that user unbind any device as root.
+PORT=""
+RTL_IDS="0bda:2838 0bda:2832"   # RTL-SDR Blog v3 and generic RTL2832U dongles
+SYSFS=/sys/bus/usb
+
+HERE=$(cd "$(dirname "$0")" && pwd)
+FORENSICS="${USB_FORENSICS_SCRIPT:-$HERE/usb_forensics.sh}"
 
 # ⚠️ THIS SCRIPT RUNS AS ROOT, under a sudoers NOPASSWD grant scoped to exactly
 # this path (README "Security Note"). So anything it executes also runs as root,
@@ -57,15 +74,64 @@ capture() {
                  "usb_reset.sh sudo grant." >&2
             ;;
         *)
-            "$FORENSICS" "$1" >/dev/null 2>&1 || true
+            # sudo's env_reset drops the caller's environment, so the helper is
+            # told the port and the base directory here, not left to its defaults.
+            USB_RESET_PORT="$PORT" WEEWX_RTLDAVIS_DIR="${WEEWX_RTLDAVIS_DIR:-$HERE}" \
+                "$FORENSICS" "$1" >/dev/null 2>&1 || true
             ;;
     esac
 }
 
+# Prints vendor:product for a device directory; empty when it has none (an
+# interface, a missing port).
+usb_id() {
+    [ -r "$1/idVendor" ] && [ -r "$1/idProduct" ] || return 0
+    printf '%s:%s' "$(cat "$1/idVendor")" "$(cat "$1/idProduct")"
+}
+
+is_rtl() {
+    for ok in $RTL_IDS; do
+        [ "$1" = "$ok" ] && return 0
+    done
+    return 1
+}
+
+refuse() {
+    echo "USB RESET REFUSED: $*; nothing was unbound (DEC-0217)." >&2
+    exit 3
+}
+
+if [ -n "$PORT" ]; then
+    # A bus port name only (1-3, 5-1.2): this string is written into sysfs as root.
+    case "$PORT" in
+        *[!0-9.-]*|-*|*-|[!0-9]*) refuse "PORT='$PORT' is not a USB port name" ;;
+    esac
+    case "$PORT" in *-*) ;; *) refuse "PORT='$PORT' is not a USB port name" ;; esac
+    ID=$(usb_id "$SYSFS/devices/$PORT")
+    is_rtl "$ID" || refuse "port $PORT is ${ID:-not a USB device}, not an RTL2832U ($RTL_IDS)"
+else
+    FOUND=""
+    COUNT=0
+    for dev in "$SYSFS"/devices/*; do
+        name=${dev##*/}
+        case "$name" in *:*|usb*) continue ;; esac   # interfaces and root hubs
+        if is_rtl "$(usb_id "$dev")"; then
+            FOUND="$FOUND $name"
+            COUNT=$((COUNT + 1))
+        fi
+    done
+    [ "$COUNT" -eq 0 ] && refuse "no RTL2832U ($RTL_IDS) found under $SYSFS/devices"
+    [ "$COUNT" -gt 1 ] && refuse "$COUNT RTL2832U dongles found (ports:$FOUND); set PORT in $0"
+    PORT=${FOUND# }
+    ID=$(usb_id "$SYSFS/devices/$PORT")
+fi
+# weewx_monitor.py's do_reset() parses this line; keep its shape.
+echo "usb_reset: port=$PORT id=$ID"
+
 capture pre
-echo '1-3' > /sys/bus/usb/drivers/usb/unbind
+echo "$PORT" > "$SYSFS/drivers/usb/unbind"
 sleep 3
-echo '1-3' > /sys/bus/usb/drivers/usb/bind
+echo "$PORT" > "$SYSFS/drivers/usb/bind"
 # After the rebind, not before it: re-enumeration is the event whose effect on the
 # container's view and on rtldavis's open handle we are trying to observe.
 capture post

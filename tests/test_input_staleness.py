@@ -190,9 +190,10 @@ def test_remedy_action_names_what_will_actually_happen(monkeypatch):
     assert wm.USB_RESET_ACTION in wm.remedy_action()
 
 
-def test_default_mode_preserves_legacy_behavior(monkeypatch, tmp_path):
-    """This is a published extension. An existing Synology install must not
-    silently change what it does because marvin needed something else.
+def test_default_mode_is_none(monkeypatch, tmp_path):
+    """An unset REMEDY_MODE detects and escalates, and never acts (DEC-0217, #453).
+    It was usb_reset, the original Synology remedy, which a new user on any other
+    host got without asking for it. Synology installs now set it explicitly.
 
     The default is read at import, so this loads a private copy of the module with
     REMEDY_MODE removed from the environment (the shared `wm` is left alone). The
@@ -204,7 +205,8 @@ def test_default_mode_preserves_legacy_behavior(monkeypatch, tmp_path):
     spec = importlib.util.spec_from_file_location("weewx_monitor_default_probe", wm.__file__)
     fresh = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fresh)
-    assert fresh.REMEDY_MODE == 'usb_reset'
+    assert fresh.REMEDY_MODE == 'none'
+    assert fresh.remedy_action() == 'no automatic remedy (REMEDY_MODE=none)'
 
 
 def test_restart_unit_mode_dispatches_to_the_unit_restart(monkeypatch):
