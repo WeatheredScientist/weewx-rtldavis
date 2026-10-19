@@ -2,7 +2,7 @@
 
 Tests parse_rain_glitch() against real driver-log signatures and non-matching
 lines. Does not send email (send_email is exercised end-to-end via the
-`weewx_monitor.py --test-alert` mode on the NAS, where the Gmail creds live).
+`weewx_monitor.py --test-alert` mode on the host that holds the Gmail creds).
 
 weewx_monitor.py runs the PID guard + emails at import; we set --test-alert in
 argv so the module imports cleanly (guard bypassed) and reads env-less creds

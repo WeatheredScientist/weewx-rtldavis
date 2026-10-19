@@ -1,4 +1,4 @@
-"""Full-outage vs. degraded reception alert classification (#373, DEC-0154).
+"""Full-outage vs. degraded reception alert classification (#373, DEC-0199).
 
 The 2026-09-07 incident (`#370`) logged `WINDOW: 0/21 (0%)` for ~71 minutes,
 identical in shape to a milder sustained dip below WU_RF_MIN_PCT -- nothing in

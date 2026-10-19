@@ -75,6 +75,62 @@ def _make_driver():
     return d
 
 
+class _BatchMgr:
+    """A ProcManager stand-in: get_stderr() hands genLoopPackets one batch of Go
+    stderr lines per loop pass, then running() turns false."""
+
+    def __init__(self, batches):
+        self.batches = list(batches)
+
+    def running(self):
+        return bool(self.batches)
+
+    def get_stderr(self):
+        return iter([list(self.batches.pop(0))])
+
+    def drain_stderr(self, max_lines=50):
+        return []
+
+
+def _fake_create(_driver, lines):
+    """PacketFactory.create stand-in. A line `DATA <temp> <cnt0>` becomes a data
+    dict carrying Go's cumulative counters, as real DATA packets do; anything
+    else decodes to nothing. Drains `lines`, as the real one does."""
+    for line in list(lines):
+        parts = line.split()
+        if parts[:1] == ['DATA']:
+            yield {'temperature': float(parts[1]), 'curr_cnt0': int(parts[2]),
+                   'curr_cnt1': 0, 'curr_cnt2': 0, 'curr_cnt3': 0}
+    del lines[:]
+
+
+def run_loop(monkeypatch, batches):
+    """Run the REAL genLoopPackets over `batches` (one list of stderr lines per
+    loop pass) until the fake process stops. Returns (driver, temperatures of
+    the loop packets it yielded). Only the decode, the stats bookkeeping and the
+    packet conversion are stubbed; the line scan and the dedup guard are the
+    driver's own (#456, audit item 35)."""
+    d = _make_driver()
+    d._mgr = _BatchMgr(batches)
+    d.tr_count = 1
+    d._stderr_sample_count = 0
+    d._hotswap_path = None
+    d._last_pkt = None
+    d._maybe_hotswap = lambda: False
+    d._update_stats = lambda *a: None
+    d._merge_pending_freq_fields = lambda data: None
+    d._data_to_packet = lambda data: {'outTemp': data['temperature']}
+    monkeypatch.setattr(rtldavis.PacketFactory, 'create', staticmethod(_fake_create))
+    monkeypatch.setattr(rtldavis.time, 'time', lambda: 1_000_000.0)
+    yielded = []
+    try:
+        for packet in d.genLoopPackets():
+            yielded.append(packet['outTemp'])
+    except rtldavis.weewx.WeeWxIOError as e:
+        assert 'not running' in str(e), e
+    return d, yielded
+
+
 def test_init_stats_starts_dup_count_at_zero():
     d = _make_driver()
     assert d.stats['dup_count'] == 0
@@ -119,18 +175,20 @@ def test_reset_stats_zeroes_dup_count_for_next_period():
     assert d.stats['dup_count'] == 0
 
 
-def test_counter_increments_unconditionally_on_go_dedup_line():
-    """The exact substring match genLoopPackets uses -- no debug_rtld gate."""
-    d = _make_driver()
-    lines = [
-        "13:44:13.116046 hop stuff\n",
-        "20:31:04.104955  E401BD56010ED10E  duplicate packet: dropped\n",
-        "some other unrelated line\n",
-    ]
-    for _line in lines:
-        if "duplicate packet:" in _line:
-            d.stats['dup_count'] += 1
-    assert d.stats['dup_count'] == 1
+def test_counter_increments_unconditionally_on_go_dedup_line(monkeypatch):
+    """genLoopPackets' own line scan, run for real with debug off: each Go
+    "duplicate packet:" line counts once, and no other line does. (This test
+    used to repeat the substring match inline, so deleting the driver's counter
+    left it green -- #456, audit item 35.)"""
+    d, _ = run_loop(monkeypatch, [
+        ["13:44:13.116046 hop stuff\n",
+         "20:31:04.104955  E401BD56010ED10E  duplicate packet: dropped\n",
+         "some other unrelated line\n"],
+        ["20:31:07.000000  E401BD56010ED10E  duplicate packet: dropped\n",
+         "DATA 21.5 100\n"],
+    ])
+    assert d.stats['dup_count'] == 2
+    assert d.stats['repeat_count'] == 0
 
 
 if __name__ == '__main__':

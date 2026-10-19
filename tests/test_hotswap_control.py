@@ -298,16 +298,24 @@ def test_ack_is_written_atomically(tmp_path):
 
 # ── 4. the watchdog grace, the hazard that motivated the design ──────────────
 
-def test_grace_exceeds_the_us_init_period():
-    """The reason a flat 150s was not good enough.
+def _go_loop_period(tx_id):
+    """Go's idLoopPeriods: 2.5625 s for ID 1, plus 62.5 ms per ID (main.go)."""
+    return 2.5625 + (tx_id - 1) * 0.0625
 
-    A respawned child is legitimately silent for the US radio init period
-    (133s). The normal watchdog leaves 17s of margin over that; the post-swap
-    grace must leave a real one.
+
+def test_grace_exceeds_the_us_init_period():
+    """The reason a flat 150s was not good enough (#456, audit item 32).
+
+    Go's init waits on one channel for the transmitter to hop onto it: within
+    51 loop periods on US frequencies, capped at 53. For ID 8 the arrival alone
+    is 153 s, past the normal watchdog; the init grace must cover Go's cap for
+    every ID with real margin.
     """
-    us_init_period = 133
-    assert rtldavis.STALL_TIMEOUT_S - us_init_period < 20
-    assert rtldavis.HOTSWAP_GRACE_S - us_init_period > 100
+    worst_arrival = 51 * _go_loop_period(8)
+    go_cap = 53 * _go_loop_period(8)
+    assert worst_arrival > rtldavis.STALL_TIMEOUT_S
+    assert rtldavis.INIT_GRACE_S - go_cap > 60
+    assert rtldavis.HOTSWAP_GRACE_S == rtldavis.INIT_GRACE_S
 
 
 class _ClockMgr:
@@ -381,15 +389,62 @@ def test_swap_resets_and_widens_the_stall_watchdog(monkeypatch):
 
 
 def test_positive_control_same_silence_without_a_swap_does_stall(monkeypatch):
-    """Proves the grace is what saved the test above, not the fake clock.
+    """Proves the swap's reset is what saved the test above, not the fake clock.
 
-    Identical timing, no swap: 200s of silence must trip the normal 150s
-    watchdog. If this ever stops raising 'stalled', the test above is
-    measuring nothing.
+    Identical timing, no swap: the silence runs on from the driver's start and
+    reaches 400s, past the 240s init grace. (Before #456 the driver's own start
+    got only the normal 150s, and 200s tripped it.) If this ever stops raising
+    'stalled', the test above is measuring nothing.
     """
     clock = [1000.0]
     monkeypatch.setattr(rtldavis.time, "time", lambda: clock[0])
     d = _loop_driver(clock, step=200, alive_passes=4, swap_on_pass=None)
+    with pytest.raises(rtldavis.weewx.WeeWxIOError, match="stalled"):
+        _run(d)
+
+
+def _first_packet_after(monkeypatch, d, clock, n_calls):
+    """Make the driver's n-th get_stderr() call carry its first packet (a hop
+    packet, which is enough to mark the child alive)."""
+    calls = [0]
+    monkeypatch.setattr(rtldavis.RtldavisDriver, "_cache_pending_freq_fields",
+                        lambda self, data: None)
+
+    def _get_stderr(_self=None):
+        clock[0] += d._mgr.step
+        calls[0] += 1
+        return iter([[]]) if calls[0] == n_calls else iter(())
+
+    def _create(_self, lines):
+        return [{"dateTime": int(clock[0]), "usUnits": 16}] if calls[0] == n_calls else []
+
+    d._mgr.get_stderr = _get_stderr
+    monkeypatch.setattr(rtldavis.PacketFactory, "create", _create)
+
+
+def test_a_fresh_start_gets_the_init_grace(monkeypatch):
+    """#456, audit item 32: the driver's own start is an init period too.
+
+    200s of silence after start (a slow init: an ID 8 transmitter, or one lost
+    packet), then the first packet. That is inside the 240s grace, so the loop
+    must survive and exit only because the child stopped. Before #456 the start
+    got the normal 150s and this raised 'stalled'.
+    """
+    clock = [1000.0]
+    monkeypatch.setattr(rtldavis.time, "time", lambda: clock[0])
+    d = _loop_driver(clock, step=200, alive_passes=3, swap_on_pass=None)
+    _first_packet_after(monkeypatch, d, clock, n_calls=2)
+    with pytest.raises(rtldavis.weewx.WeeWxIOError, match="is not running"):
+        _run(d)
+
+
+def test_the_start_grace_is_released_by_the_first_packet(monkeypatch):
+    """After the first packet the normal 150s applies: the same 200s of silence
+    that the start survived now stalls."""
+    clock = [1000.0]
+    monkeypatch.setattr(rtldavis.time, "time", lambda: clock[0])
+    d = _loop_driver(clock, step=200, alive_passes=4, swap_on_pass=None)
+    _first_packet_after(monkeypatch, d, clock, n_calls=1)
     with pytest.raises(rtldavis.weewx.WeeWxIOError, match="stalled"):
         _run(d)
 

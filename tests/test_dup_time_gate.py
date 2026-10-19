@@ -23,7 +23,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from test_duplicate_frame_counter import _make_driver  # noqa: E402  (shared weewx stubs)
+from test_duplicate_frame_counter import _make_driver, run_loop  # noqa: E402  (shared weewx stubs)
 from rtldavis import dedup_key as _dedup_key  # noqa: E402  -- the REAL function
 
 PATCH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -52,17 +52,34 @@ def test_every_curr_cnt_index_is_excluded():
     assert _dedup_key(d) == {'temperature': 1.0}
 
 
-def test_a_reading_that_returns_to_a_previous_value_still_yields():
+def test_a_reading_that_returns_to_a_previous_value_still_yields(monkeypatch):
     """Only the IMMEDIATELY preceding packet is suppressed -- the guard keeps
-    one packet of state, not a set. 21.5 -> 21.6 -> 21.5 must yield 3 times."""
-    seen = []
-    last = None
-    for t in (21.5, 21.6, 21.5):
-        reading = _dedup_key({'temperature': t, 'curr_cnt0': len(seen)})
-        if reading != last:
-            last = reading
-            seen.append(t)
-    assert seen == [21.5, 21.6, 21.5]
+    one packet of state, not a set. 21.5 -> 21.6 -> 21.5 must yield 3 times.
+    Runs the driver's real loop; it used to re-implement the guard inline, so
+    deleting the guard left it green (#456, audit item 35)."""
+    _, yielded = run_loop(monkeypatch, [["DATA 21.5 100"], ["DATA 21.6 101"],
+                                        ["DATA 21.5 102"]])
+    assert yielded == [21.5, 21.6, 21.5]
+
+
+def test_the_driver_suppresses_a_repeat_reading(monkeypatch):
+    """The guard itself: the same reading with advanced counters (a transmitter
+    repeat) yields once, and the next real change yields again."""
+    _, yielded = run_loop(monkeypatch, [["DATA 21.5 100"], ["DATA 21.5 101"],
+                                        ["DATA 21.5 102"], ["DATA 21.6 103"]])
+    assert yielded == [21.5, 21.6]
+
+
+def test_the_driver_counts_go_repeat_lines(monkeypatch):
+    """Go's `repeat packet:` line is counted by the driver's own scan, whether
+    or not a packet arrives in the same batch."""
+    d, _ = run_loop(monkeypatch, [
+        ["12:00:00.0  E401BD56010ED10E  repeat packet: accepted", "DATA 21.5 100"],
+        ["12:00:02.8  E401BD56010ED10E  repeat packet: accepted"],
+        ["unrelated repeat of nothing"],
+    ])
+    assert d.stats['repeat_count'] == 2
+    assert d.stats['dup_count'] == 0
 
 
 # --- the repeat counter --------------------------------------------------

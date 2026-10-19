@@ -168,6 +168,29 @@ def test_corrupt_lease_file_is_not_active():
     print("  [PASS] test_corrupt_lease_file_is_not_active")
 
 
+def test_valid_json_that_is_not_an_object_is_not_active():
+    """#456, audit item 20: `[]`, `null`, a number or a string is valid JSON
+    but not a lease. `.get` on it raised AttributeError, which the except tuple
+    did not catch, so it escaped skip_this_post() and killed the upload thread.
+    Each must read as "not held", and skip_this_post() must keep working."""
+    for body in ('[]', 'null', '42', '"held"', '[{"tenant": "x"}]', 'true'):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "heavy-io.lease"), "w") as f:
+                f.write(body)
+            t = _make_thread(lease_dir=d, post_interval=60)
+            assert t._foreign_lease_active() is False, body
+            t.skip_this_post(0)
+            assert t.post_interval == 60, body
+
+
+def test_lease_with_a_non_string_expiry_is_not_active():
+    with tempfile.TemporaryDirectory() as d:
+        with open(os.path.join(d, "heavy-io.lease"), "w") as f:
+            f.write(json.dumps({"tenant": "coffee-radar", "expires_at": 1893456000}))
+        t = _make_thread(lease_dir=d)
+        assert t._foreign_lease_active() is False
+
+
 def test_lease_missing_expires_at_is_not_active():
     with tempfile.TemporaryDirectory() as d:
         with open(os.path.join(d, "heavy-io.lease"), "w") as f:
