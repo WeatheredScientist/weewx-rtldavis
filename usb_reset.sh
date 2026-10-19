@@ -30,14 +30,14 @@ FORENSICS="${USB_FORENSICS_SCRIPT:-/volume1/docker/weewx-rtldavis/usb_forensics.
 # by nobody else, exactly like this file.
 #
 # Checked here rather than merely documented: prose does not execute (DEC-0040),
-# and on this NAS mode 777 is common enough that "it will be deployed correctly"
+# and on bind-mounted or shared volumes mode 777 is common enough that "it will be deployed correctly"
 # is not a safe assumption. Refusal is LOUD on stderr — weewx_monitor.py logs
 # this script's output — because a security check that silently skips the capture
 # is the silent-no-op failure class this repo keeps getting bitten by.
 capture() {
     [ -x "$FORENSICS" ] || return 0
 
-    # GNU (Synology/busybox) first, BSD second, so this is testable off-NAS.
+    # GNU (Linux/busybox) first, BSD second, so this is testable on a laptop.
     f_uid=$(stat -c %u "$FORENSICS" 2>/dev/null || stat -f %u "$FORENSICS" 2>/dev/null)
     f_mode=$(stat -c %a "$FORENSICS" 2>/dev/null || stat -f %OLp "$FORENSICS" 2>/dev/null)
     # Trailing three digits only: a setuid/sticky prefix (4755) would otherwise

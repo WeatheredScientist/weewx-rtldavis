@@ -17,7 +17,7 @@ log_success = True
 log_failure = True
 
 # This configuration file was created by ...
-version = 5.3.1
+version = 5.5.2
 
 ##############################################################################
 
@@ -58,7 +58,9 @@ version = 5.3.1
 [Rtldavis]
     # This section is for the rtldavis sdr-rtl USB receiver.
 
-    cmd = /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0
+    # Start at auto gain (0). Once reception is steady, tune it with -gain; see the
+    # README, which covers gain.
+    cmd = /usr/local/bin/rtldavis -gain 0 -v -fc 0 -ppm 0
     # Options:
     # -ppm = frequency correction of rtl dongle in ppm; default = 0
     # -gain = tuner gain in tenths of Db; default = 0 means "auto gain"
@@ -108,6 +110,11 @@ version = 5.3.1
     #qc_humidity_max_delta = 10.0
     #qc_wind_speed_max_delta = 20.0
     #qc_uv_max_delta = 8.0
+    #qc_temp_1_max_delta = 4.0
+    #qc_temp_2_max_delta = 4.0
+    #qc_humid_1_max_delta = 10.0
+    #qc_humid_2_max_delta = 10.0
+    # solar_radiation and rain_rate have bounds but no delta, so no key.
 
     # The driver to use:
     driver = user.rtldavis
@@ -725,43 +732,18 @@ version = 5.3.1
     api_key = YOUR_API_KEY
     api_secret = YOUR_API_SECRET
     station_id = YOUR_STATION_ID
-    fetch_interval = 3600
+    # Seconds between fetches; 300 uses about 1% of the API's hourly allowance.
+    fetch_interval = 300
 
 ##############################################################################
-#   WeatherCloud upload
-[WeatherCloud]
-    id = YOUR_ID
-    key = YOUR_KEY
-
-
-
-
-##############################################################################
-#   Windy.com PWS upload (API v2)
-[Windy]
-    station_id = YOUR_STATION_ID
-    password = YOUR_PASSWORD
-    post_interval = 300
-
-##############################################################################
-#   OpenWeatherMap Stations API 3.0
-[OWM]
-    api_key = YOUR_API_KEY
-    station_id = YOUR_STATION_ID
-
-[LoopData]
-    [[FileSpec]]
-        loop_data_dir = /volume1/web
-        filename = loop-data.txt
-    [[Formatting]]
-        target_report = SeasonsReport
-        [[[Units]]]
-            [[[[Groups]]]]
-                group_speed = mile_per_hour
-                group_pressure = inHg
-                group_temperature = degree_F
-                group_rain = inch
-    [[RsyncSpec]]
-        enable = False
-    [[Include]]
-        fields = current.windSpeed, current.windGust, current.windDir
+#   Loop feed for dashboards (loop-data.txt and current.json).
+#   Needs user.loop_json_writer.LoopJsonWriter LAST in process_services.
+#   Every key is optional; the values shown are the defaults.
+[LoopJsonWriter]
+    # Relative paths resolve against WEEWX_ROOT.
+    #path = loop-data.txt
+    #current_path = current.json
+    # Seconds a field keeps its last value before it is dropped from the feed.
+    #ttl_default = 300
+    # current.json is a cold-load snapshot; seconds between writes (0 = every packet).
+    #current_interval = 60

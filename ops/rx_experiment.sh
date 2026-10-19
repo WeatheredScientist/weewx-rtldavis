@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RETIRED (NAS era, DEC-0118): kept as a record of the method. Its paths and nasctl calls no longer reach a live system.
 # rx_experiment.sh — the DEC-0048 designed RX experiment, as an apparatus.
 #
 # DEC-0048 said a proper RX test is "a stated hypothesis, a fixed observation

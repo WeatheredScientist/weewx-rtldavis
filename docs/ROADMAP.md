@@ -348,14 +348,15 @@ Follows DEC-0213 (the README, `docs/DEPLOY.md` and `examples/` rewritten for a n
 The announcement waits for phases 1 and 2 and for the dashboard going public. Phases run in order;
 items inside a phase don't depend on each other.
 
-- [ ] **Phase 1 — what a new user copies.** No image change.
-  - [ ] #451 `pressure_service.py` crashes WeeWX on the example's placeholder `station_id` (audit 19).
-  - [ ] #452 `weewx.conf.example`: this station's gain, dead `[LoopData]`, orphan sections, missing
+- [ ] **Phase 1 — what a new user copies.** Docs and config, except #451, which edits the baked
+      `pressure_service.py` and so ships with phase 2's v2.0.21. S158 did #451, #452, #454, #455.
+  - [x] #451 `pressure_service.py` crashes WeeWX on the example's placeholder `station_id` (audit 19).
+  - [x] #452 `weewx.conf.example`: this station's gain, dead `[LoopData]`, orphan sections, missing
         `[LoopJsonWriter]` (audit 17).
   - [ ] #453 Monitor defaults assume Synology (`REMEDY_MODE=usb_reset`, `/volume1`, the USB port).
         Design check and a DEC before code; prod's unit gets `WEEWX_CONTAINER` first.
-  - [ ] #454 `CHANGES-FROM-UPSTREAM.md` lags the code (audit 10).
-  - [ ] #455 Retired NAS wording in adopter-facing files; patched uploaders unlinted (audit 11, 12).
+  - [x] #454 `CHANGES-FROM-UPSTREAM.md` lags the code (audit 10).
+  - [x] #455 Retired NAS wording in adopter-facing files; patched uploaders unlinted (audit 11, 12).
   - [ ] Prove the quickstart on a fresh Linux host (BOOT job 3): config seeding and non-root writes
         need no dongle.
 - [ ] **Phase 2 — the image, one release (v2.0.21).** Merged S156: #450 (both downloads pinned;
