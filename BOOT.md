@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S156 → S157)
+## ▶ Resume here (S157 → S158)
 
 ### What's settled (do not re-derive)
 
@@ -45,10 +45,10 @@ and smoke-tests amd64 and arm64, CI pushes arm64 to GHCR and `scripts/join_multi
 with marvin's `:vX.Y.Z-amd64`; the v2.0.20 backfill ran 2026-10-17 18:41 ET (`:latest` multi-arch,
 `:v2.0.20-amd64` = prod's digest). **The plan is ROADMAP P0.8 (public readiness: five phases,
 issues #451–#456) and P1.9 (decoder fixes in Go: #458 measure CRC failures, #459 burst gate)**,
-on #457. Non-Davis platform research is `eaglehunt-weather-dashboard#936`, dash's to run; weewx
+on #457. **#458 is built (S157, DEC-0216, PR #461, CI green, log-only, not deployed).** Non-Davis platform research is `eaglehunt-weather-dashboard#936`, dash's to run; weewx
 files issues from its section A.
 
-### ▶▶ S157 JOB LIST
+### ▶▶ S158 JOB LIST
 
 1. **Watch, no action unless it fires** (last checked S152: soak 14 passed / 0 failures, no
    `bar_absolute` fallback warning): the measured `pressure` keeps arriving (a `no bar_absolute`
@@ -64,7 +64,7 @@ files issues from its section A.
    then the GitHub About text and topics (owner's go). The Hub overview syncs from README on the
    next push to `main`, if the Hub secrets are set.
 4. **First arm64 run against a live radio** (any Pi with a dongle); until then README says
-   smoke-tested only. Then P0.8 phase 2's v2.0.21 (audit 15) and P1.9's #458.
+   smoke-tested only. Then P0.8 phase 2's v2.0.21 (audit 15), which carries #458 (merge PR #461 first); after it deploys, collect a day of `crc failures this period` lines and design #459 from them (frontier tier, DEC first).
 5. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI.
    (`eaglehunt-ops#358` closed S155: some replaced test addresses were live hosts; no history rewrite.)
 6. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
@@ -92,7 +92,7 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 **S156 ran on Opus 5.5** (positioning, attribution and the public docs: judgment work), switched
 with a bare `/model`, which persists: **the Sonnet floor is the owner's to restore** (not done at
-S156's close). S157 is watches plus job 3: Sonnet, Opus for #453's design.
+S156's close). S157 ran on Sonnet 5.5 (#458 was a locked design). S158 is watches plus job 3: Sonnet, Opus for #453's design.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -112,4 +112,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-18 (S156 close). v2.0.20 steady in prod; public docs rewritten (DEC-0213); images multi-arch (DEC-0214/0215); ROADMAP P0.8 + P1.9 planned with issues._
+_Last updated: 2026-10-18 (S157 close). v2.0.20 steady in prod; public docs rewritten (DEC-0213); images multi-arch (DEC-0214/0215); ROADMAP P0.8 + P1.9 planned with issues; #458 CRC counters built on PR #461._
