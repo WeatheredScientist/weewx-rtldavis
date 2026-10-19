@@ -349,12 +349,14 @@ The announcement waits for phases 1 and 2 and for the dashboard going public. Ph
 items inside a phase don't depend on each other.
 
 - [ ] **Phase 1 — what a new user copies.** Docs and config, except #451, which edits the baked
-      `pressure_service.py` and so ships with phase 2's v2.0.21. S158 did #451, #452, #454, #455.
+      `pressure_service.py` and so ships with phase 2's v2.0.21. S158 did #451, #452, #454, #455;
+      S159 did #453 (PR #463).
   - [x] #451 `pressure_service.py` crashes WeeWX on the example's placeholder `station_id` (audit 19).
   - [x] #452 `weewx.conf.example`: this station's gain, dead `[LoopData]`, orphan sections, missing
         `[LoopJsonWriter]` (audit 17).
-  - [ ] #453 Monitor defaults assume Synology (`REMEDY_MODE=usb_reset`, `/volume1`, the USB port).
-        Design check and a DEC before code; prod's unit gets `WEEWX_CONTAINER` first.
+  - [x] #453 Monitor defaults assume Synology (`REMEDY_MODE=usb_reset`, `/volume1`, the USB port).
+        DEC-0217: defaults describe no host, `usb_reset.sh` finds the dongle by USB id; the prod
+        ordering step proved unneeded (S159, PR #463).
   - [x] #454 `CHANGES-FROM-UPSTREAM.md` lags the code (audit 10).
   - [x] #455 Retired NAS wording in adopter-facing files; patched uploaders unlinted (audit 11, 12).
   - [ ] Prove the quickstart on a fresh Linux host (BOOT job 3): config seeding and non-root writes
@@ -365,9 +367,12 @@ items inside a phase don't depend on each other.
       since 2026-10-17 18:41 ET). Left: audit 15 (the Dockerfile's brace expansion under `/bin/sh`
       leaves both cleanups as no-ops), and the first arm64 run against a live radio. Driver edits
       that ride along bump `ws.7`.
-- [ ] **Phase 3 — tests that cannot fail, then the bugs they hide.** #456: audit 29 and 33–39 first
+- [x] **Phase 3 — tests that cannot fail, then the bugs they hide.** #456: audit 29 and 33–39 first
       (each fix proved by a mutation turning it red), then audit 32 (the US init time against the
       150 s watchdog, check real logs first) and audit 20 (lease JSON kills the Influx thread).
+      **Done S159 (PR #464):** 35, 36, 38 fixed (29, 33, 34 had shipped at S145; 37's boilerplate and
+      39's untested modules left for phase 5). Audit 32 was real (153 s worst case for ID 8): every
+      start now gets the 240 s init grace, rides v2.0.21. Audit 20 fixed in the mounted `influx.py`.
 - [ ] **Phase 4 — upstream, in the owner's voice; nothing posted without a go.** Offer the four
       unoffered driver fixes, highest value first: the `[options]` token's silent EU fallback (14),
       zombie reaping (12), windDir (2), `NameError` and `rxCheckPercent` (3, 4). The driver repos have

@@ -48,7 +48,8 @@ def _gnu_date_env() -> dict[str, str]:
         return env
     gdate = shutil.which("gdate")
     if not gdate:
-        pytest.skip("no GNU-compatible `date -d` on PATH (install coreutils for gdate)")
+        pytest.skip("no GNU-compatible `date -d` on PATH (install coreutils for gdate)",
+                    allow_module_level=True)
     shim = Path(tempfile.mkdtemp()) / "bin"
     shim.mkdir()
     (shim / "date").symlink_to(gdate)

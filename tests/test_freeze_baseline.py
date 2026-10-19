@@ -1,4 +1,4 @@
-"""Offline tests for ops/freeze_baseline.py — the DEC-0083 freeze-rate readout.
+"""Offline tests for ops/freeze_baseline.py — the DEC-0085 tool for DEC-0083's freeze-rate readout.
 
 This tool's whole value rests on getting the three-way split right: a >150s
 archive gap is RF-dead, a scheduled arm swap, or a freeze, and getting any of

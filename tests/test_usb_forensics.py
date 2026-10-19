@@ -1,4 +1,4 @@
-"""Offline tests for the S68 reset-forensics capture (BOOT blocker 4, DEC-0074).
+"""Offline tests for the S68 reset-forensics capture (BOOT blocker 4, DEC-0075).
 
 The USB resets fire and do not work -- 3/3 on 2026-08-06, 9/9 on 2026-08-02 --
 and the hypothesis (the reset treats the DEVICE while the fault is the CONSUMER's

@@ -44,10 +44,19 @@ They live here rather than in `BOOT.md` because a watch is not in-flight work: i
 doesn't, and until it fires there is nothing to do. Check them when something looks odd, or when a
 trigger below is plainly satisfied.
 
-- **Co-rejection grep** (DEC-0054): **0 hits through 2026-08-12 (S76), positive-controlled** — the
-  identical pipeline returns 2308 for a token known to be present. Single-token pattern
+- **Co-rejection grep** (DEC-0054): **first fired 2026-10-10 (found S159).** `frame failed
+  message-type proof` at 2026-10-10 19:58, 10-13 10:39 and 10-18 06:43 ET, each co-rejecting one
+  frame's wind fields, plus two `frame failed bounds proof` lines, in marvin's logs from 10-06 to
+  10-19. The check working as designed; nothing to do unless the rate climbs. Was 0 hits through
+  2026-08-12 (S76), positive-controlled — the identical pipeline returned 2308 for a token known to
+  be present. Single-token pattern
   `co-rejecting` — *multi-word `nasctl grep` patterns silently match nothing*; positive-control any
   zero before believing it, every time.
+- **Uploader rate limits (S159, not ours to fix)** — from 2026-10-06 to 10-19: WOW answered `Too
+  frequent observations` every 15 minutes for 6 hours after the 2026-10-14 21:22 ET restart
+  (21:25-03:45), plus about one a day otherwise; Windy answers `429 Too Many Requests` about twice a
+  day. Records are simply not published; check after the next restart whether WOW repeats the
+  6-hour pattern before considering a `post_interval` change.
 - **Humidity-spike watch** — unfired. **Method and arithmetic are in DEC-0044 — do not re-derive.**
 - **DEC-0049 phantom-rainRate** — unfired, and **already instrumented**: `soak_check.sh` computes
   `rainRate>0 while rain=0` every run, so this watch needs no manual check. The next calm,
