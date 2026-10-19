@@ -470,7 +470,7 @@ and is still there. What the Go side has shown, and where each stands:
 
 Steps, in order:
 
-- [ ] #458 **Measure.** Count CRC failures per hop slot and how many fall within ~100 ms of an
+- [~] #458 **Measure.** *(built S157, DEC-0216, PR #461; ships in the next release, then a day of counts)* Count CRC failures per hop slot and how many fall within ~100 ms of an
       accepted frame; surface it through the driver's counter line; diff the pinned source against
       upstream. Log only, no data change. A day of production counts is the baseline.
 - [ ] #459 **Fix.** A content-agnostic burst gate in Go, keyed on the receiver's own hop slot (the

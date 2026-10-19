@@ -6,6 +6,19 @@ under [Pre-S16].
 
 ---
 
+## [S157] — 2026-10-18 — CRC failures counted in the Go decoder, measurement only (#458, DEC-0216)
+
+- `patch/rtldavis-crcstats.patch` (applied after `rtldavis-dupgate.patch`) counts every CRC failure
+  per receiver hop slot and how many fall within 100 ms of an accepted frame, either order, and
+  prints `crc_stats: crc_fail=N near=M slots=…` once a minute. The driver sums it per archive period
+  and logs `crc failures this period` at INFO beside the duplicate and repeat counts. **Log only:**
+  no accept, drop or hop decision reads it. Not deployed; rides the next release.
+- Proofs: `tests/test_crcstats_patch.py` (the patch removes one line and adds only counters; the
+  real `Parse` returns byte-identical messages patched and unpatched, with a positive control) and
+  `tests/go/crcstat_test.go` (the tracker against a brute-force oracle; four mutations caught).
+- Found on the way: `main.go` builds against the **vendored** `protocol` package, so the top-level
+  `protocol/` directory is dead code for this build.
+
 ## [S156] — 2026-10-17 — image downloads pinned; amd64 and arm64 builds proved in CI (DEC-0214)
 
 - `src.tgz` and `weewx-influx2` are fetched at one commit each and checked against a sha256 (same
@@ -47,14 +60,3 @@ under [Pre-S16].
   proves it; a `loopjson-v*` tag publishes the zip with `--latest=false`). Proved locally on 5.5.2,
   shipped the same night (PR #447; prod `git pull` + `weewx.service` restart 21:22 ET, `writer` key live; tag `loopjson-v1.0.0`, release not-latest, asset URL install tested on a clean station), plus two failing controls (tag mismatch, missing `writer` key). INTERFACES §1: the `writer` row and
   the stale `data_service` / every-packet opening fixed.
-
-## [S154] — 2026-10-12 — `scripts/scan_history.sh` and the "never leaked" correction (ops#404, DEC-0212)
-
-- **`scripts/scan_history.sh`** runs the whole `check_secrets.sh` over every `(blob, path)` pair in
-  history (1,731 blobs, about 2.5 minutes) and prints only `SECRET-SCAN:` header lines.
-  `scripts/history_scan_known.txt` is the positive control: a new finding exits 1, a known one no
-  longer reported exits 3. Both exits proved by deleting and adding a list line. First run: 7 headers,
-  six benign, one the dead monitor-mail app password (rotated 2026-10-11 by ops).
-- **DEC-0212** supersedes the "never leaked" lines in DEC-0076 and DEC-0084 and adds the CONVENTIONS
-  rules: run the scan after any detector change; a redacting printer fingerprints every value-like
-  token, whatever its length.

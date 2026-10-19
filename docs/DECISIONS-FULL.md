@@ -11822,3 +11822,50 @@ Measured 2026-10-17:
   waits about one CI run for the arm64 image.
 - `dockerhub-description.yml` needs a Hub token this decision keeps out of GitHub. Replacing it with
   a laptop-run sync, or deleting it, is a separate follow-up.
+
+## DEC-0216 — Count the decoder's CRC failures, change nothing it accepts (S157)
+
+**Date:** 2026-10-18 (S157, Sonnet 5.5). **Status:** accepted; built on PR #461, not deployed. The
+owner approved the design in chat and set two conditions: rigorous testing before it goes live, and
+no false positives that kill good data packets.
+
+### Context
+
+ROADMAP P1.9 step 1 (#458). The Go decoder drops every CRC-failing frame silently, so the size of
+the corrupted-second-decode problem (DEC-0033, DEC-0035) was unmeasured; only the CRC-valid
+survivors were visible, as phantom readings. #459 (a content-agnostic burst gate) needs the numbers
+to size its window, because a gate that is too wide swallows a real packet.
+
+### Decision
+
+1. **Count, don't decide.** `crcstat.Tracker` records each failure with the receiver's hop slot and
+   whether it lies within 100 ms of an accepted frame (the accepted frame first, or the failure
+   first). `main.go` drains the failures `Parse` records, feeds the tracker, and logs one summary a
+   minute. No value from the tracker is read by any accept, drop or hop path.
+2. **A separate package.** `package main` calls `flag.Parse()` and links librtlsdr at init, so it
+   cannot be unit-tested. The tracker lives in `crcstat/`; the patch is a sibling of the dupgate
+   patch and applies after it.
+3. **The hook is in the vendored `protocol`.** `main.go` imports `github.com/lheijst/rtldavis/protocol`
+   and builds against `vendor/`, so the top-level `protocol/` directory is dead code for this build.
+   A first attempt patched it and the build failed to see the field.
+4. **Safety is a checked property.** (a) A static audit: the patch removes exactly one line and every
+   added line in existing files is on an allow-list; a positive control proves the audit rejects added
+   control flow. (b) A differential run of the real `Parse` on valid, bit-flipped and duplicate frames:
+   byte-identical messages patched and unpatched; a positive control (a tree whose CRC branch no
+   longer drops) proves the comparison can fail. (c) The tracker against a brute-force oracle over
+   3,000 random streams; four mutations of it were each caught.
+5. **Driver.** The `crc_stats:` line is parsed strictly (a foreign or malformed line, or `near` greater
+   than `crc_fail`, is ignored, never half-counted), summed per archive period, and logged at INFO.
+
+### Not done
+
+Nothing ran against a dongle: Docker was down locally and there is no simulator-backed container.
+CI proves the image builds on amd64 and arm64. The live proof is a day of production counts after the
+next release; compare `rxCheckPercent`, the duplicate and repeat counts, and loop-packet rate before
+and after. Rollback is the previous image.
+
+### Consequences
+
+- The `near` count against the CRC-valid phantom rate gives #459 its window and its baseline.
+- A wider rule that drops frames, #459, must pass the same differential test and add a case for a real
+  packet inside the window.
