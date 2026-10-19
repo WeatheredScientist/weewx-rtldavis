@@ -2,7 +2,7 @@
 
 The change: `_filter_wind` no longer substitutes the last cached windSpeed into a
 packet whose windSpeed is None. Davis transmits wind in *every* ISS/anemometer
-packet (rtldavis.py:1122 — unlike temp/humidity/rain/UV, which rotate across
+packet (`RtldavisDriver.parse_raw` — unlike temp/humidity/rain/UV, which rotate across
 message types), so windSpeed is only None when the reading is genuinely absent
 (a "no sensor" raw 0,0 packet) or was just delta-rejected as a corrupt spike.
 In both cases an honest null is correct; a stale substituted value is misleading

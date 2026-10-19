@@ -15,7 +15,7 @@ weewx is not installed in the test/CI environment, so we stub the weewx
 modules in sys.modules before importing the writer (same pattern as the
 other tests here).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_loop_json_writer.py
+Run:  .venv/bin/python -m pytest tests/test_loop_json_writer.py
 """
 import json
 import os
@@ -136,7 +136,7 @@ def test_windchill_cached_forward_like_heatindex():
         assert data['dateTime'] == 2
 
 
-# --- Cache TTL (DEC-0006 / issue #45 provenance audit, S48) ------------------
+# --- Cache TTL (DEC-0053 / issue #45 provenance audit, S48) ------------------
 # The regression these guard: the cache used to be unbounded, so a dead or
 # SensorQC-rejected sensor kept emitting its last value forever -- stamped with
 # the CURRENT packet's dateTime, making it indistinguishable from a live
@@ -299,21 +299,6 @@ def test_calm_winddir_recovery_logs_debug_not_info(caplog):
         infos = [r for r in caplog.records if r.levelno == logging.INFO
                  and 'recovered' in r.getMessage()]
         assert not infos, "recovery from a calm expiry must be DEBUG too (#74)"
-
-
-if __name__ == '__main__':
-    fails = 0
-    for name, fn in sorted(globals().items()):
-        if name.startswith('test_') and callable(fn):
-            try:
-                fn()
-                print("  [PASS] %s" % name)
-            except Exception as e:
-                fails += 1
-                print("  [FAIL] %s -> %r" % (name, e))
-    total = sum(1 for n in globals() if n.startswith('test_'))
-    print("\n%d/%d passed" % (total - fails, total))
-    sys.exit(1 if fails else 0)
 
 
 # --- current.json cadence (DEC-0093, S84) ----------------------------------

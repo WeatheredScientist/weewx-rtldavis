@@ -866,14 +866,23 @@ def reap_spawned_children():
 # repo is public and the file lives on a NAS share -- keep the boundary.
 STALL_TIMEOUT_S = 150
 
-# A freshly spawned child is legitimately silent for the radio's init period
-# (US/AU/NZ: 133s, EU: 16s), so the normal 150s stall watchdog leaves only 17s
-# of margin on a post-swap respawn. Nowhere near enough to run a campaign on:
-# a slow init would raise WeeWxIOError and tear the driver down, reintroducing
-# the abort-on-unhealthy-swap failure class this feature exists to retire.
-# The first packet after a swap gets this longer deadline instead; the normal
-# threshold returns as soon as anything is received.
-HOTSWAP_GRACE_S = 240
+# A freshly spawned child is legitimately silent for the radio's init period.
+# Go's init listens on one channel for the transmitter to hop onto it, and caps
+# the wait at (channels + 2) loop periods, where the loop period grows with the
+# transmitter ID: 2.5625 s + 62.5 ms per ID step. US/AU/NZ have 51 channels, so
+# the transmitter arrives within 51 periods: 131 s for ID 1, 143 s for ID 5
+# (this station), 153 s for ID 8. Go's cap is 136-159 s; EU (5 channels) is
+# about 16 s. Measured on this station across 9 starts (2026-09-27 to 10-14):
+# first packet 10-134 s after start (#456, audit item 32).
+#
+# So the normal 150 s watchdog leaves about 5 s of margin for ID 5, none for
+# IDs 7 and 8, and none for any ID if the one packet init waits for is lost.
+# A slow init would raise WeeWxIOError and tear the driver down mid-init. The
+# first packet after any start -- the driver's own start or a hot-swap respawn
+# -- gets this longer deadline instead; the normal threshold returns as soon as
+# anything is received. (Until #456 only the hot swap got it.)
+INIT_GRACE_S = 240
+HOTSWAP_GRACE_S = INIT_GRACE_S
 
 # Accepted control-file keys and their inclusive bounds. gain is tuner gain in
 # tenths of a dB (0 = the binary's "auto"; 496 = the R820T's 49.6 dB maximum);
@@ -1967,16 +1976,16 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         periodShowOneTransm = 2*24*3600  # 2 days
         self.transm_to_store = None  # forces the first loop pass to log below
 
-        # Normally 150s; widened to HOTSWAP_GRACE_S for the first packet after
-        # a hot swap, then restored below when anything is received.
-        stall_timeout = STALL_TIMEOUT_S
+        # INIT_GRACE_S until the first packet after a start or a hot swap, then
+        # STALL_TIMEOUT_S once anything is received (#456; see INIT_GRACE_S).
+        stall_timeout = INIT_GRACE_S
 
         while self._mgr.running():
             # Hot-swap poll (S103, DEC-0117). This runs about every 10s on its
             # own -- get_stderr() below budgets 10s per pass -- so no thread or
             # signal handler is needed. Resetting the watchdog state here is
             # not optional: a respawned child restarts its init period (US:
-            # 133s) and would otherwise be judged against a time_last_received
+            # up to ~150s, INIT_GRACE_S) and would otherwise be judged against a time_last_received
             # inherited from before the swap.
             if self._maybe_hotswap():
                 _swapped_at = int(time.time())
@@ -1986,8 +1995,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 hop_since_data = 0
                 stall_timeout = HOTSWAP_GRACE_S
                 continue
-            # the stalled timeout must be greater than the init period
-            # init period is EU: 16 s, US, AU and NZ: 133 s
+            # the stalled timeout must be greater than the init period, so it
+            # starts at INIT_GRACE_S (see there for the measured init times)
             _now = int(time.time())
             # Recomputed every iteration (a few integer ops -- the loop
             # already blocks up to 10s per get_stderr() call, so this is

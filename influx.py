@@ -497,6 +497,11 @@ class InfluxThread(weewx.restx.RESTThread):
         try:
             with open(self._lease_path, 'rb') as f:
                 lease = json.loads(f.read().decode())
+            # Valid JSON that is not an object (a list, null, a number) is not
+            # a lease. `.get` on it raised AttributeError, which escaped this
+            # method and skip_this_post() and killed the upload thread (#456).
+            if not isinstance(lease, dict):
+                return False
             if lease.get('tenant') == TENANT:
                 return False
             expires_at = datetime.strptime(
