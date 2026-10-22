@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S161] — 2026-10-21 — deploy of #464's `influx.py`
+
+- `marvinctl pull` to `dev` `1d96587`, then `weewx.service` restart at 23:14:42 ET. Live `influx.py` sha `526d2ac6…` = `dev`'s (was `23f21235…`); the pull also carried `loop_json_writer.py` (docstring only). Soak 19/0/0 after the first record. #465/#466 had already merged and #465 was closed with comments. No image change.
+
 ## [S160] — 2026-10-21 — rain recovery judged against the last accepted count (#465, DEC-0218)
 
 - **#465 (DEC-0218):** a rain reading after a rejected one is judged first against the last
