@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S161 → S162)
+## ▶ Resume here (S162 → S163)
 
 ### What's settled (do not re-derive)
 
@@ -48,7 +48,7 @@ issues #451–#456) and P1.9 (decoder fixes in Go: #458 measure CRC failures, #4
 on #457. **#458 is merged (S157, DEC-0216, PR #461, log-only, not deployed). S158 did P0.8 phase 1's cheap items (#451, #452, #454, #455); #451 edits the baked `pressure_service.py`, so it ships with v2.0.21.** **S159's #463 (#453, DEC-0217) and #464 (#456) are merged to `dev`, issues closed with comments; #464 carries the 240 s init grace (baked, v2.0.21) and `influx.py`'s lease-JSON fix (mounted, not yet deployed).** **S160 (#465, DEC-0218, merged as #466): a rain reading after a rejected one is judged first against the last accepted count, removing the up-to-16-tip phantom when a counter dips and comes back; baked, rides v2.0.21. S161 deployed #464's mounted `influx.py` (and the writer's docstring) with a `weewx.service` restart at 2026-10-21 23:14:42 ET; sha matches `dev`, soak 19/0/0.** It was prompted by four replies on 2026-10-21 from `weewx-packages`, a day-old continuation org that folded our upstream PRs (lheijst#22, #23, #15, lheijst/rtldavis#7) into its own fork with accurate credit and no endorsement from the original maintainers. No reply is owed; our upstream PRs stay open. Non-Davis platform research is `eaglehunt-weather-dashboard#936`, dash's to run; weewx
 files issues from its section A.
 
-### ▶▶ S162 JOB LIST
+### ▶▶ S163 JOB LIST
 
 1. **Watch, no action unless it fires** (last checked S161: soak 19 passed / 0 failures, no
    `bar_absolute` fallback since v2.0.20): the measured `pressure` keeps arriving (a `no
@@ -57,9 +57,10 @@ files issues from its section A.
    restart, so the earliest is 10-19 21:22 ET; the owner reads it off WU) · OWM and Windy rain in
    millimeters (needs rain; ERR-0010) · freeze lead (blocker 1), measure at the next freeze; none
    since at least 10-11. The message-type proof fired (3 times, `BACKLOG.md`); no longer a watch.
-2. **P0.8 phase 1, what is left:** prove DEC-0213's quickstart on a fresh Linux host (never run end
-   to end; no dongle needed for the seed and permission checks), then the GitHub About text and
-   topics (owner's go). The Hub overview syncs from README on the next push to `main`, if the Hub
+2. **P0.8 phase 1, what is left:** the quickstart's container half is proven on arm64 (S162: seed,
+   non-root writes, banner). The host steps (blacklist, udev rule, systemd unit) wait on marvin's
+   answer to **ops#427** (a disposable Debian VM); then the GitHub About text and topics (owner's
+   go). **#468** (two stray `weewx.conf.<timestamp>` files in the seed) rides v2.0.21. The Hub overview syncs from README on the next push to `main`, if the Hub
    secrets are set.
 3. **First arm64 run against a live radio** (any Pi with a dongle); until then README says
    smoke-tested only. Then P0.8 phase 2's v2.0.21 (audit 15), which carries #451, #458, #456's
@@ -114,4 +115,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-21 (S161 close). v2.0.20 steady in prod; #466 merged; `influx.py` deployed; v2.0.21 not yet cut._
+_Last updated: 2026-10-22 (S162). v2.0.20 steady in prod; arm64 container proof done; ops#427 open; v2.0.21 not yet cut._

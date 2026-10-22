@@ -359,8 +359,11 @@ items inside a phase don't depend on each other.
         ordering step proved unneeded (S159, PR #463).
   - [x] #454 `CHANGES-FROM-UPSTREAM.md` lags the code (audit 10).
   - [x] #455 Retired NAS wording in adopter-facing files; patched uploaders unlinted (audit 11, 12).
-  - [ ] Prove the quickstart on a fresh Linux host (BOOT job 3): config seeding and non-root writes
-        need no dongle.
+  - [ ] Prove the quickstart on a fresh Linux host (BOOT job 2): config seeding and non-root writes
+        need no dongle. **Container half proven S162 on arm64** (this Mac's Docker, `:v2.0.20`
+        `--platform linux/arm64`, uid 501, `--cap-drop ALL`: seed copy, `archive/weewx.sdb` and
+        `weewx.log` written, banner `0.20+ws.6`; found #468, two stray backups in the seed).
+        Left: the host steps (blacklist, udev rule, systemd unit), asked of marvin as ops#427.
 - [ ] **Phase 2 — the image, one release (v2.0.21).** Merged S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
       and joins it into Docker Hub's multi-arch tag, DEC-0215; `:latest` and `:v2.0.20` multi-arch
