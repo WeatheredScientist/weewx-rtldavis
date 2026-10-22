@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S160 → S161)
+## ▶ Resume here (S161 → S162)
 
 ### What's settled (do not re-derive)
 
@@ -45,36 +45,31 @@ and smoke-tests amd64 and arm64, CI pushes arm64 to GHCR and `scripts/join_multi
 with marvin's `:vX.Y.Z-amd64`; the v2.0.20 backfill ran 2026-10-17 18:41 ET (`:latest` multi-arch,
 `:v2.0.20-amd64` = prod's digest). **The plan is ROADMAP P0.8 (public readiness: five phases,
 issues #451–#456) and P1.9 (decoder fixes in Go: #458 measure CRC failures, #459 burst gate)**,
-on #457. **#458 is merged (S157, DEC-0216, PR #461, log-only, not deployed). S158 did P0.8 phase 1's cheap items (#451, #452, #454, #455); #451 edits the baked `pressure_service.py`, so it ships with v2.0.21.** **S159's #463 (#453, DEC-0217) and #464 (#456) are merged to `dev`, issues closed with comments; #464 carries the 240 s init grace (baked, v2.0.21) and `influx.py`'s lease-JSON fix (mounted, not yet deployed).** **S160 (#465, DEC-0218, PR on `s160-rain-anchor-465`): a rain reading after a rejected one is judged first against the last accepted count, removing the up-to-16-tip phantom when a counter dips and comes back; baked, rides v2.0.21.** It was prompted by four replies on 2026-10-21 from `weewx-packages`, a day-old continuation org that folded our upstream PRs (lheijst#22, #23, #15, lheijst/rtldavis#7) into its own fork with accurate credit and no endorsement from the original maintainers. No reply is owed; our upstream PRs stay open. Non-Davis platform research is `eaglehunt-weather-dashboard#936`, dash's to run; weewx
+on #457. **#458 is merged (S157, DEC-0216, PR #461, log-only, not deployed). S158 did P0.8 phase 1's cheap items (#451, #452, #454, #455); #451 edits the baked `pressure_service.py`, so it ships with v2.0.21.** **S159's #463 (#453, DEC-0217) and #464 (#456) are merged to `dev`, issues closed with comments; #464 carries the 240 s init grace (baked, v2.0.21) and `influx.py`'s lease-JSON fix (mounted, not yet deployed).** **S160 (#465, DEC-0218, merged as #466): a rain reading after a rejected one is judged first against the last accepted count, removing the up-to-16-tip phantom when a counter dips and comes back; baked, rides v2.0.21. S161 deployed #464's mounted `influx.py` (and the writer's docstring) with a `weewx.service` restart at 2026-10-21 23:14:42 ET; sha matches `dev`, soak 19/0/0.** It was prompted by four replies on 2026-10-21 from `weewx-packages`, a day-old continuation org that folded our upstream PRs (lheijst#22, #23, #15, lheijst/rtldavis#7) into its own fork with accurate credit and no endorsement from the original maintainers. No reply is owed; our upstream PRs stay open. Non-Davis platform research is `eaglehunt-weather-dashboard#936`, dash's to run; weewx
 files issues from its section A.
 
-### ▶▶ S161 JOB LIST
+### ▶▶ S162 JOB LIST
 
-1. **Land S160's PR (#465, carries this closeout).** A `dev` base does not auto-close issues:
-   after the merge, close #465 with a comment. Nothing to deploy: the driver is baked.
-2. **Deploy #464's `influx.py`** (mounted, not baked: `CONSTANTS.md` deploy-layers row; carried
-   from S159, no heartofgold row says it ran): restart `weewx.service`, verify the running file's
-   sha against `dev`, add the heartofgold CHANGELOG line.
-3. **Watch, no action unless it fires** (last checked S159: soak 15 passed / 0 failures, no
+1. **Watch, no action unless it fires** (last checked S161: soak 19 passed / 0 failures, no
    `bar_absolute` fallback since v2.0.20): the measured `pressure` keeps arriving (a `no
    bar_absolute` WARNING means the column went derived again, and DISC-0002 needs a second
    boundary) · WU gold star (≥ 5 uninterrupted days; the run restarted at the 2026-10-14 21:22 ET
    restart, so the earliest is 10-19 21:22 ET; the owner reads it off WU) · OWM and Windy rain in
    millimeters (needs rain; ERR-0010) · freeze lead (blocker 1), measure at the next freeze; none
    since at least 10-11. The message-type proof fired (3 times, `BACKLOG.md`); no longer a watch.
-4. **P0.8 phase 1, what is left:** prove DEC-0213's quickstart on a fresh Linux host (never run end
+2. **P0.8 phase 1, what is left:** prove DEC-0213's quickstart on a fresh Linux host (never run end
    to end; no dongle needed for the seed and permission checks), then the GitHub About text and
    topics (owner's go). The Hub overview syncs from README on the next push to `main`, if the Hub
    secrets are set.
-5. **First arm64 run against a live radio** (any Pi with a dongle); until then README says
+3. **First arm64 run against a live radio** (any Pi with a dongle); until then README says
    smoke-tested only. Then P0.8 phase 2's v2.0.21 (audit 15), which carries #451, #458, #456's
    init grace and #465 (bump `ws.7`); after it deploys, collect a day of `crc failures this period`
    lines and DEC-0218's `rain: counter recovered` lines, and design #459 from them (frontier tier,
    DEC first).
-6. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI. Whether to
+4. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI. Whether to
    tell the `weewx-packages` maintainer that their equality confirmation stalls in heavy rain after
    an over-cap jump (DEC-0218 option B).
-7. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
+5. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry, audit 37 and 39 (phase 5), the reset-from-112-or-above phantom
    (#465's footnote).
 
@@ -89,7 +84,7 @@ files issues from its section A.
 | Campaign harness | schedule empty (stand-down), state `BASELINE`, timer not installed |
 | `main`/`dev` | `main` = `dev` at the v2.0.20 promotion (`prod-baseline-20261006`, S150); `dev` is ahead only by docs and the secret gate (see above). Before the promotion `main` was v2.0.16's (`prod-baseline-20260904`, #324, S122) plus the misrouted #338 — S149/S150's BOOT and CONSTANTS said "v2.0.13", stale since S122. The promotion merge resolved every conflict in `dev`'s favor |
 | Docker Hub | `:v2.0.20` = `:latest`, multi-arch `4e9d840b…` since 2026-10-17 18:41 ET; `:v2.0.20-amd64` = prod (`f617c9ca…`) · `:v2.0.19` · `:v2.0.16` |
-| Trackers | repo: #465 → S160's PR, #458/#459 decoder, #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
+| Trackers | repo: #458/#459 decoder, #380 informational · ops: #395 closes with #441, #357 weewx side done (HLF accepts, ops closes), #265/#110 deferred-trigger · #306 residual · #344 macOS LAN |
 
 ## Blockers
 
@@ -99,8 +94,7 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 ## Model tier
 
 **S160 ran on Opus 5.5** (the desktop app's persisted selection): right for reading the upstream
-replies and #465's design. The Sonnet floor is the owner's to restore in the app. S161 is a merge,
-a mounted-file deploy and the quickstart proof: Sonnet.
+replies and #465's design. The Sonnet floor is the owner's to restore in the app. S161 ran on Sonnet (a merge check and a mounted-file deploy). S162 is the quickstart proof: Sonnet.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -120,4 +114,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-21 (S160 close). v2.0.20 steady in prod; S159's PRs merged; #465 (DEC-0218) on S160's PR, not merged; `influx.py` deploy still owed._
+_Last updated: 2026-10-21 (S161 close). v2.0.20 steady in prod; #466 merged; `influx.py` deployed; v2.0.21 not yet cut._
