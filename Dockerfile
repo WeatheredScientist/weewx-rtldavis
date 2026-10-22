@@ -101,6 +101,7 @@ RUN curl -fsSL -o /tmp/weewx-influx2.zip \
     sed -i 's/cmd = \/usr\/local\/bin\/rtldavis \[options\]/cmd = \/usr\/local\/bin\/rtldavis/' \
         /opt/weewx-data/weewx.conf && \
     sed -i 's/debug = 0/debug = 0/' /opt/weewx-data/weewx.conf && \
+    rm -f /opt/weewx-data/weewx.conf.[0-9]* && \
     rm -rf /tmp/*
 
 #--------------------------------------------
@@ -188,8 +189,7 @@ RUN apt-get update && apt-get install -y \
     rtl-sdr \
     && apt-get clean autoclean \
     && apt-get autoremove --yes \
-    && rm -rf /var/lib/{apt,dpkg,cache,log} \
-    && rm -rf /usr/share/{doc,man,info} \
+    && rm -rf /var/lib/apt/lists/* /usr/share/man /usr/share/info \
     && ln -sf /usr/bin/python3 /opt/weewx-venv/bin/python3 \
     && chmod +x /entrypoint.sh
 

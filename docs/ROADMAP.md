@@ -367,9 +367,10 @@ items inside a phase don't depend on each other.
 - [ ] **Phase 2 — the image, one release (v2.0.21).** Merged S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
       and joins it into Docker Hub's multi-arch tag, DEC-0215; `:latest` and `:v2.0.20` multi-arch
-      since 2026-10-17 18:41 ET). Left: audit 15 (the Dockerfile's brace expansion under `/bin/sh`
-      leaves both cleanups as no-ops), and the first arm64 run against a live radio. Driver edits
-      that ride along bump `ws.7`; S160's #465 (DEC-0218, rain recovery) is one.
+      since 2026-10-17 18:41 ET). S163 prepped on a branch: audit 15 and #468 fixed in the
+      Dockerfile, banner bumped to `ws.7`. Left: build and compare the baked config's sha, the
+      release mechanics, and the first arm64 run against a live radio. S160's #465 (DEC-0218, rain
+      recovery) is one of the driver edits that ride along.
 - [x] **Phase 3 — tests that cannot fail, then the bugs they hide.** #456: audit 29 and 33–39 first
       (each fix proved by a mutation turning it red), then audit 32 (the US init time against the
       150 s watchdog, check real logs first) and audit 20 (lease JSON kills the Influx thread).

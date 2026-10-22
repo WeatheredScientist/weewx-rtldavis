@@ -40,7 +40,7 @@
 #
 #   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
 #   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
-#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.6'
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.7'
 #   so the difference is visible in the logs. Bugs here are ours, not upstream's.
 #
 #   Changes, with the date each was recorded in git. Entries dated 2026-07-04
@@ -120,6 +120,7 @@
 #   2026-10-21  #465: a rain reading after a rejected one is judged first against the
 #               last ACCEPTED count, so a counter that dips and comes back books 0
 #               tips, not the dip. Today's resync stays as the fallback. (DEC-0218)
+#   2026-10-22  ws.6 -> ws.7 for the v2.0.21 release.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -223,7 +224,7 @@ DRIVER_NAME = 'Rtldavis'
 # up with every behavior change to this file (README rule 1, #406). Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.6'
+DRIVER_VERSION = '0.20+ws.7'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
