@@ -11959,3 +11959,94 @@ the old default stops resetting after it upgrades the monitor until it sets
   docker is reachable, though the unit owns the container there. Out of scope here.
 - #453's remaining audit text (CODE_REVIEW_S145 item 12's other `/volume1` defaults in `ops/`
   scripts) is maintainer tooling, not what a new user copies; left as is.
+
+## DEC-0218 — A rain reading after a rejected one is judged first against the last accepted count (S160)
+
+**Date:** 2026-10-21 (S160, Opus 5.5). **Status:** accepted; the owner chose option C of four on
+#465 in chat. Built on a feature branch. The driver is baked (DEC-0031), so nothing reaches prod
+until the next image release.
+
+### Context
+
+`_data_to_packet` resyncs `last_rain_count` to every clean frame's counter, even when
+`rain_delta_tips()` rejects the delta. That is deliberate: a rejected step can never freeze the
+baseline (DEC-0029's "rain-filter trick", DEC-0103's no-stall rule), and a rejected genuine storm
+delta is lost for that one step only (DEC-0056). The cost had never been written down: a counter
+that glitches **down** and comes back books the climb back as rain. 115 → 114 → 115 rejects the
+114, then books 114 → 115 as 1 tip. A 16-tip dip books 16 tips (0.16 in), the cap. The recovery
+step is plausible, on a clean frame, so nothing logs it. DEC-0054's co-rejection does not help: it
+fires only when another field in the same frame fails its bounds, and here the counter byte is
+the only thing wrong.
+
+The observation came from the weewx-packages continuation of lheijst/weewx-rtldavis (created
+2026-10-21, not endorsed by the original maintainers), whose maintainer noted on lheijst#22 that
+their version "preserves the previous baseline after rejection". Cited for the idea, not taken
+as a dependency.
+
+### Options (#465)
+
+- **A. Keep today's behavior.** Phantom of up to 16 tips per small downward glitch.
+- **B. Equality confirmation (the continuation's).** A rejected value does not move the baseline.
+  It becomes a candidate, adopted with 0 tips only when the next reading equals it. Fixes the
+  dip, but after a genuine over-cap jump during heavy rain the counter keeps climbing, so no
+  reading ever equals the candidate. Every reading is nulled until the rain slows below one tip
+  per rain message, then the whole interval is booked as 0. Our cap of 16 (theirs is 60) makes
+  that more reachable. Rejected.
+- **C. Anchor first, old check second.** Chosen.
+- **D. Log the signature and correct by hand.** Does not remove the phantom. Rejected, but C's log
+  line gives the same visibility.
+
+### Decision
+
+1. The driver keeps `last_accepted_rain_count` (the anchor): the last counter whose delta was
+   accepted, set on cold start and on every accepted reading, never on a rejected one and never
+   on a co-rejected frame.
+2. `rain_tips_with_anchor(anchor, last_count, new_count)`, a pure function beside
+   `rain_delta_tips()`. When the anchor differs from `last_count` (the previous reading was
+   rejected) and the new reading is plausible against the anchor, book that delta: the rejected
+   reading was the glitch. Otherwise return `rain_delta_tips(last_count, new_count)`, the old
+   check exactly.
+3. `last_rain_count` still resyncs to every clean reading. Because step 2's fallback is the old
+   check, C accepts every reading the old code accepted. It cannot stall and cannot null more. It
+   changes only how many tips are booked, and only when the new reading agrees with the anchor.
+4. Each time the anchor path books a reading, one INFO line:
+   `rain: counter recovered to N after rejected M; booked K tips against last accepted A (DEC-0218)`.
+   It does not contain `weewx_monitor.py`'s `RAIN_GLITCH_MARKER`, so it sends no email. It makes the
+   recovery rate countable from logs, a number #465 asked for and nobody has.
+
+### Evidence
+
+Exhaustive over every (anchor, rejected reading, next reading) triple, 0–127 each, with today's
+constants (cap 16, wraparound threshold −100):
+
+| Scenario | Old | C |
+|---|---|---|
+| Glitch, then recovery: truth stays at the anchor, next reading = anchor + 0..16 (241,536 cases) | wrong in every case: phantom tips, or a valid reading nulled | correct in every case |
+| Real storm jump over the cap (17–60 tips), then real progress | loses the jump | identical: 0 differences |
+| Real counter reset to 0–2, then real progress | correct | differs in 408 cases, all with an anchor of 18 or less: undercounts |
+
+The last row is the whole cost. It needs an ISS power cycle while the counter sits at 0–18 *and*
+enough rain before the next rain message to climb back within 16 of the old count.
+
+`tests/test_rain_anchor_465.py` (14 tests). Nine run named sequences through the real
+`_data_to_packet`. Against the pre-fix driver, the four phantom cases fail with exactly the
+predicted amounts: 1, 16, 7 and 5 tips (0.2, 3.2, 1.4 and 1.0 mm on the test's 0.2 mm bucket).
+The two anchor-field tests fail because the field does not exist. The three regression guards
+(storm jump, reset, repeated rejects) pass on both, as they should. The five exhaustive tests
+assert the table above on the pure helper, including its case counts (241,536 and 408) so a loop
+that silently ran nothing would fail. On the pre-fix driver they fail only at import. So a mutation
+disabling the anchor path was run separately: 6 failures, all on assertions, and the file was
+restored by sha.
+
+### Not addressed
+
+A reset from a count of 112 or above looks like a 127 → 0 wraparound, so both the old code and C
+book 128 − count tips (1–16) of phantom rain. It needs a battery swap late in the counter's cycle,
+so it's rare. Left as a footnote on #465.
+
+### Consequences
+
+- Ships with the next driver image release, not one of its own. It needs a version bump in the
+  banner (ws.6 → ws.7) at that release.
+- The continuation's maintainer could be told about B's heavy-rain stall. Not done here: it would
+  be a comment in a third-party org's tracker, and it's the owner's call.

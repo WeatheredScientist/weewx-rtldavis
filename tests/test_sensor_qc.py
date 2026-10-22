@@ -171,6 +171,7 @@ def _bare_driver(enabled=True):
     drv = RtldavisDriver.__new__(RtldavisDriver)  # skip __init__ (ProcManager)
     drv.sensor_map = dict(RtldavisDriver.DEFAULT_SENSOR_MAP)
     drv.last_rain_count = None
+    drv.last_accepted_rain_count = None
     drv.rain_per_tip = 0.2
     drv._sensor_qc_enabled = enabled
     drv._sensor_qc = SensorQC()

@@ -366,7 +366,7 @@ items inside a phase don't depend on each other.
       and joins it into Docker Hub's multi-arch tag, DEC-0215; `:latest` and `:v2.0.20` multi-arch
       since 2026-10-17 18:41 ET). Left: audit 15 (the Dockerfile's brace expansion under `/bin/sh`
       leaves both cleanups as no-ops), and the first arm64 run against a live radio. Driver edits
-      that ride along bump `ws.7`.
+      that ride along bump `ws.7`; S160's #465 (DEC-0218, rain recovery) is one.
 - [x] **Phase 3 — tests that cannot fail, then the bugs they hide.** #456: audit 29 and 33–39 first
       (each fix proved by a mutation turning it red), then audit 32 (the US init time against the
       150 s watchdog, check real logs first) and audit 20 (lease JSON kills the Influx thread).
@@ -378,6 +378,9 @@ items inside a phase don't depend on each other.
       zombie reaping (12), windDir (2), `NameError` and `rxCheckPercent` (3, 4). The driver repos have
       been quiet since 2023, so the first move is one courtesy note to weewx-contrib, the package
       everyone installs. Answer the reviewer note on david-lutz/weewx-influx2#1 (`verify_ssl`).
+      New since S160: `weewx-packages/weewx-rtldavis`, an unendorsed continuation created
+      2026-10-21, absorbed lheijst#22, #23 and lheijst/rtldavis#7 with credit. Whether it is also
+      a place to offer the four fixes is part of this phase's owner call.
 - [ ] **Phase 5 — cleanup, no user-visible change.** Audit 21–28 and 30–31: duplication in the
       monitor, `ops/` and the OWM/Windy pair, SPDX gaps, CI pinning. Audit 28 (the
       `-or-later` tags on three uploaders) is an owner read, not a code fix.

@@ -6,6 +6,19 @@ under [Pre-S16].
 
 ---
 
+## [S160] — 2026-10-21 — rain recovery judged against the last accepted count (#465, DEC-0218)
+
+- **#465 (DEC-0218):** a rain reading after a rejected one is judged first against the last
+  accepted counter value, then against the resync baseline as before
+  (`rain_tips_with_anchor()`). A counter that dipped and came back (115 → 114 → 115) used to book
+  the climb back as rain, up to 16 tips (0.16 in), on a clean frame, unlogged. Everything the old
+  check accepted is still accepted, so no stall. Exhaustive check: all 241,536 glitch-and-recover
+  cases now book the true tips, storm jumps are unchanged, and the only cost is an undercount after
+  a counter reset from a count of 18 or less. An INFO line marks each recovery. 14 tests in
+  `tests/test_rain_anchor_465.py`; the four phantom cases fail on the pre-fix driver with the
+  predicted 1, 16, 7 and 5 tips. Baked driver: ships with the next image release. Prompted by the
+  weewx-packages continuation's reply on lheijst#22; the four upstream replies need no answer.
+
 ## [S159] — 2026-10-19 — monitor defaults and USB discovery (#453, DEC-0217); tests that cannot fail and two bugs (#456)
 
 - **#453 (PR #463, DEC-0217):** `weewx_monitor.py` defaults describe no host. `REMEDY_MODE` defaults
