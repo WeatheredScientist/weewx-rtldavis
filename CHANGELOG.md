@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S162] — 2026-10-22 — quickstart's container half proven on arm64
+
+- README Quick start steps 3, 5 and 6 run against `:v2.0.20` as `linux/arm64` on the owner's Mac (no dongle): seed copy gives a `weewx.conf`, the unprivileged container writes `archive/weewx.sdb` and `weewx.log`, the log carries the `0.20+ws.6` banner, and it retries every 60 s on "No supported devices found". Filed #468 (two stray `weewx.conf.<timestamp>` backups in the seeded directory) and ops#427 (a disposable Debian VM from marvin for the host steps).
+
 ## [S161] — 2026-10-21 — deploy of #464's `influx.py`
 
 - `marvinctl pull` to `dev` `1d96587`, then `weewx.service` restart at 23:14:42 ET. Live `influx.py` sha `526d2ac6…` = `dev`'s (was `23f21235…`); the pull also carried `loop_json_writer.py` (docstring only). Soak 19/0/0 after the first record. #465/#466 had already merged and #465 was closed with comments. No image change.
