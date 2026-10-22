@@ -117,6 +117,9 @@
 #   2026-09-28  co-rejection: battery flags, impossible message types (DEC-0203).
 #   2026-09-29  #402: first rxCheckPercent after a start or reset was off by one.
 #   2026-09-29  #406: ws.5 -> ws.6; the 2026-08-19 to 09-28 entries shipped as ws.5.
+#   2026-10-21  #465: a rain reading after a rejected one is judged first against the
+#               last ACCEPTED count, so a counter that dips and comes back books 0
+#               tips, not the dip. Today's resync stays as the fallback. (DEC-0218)
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -345,6 +348,40 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     if delta < 0 or delta > max_tips:       # small-negative glitch, or implausible spike
         return None
     return delta
+
+
+def rain_tips_with_anchor(anchor, last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
+    """Rain tips for a new reading, judged first against the last ACCEPTED count.
+
+    WHY (#465, DEC-0218): the caller resyncs `last_count` to every reading, even
+    a rejected one, so a rejected step can never freeze the baseline (DEC-0029,
+    DEC-0103). The cost was a phantom on recovery: a counter that glitches DOWN
+    and comes back (115 -> 114 -> 115) had the 114 rejected, then booked the
+    climb back to 115 as 1 tip -- up to max_tips (0.16") for a 16-tip dip, on a
+    clean frame, with nothing logged.
+
+    `anchor` is the last count whose delta was accepted. When it differs from
+    `last_count` (the previous reading was rejected) and the new reading is
+    plausible against it, the rejected reading was the glitch: book against the
+    anchor. Otherwise fall back to `rain_delta_tips(last_count, new_count)`,
+    which is the old behavior exactly -- so every reading the old code accepted
+    is still accepted, and no stall is possible.
+
+    Exhaustive over every (anchor, rejected, next) counter triple: every
+    glitch-and-recover case books the true tips (the old code got all 241,536
+    wrong); real over-cap storm jumps book exactly as before. The one cost: a
+    genuine counter RESET (ISS power cycle) from a count of 18 or less, with
+    enough rain before the next reading to climb back within max_tips of the old
+    count, is undercounted. See tests/test_rain_anchor_465.py.
+
+    Returns (tips, recovered): tips as rain_delta_tips returns them (None =
+    rejected), and recovered=True when the anchor path booked them.
+    """
+    if anchor is not None and anchor != last_count:
+        tips = rain_delta_tips(anchor, new_count, max_tips)
+        if tips is not None:
+            return tips, True
+    return rain_delta_tips(last_count, new_count, max_tips), False
 
 
 _CRC_STATS = re.compile(r"crc_stats: crc_fail=(\d+) near=(\d+) slots=(-|\d+:\d+(?:,\d+:\d+)*)\s*$")
@@ -1446,6 +1483,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         loginf('sensor map is: %s' % self.sensor_map)
         self._init_stats()
         self.last_rain_count = None
+        self.last_accepted_rain_count = None    # anchor for recovery after a reject (DEC-0218)
         # sensor plausibility filter (DEC-0029); deltas overridable per field
         self._sensor_qc_enabled = tobool(stn_dict.get('sensor_qc', True))
         qc_limits = {}
@@ -1638,7 +1676,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 packet['rain'] = None               # null-on-rejection, DEC-0006
             else:
                 prev = self.last_rain_count
-                tips = rain_delta_tips(prev, data['rain_count'])
+                anchor = self.last_accepted_rain_count
+                tips, recovered = rain_tips_with_anchor(anchor, prev, data['rain_count'])
                 self.last_rain_count = data['rain_count']   # always resync, even on reject
                 if tips is None:
                     logerr("rain: rejecting implausible counter delta last=%s new=%s "
@@ -1646,6 +1685,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                            (prev, data['rain_count']))
                     packet['rain'] = None               # null-on-rejection, DEC-0006
                 else:
+                    self.last_accepted_rain_count = data['rain_count']
+                    if recovered:
+                        loginf("rain: counter recovered to %s after rejected %s; "
+                               "booked %s tips against last accepted %s (DEC-0218)" %
+                               (data['rain_count'], prev, tips, anchor))
                     packet['rain'] = float(tips) * self.rain_per_tip
                 if DEBUG_RAIN:
                     logdbg("rain=%s tips=%s last=%s new=%s" %
