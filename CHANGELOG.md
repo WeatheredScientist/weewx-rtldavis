@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S163] — 2026-10-22 — v2.0.21 prep (not cut, not deployed)
+
+- Dockerfile: the seed-config backups are removed after the last `weectl` call (#468, a plain POSIX glob), and the two brace-expansion `rm -rf` lines, no-ops under dash (audit 15), are now explicit paths. `/usr/share/doc` stays for the Debian copyright files and `/var/lib/dpkg` for the package record. Two tests in `test_dockerfile_pins.py`. Driver banner `0.20+ws.6` → `ws.7` in `rtldavis.py`, README, `ops/soak_check.sh` and `CHANGES-FROM-UPSTREAM.md`. Before the tag: build, compare the baked config's sha before and after, then the release mechanics.
+
 ## [S162] — 2026-10-22 — quickstart's container half proven on arm64
 
 - README Quick start steps 3, 5 and 6 run against `:v2.0.20` as `linux/arm64` on the owner's Mac (no dongle): seed copy gives a `weewx.conf`, the unprivileged container writes `archive/weewx.sdb` and `weewx.log`, the log carries the `0.20+ws.6` banner, and it retries every 60 s on "No supported devices found". Filed #468 (two stray `weewx.conf.<timestamp>` backups in the seeded directory) and ops#427 (a disposable Debian VM from marvin for the host steps).

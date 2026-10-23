@@ -99,7 +99,7 @@ Set `TZ` to your own zone so daily rain resets at local midnight. `BIAS_TEE=0` l
 dongle's antenna power off; set it to `1` only if you run an LNA powered through the dongle.
 
 **6. Check it.** `tail -f ~/weewx/logs/weewx.log` should show
-`driver version is 0.20+ws.6 (fork of 0.20, patched by WeatheredScientist -- not stock upstream)`,
+`driver version is 0.20+ws.7 (fork of 0.20, patched by WeatheredScientist -- not stock upstream)`,
 then `LOOP` data and, once uploads are enabled, `Published record` lines.
 
 To run it as a system service, see [docs/DEPLOY.md](docs/DEPLOY.md). systemd is the recommended

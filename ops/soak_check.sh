@@ -58,7 +58,7 @@ EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:${_stamp:-v2.0.2
 # The DEC-0031 canary. Unlike EXPECT_IMAGE it reads no stamp: this is what prod is
 # running NOW, not what the repo is on, so a deploy that changes the driver banner
 # (DRIVER_VERSION in rtldavis.py) must bump it.
-EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.6}"
+EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.7}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }

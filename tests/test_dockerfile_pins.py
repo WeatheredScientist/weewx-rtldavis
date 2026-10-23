@@ -66,6 +66,20 @@ def test_dupgate_assertion_kept():
     assert 'test "$(grep -c dupwindow main.go)" = "2"' in _dockerfile()
 
 
+def test_no_brace_expansion_in_run_lines():
+    # /bin/sh is dash: `rm -rf /x/{a,b}` removes nothing (audit 15, #468's sibling)
+    bad = [ln for ln in _dockerfile().splitlines()
+           if re.search(r"\{[^}$ ]*,[^} ]*\}", ln) and not ln.lstrip().startswith("#")]
+    assert not bad, "brace expansion is a no-op under dash: %r" % bad
+
+
+def test_seed_config_backups_removed_after_last_weectl():
+    # weectl leaves weewx.conf.<timestamp> beside the config (#468)
+    text = _dockerfile()
+    cleanup = text.index("rm -f /opt/weewx-data/weewx.conf.[0-9]*")
+    assert cleanup > text.rindex("weectl station reconfigure")
+
+
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-v"]))
