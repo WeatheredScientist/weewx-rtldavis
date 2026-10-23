@@ -606,6 +606,34 @@ rain after the cutover should read in millimeters at both services. A dry day pr
 
 ---
 
+## ERR-0011 — 2026-10-22 10:17–11:18 EDT, 62-minute gap from marvin's host outage, recovery not attempted
+
+**Window:** 2026-10-22 10:17:00 → 11:18:00 EDT (62 archive records absent; last record 10:16, next
+11:19) · **Logged:** 2026-10-23 (S164, from the ops S83 ring about `eaglehunt-ops#429`) ·
+**Cause:** not a sensor or decode fault. marvin itself was down 10:16–11:20 AM ET (`#429`, found
+by heartofgold's own tool), so `weewx.service` and the receiver went with it. The gap was read from
+`weewx.log.2026-10-22` (`Added record … to database` lines for hours 10 and 11: 58 records, one
+gap), not from the archive file; `marvinctl exec-ro` could not carry the SQL query.
+
+- **local-archive:** ✅ **applied 2026-10-23 (S164), 3 of ~62 minutes.** Backup first:
+  `weewx.sdb.bak-S164-preBackfill-20261023`. Three INSERTs at `interval = 15` (`dateTime`
+  1792679400, 1792680300, 1792681200 = 10:30, 10:45, 11:00 EDT; outTemp, dewpoint, outHumidity,
+  windDir (N = 0), windSpeed, windGust, windGustDir, barometer, rain, rainRate, radiation, UV, read
+  off the table, nothing derived), then `weectl database rebuild-daily --date=2026-10-22` (1,381
+  records reprocessed). The other ~59 minutes stay empty. Source: Checked 2026-10-23 (S164) against
+  Weather Underground's public history table for our station identity, the same method as
+  ERR-0003/ERR-0005/ERR-0008. It carries three rows inside the gap, 10:30, 10:45 and 11:00 AM
+  (the co-located WeatherLink Live console's own 15-minute upload; temperature 55.6, 56.1 and
+  57.1 °F, wind north 2–3 mph, pressure 30.10–30.09 inHg, no rain, solar 640–715 W/m²). The
+  rows at 10:16 and 11:19 are our own. Daylight, so solar is real and nothing is booked as
+  zero. The Davis cloud archive (the WeatherLink API) has not been checked.
+- **influxdb:** ✅ **applied 2026-10-23 (S164)**, the same 3 points on `record,binding=archive`
+  with the in-band `backfill = 1` flag, posted with the weewx uploader's own token from the
+  container's config (HTTP 204). Not read back: the write token cannot read its bucket.
+- **external:** nothing was published for the window from our own path.
+
+---
+
 ## DISC-0001 — `rxCheckPercent` steps ~73% → ~99% at the DEC-0135 deploy (not an error)
 
 **Not an `ERR-####`.** No observation is wrong, before or after. This is a **metric-definition
