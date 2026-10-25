@@ -6,6 +6,9 @@ reproducible, and a replaced upstream file would have slipped in silently. This 
 branch-tracking URL comes back, if a fetched file loses its sha256 check, or if a pin ARG is not a
 full commit id / full sha256.
 
+Since DEC-0219 the image installs `influx.py` from this repo's extension, so `src.tgz` is the one
+remaining download; the checks below no longer expect two.
+
 Run:  python3 -m pytest tests/    OR    python3 tests/test_dockerfile_pins.py
 """
 import os
@@ -34,7 +37,7 @@ def test_no_branch_tracking_urls():
 
 def test_every_github_fetch_names_a_commit_arg():
     fetches = [u for u in _urls() if "github.com" in u]
-    assert len(fetches) >= 2, "Dockerfile URL parse found too few fetches: %r" % fetches
+    assert len(fetches) >= 1, "Dockerfile URL parse found too few fetches: %r" % fetches
     for u in fetches:
         m = re.search(r"\$\{(\w+_COMMIT)\}", u)
         assert m, "fetch not pinned to a commit ARG: %s" % u
@@ -45,7 +48,7 @@ def test_pin_args_are_full_ids():
     args = _args()
     commits = {k: v for k, v in args.items() if k.endswith("_COMMIT")}
     shas = {k: v for k, v in args.items() if k.endswith("_SHA256")}
-    assert len(commits) >= 2 and len(commits) == len(shas), args
+    assert len(commits) >= 1 and len(commits) == len(shas), args
     for k, v in commits.items():
         assert re.fullmatch(r"[0-9a-f]{40}", v), "%s is not a full commit id: %s" % (k, v)
         assert k.replace("_COMMIT", "_SHA256") in shas, "%s has no matching _SHA256 ARG" % k
@@ -56,7 +59,7 @@ def test_pin_args_are_full_ids():
 def test_every_downloaded_file_is_checked_before_use():
     text = _dockerfile()
     outputs = re.findall(r"curl [^\n]*-o (\S+)", text)
-    assert len(outputs) >= 2, outputs
+    assert len(outputs) >= 1, outputs
     for out in outputs:
         assert re.search(r"_SHA256\}  %s\" \| sha256sum -c -" % re.escape(out), text), (
             "%s is downloaded but never checked with sha256sum -c" % out)

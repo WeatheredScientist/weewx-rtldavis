@@ -61,6 +61,9 @@ files issues from its section A.
    Dockerfile, banner `ws.7` (driver, README, `soak_check.sh`). To do: CI green on the PR, build
    on marvin, sha of the baked config before and after (must be identical), release mechanics
    (`CONSTANTS.md`), tag and release in the same PR (CLAUDE.md step 0). Not deployed.
+1c. **#474 / DEC-0219 (S165, PR #479):** `influx.py` extension built, CI green; after merge, the owner
+   decides when to push tag `influx-v0.20+ws.2` (not cut). Prod unchanged (mount); the Dockerfile
+   change rides v2.0.21. Add it to the v2.0.21 check: the baked config stanza must still match.
 2. **P0.8 phase 1, what is left:** the quickstart's container half is proven on arm64 (S162: seed,
    non-root writes, banner). The host steps (blacklist, udev rule, systemd unit) wait on marvin's
    answer to **ops#427** (a disposable Debian VM); then the GitHub About text and topics (owner's

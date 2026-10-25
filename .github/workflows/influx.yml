@@ -1,0 +1,54 @@
+name: influx extension
+
+# DEC-0219 (weewx-rtldavis#474): influx.py ships as a WeeWX extension.
+# Every PR builds the zip and installs it into a fresh WeeWX 5.5.2 with the
+# Simulator driver, so "works without the rtldavis driver" is measured, not
+# asserted. A pushed influx-vX.Y.Z tag also publishes the zip as a release.
+
+on:
+  push:
+    branches: [main, dev]
+    tags: ["influx-v*"]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  build-prove-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # the release step; every other step only reads
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install WeeWX 5.5.2
+        run: python -m pip install --upgrade pip weewx==5.5.2
+
+      # Fails if the module's __version__, install.py's VERSION and (on a tag
+      # run) the tag disagree.
+      - name: Build the zip
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            scripts/build_influx_zip.sh "${GITHUB_REF_NAME}"
+          else
+            scripts/build_influx_zip.sh
+          fi
+
+      - name: Install into a fresh WeeWX and run the Simulator
+        run: scripts/prove_influx.sh dist/weewx-influx-*.zip
+
+      # --latest=false keeps "Latest" on the Docker image releases.
+      - name: Publish the release asset
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/weewx-influx-*.zip \
+            --latest=false \
+            --title "influx.py ${GITHUB_REF_NAME#influx-v}" \
+            --notes "WeeWX extension release. Install: weectl extension install <URL of the weewx-influx zip below>. See extensions/influx/README.md and docs/INTERFACES.md section 2."

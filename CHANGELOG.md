@@ -9,6 +9,10 @@ under [Pre-S16].
 ## [S166] — 2026-10-25 — DEC-0220, the loop-JSON writer's extra_fields design (#473, design only)
 
 - DEC-0220 (accepted, not built): opt-in `[LoopJsonWriter] extra_fields` emitted under weewx-influx2's names, refusing per-packet deltas (any observation whose accumulator extractor is `sum`), plus `loop_interval_s`; contract `loop_json_writer/1.1.0`. Filed #481 (the driver drops message 9's 10-minute gust).
+## [S165] — 2026-10-25 — influx.py ships as a WeeWX extension (#474, DEC-0219; PR #479, not released)
+
+- `extensions/influx/`, `scripts/build_influx_zip.sh`, `scripts/prove_influx.sh`, `.github/workflows/influx.yml`: CI builds `weewx-influx-VERSION.zip`, installs it into WeeWX 5.5.2 with the Simulator driver and builds the service from the installed config; an `influx-vVERSION` tag publishes it (`--latest=false`). Replaces upstream's `influx` extension in place; file unchanged at `0.20+ws.2`.
+- Dockerfile installs the extension from the root `influx.py`; the weewx-influx2 download and `INFLUX2_*` pins are gone. mypy gate gains `--explicit-package-bases` (two `install.py` files).
 
 ## [S163] — 2026-10-22 — v2.0.21 prep (not cut, not deployed)
 
