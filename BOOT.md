@@ -12,7 +12,7 @@ is a **separate repo** — don't make dashboard changes here.
 
 ---
 
-## ▶ Resume here (S163 → S164)
+## ▶ Resume here (S166 → S167)
 
 ### What's settled (do not re-derive)
 
@@ -45,10 +45,20 @@ and smoke-tests amd64 and arm64, CI pushes arm64 to GHCR and `scripts/join_multi
 with marvin's `:vX.Y.Z-amd64`; the v2.0.20 backfill ran 2026-10-17 18:41 ET (`:latest` multi-arch,
 `:v2.0.20-amd64` = prod's digest). **The plan is ROADMAP P0.8 (public readiness: five phases,
 issues #451–#456) and P1.9 (decoder fixes in Go: #458 measure CRC failures, #459 burst gate)**,
-on #457. **#458 is merged (S157, DEC-0216, PR #461, log-only, not deployed). S158 did P0.8 phase 1's cheap items (#451, #452, #454, #455); #451 edits the baked `pressure_service.py`, so it ships with v2.0.21.** **S159's #463 (#453, DEC-0217) and #464 (#456) are merged to `dev`, issues closed with comments; #464 carries the 240 s init grace (baked, v2.0.21) and `influx.py`'s lease-JSON fix (mounted, not yet deployed).** **S160 (#465, DEC-0218, merged as #466): a rain reading after a rejected one is judged first against the last accepted count, removing the up-to-16-tip phantom when a counter dips and comes back; baked, rides v2.0.21. S161 deployed #464's mounted `influx.py` (and the writer's docstring) with a `weewx.service` restart at 2026-10-21 23:14:42 ET; sha matches `dev`, soak 19/0/0.** It was prompted by four replies on 2026-10-21 from `weewx-packages`, a day-old continuation org that folded our upstream PRs (lheijst#22, #23, #15, lheijst/rtldavis#7) into its own fork with accurate credit and no endorsement from the original maintainers. No reply is owed; our upstream PRs stay open. Non-Davis platform research is `eaglehunt-weather-dashboard#936`, dash's to run; weewx
-files issues from its section A.
+on #457. **#458 is merged (S157, DEC-0216, PR #461, log-only, not deployed). S158 did P0.8 phase 1's cheap items (#451, #452, #454, #455); #451 edits the baked `pressure_service.py`, so it ships with v2.0.21.** **S159's #463 (#453, DEC-0217) and #464 (#456) are merged to `dev`, issues closed with comments; #464 carries the 240 s init grace (baked, v2.0.21) and `influx.py`'s lease-JSON fix (mounted, not yet deployed).** **S160 (#465, DEC-0218, merged as #466): a rain reading after a rejected one is judged first against the last accepted count, removing the up-to-16-tip phantom when a counter dips and comes back; baked, rides v2.0.21. S161 deployed #464's mounted `influx.py` (and the writer's docstring) with a `weewx.service` restart at 2026-10-21 23:14:42 ET; sha matches `dev`, soak 19/0/0.** It was prompted by four replies on 2026-10-21 from `weewx-packages`, a day-old continuation org that folded our upstream PRs (lheijst#22, #23, #15, lheijst/rtldavis#7) into its own fork with accurate credit and no endorsement from the original maintainers. No reply is owed; our upstream PRs stay open. Non-Davis platform research (`eaglehunt-weather-dashboard#936`, closed; doc
+`docs/proposals/non-davis-platforms-s398.md` in the dashboard repo) is answered by #473, #474 and
+#475; dash's duplicates #476–478 are closed in their favor.
 
-### ▶▶ S164 JOB LIST
+**S164–S166.** S164: ERR-0011 (marvin's own outage, 62 minutes on 2026-10-22; 3 minutes backfilled
+from WU, the rest stay empty). **S165 (#474, DEC-0219, PR #479): `influx.py` is a WeeWX extension;
+release `influx-v0.20+ws.2` is published (not Latest), prod untouched (it keeps its mount); the
+Dockerfile installs from the root copy and rides v2.0.21.** **S166 (#473, DEC-0220, PR #480):
+design only, accepted, not built: opt-in `[LoopJsonWriter] extra_fields` under weewx-influx2's
+names, per-packet deltas refused, plus `loop_interval_s` (dash#1066 needs it); contract
+`loop_json_writer/1.1.0`.** #481: the live loop has no `windGust_mph` (the driver drops message 9's
+gust). **#475 (portable SensorQC) is parked on purpose: thin demand, no hardware to test on.**
+
+### ▶▶ S167 JOB LIST
 
 1. **Watch, no action unless it fires** (last checked S161: soak 19 passed / 0 failures, no
    `bar_absolute` fallback since v2.0.20): the measured `pressure` keeps arriving (a `no
@@ -57,13 +67,16 @@ files issues from its section A.
    restart, so the earliest is 10-19 21:22 ET; the owner reads it off WU) · OWM and Windy rain in
    millimeters (needs rain; ERR-0010) · freeze lead (blocker 1), measure at the next freeze; none
    since at least 10-11. The message-type proof fired (3 times, `BACKLOG.md`); no longer a watch.
-1b. **v2.0.21 is prepped on branch `s163-v2.0.21-prep` (S163), not cut:** audit 15 and #468 in the
+1b. **v2.0.21 is prepped and merged to `dev` (S163, #470), not cut:** audit 15 and #468 in the
    Dockerfile, banner `ws.7` (driver, README, `soak_check.sh`). To do: CI green on the PR, build
    on marvin, sha of the baked config before and after (must be identical), release mechanics
    (`CONSTANTS.md`), tag and release in the same PR (CLAUDE.md step 0). Not deployed.
-1c. **#474 / DEC-0219 (S165, PR #479):** `influx.py` extension built, CI green; after merge, the owner
-   decides when to push tag `influx-v0.20+ws.2` (not cut). Prod unchanged (mount); the Dockerfile
-   change rides v2.0.21. Add it to the v2.0.21 check: the baked config stanza must still match.
+1c. **#474 / DEC-0219 is released** (`influx-v0.20+ws.2`); the Dockerfile change rides v2.0.21, so
+   add it to that check: the baked `[StdRESTful][[Influx]]` stanza must still match. #474 is
+   still open: close it with a comment once the owner calls it done.
+1d. **Build #473 from DEC-0220** (tier:mid, Sonnet, after v2.0.21): small steps, tests that cannot
+   pass vacuously (GOTCHAS §1), INTERFACES §1 rows per sensor class, tell dash when the contract
+   ships. **#481** (`windGust10`) is its own mid-tier issue; design the key name first.
 2. **P0.8 phase 1, what is left:** the quickstart's container half is proven on arm64 (S162: seed,
    non-root writes, banner). The host steps (blacklist, udev rule, systemd unit) wait on marvin's
    answer to **ops#427** (a disposable Debian VM); then the GitHub About text and topics (owner's
@@ -102,7 +115,7 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 ## Model tier
 
 **S160 ran on Opus 5.5** (the desktop app's persisted selection): right for reading the upstream
-replies and #465's design. The Sonnet floor is the owner's to restore in the app. S161 ran on Sonnet (a merge check and a mounted-file deploy). S162 is the quickstart proof: Sonnet.
+replies and #465's design. The Sonnet floor is the owner's to restore in the app. S161 ran on Sonnet (a merge check and a mounted-file deploy). S162 is the quickstart proof: Sonnet. S165 (#474 build) ran on Sonnet at high, S166 (#473 design) on Opus 5.5 at medium, both as parallel worktree sessions; S167 (this closeout) on Sonnet.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -122,4 +135,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-22 (S163). v2.0.20 steady in prod; v2.0.21 prepped on a branch, not cut.
+_Last updated: 2026-10-25 (S167). v2.0.20 steady in prod; v2.0.21 prepped on `dev`, not cut; #473 designed (DEC-0220), #474 released.
