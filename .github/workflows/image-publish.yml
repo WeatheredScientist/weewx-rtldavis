@@ -88,7 +88,9 @@ jobs:
             echo "tree is pinned (DEC-0214); its build checks the sha256 itself"; exit 0
           fi
           src_sha="$(sed -n 's/^ARG RTLDAVIS_SRC_SHA256=//p' tools/Dockerfile)"
-          influx_commit="$(sed -n 's/^ARG INFLUX2_COMMIT=//p' tools/Dockerfile)"
+          # The current Dockerfile no longer pins weewx-influx2 (DEC-0219); this check is only for
+          # trees that still download it, so the commit lives here.
+          influx_commit=f791f2e1a7a4dd11835983acee6b03345aba74c6
           curl -fsSL -o "$RUNNER_TEMP/src.tgz" \
             https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz
           echo "${src_sha}  $RUNNER_TEMP/src.tgz" | sha256sum -c -

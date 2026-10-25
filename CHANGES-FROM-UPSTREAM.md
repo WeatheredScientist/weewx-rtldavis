@@ -23,9 +23,9 @@ It exists for three reasons:
 ## Provenance
 
 We build from Vince Skahan's repackage, not from Luc Heijst's repository directly. The chain is
-verified from `Dockerfile` (which fetches `weewx-contrib/weewx-rtldavis/src.tgz` and installs
-`david-lutz/weewx-influx2`, each pinned to one commit and checked against a sha256 since S156,
-DEC-0214; the pins are the `ARG` lines in the base stage):
+verified from `Dockerfile` (which fetches `weewx-contrib/weewx-rtldavis/src.tgz`, pinned to one commit and checked
+against a sha256 since S156, DEC-0214, and installs the uploader from this repo's own root copy
+since S165, DEC-0219; the pin is the `ARG` lines in the base stage):
 
 | Component | Chain |
 |-----------|-------|
@@ -202,8 +202,8 @@ archive period. Measurement only: it changes no decoded output. Applied and asse
 Base: `david-lutz/weewx-influx2` (itself a fork of `matthewwall/weewx-influx` for InfluxDB 2.x).
 Delta through item 5: **+33 / −14 lines**; item 6 (2026-08-21) adds roughly 64 more, not
 re-measured against true upstream here — the number above predates it and is left as historical
-rather than guessed at. The Dockerfile installs the upstream extension and then copies our patched
-file over it.
+rather than guessed at. The image and the `influx-v*` releases (DEC-0219) both install this repo's
+root copy as the `influx` extension; the image no longer downloads upstream's.
 
 | # | Change | Date | Why |
 |---|--------|------|-----|

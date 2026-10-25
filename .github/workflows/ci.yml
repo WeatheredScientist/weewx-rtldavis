@@ -78,4 +78,4 @@ jobs:
       # + DEC-0027 (S31). Vendored third-party uploaders are excluded via ruff.toml.
 
       - name: Mypy
-        run: python -m mypy --ignore-missing-imports --no-strict-optional .
+        run: python -m mypy --ignore-missing-imports --no-strict-optional --explicit-package-bases .

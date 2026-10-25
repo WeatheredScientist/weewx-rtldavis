@@ -166,7 +166,9 @@ only because not yet seen this run):
 ## 2. InfluxDB — archive/time-series surface
 
 Written by `influx.py` (`user.influx.Influx`, a RESTThread uploader — the david-lutz weewx-influx2
-fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.x line protocol**.
+fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.x line protocol**. It also ships on its own as a WeeWX extension
+(`influx-v*` releases, DEC-0219; adopter notes in `extensions/influx/README.md`); the class path
+`user.influx.Influx` and the `[StdRESTful][[Influx]]` section are the same as upstream's.
 
 **Contract:**
 - Config keys in `weewx.conf [[Influx]]`: `server_url`, `org`, `bucket`, `token`. `server_url` is
