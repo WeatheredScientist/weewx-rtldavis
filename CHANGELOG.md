@@ -6,6 +6,11 @@ under [Pre-S16].
 
 ---
 
+## [S165] — 2026-10-25 — influx.py ships as a WeeWX extension (#474, DEC-0219; PR #479, not released)
+
+- `extensions/influx/`, `scripts/build_influx_zip.sh`, `scripts/prove_influx.sh`, `.github/workflows/influx.yml`: CI builds `weewx-influx-VERSION.zip`, installs it into WeeWX 5.5.2 with the Simulator driver and builds the service from the installed config; an `influx-vVERSION` tag publishes it (`--latest=false`). Replaces upstream's `influx` extension in place; file unchanged at `0.20+ws.2`.
+- Dockerfile installs the extension from the root `influx.py`; the weewx-influx2 download and `INFLUX2_*` pins are gone. mypy gate gains `--explicit-package-bases` (two `install.py` files).
+
 ## [S163] — 2026-10-22 — v2.0.21 prep (not cut, not deployed)
 
 - Dockerfile: the seed-config backups are removed after the last `weectl` call (#468, a plain POSIX glob), and the two brace-expansion `rm -rf` lines, no-ops under dash (audit 15), are now explicit paths. `/usr/share/doc` stays for the Debian copyright files and `/var/lib/dpkg` for the package record. Two tests in `test_dockerfile_pins.py`. Driver banner `0.20+ws.6` → `ws.7` in `rtldavis.py`, README, `ops/soak_check.sh` and `CHANGES-FROM-UPSTREAM.md`. Before the tag: build, compare the baked config's sha before and after, then the release mechanics.
