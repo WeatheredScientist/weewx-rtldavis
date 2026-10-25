@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S166] — 2026-10-25 — DEC-0220, the loop-JSON writer's extra_fields design (#473, design only)
+
+- DEC-0220 (accepted, not built): opt-in `[LoopJsonWriter] extra_fields` emitted under weewx-influx2's names, refusing per-packet deltas (any observation whose accumulator extractor is `sum`), plus `loop_interval_s`; contract `loop_json_writer/1.1.0`. Filed #481 (the driver drops message 9's 10-minute gust).
+
 ## [S163] — 2026-10-22 — v2.0.21 prep (not cut, not deployed)
 
 - Dockerfile: the seed-config backups are removed after the last `weectl` call (#468, a plain POSIX glob), and the two brace-expansion `rm -rf` lines, no-ops under dash (audit 15), are now explicit paths. `/usr/share/doc` stays for the Debian copyright files and `/var/lib/dpkg` for the package record. Two tests in `test_dockerfile_pins.py`. Driver banner `0.20+ws.6` → `ws.7` in `rtldavis.py`, README, `ops/soak_check.sh` and `CHANGES-FROM-UPSTREAM.md`. Before the tag: build, compare the baked config's sha before and after, then the release mechanics.
