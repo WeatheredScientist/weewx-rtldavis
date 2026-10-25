@@ -127,7 +127,9 @@ Two outputs are the project's contract with anything that reads it, specified in
 - **A live JSON feed** (`loop-data.txt` and `current.json`), rewritten on every reading. It also
   ships on its own as a WeeWX extension that works with any driver:
   [extensions/loopjson](extensions/loopjson/README.md).
-- **An InfluxDB 2 time series**, one point per archive record.
+- **An InfluxDB 2 time series**, one point per archive record. The uploader also ships on its own
+  as a WeeWX extension, patched for Python 3.12+ and verified TLS:
+  [extensions/influx](extensions/influx/README.md).
 
 They were built for the Eagle Hunt Weather dashboard, and nothing in them is specific to it.
 

@@ -106,7 +106,7 @@ gitignored local-infra doc (DEC-0012).
   ```
   .venv/bin/python -m ruff check .
   .venv/bin/python -m pytest
-  .venv/bin/python -m mypy --ignore-missing-imports --no-strict-optional $(git ls-files '*.py')
+  .venv/bin/python -m mypy --ignore-missing-imports --no-strict-optional --explicit-package-bases $(git ls-files '*.py')
   ```
 
   **`.venv/bin/python` is the only interpreter on this box that has the tooling** (verified S59).
@@ -117,7 +117,9 @@ gitignored local-infra doc (DEC-0012).
 
   **mypy needs the flags and the file list spelled out**: this repo has no mypy config at all (no
   `pyproject.toml`, no `mypy.ini`, no `setup.cfg` — only `ruff.toml`), so a bare `python -m mypy`
-  exits `Missing target module, package, files, or command`. The invocation above is what
+  exits `Missing target module, package, files, or command`. `--explicit-package-bases` is there because every extension's installer
+  must be named `install.py` (`extensions/loopjson/`, `extensions/influx/`); without it mypy reports
+  the duplicate module name and stops (DEC-0219). The invocation above is what
   `.pre-commit-config.yaml` passes, and it reproduces CI locally.
 
   **`ruff format` is NOT a gate — do not run it (DEC-0027).** It was listed here as one until S59.

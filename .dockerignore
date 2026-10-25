@@ -14,5 +14,6 @@
 !windy.py
 !wcloud.py
 !influx.py
+!extensions/influx/install.py
 !rtldavis.py
 !entrypoint.sh

@@ -12050,3 +12050,57 @@ so it's rare. Left as a footnote on #465.
   banner (ws.6 → ws.7) at that release.
 - The continuation's maintainer could be told about B's heavy-rain stall. Not done here: it would
   be a comment in a third-party org's tracker, and it's the owner's call.
+
+---
+
+## DEC-0219 — `influx.py` ships as a WeeWX extension, and the image installs it from there (S165)
+
+**Date:** 2026-10-25 (S165, Sonnet 5.5). **Status:** accepted; the owner approved the design in chat,
+including dropping the upstream download from the Dockerfile. Built on a feature branch. Issue #474
+(from dash#936, merged proposal `non-davis-platforms-s398.md` section A.2).
+
+### Context
+
+The uploader fixes (DEC-0007 and the items in `CHANGES-FROM-UPSTREAM.md`) reached only people who run
+our image: the Dockerfile fetched upstream's zip and copied our `influx.py` over it. Upstream
+`david-lutz/weewx-influx2` was last pushed 2021-02-22. As published it imports `distutils` (gone in
+Python 3.12) and uses `ssl._create_unverified_context()` for every https URL. Our PR
+(david-lutz/weewx-influx2#1) has had no maintainer response since 2026-07-13, and `matthewwall`'s
+original is InfluxDB 1.x. An adopter outside the image either cannot start WeeWX on a current
+Python or sends a token over unverified TLS.
+
+### Decision
+
+1. Release the patched file as an extension, on DEC-0211's pattern. The root `influx.py` is the only
+   copy. `extensions/influx/install.py` and `README.md` are the only new source files.
+2. Keep upstream's extension name `influx`, its `restful_services` class `user.influx.Influx` and its
+   `[StdRESTful][[Influx]]` placeholder stanza. Installing our zip over upstream's replaces it in
+   place (measured with WeeWX 5.5.2: upstream first, ours second, both exit 0, `weectl extension
+   list` shows one `influx 0.20+ws.2`). An existing config needs no edit.
+3. Version: `VERSION = "0.20+ws.N"` in `influx.py` and in `install.py`; the build script fails if
+   they disagree with each other or with the tag. Tag prefix `influx-v`, so `influx-v0.20+ws.2`;
+   release with `--latest=false` so "Latest" stays on the image releases. First release ships the
+   file unchanged at ws.2, the bytes prod already mounts; bump N only when the code changes.
+4. CI (`.github/workflows/influx.yml`): build the zip, install it into a fresh WeeWX 5.5.2 with the
+   Simulator driver, check the service is registered and the stanza exists, import `user.influx` on
+   Python 3.14, and construct the service from the installed config (asserts the version line and
+   that the upload thread was created). weewxd is not run: it logs to syslog, which a runner does not
+   keep, and the service needs nothing from a running engine to prove it loads.
+5. Owner's call, beyond the issue's minimum: the Dockerfile stops downloading weewx-influx2. It lays
+   the root `influx.py` and `extensions/influx/install.py` out as the zip does and runs
+   `weectl extension install` on that directory, so the image and the release install the same
+   thing from the same copy. The `INFLUX2_COMMIT` and `INFLUX2_SHA256` pins and the trailing
+   `COPY influx.py` are gone. `.dockerignore` admits `extensions/influx/install.py`.
+
+### Consequences
+
+- Prod keeps mounting the root `influx.py` (CONSTANTS' deploy-layers table): the file is unchanged,
+  so nothing is deployed. The Dockerfile change is baked-layer and rides the next image release;
+  the installed bytes are the same file.
+- The baked config stanza is unchanged in shape: the extension's config block matches upstream's,
+  and the ExtensionInstaller `version` is the only difference.
+- `image-publish.yml`'s legacy-tree check (trees from before DEC-0214) compared upstream's head with
+  the Dockerfile's `INFLUX2_COMMIT`; that commit now lives in the workflow.
+- `tests/test_dockerfile_pins.py` expected two pinned downloads; it now expects at least one.
+- A release is a separate step: push `influx-v0.20+ws.2` after merge. Not done in this session.
+- Not covered locally: a full image build. The image CI builds and smoke-tests it on the PR.
