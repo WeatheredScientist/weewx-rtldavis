@@ -12050,3 +12050,170 @@ so it's rare. Left as a footnote on #465.
   banner (ws.6 → ws.7) at that release.
 - The continuation's maintainer could be told about B's heavy-rain stall. Not done here: it would
   be a comment in a third-party org's tracker, and it's the owner's call.
+
+## DEC-0220 — The loop-JSON writer passes opt-in extra observations under weewx-influx2's names, never a per-packet delta, and reports its own cadence (S166)
+
+**Date:** 2026-10-25 (S166, Opus 5.5). **Status:** accepted; the owner approved the design as
+drafted, in chat. Design only, no code written yet. Issue #473, from eaglehunt-weather-dashboard#936 (merged
+proposal `docs/proposals/non-davis-platforms-s398.md`, section A.1).
+
+### Context
+
+`loop_json_writer.py` copies a fixed list of 13 observations (`_FIELDS`, lines 109-123) out of each
+LOOP packet. Since DEC-0211 anyone running another driver can install it as an extension, and for
+them the list is the limit: lightning, air quality, soil, leaf, indoor, extra temperature and
+humidity, battery and signal never reach `loop-data.txt`. Worse, the commonest non-Davis paths have
+no `radiation` at all. Both Ecowitt gateway drivers emit lux (`luminosity`, `illuminance`), weewx-sdr
+emits `lux` or `light`, AcuRite Atlas raw lux. So the solar tile, ET's input and the sky
+classifier's input are lost before any extra sensor is considered.
+
+Facts this design rests on, each checked at source (dash's research marked two of them inferred):
+
+1. The 13 existing output keys already follow weewx-influx2's naming rule, so it is one rule, not
+   two. `influx.py` names a field `<obs>_<label>`, where label is the observation's US unit
+   (`weewx.units.getStandardUnitType(US, obs)`) shortened by `UNIT_REDUCTIONS` (`influx.py:238`),
+   and leaves it bare when the label reduces to `None` (compass degrees, UV index, percent, epoch)
+   or the observation has no unit group. `rainRate` → `rainRate_inch_per_hour`, `cloudbase` →
+   `cloudbase_foot`, `windDir` → `windDir`: all 13 match.
+2. Per-packet deltas exist and the drivers mark them. weewx-contrib/weewx-gw1000's
+   `calculate_lightning_count` (`lightning_strike_count` = change in `lightningcount` since the last
+   period) and `calculate_rain` (`t_rain`, mapped to WeeWX `rain` by its default field map, and `p_rain`), and its installer writes `[Accumulator]`
+   entries with `extractor = sum` for exactly those three. weewx-ecowitt_local_http writes the same
+   three. weewx-sdr's `DEFAULT_DELTAS` are `rain` and `lightning_strike_count`, both already `sum` in
+   WeeWX's own accumulator defaults, along with `ET` and `windrun` (`accum.py` `DEFAULTS_INI`,
+   5.5.2). Our own driver's `rain` is a delta too; it is simply not in `_FIELDS`. So "the
+   accumulator extractor is `sum`" identifies every delta found, with no driver-specific list.
+3. The accumulator map is not ready when the writer is built. `weewx.accum.initialize(config_dict)`
+   runs in `StdArchive.__init__`, an archive service, and WeeWX builds `process_services` before
+   `archive_services` (`weewx.all_service_groups`). The writer runs in `process_services`, so at its
+   `__init__` the map holds only WeeWX's defaults, not the site's `[Accumulator]` section.
+4. Unit groups can come from the driver. `luminosity` is not in WeeWX's `obs_group_dict`; gw1000
+   adds it (`group_illuminance`) at import. Battery and signal observations have no group at all.
+   A name computed at runtime from the live registry therefore matches what `influx.py` computes in
+   the same process; a static table would not.
+5. The consumer passes the file through. eh-proxy's `/loopdata` parses it, checks `dateTime`
+   (`age > 30` → 503) and returns `{...parsed, skyState, ongoingEvents}`. Nothing in the dashboard
+   reads `writer`. New optional keys are invisible to it until a tile asks for one.
+6. The research's driver repository name is off by a hyphen: the gateway driver is
+   `weewx-contrib/weewx-gw1000` (file `bin/user/gw1000.py`), not `weewx-gw-1000`.
+
+### Options
+
+Delta handling (the open question on #473):
+
+- A. Cache-forward like every other field. Repeats a delta on every write for up to 300 s: one
+  strike becomes dozens. Rejected.
+- B. TTL 0: emit a delta only on the write of the packet that carried it. Still wrong. The file is
+  overwritten in place and read on the consumer's own clock, so a consumer reads one write twice
+  (double count) or not at all (lost count). A delta needs exactly-once delivery, which this
+  transport cannot give. Rejected.
+- C. A running sum since the writer started. Invents a quantity that resets on every restart and
+  matches nothing in the archive. Rejected.
+- D. Exclude: refuse any configured observation whose accumulator extractor is `sum`, with a
+  WARNING naming the cumulative counterpart to list instead (`lightningcount`, `dayRain`,
+  `rain_total`; gw1000 registers `lightningcount` as `group_count`), which is a state and safe to cache. Chosen.
+
+Key naming:
+
+- A. Free-form names in the config (`luminosity = light_lux`). Lets loop and archive diverge, and
+  the dashboard would need two registry entries. Rejected.
+- B. weewx-influx2's default rule under US units, computed at runtime. Chosen. It names the archive
+  field the same way only when the site's `[[Influx]]` keeps the defaults (`append_units_label` on,
+  no per-input `name`); the contract states the rule, not the site's uploader config.
+
+`loop_interval_s`:
+
+- A. Leave cadence to the consumer. A consumer starting cold cannot know it, and the dashboard's 30 s
+  gate fails every 60-300 s platform (proposal section B.2).
+- B. Emit the measured median gap. Chosen, on the same minor bump, so the contract moves once.
+
+### Decision
+
+1. Config: `[LoopJsonWriter] extra_fields = luminosity, lightning_distance, pm2_5`, a plain list of
+   WeeWX observation names, empty by default. A scalar list, not the `[[extra_fields]]` subsection
+   #473 sketched: there is nothing per field to say except a TTL, which goes in an optional
+   `[[ttl]]` subsection keyed by observation name (seconds; default `ttl_default`).
+2. Names: `<obs>_<label>` by fact 1's rule, with the label from `weewx.units` at runtime and the
+   reduction table copied from `influx.py` (the writer is a separate extension and cannot import
+   it). Bare when the label reduces to `None` or the observation has no group.
+3. Refusals, each one WARNING at startup or first packet, never an exception: a name whose
+   extractor is `sum` (D above); a name whose key equals an existing output key (`outTemp` →
+   already `outTemp_F`; ignored, INFO); a key in the reserved set (`dateTime`, `writer`,
+   `barometer_fetch_epoch`, `loop_interval_s`). The `sum` check reads `config_dict['Accumulator']`
+   first and falls back to `weewx.accum`'s defaults, because the map is not built yet (fact 3).
+4. Values: same `to_US()` packet, same bounded cache and expiry WARNING as the 13 (DEC-0006),
+   rounded nowhere. Group-less values pass as the driver set them.
+5. `loop_interval_s`: the median of the last 32 gaps between `new_loop` calls on a monotonic clock
+   (packet `dateTime` is whole seconds on rtldavis, `int(time.time() + 0.5)`, so its gaps alternate
+   2 and 3 s), one decimal, omitted until 8 gaps exist. Always on.
+6. Contract `loop_json_writer/1.1.0`: new optional keys only. With `extra_fields` empty, output
+   differs from 1.0.0 only by `writer` and `loop_interval_s`. Release `loopjson-v1.1.0`;
+   `install.py`'s version moves with `__version__` (CI checks the pair).
+7. INTERFACES section 1 gains one table of sensor classes, not one row per field:
+
+| Class | Example observations → keys (US, WeeWX 5.5.2 groups) | Kind |
+|---|---|---|
+| Light | `luminosity` → `luminosity_lux`, `illuminance` → `illuminance_lux` | state. Lux is not `radiation_Wpm2`; the writer converts nothing |
+| Lightning | `lightning_distance` → `lightning_distance_mile`, `lightning_last_det_time` (bare, an epoch), `lightningcount` → `lightningcount_count` (cumulative) | state. `lightning_strike_count` is a delta, refused |
+| Air quality | `pm2_5` → `pm2_5_microgram_per_meter_cubed`, `pm10_0` → `pm10_0_microgram_per_meter_cubed`, `co2` → `co2_ppm` | state |
+| Soil and leaf | `soilMoist1` → `soilMoist1_centibar`, `soilTemp1` → `soilTemp1_F`, `leafWet1` → `leafWet1_count`, `leafTemp1` → `leafTemp1_F` | state |
+| Extra and indoor T/H | `extraTemp1` → `extraTemp1_F`, `extraHumid1`, `inTemp` → `inTemp_F`, `inHumidity` | state |
+| Battery and signal | driver-defined names, bare, driver-defined meaning | state |
+| Piezo and second rain | `p_rain`, `t_rain`, `rain` refused; `p_rainRate` and cumulative totals pass | delta refused, totals state |
+
+   Each key is computed, not listed; the table's examples are what 5.5.2 produces, and the doc
+   says so.
+8. The dashboard needs nothing to stay working. Using an extra key is dash's own registry change,
+   one entry per key shared with the archive field. `loop_interval_s` is dash's to adopt in its
+   liveness gate (proposal B.2).
+
+### Tests that cannot pass vacuously (GOTCHAS section 1)
+
+The unit tests stub `weewx`, so a green there says nothing about real unit groups or the real
+accumulator (the S147 entry). Therefore:
+
+1. A real-WeeWX test file, run in `loopjson.yml`'s job (which already installs `weewx==5.5.2`) with
+   `REQUIRE_REAL_WEEWX=1`, under which a missing `weewx` fails instead of skipping. It asserts the
+   rule reproduces all 13 existing keys from their observation names, and the class table's keys
+   after registering `luminosity` the way gw1000 does.
+2. Drift: the writer's reduction table equals `influx.py`'s, read with `ast` (no import). Positive
+   control: one mutated entry turns it red.
+3. Delta refusal with engine order: build the writer, then call `weewx.accum.initialize` with an
+   `[Accumulator]` declaring `t_rain` `sum`, as `StdArchive` would. With `extra_fields = t_rain,
+   lightning_strike_count, luminosity`, `luminosity_lux` must be present and both deltas absent, on
+   the packet that carries them and on the next one that does not. The presence assertion is what
+   stops an emit-nothing bug from passing.
+4. Default compatibility: the same packet sequence through 1.0.0 (from git) and 1.1.0 with no
+   extras gives equal dicts apart from `writer` and `loop_interval_s`.
+5. `loop_interval_s` with an injected clock: absent below 8 gaps, the median after, and a
+   stopped feed does not change the last value (no write happens to change it).
+6. End to end: `prove_loopjson.sh` adds `extra_fields = inTemp, rain` to the Simulator station and
+   asserts `inTemp_F` present and `rain_in` absent in the real feed.
+7. Pre-fix proof: tests 1, 3, 5 and 6 run against 1.0.0 and fail on their assertions, not at
+   import or on a signature (shim if needed).
+
+### Implementation plan (each step its own commit on one branch, PR against `dev`)
+
+1. Naming: `_extra_key(obs)` plus the copied reduction table; tests 1 (rule half) and 2.
+2. Config parsing and refusals: `extra_fields`, `[[ttl]]`, reserved set, duplicate keys; offline
+   tests with the stub.
+3. Delta refusal resolved at first packet from `config_dict` plus defaults; test 3.
+4. Cache path: extras ride the existing cache loop; test 4.
+5. `loop_interval_s`; test 5.
+6. Version 1.1.0 in the writer and `install.py`; `prove_loopjson.sh` extension (test 6); extension
+   README.
+7. Docs: INTERFACES section 1 (the class table, `loop_interval_s`, the delta rule), CHANGELOG,
+   `weewx.conf.example` commented sample.
+8. Release `loopjson-v1.1.0` and a tracker note to dash#936; prod deploy of the mounted writer is
+   its own step (scp to the project root, restart, one feed read showing `loop_interval_s`).
+
+### Consequences
+
+- Prod changes only by one new key. Our station needs no extras today.
+- A site whose `[[Influx]]` renames fields loses the shared name; documented, not prevented.
+- Sibling DEC-0219 (#474) moves `influx.py` into an extension but keeps the root file, so test 2's
+  path stands.
+- Not addressed, and its own issue: our live loop has no `windGust_mph`. The rtldavis driver parses
+  message 9's 10-minute gust and drops it (`rtldavis.py:2401-2412`). WeeWX's `windGust10`
+  (extractor `last`) fits it. That is a baked driver change with its own semantics question (a
+  10-minute maximum, not an instant gust), so it stays out of this writer change.
