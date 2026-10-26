@@ -83,6 +83,13 @@ def test_seed_config_backups_removed_after_last_weectl():
     assert cleanup > text.rindex("weectl station reconfigure")
 
 
+def test_influx_copied_into_the_venv_user_package():
+    # The venv's `user` package shadows weewx-data/bin/user, so the extension install alone leaves
+    # `user.influx` unimportable (v2.0.21 build, S169); the root file must be COPY'd into the venv
+    assert ("COPY influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py"
+            in _dockerfile())
+
+
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-v"]))

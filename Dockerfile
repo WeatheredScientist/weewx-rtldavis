@@ -144,6 +144,10 @@ COPY pressure_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/press
 COPY owm.py /opt/weewx-venv/lib/python3.14/site-packages/user/owm.py
 COPY windy.py /opt/weewx-venv/lib/python3.14/site-packages/user/windy.py
 COPY wcloud.py /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
+# The extension install above puts influx.py in /opt/weewx-data/bin/user, which the venv's own
+# `user` package shadows (weewx appends that directory to sys.path last), so `user.influx` must
+# also live here or weewxd cannot import it. Same root file, no second copy in the repo.
+COPY influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py
 
 #--------------------------------------------
 # Copy the patched rtldavis.py — the driver weewx actually imports (user.* resolves

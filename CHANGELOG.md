@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S169] — 2026-10-26 — v2.0.21 build gate: `user.influx` import restored (DEC-0219 correction)
+
+- Building v2.0.21 on marvin showed the image had no importable `user.influx` (the venv `user` package shadows `weewx-data/bin/user`); the Dockerfile copies the root `influx.py` into the venv again, `test_dockerfile_pins.py` pins it and `smoke_image.sh` imports it. Baked config sha `ee62b7a2…` to `f67762d9…` is only the three Influx placeholders. Not yet released.
+
 ## [S168] — 2026-10-26 — DEC-0221, `loop_interval_s` per dash's asks on #473 (design only)
 
 - DEC-0221 (accepted, not built) amends DEC-0220 item 5: `loop_interval_s` is the gap between successful writes of `loop-data.txt`, reported from the first gap, omitted outside [1, 3600] s; INTERFACES section 1's liveness paragraph moves to `max(30, 3 × loop_interval_s)` (dash DEC-0404) with the 1.1.0 build.
