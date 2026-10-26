@@ -77,7 +77,7 @@ mkdir -p ~/weewx/weewx-data ~/weewx/logs
 ```
 
 ```bash
-docker create --name wx-seed weatheredscientist/weewx-rtldavis:v2.0.20
+docker create --name wx-seed weatheredscientist/weewx-rtldavis:v2.0.21
 ```
 
 ```bash
@@ -92,7 +92,7 @@ setting, including each upload service.
 **5. Run it.**
 
 ```bash
-docker run -d --name weewx-rtldavis --restart unless-stopped --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges --device /dev/bus/usb -e HOME=/tmp -e TZ=America/New_York -e BIAS_TEE=0 -v ~/weewx/weewx-data:/opt/weewx-data -v ~/weewx/logs:/var/log/weewx weatheredscientist/weewx-rtldavis:v2.0.20
+docker run -d --name weewx-rtldavis --restart unless-stopped --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges --device /dev/bus/usb -e HOME=/tmp -e TZ=America/New_York -e BIAS_TEE=0 -v ~/weewx/weewx-data:/opt/weewx-data -v ~/weewx/logs:/var/log/weewx weatheredscientist/weewx-rtldavis:v2.0.21
 ```
 
 Set `TZ` to your own zone so daily rain resets at local midnight. `BIAS_TEE=0` leaves the
@@ -151,7 +151,7 @@ across healthy reception, and when its own input goes stale. Setup is in
 
 ## Versions
 
-- **Image tags** (`v2.0.20`) version this distribution. The major number tracks the base OS and
+- **Image tags** (`v2.0.21`) version this distribution. The major number tracks the base OS and
   Python generation (v2 is Ubuntu 26.04, Python 3.14, WeeWX 5.5). Pin a tag. `:latest` moves only
   after a release has run in production.
 - **The driver** reports `0.20+ws.N`: upstream's 0.20 plus this project's patch level, which rises

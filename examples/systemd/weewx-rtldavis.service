@@ -5,7 +5,7 @@
 #   990:990          the weewx user's uid:gid (`id -u weewx`, `id -g weewx`)
 #   /srv/weewx       where weewx-data/ and logs/ live, owned by that user
 #   America/New_York your time zone
-#   v2.0.20          the image tag you want
+#   v2.0.21          the image tag you want
 #
 # Install: sudo install -m 0644 weewx-rtldavis.service /etc/systemd/system/
 #          sudo systemctl daemon-reload && sudo systemctl enable --now weewx-rtldavis
@@ -29,7 +29,7 @@ ExecStart=/usr/bin/docker run --rm --name weewx-rtldavis \
     -e HOME=/tmp -e TZ=America/New_York -e BIAS_TEE=0 \
     --mount type=bind,source=/srv/weewx/weewx-data,target=/opt/weewx-data \
     --mount type=bind,source=/srv/weewx/logs,target=/var/log/weewx \
-    weatheredscientist/weewx-rtldavis:v2.0.20
+    weatheredscientist/weewx-rtldavis:v2.0.21
 # kill, not stop: weewx has no state a SIGTERM grace period would save, and
 # a hung stop holds the dongle.
 ExecStop=/usr/bin/docker kill weewx-rtldavis

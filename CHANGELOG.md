@@ -8,7 +8,7 @@ under [Pre-S16].
 
 ## [S169] — 2026-10-26 — v2.0.21 build gate: `user.influx` import restored (DEC-0219 correction)
 
-- Building v2.0.21 on marvin showed the image had no importable `user.influx` (the venv `user` package shadows `weewx-data/bin/user`); the Dockerfile copies the root `influx.py` into the venv again, `test_dockerfile_pins.py` pins it and `smoke_image.sh` imports it. Baked config sha `ee62b7a2…` to `f67762d9…` is only the three Influx placeholders. Not yet released.
+- Building v2.0.21 on marvin showed the image had no importable `user.influx` (the venv `user` package shadows `weewx-data/bin/user`); the Dockerfile copies the root `influx.py` into the venv again, `test_dockerfile_pins.py` pins it and `smoke_image.sh` imports it. Baked config sha `ee62b7a2…` to `f67762d9…` is only the three Influx placeholders. v2.0.21 built on marvin from `dev`@`c9c5934` and in prod from 2026-10-26 18:16:14 ET (image `5ca44ede…`). `BOOT.md` rewritten and trimmed under its cap; `CONSTANTS.md` rows and the version pins in README, compose and the systemd example move to v2.0.21; GOTCHAS §4 gains the import-path trap. Hub push, tag and `main` promotion pending.
 
 ## [S168] — 2026-10-26 — DEC-0221, `loop_interval_s` per dash's asks on #473 (design only)
 
