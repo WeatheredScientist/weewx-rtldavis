@@ -389,6 +389,11 @@ alone did not catch.
   `SuccessExitStatus=2` in the unit, a routine `systemctl stop` leaves it in `failed`, and the next
   start then reads in the journal as a recovery from a crash that never happened. Check a unit's
   `SuccessExitStatus` before reading a nonzero exit as trouble.
+- **A clean build is not proof the baked config's modules import** (S169): moving `influx.py` into an
+  extension install left `user.influx` unimportable, because the venv's `user` package shadows
+  `weewx-data/bin/user` (weewx appends that directory to `sys.path` last), and prod hid it by mounting
+  the file. Found only by running `python -m user.influx` in the built image on marvin. The image CI
+  smoke test imports it now. Prove an import path inside the image, not from the Dockerfile's text.
 - **`marvinctl enable <unit> --now` and `disable <unit> --now` both need the unit's `[Install]`
   section to actually do anything** (S124/S125) — a unit installed but never enabled has no
   `timers.target.wants` symlink for `disable` to remove, and `enable --now` is what creates it AND
