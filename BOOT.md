@@ -27,9 +27,8 @@ baked config sha moved `ee62b7a2…` to `f67762d9…` (only the Influx placehold
 `YOUR_INFLUX_*`). Rollback: retag `:v2.0.20` as `:marvin-live` + restart (CONSTANTS).
 
 **v2.0.20 (2026-10-06, DEC-0209):** WeatherLink's `bar_absolute` is `pressure`, `altimeter` derives
-from it; archive `pressure` is measured from 22:18:00 ET (DISC-0002). `main` = `prod-baseline-20261006`
-(v2.0.20); `dev` is ahead by v2.0.21 and design records, so **v2.0.21 is not promoted to `main`
-yet**. Images are multi-arch (DEC-0214/0215, `scripts/join_multiarch.sh`). `LoopJsonWriter` and
+from it; archive `pressure` is measured from 22:18:00 ET (DISC-0002). **`main` = `prod-baseline-20261026`
+(v2.0.21, promoted S169); `dev` carries only design records and docs past it.** Images are multi-arch (DEC-0214/0215, `scripts/join_multiarch.sh`). `LoopJsonWriter` and
 `influx.py` ship as extensions (`loopjson-v1.0.0`, `influx-v0.20+ws.2`); prod still mounts both.
 `t-weewx` (996:986) under `--cap-drop ALL` (ops#360 done); swap path proved (#423). The S145 audit's
 ten high items shipped; 29 medium/low stay in `docs/CODE_REVIEW_S145.md`. The public face was
@@ -41,10 +40,9 @@ drops message 9's 10-minute gust.
 
 ### ▶▶ S170 JOB LIST
 
-1. **Finish the v2.0.21 release if S169 did not:** `:v2.0.21-amd64` on Hub, the multi-arch join
-   (dry run, then `--apply` on the owner's go), `:latest` (owner's gesture), `v2.0.21` tag and
-   GitHub release, promotion `dev` to `main` with `prod-baseline-20261026` (owner's go). Close
-   **#474** with a comment once the owner calls it done.
+1. **v2.0.21 is released** (tag, GitHub release, multi-arch Hub tag, `main` promoted). Left: the
+   owner moves `:latest` to `:v2.0.21` (a stale `:latest` makes `docker pull` fetch v2.0.20), and
+   **#474** closes with a comment once the owner calls it done.
 2. **Watch, no action unless it fires:** measured `pressure` keeps arriving (a `no bar_absolute`
    WARNING means DISC-0002 needs a second boundary) · WU gold star (owner reads it off WU) · OWM and
    Windy rain in millimeters (needs rain; ERR-0010) · freeze lead (blocker 1) at the next freeze.
@@ -70,8 +68,8 @@ drops message 9's 10-minute gust.
 | Prod | marvin, **`v2.0.21`** as `:marvin-live` (image `5ca44ede…`) since 2026-10-26 18:16:14 ET, weewx 5.5.2, gain 372, `t-weewx`. `:v2.0.20` (`f617c9ca…`) is local for rollback |
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `5cd09917…` since 2026-09-29, `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
-| `main`/`dev` | `main` = v2.0.20's promotion (`prod-baseline-20261006`); `dev` ahead (above) |
-| Docker Hub | `:v2.0.20` = `:latest`, multi-arch. `:v2.0.21` not pushed until job 1 is done |
+| `main`/`dev` | `main` = v2.0.21's promotion (`prod-baseline-20261026`); `dev` ahead by docs only |
+| Docker Hub | `:v2.0.21` multi-arch (index `e2177ffc…`, amd64 = prod's `5ca44ede…`) since 2026-10-26; `:latest` still `:v2.0.20` until the owner moves it |
 | Trackers | repo: #458/#459 decoder, #473/#481 live feed, #474 (close), #475 parked, #380 info · ops: #427 VM, #357 done on our side, #344 macOS LAN, #433 (this file's size) |
 
 ## Blockers
@@ -101,4 +99,4 @@ map (DEC-0063).
 
 Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-26 (S169). v2.0.21 in prod; Hub push, tag and `main` promotion pending._
+_Last updated: 2026-10-26 (S169). v2.0.21 in prod, on Hub and on `main`; `:latest` and #474 are the owner's._
