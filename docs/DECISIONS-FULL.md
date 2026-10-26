@@ -12106,6 +12106,19 @@ Python or sends a token over unverified TLS.
 - Not covered locally: a full image build. The image CI builds and smoke-tests it on the PR.
 
 
+### Correction (S169, found by the v2.0.21 build gate)
+
+Item 5 dropped the venv copy of `influx.py` along with the download, and the consequence list
+missed what that does. WeeWX appends `weewx-data/bin` to `sys.path` last (`weeutil/startup.py`), so
+the venv's own `user` package shadows the extension's install directory: in the v2.0.21 build
+`python -m user.influx` failed with "No module named user.influx", and a container with no mount
+would not have started weewxd (the baked config names `user.influx.Influx`). Prod was safe only
+because its mount supplies the file. The Dockerfile now also `COPY`s the same root `influx.py` into
+the venv `user` package (still one source file); `tests/test_dockerfile_pins.py` pins the line and
+`scripts/smoke_image.sh` imports `user.influx`, which the image CI never did. Also measured: the
+baked config's Influx placeholders are now `YOUR_INFLUX_ORG/BUCKET/TOKEN` (were `replace_me`), the
+only difference in the baked config sha (`ee62b7a2…` to `f67762d9…`).
+
 ## DEC-0220 — The loop-JSON writer passes opt-in extra observations under weewx-influx2's names, never a per-packet delta, and reports its own cadence (S166)
 
 **Date:** 2026-10-25 (S166, Opus 5.5). **Status:** accepted; the owner approved the design as

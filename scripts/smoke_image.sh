@@ -30,3 +30,7 @@ grep -qF "$want_weewx" <<<"$version_out" || { echo "weectl is not $want_weewx" >
 echo "== the patched driver imports"
 docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
   "import user.rtldavis as d; print('driver', d.DRIVER_VERSION)"
+
+echo "== the uploader the baked config names imports (weewxd cannot start without it)"
+docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
+  "import user.influx as i; print('influx', i.VERSION)"
