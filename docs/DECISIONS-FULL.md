@@ -12272,3 +12272,72 @@ accumulator (the S147 entry). Therefore:
   message 9's 10-minute gust and drops it (`rtldavis.py:2401-2412`). WeeWX's `windGust10`
   (extractor `last`) fits it. That is a baked driver change with its own semantics question (a
   10-minute maximum, not an instant gust), so it stays out of this writer change.
+
+## DEC-0221 — `loop_interval_s` is the gap between writes of `loop-data.txt`, reported from the first gap and only inside [1, 3600] s (S168)
+
+Date: 2026-10-26 (S168, Opus 5.5). Status: accepted; the owner approved it as drafted,
+in chat. Design only. Amends DEC-0220 decision item 5 and its implementation plan's steps 5 and 7. Everything
+else in DEC-0220 stands. Prompted by dash's four contract asks on #473 (2026-10-26), after dash
+merged its DEC-0404 (eaglehunt-weather-dashboard PR #1067): the `/loopdata` gate is now
+`max(30, 3 × cadence)`, where the cadence comes from the feed's `loop_interval_s` when it is a finite
+number in [1, 3600]. Failing that, the proxy uses the last such value it has seen, then the site fact
+`data.loop_cadence_s`, then 2.5 s.
+
+### Context
+
+DEC-0220 item 5 emitted `loop_interval_s` only once 8 gaps existed. Dash measured the cost. On a 300 s
+platform the key is missing for 40 minutes after every WeeWX restart. The proxy's memory covers that
+only while the proxy itself keeps running, so after a host reboot the dashboard shows "station
+offline" for those 40 minutes unless the site has set `data.loop_cadence_s`. Dash also asked that the
+quantity be defined as the file's cadence, not the sensor's, and that the producer and the consumer
+use the same range.
+
+### Decisions, one per ask
+
+1. Cold start: report from the first gap. Once two writes have happened, `loop_interval_s` is the
+   median of the gaps that exist, up to the last 32. The 8-gap floor is dropped. Reasons:
+   - A short early estimate is harmless. The consumer's gate never goes below 30 s, and the median
+     corrects itself within three gaps. For example, if a driver's first poll comes 1 s after startup
+     and the next ones come 300 s apart, the medians run 1, 150.5, 300.
+   - A missing value costs the whole wait.
+   - We also tell slow-platform adopters to set `data.loop_cadence_s` on a cold host: before the
+     second write the key cannot exist, and at 300 s that wait is 5 minutes.
+2. The quantity: seconds between consecutive successful writes of `loop-data.txt`.
+   - The clock is monotonic and is read after `os.replace` succeeds, so a failed write neither counts
+     nor resets anything.
+   - The writer writes once per LOOP packet, so for a driver that emits bursts this is the burst
+     cadence, not any one sensor's. AcuRite's two alternating field sets come out at 18 s; Tempest's
+     3 s `rapid_wind` packets come out at 3 s beside its 60 s observations.
+   - Liveness is about the file, so this is the right number. INTERFACES section 1 states it in those
+     words.
+3. INTERFACES section 1's liveness paragraph moves to "within `max(30, 3 × loop_interval_s)` s"
+   and cites dash DEC-0404. It lands with the 1.1.0 build (DEC-0220 step 7), not now.
+   - The paragraph also says what the consumer does when the key is absent: a 1.0.x writer, or before
+     the second write. It falls back to the proxy's memory, then the site's `data.loop_cadence_s`,
+     then 30 s.
+   - For our own station the gate is unchanged: a 2.5 s cadence gives `max(30, 7.5)` = 30 s.
+4. Range: omit outside [1, 3600], never clamp.
+   - The value is rounded to one decimal first, and the range is checked on the rounded value, so the
+     writer emits exactly what the consumer will accept.
+   - A clamped value would state a cadence the station does not have. Omitting it lets the consumer
+     fall back the way it already does for a missing key.
+   - The edges really are edge cases. A median under 1 s would gate at 30 s anyway, and a loop slower
+     than an hour is not a live feed.
+   - One DEBUG line the first time the value leaves the range.
+
+### Test changes (DEC-0220's tests section, test 5)
+
+The test injects a clock. It asserts:
+- the key is absent after one write and present after the second;
+- the medians follow the sequence 1, 150.5, 300 for gaps of 1, 300, 300;
+- the key is absent for a 0.94 s median (rounds to 0.9) and for a 3600.06 s median (rounds to 3600.1),
+  and present at exactly 1.0 and at 3600.0;
+- a failed write, simulated by making `os.replace` raise, adds no gap.
+
+The presence assertions are what keep an emit-nothing bug from passing.
+
+### Consequences
+
+- No change to DEC-0220's contract version. `loop_json_writer/1.1.0` still brings `loop_interval_s`
+  in as a new optional key.
+- Dash needs nothing more. Its range check, its fallbacks and its 30 s floor already match this.

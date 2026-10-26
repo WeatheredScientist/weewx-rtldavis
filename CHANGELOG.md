@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S168] — 2026-10-26 — DEC-0221, `loop_interval_s` per dash's asks on #473 (design only)
+
+- DEC-0221 (accepted, not built) amends DEC-0220 item 5: `loop_interval_s` is the gap between successful writes of `loop-data.txt`, reported from the first gap, omitted outside [1, 3600] s; INTERFACES section 1's liveness paragraph moves to `max(30, 3 × loop_interval_s)` (dash DEC-0404) with the 1.1.0 build.
+
 ## [S167] — 2026-10-25 — closeout for S164–S166
 
 - `BOOT.md` Resume block rewritten (S166 → S167): S164's ERR-0011, #474 released, #473 designed, #475 parked, #481 filed; job 1c corrected (the `influx-v0.20+ws.2` release exists). Filed #473–#475 from dash#936 section A; dash's duplicates #476–478 closed in their favor.
