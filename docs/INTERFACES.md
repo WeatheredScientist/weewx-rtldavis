@@ -63,6 +63,14 @@ not this repo's.
 > is exactly why that path can be throttled and this one cannot. A consumer must not compute
 > staleness from `current.json`'s `dateTime`: by design it can be up to `current_interval` old on a
 > perfectly healthy station.
+>
+> **The 30 s is this station's number, not a constant (1.1.0, DEC-0221; dash DEC-0404).** The
+> dashboard's gate is now **`dateTime` within `max(30, 3 × loop_interval_s)` s**, where
+> `loop_interval_s` is the feed's own key (below). When the key is absent (a 1.0.x writer, or
+> before the second write of a run) the consumer falls back to the last value it saw, then its
+> site fact `data.loop_cadence_s`, then 2.5 s. Our own station writes every ~2.5 s, so its gate is
+> still 30 s. On a slow platform (a 300 s driver), set the consumer's `data.loop_cadence_s` for a
+> cold host: until the second write there is no gap to report.
 
 **Contract:**
 - **Units are US/imperial**, encoded in the key names. The packet is `to_US()`-normalized before
@@ -79,10 +87,45 @@ not this repo's.
     from that service's own config so the two cannot drift apart. **Only when a `[DavisPressure]`
     section exists (DEC-0211):** a station without one gets `ttl_default` for the barometer too, so a
     dead barometer is not served stale for two hours.
-- **`writer` — the contract version (DEC-0211, v1.0.0).** Every write to both files carries
+- **`writer` — the contract version (DEC-0211; 1.1.0 added `loop_interval_s` and the opt-in extra
+  fields, DEC-0220/0221).** Every write to both files carries
   `"writer": "loop_json_writer/<version>"`. Semver against this contract: major when a key is
   renamed, removed or given new units; minor for a new optional key; patch for a behavior fix. A
   consumer passes it through or ignores it.
+- **`loop_interval_s` — the file's own cadence (1.1.0, DEC-0221).** Seconds between consecutive
+  *successful* writes of `loop-data.txt`, on a monotonic clock: the median of the last 32 gaps,
+  rounded to one decimal. It is the file's cadence, not a sensor's: the writer writes once per LOOP
+  packet, so a driver that emits bursts reports the burst cadence (AcuRite's two alternating sets
+  come out near 18 s, Tempest's 3 s `rapid_wind` packets at 3 s). A gap is known only after the
+  write that ends it, so the key first appears in the third file of a run. It is **omitted, never
+  clamped,** when the rounded value is outside [1, 3600] s, the range the consumer accepts.
+- **Extra observations — opt-in, 1.1.0 (DEC-0220).** `[LoopJsonWriter] extra_fields` names WeeWX
+  observations to pass through (empty by default; with it empty the output differs from 1.0.0 only
+  in `writer` and `loop_interval_s`). Each key is `<obs>_<US unit label>` by weewx-influx2's rule,
+  read from the live unit registry, bare when the label reduces to none or the observation has no
+  group. The thirteen standard keys already follow that rule. The name matches the archive and
+  InfluxDB field only while the site's `[[Influx]]` keeps its defaults (`append_units_label` on, no
+  per-input `name`). Extras share the cache, `ttl_default` and the expiry WARNING above;
+  `[[ttl]]` sets one observation's TTL. **A per-packet delta is refused** (WARNING, no key): an
+  observation whose accumulator extractor is `sum` (`rain`, `lightning_strike_count`, ET, windrun,
+  a driver's `t_rain` and `p_rain`). The file is overwritten in place and read on the consumer's
+  clock, so a delta would be counted twice or not at all; list the cumulative counterpart
+  (`dayRain`, `lightningcount`) instead. Per sensor class, the keys are computed, not listed;
+  these are what WeeWX 5.5.2 produces for a US-unit packet:
+
+  | Class | Example observations → keys | Kind |
+  |---|---|---|
+  | Light | `luminosity` → `luminosity_lux`, `illuminance` → `illuminance_lux` | state. Lux is not `radiation_Wpm2`; the writer converts nothing |
+  | Lightning | `lightning_distance` → `lightning_distance_mile`, `lightning_last_det_time` (bare, an epoch), `lightningcount` → `lightningcount_count` (cumulative) | state; `lightning_strike_count` is a delta, refused |
+  | Air quality | `pm2_5` → `pm2_5_microgram_per_meter_cubed`, `pm10_0` → `pm10_0_microgram_per_meter_cubed`, `co2` → `co2_ppm` | state |
+  | Soil and leaf | `soilMoist1` → `soilMoist1_centibar`, `soilTemp1` → `soilTemp1_F`, `leafWet1` → `leafWet1_count`, `leafTemp1` → `leafTemp1_F` | state |
+  | Extra and indoor T/H | `extraTemp1` → `extraTemp1_F`, `extraHumid1`, `inTemp` → `inTemp_F`, `inHumidity` | state |
+  | Battery and signal | driver-defined names, bare, driver-defined meaning | state |
+  | Piezo and second rain | `p_rain`, `t_rain`, `rain` refused; `p_rainRate` and cumulative totals pass | delta refused, totals state |
+
+  A group a driver registers itself (gw1000's `luminosity`, `lightningcount`) is in the registry
+  only once the driver is imported, which happens before services start; without it the name is
+  bare. Lux values are not converted to W/m².
 - **`barometer_inHg` is a corrected-upstream passthrough, not an ISS decode (S77).** The VP2+ ISS
   never transmits pressure over 915 MHz. `pressure_service.py`'s `DavisPressureFetcher` polls
   `api.weatherlink.com/v2/current/<station_id>` directly and prefers `bar_sea_level` — **already

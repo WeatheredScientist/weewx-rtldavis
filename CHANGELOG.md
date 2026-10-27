@@ -6,6 +6,11 @@ under [Pre-S16].
 
 ---
 
+## [S170] — 2026-10-27 — #473 built on a branch: loopjson 1.1.0 (`extra_fields`, `loop_interval_s`); #471 closed
+
+- #471: README step 5 and DEPLOY.md say `--device /dev/bus/usb` needs a USB device present (PR #489). ops#427 answered.
+- #473 / DEC-0220 + DEC-0221, steps 1 to 7 on `s170-473-extra-fields-build`, not yet merged or released: `[LoopJsonWriter] extra_fields` with weewx-influx2's key names, `[[ttl]]`, refusal of `sum`-extractor deltas at the first packet, extras on the shared cache, `loop_interval_s`, version 1.1.0. Tests run against real WeeWX in `loopjson.yml` (`REQUIRE_REAL_WEEWX=1`); `prove_loopjson.sh` proves it end to end on the Simulator. INTERFACES §1 gains the class table and the cadence-aware liveness paragraph. Release `loopjson-v1.1.0` is step 8.
+
 ## [S169b] — 2026-10-26 — DEC-0222, image tags follow SemVer; the base OS is recorded, not versioned
 
 - DEC-0222 (accepted, docs only): major = a break in what consumers read, minor = something added or a value's meaning changed, patch = the rest; v2.1.0 is the first release under the rule; no tag renumbered, no rename. README "Versions" rewritten as a table of the four independent numbers.
