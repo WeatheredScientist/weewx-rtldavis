@@ -122,6 +122,39 @@ _FIELDS = [
     ('cloudbase',            'cloudbase_foot'),
 ]
 
+# Unit-label shortening for opt-in extra observations (DEC-0220). A copy of
+# influx.py's UNIT_REDUCTIONS: this file ships as its own extension and cannot
+# import it. tests/test_loop_json_extra_names.py fails if the two drift apart.
+_UNIT_REDUCTIONS = {
+    'degree_F': 'F',
+    'degree_C': 'C',
+    'inch': 'in',
+    'mile_per_hour': 'mph',
+    'mile_per_hour2': 'mph',
+    'km_per_hour': 'kph',
+    'km_per_hour2': 'kph',
+    'knot': 'knot',
+    'knot2': 'knot',
+    'meter_per_second': 'mps',
+    'meter_per_second2': 'mps',
+    'degree_compass': None,
+    'watt_per_meter_squared': 'Wpm2',
+    'uv_index': None,
+    'percent': None,
+    'unix_epoch': None,
+}
+
+
+def _extra_key(obs):
+    """Output key for an extra observation, by weewx-influx2's rule (DEC-0220):
+    '<obs>_<label>', the label being the observation's US unit shortened by
+    _UNIT_REDUCTIONS, and the bare name when the label reduces to None or the
+    observation has no unit group. Read from the live registry, because drivers
+    register their own groups (gw1000 adds luminosity)."""
+    unit_type, _group = weewx.units.getStandardUnitType(weewx.US, obs)
+    label = _UNIT_REDUCTIONS.get(unit_type, unit_type)
+    return obs if label is None else '%s_%s' % (obs, label)
+
 
 class LoopJsonWriter(StdService):
     def __init__(self, engine, config_dict):
