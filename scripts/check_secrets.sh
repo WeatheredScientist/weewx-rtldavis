@@ -66,6 +66,14 @@
 # are inert (see INERT ALTERNATES below). When you add or change an alternate, delete it
 # in a scratch copy and confirm the test goes red.
 #
+# S151 (#421) closed the four holes that pass found, one planted control each, every new
+# alternate mutation-tested: quoted key names (`_sep`), `secret_key`/`access_key`/
+# `private_key`, `os.getenv(` as a false positive, and the allow-list applied per LINE
+# (it is now per MATCH, in the scan loop). One new deletion stays green and no control
+# can kill it: the scan loop's fail-closed branch for a flagged line that yields no match
+# (the detector and the splitter run the same regex, so it cannot happen). It stays as a
+# guard against a future edit to either.
+#
 # ---------------------------------------------------------------------------
 set -u
 status=0
@@ -119,10 +127,22 @@ fi
 # --- What looks like a secret: KEY <sep> VALUE, value 8+ credential-ish chars ---
 # `_key` is shared by the detector AND by every POSITIONED allow term below, so
 # an allow term must sit right after a credential key — not float anywhere on the line.
-# It is still tested per LINE, not per match: on a line with two assignments, an
-# allowed first one excuses a literal second one. Measured S145 (#409), not fixed.
-_key='(password|passcode|pass|PASS|api_?key|api_?secret|token|secret|[^A-Za-z_]key)'
-_assign="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=-]{8,}'
+# The allow-list is tested per MATCH, not per line (S151, #421 item 1): see the scan loop.
+#
+# S151 (#421 items 2 and 3):
+#   - `_sep` lets a closing quote sit between the key and its separator, so a JSON or
+#     dict-style `"api_key": "<value>"` is scanned. It is shared by the detector and the
+#     positioned allow terms, like `_key`, so a quoted key is excused the same way.
+#   - `PASSWORD` is listed for the same reason `PASS` is (S68): detection ignores case, the
+#     allow-list does not, and windy.py's `'PASSWORD': self.password` (an upload parameter)
+#     became visible with the quoted-key change and could not be excused.
+#   - `(secret|access|private)_?key` was missing: `secret` needs the separator right
+#     after it and the bare `key` alternate wants a non-letter, non-underscore character
+#     before it, so `SECRET_KEY = <value>` slipped between both. The allow-list is
+#     case-sensitive, so the uppercase and camelCase spellings are listed on their own.
+_key='(password|PASSWORD|passcode|pass|PASS|api_?key|api_?secret|token|secret|[^A-Za-z_]key|(secret|access|private)_?[Kk]ey|(SECRET|ACCESS|PRIVATE)_?KEY)'
+_sep='["'"'"']?[[:space:]]*[:=]'
+_assign="${_key}${_sep}"'[[:space:]]*["'"'"']?[A-Za-z0-9_./+=-]{8,}'
 
 # --- S68: bare `pass`, and the app-password literal (hole class 5) ---
 # `pass` was added to _key above because the key list held `password` and
@@ -170,7 +190,7 @@ _apppw='["'"'"'][a-z]{4}([[:space:]][a-z]{4}){3}["'"'"']'
 # prose and comments across the repo and train people to skip the gate (ops#147
 # item 6). Requiring the credential key immediately before it cannot fire on
 # prose. Quotes stay OPTIONAL here so this one rule covers both spellings.
-_apppw_assign="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?[a-z]{4}([[:space:]][a-z]{4}){3}'
+_apppw_assign="${_key}${_sep}"'[[:space:]]*["'"'"']?[a-z]{4}([[:space:]][a-z]{4}){3}'
 
 secret_re="${_assign}|${_apppw}|${_apppw_assign}"
 
@@ -235,8 +255,10 @@ _private_ip='(^|[^0-9.])(10\.[0-9x]{1,3}\.[0-9x]{1,3}\.[0-9x]{1,3}|172\.(1[6-9]|
 # starting with it. All stay as documented intent; a green GOOD line for one of them is
 # not coverage. `os.getenv(...)` is flagged, not excused: the value must begin with the
 # token. The test marks such lines (inert).
-_val='(YOUR_|your_|\$\{|os\.environ|getenv|sys\.argv|argv|input\(|""|'"''"'|None|-1\b|self\.|options\.|[A-Za-z_][A-Za-z_0-9]*\.get\(|(site|config|stn)_dict|[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\b)'
-allow_value="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?'"$_val"
+# `os.getenv(` is the exception (S151, #421 item 4): the value does begin with `os.`, so
+# it is excused on its own alternate, like `os.environ`.
+_val='(YOUR_|your_|\$\{|os\.environ|os\.getenv|getenv|sys\.argv|argv|input\(|""|'"''"'|None|-1\b|self\.|options\.|[A-Za-z_][A-Za-z_0-9]*\.get\(|(site|config|stn)_dict|[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\b)'
+allow_value="${_key}${_sep}"'[[:space:]]*["'"'"']?'"$_val"
 
 # --- ALLOW (2): prose, as the value of THE SECRET KEY ITSELF. ---
 # A docstring / table row describing a field (influx.py's "InfluxDB 2.x
@@ -249,7 +271,7 @@ allow_value="${_key}"'[[:space:]]*[:=][[:space:]]*["'"'"']?'"$_val"
 # began `[A-Za-z]:` — any letter, any colon, anywhere — so a trailing
 # "Authorization: Bearer …" comment excused a real value sitting on the left.
 # The planted-payload test caught that while this very gate was being written.
-allow_prose="${_key}"'[[:space:]]*:[[:space:]]*[A-Z][A-Za-z]*[[:space:]]+[A-Za-z0-9]'
+allow_prose="${_key}"'["'"'"']?[[:space:]]*:[[:space:]]*[A-Z][A-Za-z]*[[:space:]]+[A-Za-z0-9]'
 
 # --- ALLOW (3): `description` / `Authorization` as the line's OWN key. ---
 # ANCHORED to line start. These two were free-floating in both repos' gates, and
@@ -267,7 +289,14 @@ allow_keys='^[[:space:]]*[-{,]?[[:space:]]*["'"'"']?(description|Authorization)[
 # scanned like any other. Delete the dead comment rather than re-widening this.
 allow_selfassign='^[[:space:]]*self\.[A-Za-z_0-9]+[[:space:]]*=[[:space:]]*[a-z_][a-z_0-9]*[[:space:]]*$'
 
-allow_re="${allow_value}|${allow_prose}|${allow_keys}|${allow_selfassign}"
+# S151 (#421 item 1): the two kinds of excuse apply at different scales.
+#   allow_line  describes the LINE (its own key is `description`, or it is `self.x = x`),
+#               so it excuses the whole line, anchored at the start as before.
+#   allow_match describes ONE assignment's VALUE, so each secret-shaped match on the line
+#               must carry its own. One excused assignment no longer excuses a literal
+#               beside it; before, `a = os.environ[..], b = <literal>` passed.
+allow_line="${allow_keys}|${allow_selfassign}"
+allow_match="${allow_value}|${allow_prose}"
 
 for f in "${files[@]}"; do
   [ -f "$f" ] || continue
@@ -311,7 +340,25 @@ for f in "${files[@]}"; do
     [ -n "$hit" ] || continue
     n="${hit%%:*}"        # line number
     line="${hit#*:}"      # RAW line content, prefix removed
-    printf '%s\n' "$line" | grep -qE "$allow_re" && continue
+    printf '%s\n' "$line" | grep -qE "$allow_line" && continue
+    # Split the line into one segment per match (from a match's start to the next one's)
+    # and demand an allow term in EVERY segment. Literal string surgery, no offsets, so
+    # it does not depend on the locale. A line the detector fired on but that yields no
+    # match here stays flagged: failing closed, never open.
+    cur=""; scan="$line"; excused=1
+    while IFS= read -r m; do
+      [ -n "$m" ] || continue
+      pre="${scan%%"$m"*}"
+      start="${scan#"$pre"}"
+      if [ -n "$cur" ]; then
+        printf '%s\n' "${cur%"$start"}" | grep -qE "$allow_match" || excused=0
+      fi
+      cur="$start"
+      scan="${start#"$m"}"
+    done < <(printf '%s\n' "$line" | grep -oEi "$secret_re")
+    if [ -z "$cur" ]; then excused=0
+    else printf '%s\n' "$cur" | grep -qE "$allow_match" || excused=0; fi
+    [ "$excused" -eq 1 ] && continue
     echo "SECRET-SCAN: possible embedded secret in $f:"
     echo "  ${n}: ${line}"
     status=1

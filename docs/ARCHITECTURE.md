@@ -1,7 +1,8 @@
 # Architecture — weewx-rtldavis
 
 **Status:** Source of truth
-**Last updated:** 2026-09-19 (S139) — re-verified against live marvin state after sitting untouched
+**Last updated:** 2026-10-10 (S152) — §1 and §2 corrected: `LoopJsonWriter` runs last in
+`process_services` (eaglehunt-ops#395). Before that, 2026-09-19 (S139) — re-verified against live marvin state after sitting untouched
 since S17; the deploy-layers table below is now a pointer to `CONSTANTS.md` rather than a second
 copy, per STANDARD rule 5 (a second copy is a defect — this one drifted to a stale NAS path across
 the DEC-0118 marvin move without anyone noticing until now).
@@ -27,9 +28,11 @@ Davis 6263 VP2+ ISS  ──915 MHz FHSS──▶  RTL-SDR Blog v3 (bias-tee-capa
              ┌───────────────┬────────────────┼───────────────────┬──────────────────┐
              ▼               ▼                 ▼                   ▼                  ▼
      data_services    process_services   xtype_services   archive_services   restful_services
-     loop_json_writer  StdConvert/Cal/QC   StdWXXTypes      StdArchive        11 uploaders +
-     (→ loop-data.txt)  dewpoint_service    PressureCooker   (→ SQLite)        influx + ogoxe
-                        pressure_service    RainRater
+     (empty)           StdConvert/Cal/QC   StdWXXTypes      StdArchive        11 uploaders +
+                       dewpoint_service    PressureCooker   (→ SQLite)        influx + ogoxe
+                       pressure_service    RainRater
+                       loop_json_writer
+                       (→ loop-data.txt)
 ```
 
 **The driver spawns the Go binary; the Go binary owns the SDR.** Only one `rtldavis` process can
@@ -42,11 +45,16 @@ From `weewx.conf [Engine][Services]`:
 
 | Group | Services |
 |-------|----------|
-| `data_services` | `user.loop_json_writer.LoopJsonWriter` |
-| `process_services` | `StdConvert, StdCalibrate, StdQC, StdWXCalculate, user.dewpoint_service.DewpointCacher, user.pressure_service.DavisPressureFetcher` |
+| `data_services` | *(empty)* |
+| `process_services` | `StdConvert, StdCalibrate, StdQC, StdWXCalculate, user.dewpoint_service.DewpointCacher, user.pressure_service.DavisPressureFetcher, user.loop_json_writer.LoopJsonWriter` |
 | `xtype_services` | `StdWXXTypes, StdPressureCooker, StdRainRater, StdDelta` |
 | `archive_services` | `StdArchive` |
 | `restful_services` | `StationRegistry, Wunderground, PWSweather, CWOP, WOW, WOWBE, AWEKAS, user.wcloud.WeatherCloud, user.windy.Windy, user.owm.OWM, user.influx.Influx, user.ogoxeUploader.OgoxeUploader` |
+
+> **`LoopJsonWriter` runs last in `process_services`, never in `data_services`** (since 2026-07-12;
+> re-read from the live `weewx.conf` at S152). `data_services` runs first, so a writer there would
+> publish each LOOP packet before conversion, QC and the derived fields exist. This table read
+> "`data_services`" from S16 until S152 (eaglehunt-ops#395). `weewx.conf.example` carries the rule.
 
 > **Removed (S47):** `user.loopdata.LoopData` was never in any active list; the `loopdata.py` mount
 > and the `[LoopData]` config section were dead weight, now removed from the live container and
@@ -96,10 +104,12 @@ find /opt/weewx-venv -name "*.pyc" -path "*/user/*" -delete
 `entrypoint.sh` reads `BIAS_TEE` (default `1`) and drives the RTL-SDR's bias-tee accordingly
 (`rtl_biast -b 1` / `-b 0`) before launching `weewxd`; the off-branch drives the tee off explicitly
 rather than relying on the power-on default, since tee state can survive a warm restart.
-**Live value is currently `BIAS_TEE=0`** (verified in the running container's env, 2026-09-19) — the
-LNA has been out of circuit since 2026-08-02 (DEC-0081/0083; see `CONSTANTS.md`'s hardware timeline).
-Re-check this directly (`marvinctl --tenant weewx inspect weewx-rtldavis-v2` → `Config.Env`) rather
-than trusting this line if the LNA is ever reinstalled.
+**Live value is currently `BIAS_TEE=0`** (verified on `weewx.service`'s command line, 2026-10-10) —
+the LNA has been out of circuit since 2026-08-02 (DEC-0081/0083; see `CONSTANTS.md`'s hardware
+timeline). Re-check it at its source, the unit file that sets it, rather than trusting this line if
+the LNA is ever reinstalled: `marvinctl --tenant weewx grep BIAS_TEE /etc/systemd/system/weewx.service`.
+`marvinctl inspect` no longer shows it: since MARVIN-DEC-0198 (2026-10-10) every `Config.Env` value
+prints as `<REDACTED>` (#443).
 
 ## 5. Config vs image — what a change requires
 
@@ -150,9 +160,9 @@ owner root gesture on marvin (DEC-0009).
 
 **`REMEDY_MODE=none` on marvin, on purpose** — the unit detects and escalates (RF reception,
 uploader alerting, input-staleness watchdog) but takes no automatic remedy action yet. The
-Foundation-era `usb_reset` remedy (`usb_reset.sh`, a driver unbind/rebind sudoers-scoped to a
-hardcoded Synology bus path) is still `weewx_monitor.py`'s own module-level default for other
-deployments, but is **not used on marvin**: its USB topology differs, and the script would either
+Foundation-era `usb_reset` remedy (`usb_reset.sh`, a sudoers-scoped driver unbind/rebind; it
+unbound a hardcoded Synology bus path until DEC-0217 made it find the RTL2832U by USB id, and it
+stopped being the module default then) is **not used on marvin**: its USB topology differs, and the script would either
 no-op or reset a different tenant's device (MARVIN-DEC-0051; see the unit file's own comment). The
 planned marvin remedy is a full container recreate (`restart_unit`, i.e. `weewx.service`'s own
 `docker run --rm` + `ExecStartPre=docker rm -f` cycle) via a path-scoped sudo grant

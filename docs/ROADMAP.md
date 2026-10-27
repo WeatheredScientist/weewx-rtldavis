@@ -3,7 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-09-29 (S146 — **scheduled full reconciliation, tripwire fired exactly on
+**Last updated:** 2026-10-17 (S156 — **scheduled full reconciliation, tripwire fired exactly on
+time**: three lines moved, detail in the guardrail section. Next check: S166.)
+Prior: 2026-09-29 (S146 — **scheduled full reconciliation, tripwire fired exactly on
 time**: every open P0–P3 item read against `BOOT.md`/`DECISIONS.md`/`CHANGELOG.md` fresh, plus
 DEC-0196 through DEC-0205 classed one by one. **Four lines moved.** (1) The P0 freeze item gained
 S144's lead (corrupt CRC-valid frames sit at outage onsets), marked a lead; the rate and the
@@ -133,11 +135,18 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S156** (~10 sessions out). If the session counter is
-  at or past S156 and this line still says S156, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136 and S146 did (diff every
+- **Next scheduled reconciliation check: by S166** (~10 sessions out). If the session counter is
+  at or past S166 and this line still says S166, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146 and S156 did (diff every
   open/pending item here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S146, 2026-09-29** — tripwire fired exactly on time. **Four lines
+- Last full reconciliation: **S156, 2026-10-17** — tripwire fired exactly on time. **Three lines
+  were behind and are fixed.** P3's extension item shipped at S155 (DEC-0211) but was still
+  unchecked; P3's INTERFACES line lacked DEC-0211's `writer` row; P0.7 still called #421 open
+  (closed S151, DEC-0210). Classed, no line: DEC-0206 and DEC-0208 (releases of items already
+  here), DEC-0207 (engine-bump tooling), DEC-0209 (already on P3's line), DEC-0212 (history scan),
+  DEC-0213 (adopter docs). Verified current: the P0 freeze row (`BOOT.md` blocker 1 unchanged),
+  the DB-lock row, P1, P1.8, P2's header.
+- Prior full reconciliation: **S146, 2026-09-29** — tripwire fired exactly on time. **Four lines
   were behind and are fixed; nothing else stale.** The pass also classed every DEC since S136
   (DEC-0196 to DEC-0205) instead of trusting the banner. Moved: the P0 freeze item (S144's lead,
   labeled a lead: the reverse rate is unmeasured, so neither the 1.31/day figure nor "mechanism
@@ -330,9 +339,58 @@ re-verified by the main thread before filing. The ten high items (#402–#411, `
 are fixed (PRs #412–#418) and **shipped**: the monitor's fixes (#413) went live with a restart on
 2026-09-29 09:31 ET, and the driver and uploader fixes (#412, #414) as the v2.0.18 image at
 16:37 ET (DEC-0206). The 29 medium/low items are the open cleanup queue in
-`docs/CODE_REVIEW_S145.md`: unordered, not scheduled; the secret gate's four detector holes are
-#421. Same shape as P0.6 above
+`docs/CODE_REVIEW_S145.md`: unordered, not scheduled. The secret gate's four detector holes (#421)
+are closed (S151, DEC-0210). Same shape as P0.6 above
 (`docs/CODE_REVIEW_S24.md`).
+
+## P0.8 — Public readiness (S156–) — 🔶 OPEN, ordered by what a new user hits first
+Follows DEC-0213 (the README, `docs/DEPLOY.md` and `examples/` rewritten for a new user, PR #449).
+The announcement waits for phases 1 and 2 and for the dashboard going public. Phases run in order;
+items inside a phase don't depend on each other.
+
+- [ ] **Phase 1 — what a new user copies.** Docs and config, except #451, which edits the baked
+      `pressure_service.py` and so ships with phase 2's v2.0.21. S158 did #451, #452, #454, #455;
+      S159 did #453 (PR #463).
+  - [x] #451 `pressure_service.py` crashes WeeWX on the example's placeholder `station_id` (audit 19).
+  - [x] #452 `weewx.conf.example`: this station's gain, dead `[LoopData]`, orphan sections, missing
+        `[LoopJsonWriter]` (audit 17).
+  - [x] #453 Monitor defaults assume Synology (`REMEDY_MODE=usb_reset`, `/volume1`, the USB port).
+        DEC-0217: defaults describe no host, `usb_reset.sh` finds the dongle by USB id; the prod
+        ordering step proved unneeded (S159, PR #463).
+  - [x] #454 `CHANGES-FROM-UPSTREAM.md` lags the code (audit 10).
+  - [x] #455 Retired NAS wording in adopter-facing files; patched uploaders unlinted (audit 11, 12).
+  - [ ] Prove the quickstart on a fresh Linux host (BOOT job 2): config seeding and non-root writes
+        need no dongle. **Container half proven S162 on arm64** (this Mac's Docker, `:v2.0.20`
+        `--platform linux/arm64`, uid 501, `--cap-drop ALL`: seed copy, `archive/weewx.sdb` and
+        `weewx.log` written, banner `0.20+ws.6`; found #468, two stray backups in the seed).
+        Left: the host steps (blacklist, udev rule, systemd unit), asked of marvin as ops#427.
+- [ ] **Phase 2 — the image, one release (v2.0.21).** Merged S156: #450 (both downloads pinned;
+      CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
+      and joins it into Docker Hub's multi-arch tag, DEC-0215; `:latest` and `:v2.0.20` multi-arch
+      since 2026-10-17 18:41 ET). S163 prepped on a branch: audit 15 and #468 fixed in the
+      Dockerfile, banner bumped to `ws.7`. Left: build and compare the baked config's sha, the
+      release mechanics, and the first arm64 run against a live radio. S160's #465 (DEC-0218, rain
+      recovery) is one of the driver edits that ride along.
+- [x] **Phase 3 — tests that cannot fail, then the bugs they hide.** #456: audit 29 and 33–39 first
+      (each fix proved by a mutation turning it red), then audit 32 (the US init time against the
+      150 s watchdog, check real logs first) and audit 20 (lease JSON kills the Influx thread).
+      **Done S159 (PR #464):** 35, 36, 38 fixed (29, 33, 34 had shipped at S145; 37's boilerplate and
+      39's untested modules left for phase 5). Audit 32 was real (153 s worst case for ID 8): every
+      start now gets the 240 s init grace, rides v2.0.21. Audit 20 fixed in the mounted `influx.py`.
+- [ ] **Phase 4 — upstream, in the owner's voice; nothing posted without a go.** Offer the four
+      unoffered driver fixes, highest value first: the `[options]` token's silent EU fallback (14),
+      zombie reaping (12), windDir (2), `NameError` and `rxCheckPercent` (3, 4). The driver repos have
+      been quiet since 2023, so the first move is one courtesy note to weewx-contrib, the package
+      everyone installs. Answer the reviewer note on david-lutz/weewx-influx2#1 (`verify_ssl`).
+      New since S160: `weewx-packages/weewx-rtldavis`, an unendorsed continuation created
+      2026-10-21, absorbed lheijst#22, #23 and lheijst/rtldavis#7 with credit. Whether it is also
+      a place to offer the four fixes is part of this phase's owner call.
+- [ ] **Phase 5 — cleanup, no user-visible change.** Audit 21–28 and 30–31: duplication in the
+      monitor, `ops/` and the OWM/Windy pair, SPDX gaps, CI pinning. Audit 28 (the
+      `-or-later` tags on three uploaders) is an owner read, not a code fix.
+
+Errors in the Go decoder itself are their own track, P1.9 below; its image changes ride phase 2's
+release or the one after.
 
 ## P1 — Data integrity & Sensor-QC hardening (S18–S55c) — ✅ DONE, watch-only
 One continuous arc, not several separate efforts: RF/decode corruption that passes CRC has produced
@@ -407,6 +465,37 @@ NAS dependency observed, zero stall through the restore.
 ---
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
+
+## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–) — 🔶 OPEN
+P1 closed every corruption class with filters in the Python driver; the source is in the Go decoder
+and is still there. What the Go side has shown, and where each stands:
+
+- **Repeat packets booked as misses** (DEC-0134): fixed by our `-dupwindow` time gate
+  (`patch/rtldavis-dupgate.patch`, DEC-0135, v2.0.15), offered as lheijst/rtldavis#7. Done.
+- **One burst decoded twice, the second copy sometimes corrupted** (DEC-0033, DEC-0035): the clean
+  copy is dropped as a duplicate; a corrupted one differs, so it passes the filter, and about 1 in
+  65,536 also passes CRC and arrives as a valid-looking frame. Only the Python filters catch it, and
+  only when the value is impossible. Open.
+- **CRC failures are dropped silently** (`protocol.go` ~L218): no count exists, so the size of the
+  problem above is unmeasured. Open.
+- **Which upstream version the bundled source is** (`BACKLOG.md`, open since S21): #450 pins it;
+  nobody has diffed it against `lheijst/rtldavis` master. Open.
+
+Steps, in order:
+
+- [~] #458 **Measure.** *(built S157, DEC-0216, PR #461; ships in the next release, then a day of counts)* Count CRC failures per hop slot and how many fall within ~100 ms of an
+      accepted frame; surface it through the driver's counter line; diff the pinned source against
+      upstream. Log only, no data change. A day of production counts is the baseline.
+- [ ] #459 **Fix.** A content-agnostic burst gate in Go, keyed on the receiver's own hop slot (the
+      frame's ID can be the corrupted part), designed against #458's numbers. Credits LloydR's
+      lheijst/rtldavis#2, which gates at 2 s on the frame ID. The Python filters stay as the
+      backstop. Design first (tier: frontier).
+- [ ] **Offer upstream** (owner's go): a comment on lheijst/rtldavis#2 or a follow-on PR, joining P0.8
+      phase 4.
+
+Not here on purpose: the RF-dead episodes (`BOOT.md` blocker 2, DEC-0081), where the Go child goes
+silent and recovers with time. Nothing has shown a decoder bug behind them yet; if #458's counters
+or a capture do, it gets a step here.
 
 ## P2 — RF optimization, done honestly (PRINCIPLES §3) — **✅ CLOSED (S116, DEC-0134/DEC-0135; DEPLOYED S117, DEC-0136): there was never an RF problem to optimize**
 
@@ -825,13 +914,19 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       of rows, found when HLF read the bucket. The doc now says so.
       **Built S150 (DEC-0209):** `eaglehunt-ops#357`'s ask for WeatherLink's `bar_absolute` as a
       measured station pressure is option (A) — it becomes weewx's own `pressure`, `altimeter`
-      derives from it; ships with v2.0.20, boundary in `DATA_ERRATA.md` DISC-0002. **Corrected S97:** this line
+      derives from it; ships with v2.0.20, boundary in `DATA_ERRATA.md` DISC-0002. **S155
+      (DEC-0211)** added the `writer` version row to §1 and fixed its stale `data_service` opening.
+      **Corrected S97:** this line
       previously also claimed DEC-0053's station-identity finding was documented — it was not; only
       DEC-0053's cache-bounding finding (Finding 1) had actually made it into the doc. §2 now carries
       the missing station-identity/series-key trap (Finding 2), closing that gap for real. Finding 3
       (the SQLite archive's own missing correction flag) stays in `DATA_ERRATA.md` on purpose —
       INTERFACES.md scopes itself to the two *published* surfaces, and SQLite is neither. This item
       is about closing what remains, not starting from zero.)
+- [x] Ship `loop_json_writer.py` as an installable WeeWX extension (`weewx#440`, the dashboard's
+      DEC-0348 ask) — **designed S153, shipped S155 (DEC-0211)**: release `loopjson-v1.0.0` of this
+      repo, proved on a clean WeeWX 5.5.2; prod writes `writer: loop_json_writer/1.0.0`. The
+      adopter README is `extensions/loopjson/README.md`, linked from the main README since S156.
 - [x] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005) — done S47.
 
 ---

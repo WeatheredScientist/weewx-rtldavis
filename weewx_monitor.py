@@ -10,14 +10,20 @@ import sys
 import re
 import sqlite3
 import fcntl
+import shutil
 from collections import deque
 from email.mime.text import MIMEText
 from datetime import datetime
 
 # --- Config ---
-# Paths default to the NAS layout but are env-overridable for parity with the
-# credentials, which already come from env (S24 L-D).
-BASE_DIR = os.environ.get('WEEWX_RTLDAVIS_DIR', '/volume1/docker/weewx-rtldavis')
+# Paths are env-overridable for parity with the credentials, which already come
+# from env (S24 L-D). BASE_DIR defaults to this script's own directory (DEC-0217,
+# #453): every documented layout puts weewx_monitor.py in the directory that holds
+# logs/ and weewx-data/, so none of them needs the variable. It used to default to
+# the original Synology path, which a new user on any other host got silently. The
+# daemon refuses to start below if BASE_DIR has no logs/ directory.
+BASE_DIR = os.environ.get('WEEWX_RTLDAVIS_DIR',
+                          os.path.dirname(os.path.abspath(__file__)))
 LOG      = os.environ.get('MONITOR_LOG', f'{BASE_DIR}/logs/weewx_monitor.log')
 PIDFILE  = os.environ.get('MONITOR_PIDFILE', f'{BASE_DIR}/logs/weewx_monitor.pid')
 POLL     = 30
@@ -52,8 +58,7 @@ RESET_MAX_TRIES = 1     # ineffective resets before we stop and escalate (was 3,
 # a power cycle. Months of logs named the wrong operation, and a reader reasoning
 # from them (including a Claude session at S67) reasons about the wrong mechanism.
 # If the script ever changes what it does, change USB_RESET_ACTION with it.
-USB_RESET_SCRIPT = os.environ.get(
-    'USB_RESET_SCRIPT', '/volume1/docker/weewx-rtldavis/usb_reset.sh')
+USB_RESET_SCRIPT = os.environ.get('USB_RESET_SCRIPT', f'{BASE_DIR}/usb_reset.sh')
 USB_RESET_ACTION = 'USB driver unbind/rebind'
 
 # --- Reset forensics (S68, BOOT blocker 4) ---
@@ -66,27 +71,30 @@ USB_RESET_ACTION = 'USB driver unbind/rebind'
 # through sudo). This module fires only the +RESET_VERIFY_S capture, which is
 # host-side and therefore degraded by construction -- it still shows whether the
 # rebind's devnum change persisted, which is the question at that moment.
-USB_FORENSICS_SCRIPT = os.environ.get(
-    'USB_FORENSICS_SCRIPT', '/volume1/docker/weewx-rtldavis/usb_forensics.sh')
-CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
+USB_FORENSICS_SCRIPT = os.environ.get('USB_FORENSICS_SCRIPT', f'{BASE_DIR}/usb_forensics.sh')
+# The README's container name (DEC-0217). It feeds only build_recreate_cmd()'s
+# `docker inspect`, for the escalation email.
+CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis')
 
 # --- Which automatic remedy the watchdog is allowed to try (S107, ops#233) ---
 # The host moved to marvin (DEC-0118), where the Foundation-era USB path does not
-# just fail -- it is DANGEROUS. `usb_reset.sh` unbinds a driver at a hardcoded
+# just fail -- it is DANGEROUS. `usb_reset.sh` unbound a driver at a hardcoded
 # Synology bus path (`/sys/bus/usb/devices/1-3`); marvin's USB topology is
 # different (MARVIN-DEC-0051 reassigned two controller roles), so the same call
 # there either no-ops or resets SOMEONE ELSE'S device on a box now hosting two
-# live tenants and a passed-through ASM3142 controller.
+# live tenants and a passed-through ASM3142 controller. (Since DEC-0217 the
+# script finds the port by the dongle's USB id and refuses when it can't, so it
+# can no longer reach another device; the mode stays opt-in all the same.)
 #
 # So the mechanism is now selected, not assumed:
 #
 #   usb_reset     the Foundation/Synology body: sudo usb_reset.sh (driver
-#                 unbind/rebind). DEFAULT, because this is a published extension
-#                 and changing an existing install's behavior silently would be
-#                 its own defect. But read RESET_MAX_TRIES' comment before
-#                 trusting it: across ~17 forensically-captured events on our
-#                 hardware it never once demonstrably fixed a stall, and
-#                 ERR-0005 suspects reset #10 caused a strictly worse mode.
+#                 unbind/rebind of the one RTL2832U it finds on the bus). Must
+#                 be set explicitly since DEC-0217; it was the default until
+#                 then. Read RESET_MAX_TRIES' comment before trusting it: across
+#                 ~17 forensically-captured events on our hardware it never once
+#                 demonstrably fixed a stall, and ERR-0005 suspects reset #10
+#                 caused a strictly worse mode.
 #   restart_unit  marvin: REMEDY_SYSTEMCTL's prefix + `restart <REMEDY_UNIT>` --
 #                 NOT literally bare `systemctl` (ops#274: t-weewx's sudoers
 #                 only grants `marvin-own weewx <verb> <target>`, so the
@@ -98,7 +106,12 @@ CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 #                 ERR-0005, which the Foundation monitor could only
 #                 reconstruct via `docker inspect` and mail to a human.
 #   none          detect and escalate only; never act. The honest setting for
-#                 any host where no remedy has been shown to work.
+#                 any host where no remedy has been shown to work. DEFAULT
+#                 since DEC-0217 (#453): doing nothing is harmless on any host,
+#                 while a remedy armed by default acts on a host nobody checked.
+#                 The startup log says so when REMEDY_MODE is unset, so an
+#                 existing Synology install that relied on the old default can
+#                 see why its resets stopped.
 #
 # Every mode keeps the SAME escalation discipline (RESET_MAX_TRIES, the verify
 # window, one email per outage). Only the action in the middle changes.
@@ -108,7 +121,7 @@ CONTAINER  = os.environ.get('WEEWX_CONTAINER', 'weewx-rtldavis-v2')
 # (#404). The dispatch used to fall through to the USB reset for it, so a bad
 # value ran the one remedy the marvin unit forbids while the log denied it.
 REMEDY_MODES = ('usb_reset', 'restart_unit', 'none')
-_remedy_mode_env = os.environ.get('REMEDY_MODE', 'usb_reset')
+_remedy_mode_env = os.environ.get('REMEDY_MODE', 'none')
 REMEDY_MODE = _remedy_mode_env if _remedy_mode_env in REMEDY_MODES else 'none'
 REMEDY_UNIT = os.environ.get('REMEDY_UNIT', 'weewx.service')
 # How to invoke systemctl. marvin's tenant runs unprivileged, so this is the
@@ -146,7 +159,8 @@ EPISODES_LOG = os.environ.get('EPISODES_LOG', f'{BASE_DIR}/logs/episodes.log')
 # email never got its RECOVERY pair. The mirror is rewritten on every episode
 # mutation and removed at close; startup restores it (episode_load).
 EPISODE_STATE = os.environ.get('EPISODE_STATE', f'{BASE_DIR}/logs/monitor_episode.state')
-DOCKER_BIN = os.environ.get('DOCKER_BIN', '/usr/local/bin/docker')
+# PATH first; Synology's docker is /usr/local/bin/docker, off the default PATH (DEC-0217).
+DOCKER_BIN = os.environ.get('DOCKER_BIN') or shutil.which('docker') or '/usr/local/bin/docker'
 
 # Env names whose VALUES must never reach an email or a log (DEC-0062). The
 # recreate command below is built from `docker inspect`, and this repo is public
@@ -243,7 +257,23 @@ BATTERY_LOW_MIN_MINUTES = 5   # healthy flagged minutes in one block that mean "
 # flock is scoped to the open file description, cleared by the kernel the
 # moment a process exits or the box reboots -- no staleness window to hit.
 _TEST_ALERT = '--test-alert' in sys.argv
+
+
+def missing_output_dirs():
+    """Directories the daemon writes into that do not exist. BASE_DIR is derived,
+    not assumed (DEC-0217), so a monitor copied away from its data reports that here
+    in one line instead of dying on the pidfile's FileNotFoundError."""
+    return sorted({d for d in (os.path.dirname(LOG), os.path.dirname(PIDFILE))
+                   if not os.path.isdir(d)})
+
+
 if not _TEST_ALERT:
+    _missing = missing_output_dirs()
+    if _missing:
+        print(f"weewx_monitor: {', '.join(_missing)} does not exist. BASE_DIR is "
+              f"{BASE_DIR}; set WEEWX_RTLDAVIS_DIR to the directory that holds logs/ "
+              f"and weewx-data/ (or MONITOR_LOG and MONITOR_PIDFILE).", file=sys.stderr)
+        sys.exit(2)
     _pidfile_fh = open(PIDFILE, 'a+')
     try:
         fcntl.flock(_pidfile_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -551,11 +581,11 @@ def do_reset(notify=True):
             capture_output=True, text=True, timeout=15
         )
         if result.returncode == 0:
-            try:
-                vendor = open('/sys/bus/usb/devices/1-3/idVendor').read().strip()
-            except OSError:
-                vendor = 'unknown'
-            log(f"RESET: done, idVendor={vendor}")
+            # The script names the port it found (DEC-0217); there is no fixed
+            # port left to read idVendor from here.
+            m = re.search(r'^usb_reset: port=(\S+) id=(\S+)', result.stdout or '', re.M)
+            vendor = f"{m.group(2)} at port {m.group(1)}" if m else 'unknown'
+            log(f"RESET: done, device={vendor}")
             # A zero exit does not mean the script had nothing to say. It refuses
             # to run the forensics helper if that helper is not root-owned and
             # root-only-writable (it would escalate our own sudo grant), and it
@@ -1398,6 +1428,9 @@ def main():
 
     log("Monitor started")
     log(f"Remedy armed: {remedy_action()}")
+    if 'REMEDY_MODE' not in os.environ:
+        log("REMEDY_MODE is not set, so it is none. Before DEC-0217 the default was "
+            "usb_reset; set REMEDY_MODE=usb_reset to keep the USB reset on Synology")
     send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
 
     last_offset = get_log_size()

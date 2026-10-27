@@ -15,7 +15,7 @@ weewx is not installed in the test/CI environment, so we stub the weewx
 modules in sys.modules before importing the writer (same pattern as the
 other tests here).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_loop_json_writer.py
+Run:  .venv/bin/python -m pytest tests/test_loop_json_writer.py
 """
 import json
 import os
@@ -109,9 +109,12 @@ def test_writes_both_paths_with_identical_content():
 
 
 def test_current_path_defaults_alongside_loop_path():
-    w = LoopJsonWriter(engine=None, config_dict={})
-    assert w.path == '/opt/weewx-data/loop-data.txt'
-    assert w.current_path == '/opt/weewx-data/current.json'
+    # The Docker image's WEEWX_ROOT is /opt/weewx-data, so the relative defaults
+    # land on the same files as the old absolute ones (DEC-0211).
+    with tempfile.TemporaryDirectory() as root:
+        w = LoopJsonWriter(engine=None, config_dict={'WEEWX_ROOT': root})
+        assert w.path == os.path.join(root, 'loop-data.txt')
+        assert w.current_path == os.path.join(root, 'current.json')
 
 
 def test_windchill_cached_forward_like_heatindex():
@@ -133,7 +136,7 @@ def test_windchill_cached_forward_like_heatindex():
         assert data['dateTime'] == 2
 
 
-# --- Cache TTL (DEC-0006 / issue #45 provenance audit, S48) ------------------
+# --- Cache TTL (DEC-0053 / issue #45 provenance audit, S48) ------------------
 # The regression these guard: the cache used to be unbounded, so a dead or
 # SensorQC-rejected sensor kept emitting its last value forever -- stamped with
 # the CURRENT packet's dateTime, making it indistinguishable from a live
@@ -298,21 +301,6 @@ def test_calm_winddir_recovery_logs_debug_not_info(caplog):
         assert not infos, "recovery from a calm expiry must be DEBUG too (#74)"
 
 
-if __name__ == '__main__':
-    fails = 0
-    for name, fn in sorted(globals().items()):
-        if name.startswith('test_') and callable(fn):
-            try:
-                fn()
-                print("  [PASS] %s" % name)
-            except Exception as e:
-                fails += 1
-                print("  [FAIL] %s -> %r" % (name, e))
-    total = sum(1 for n in globals() if n.startswith('test_'))
-    print("\n%d/%d passed" % (total - fails, total))
-    sys.exit(1 if fails else 0)
-
-
 # --- current.json cadence (DEC-0093, S84) ----------------------------------
 # current.json is a cold-load snapshot, not a live feed: throttled to
 # current_interval (default 60 s) while loop-data.txt stays per-packet, because
@@ -408,3 +396,77 @@ def test_loop_data_written_on_every_packet_regardless():
         for i, ts in enumerate((1000, 1002, 1005, 1007)):
             w.new_loop(_pkt(ts, outTemp=70.0 + i))
             assert _read(w)['dateTime'] == ts
+
+
+# --- DEC-0211: the extension build (#440) ---
+
+def test_relative_paths_resolve_against_weewx_root():
+    with tempfile.TemporaryDirectory() as root:
+        w = LoopJsonWriter(engine=None, config_dict={
+            'WEEWX_ROOT': root,
+            'LoopJsonWriter': {'path': 'feed/loop-data.txt',
+                               'current_path': 'feed/current.json'}})
+        assert w.path == os.path.join(root, 'feed', 'loop-data.txt')
+        assert w.current_path == os.path.join(root, 'feed', 'current.json')
+
+
+def test_absolute_paths_pass_through_unchanged():
+    # Prod sets absolute paths; WEEWX_ROOT must not touch them.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = LoopJsonWriter(engine=None, config_dict={
+            'WEEWX_ROOT': '/somewhere/else',
+            'LoopJsonWriter': {'path': os.path.join(tmpdir, 'a.txt'),
+                               'current_path': os.path.join(tmpdir, 'b.json')}})
+        assert w.path == os.path.join(tmpdir, 'a.txt')
+        assert w.current_path == os.path.join(tmpdir, 'b.json')
+
+
+def test_output_directories_are_created_at_startup():
+    with tempfile.TemporaryDirectory() as root:
+        w = LoopJsonWriter(engine=None, config_dict={
+            'WEEWX_ROOT': root,
+            'LoopJsonWriter': {'path': 'feed/loop-data.txt',
+                               'current_path': 'other/current.json'}})
+        assert os.path.isdir(os.path.join(root, 'feed'))
+        assert os.path.isdir(os.path.join(root, 'other'))
+        w.new_loop(_pkt(1000, outTemp=70.0))
+        assert _read(w)['outTemp_F'] == 70.0
+
+
+def test_uncreatable_directory_does_not_stop_startup():
+    # A file where the directory should be: makedirs fails, the service must
+    # still construct (the per-packet write then logs its own error).
+    with tempfile.TemporaryDirectory() as root:
+        blocker = os.path.join(root, 'feed')
+        open(blocker, 'w').close()
+        w = LoopJsonWriter(engine=None, config_dict={
+            'WEEWX_ROOT': root, 'LoopJsonWriter': {'path': 'feed/loop-data.txt'}})
+        w.new_loop(_pkt(1000, outTemp=70.0))      # logs an error, does not raise
+
+
+def test_barometer_uses_default_ttl_without_a_davispressure_section():
+    # No [DavisPressure] means no hourly fetcher to wait for; a dead barometer
+    # must expire on ttl_default, not be served stale for two hours.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir)
+        assert w._ttl('barometer_inHg') == 300
+        w.new_loop(_pkt(1000, barometer=30.02))
+        w.new_loop(_pkt(1000 + 301))
+        assert 'barometer_inHg' not in _read(w)
+
+
+def test_barometer_long_ttl_only_with_a_davispressure_section():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer_cfg(tmpdir, davis={})
+        assert w._ttl('barometer_inHg') == 7200   # 2 x the 3600 s default
+
+
+def test_every_write_carries_the_writer_version():
+    import loop_json_writer
+    assert loop_json_writer.__version__ == '1.0.0'
+    with tempfile.TemporaryDirectory() as tmpdir:
+        w = _make_writer(tmpdir)
+        w.new_loop(_pkt(1000, outTemp=70.0))
+        for path in (w.path, w.current_path):
+            with open(path) as f:
+                assert json.load(f)['writer'] == 'loop_json_writer/1.0.0'

@@ -6,135 +6,101 @@ under [Pre-S16].
 
 ---
 
-## [S150] — 2026-10-06 — WeatherLink's `bar_absolute` becomes weewx's `pressure` (DEC-0209, `eaglehunt-ops#357` option A); v2.0.20 in prod the same night
+## [S169] — 2026-10-26 — v2.0.21 build gate: `user.influx` import restored (DEC-0219 correction)
 
-- **v2.0.20 is in prod since 2026-10-06 22:15:14 ET.** PR #433 moved the stamp; built on marvin
-  from `dev`@`9a86c97` (image `f617c9ca…`); `exec-ro` sha of the seven baked modules against
-  v2.0.19: only `pressure_service.py` differs, equal to `dev`'s. The first fetch (22:17:19) logged
-  `station pressure 29.534`; the first record (22:18:00) carries `pressure 29.534`, `altimeter
-  30.130` against the derived rows' 29.526 / 30.122 — a +0.008 inHg step, `barometer` unchanged
-  (DISC-0002 filled). Zero WARNING/ERROR lines since the restart; three archive minutes lost to it.
-  `soak_check.sh`: 19 passed, 0 warnings, 0 failures (an earlier run inside the acquisition gap
-  flagged ARCHIVE STALLED, as expected). `:v2.0.20` pushed to Docker Hub with `marvinctl push` at
-  22:19 ET, Hub's digest equal to prod's (`f617c9ca…`). Tagged `v2.0.20` on `9a86c97` with a GitHub
-  release.
-- **`dev` promoted to `main` as v2.0.20, tag `prod-baseline-20261006`** (106 commits, S122 → S150).
-  Found while doing it: `main` was v2.0.16's promotion (`prod-baseline-20260904`, #324) plus the
-  misrouted #338, not v2.0.13 as BOOT and CONSTANTS had said since S122; both corrected. The merge
-  conflicted in ten docs and `ops/campaign_analyze.py` (#338's hunks against `dev`'s later
-  rewrites, #339 having already carried its content to `dev`), every conflict resolved in `dev`'s
-  favor and the result's tree checked equal to `dev`'s.
-- **`pressure_service.py` reads `bar_absolute` beside `bar_sea_level` and injects it as `pressure`**
-  when the packet's is null; weewx's `prefer_hardware` keeps it, so the archive's station pressure is
-  measured and `altimeter` derives from it instead of from the reversed sea-level value. Without the
-  key nothing changes (one warning). Five new tests; the S82b injection test split in two. Baked, so
-  it rides a v2.0.20 release — not built this session.
-- **Both consumers answered on `eaglehunt-ops#357`** (dashboard 09-29, HLF S362, rung from here):
-  neither reads `pressure_inHg` or `altimeter_inHg`; HLF needs the value in the archive. The owner
-  chose (A). `DISC-0002` records the boundary (timestamp and shift filled at the deploy); INTERFACES
-  §1 rewritten; the ROADMAP line closed; CWOP noted as the one uploader that moves (it posts
-  `altimeter`).
-- **The station's response carries the key (owner-run probe, the in-session `marvinctl exec` was
-  classifier-denied as a production read):** the barometer sensor's record (type 242, data
-  structure 19) reads `bar_absolute = 29.534` beside `bar_sea_level = 30.127`, `bar_offset = 0`,
-  inHg — one record, the shape the code assumes. The probe printed key names and `bar_*` values
-  only.
+- Building v2.0.21 on marvin showed the image had no importable `user.influx` (the venv `user` package shadows `weewx-data/bin/user`); the Dockerfile copies the root `influx.py` into the venv again, `test_dockerfile_pins.py` pins it and `smoke_image.sh` imports it. Baked config sha `ee62b7a2…` to `f67762d9…` is only the three Influx placeholders. v2.0.21 built on marvin from `dev`@`c9c5934` and in prod from 2026-10-26 18:16:14 ET (image `5ca44ede…`). `BOOT.md` rewritten and trimmed under its cap; `CONSTANTS.md` rows and the version pins in README, compose and the systemd example move to v2.0.21; GOTCHAS §4 gains the import-path trap. Then: `:v2.0.21-amd64` pushed, tag `v2.0.21` and the GitHub release on `a7bf7ec`, the multi-arch `:v2.0.21` joined on Hub (`e2177ffc…`), `dev` promoted to `main` (`prod-baseline-20261026`).
 
-## [S149] — 2026-10-02 — v2.0.19 in prod (DEC-0208): weewx 5.5.2, the rapidfire endpoint confirmed live
+## [S168] — 2026-10-26 — DEC-0221, `loop_interval_s` per dash's asks on #473 (design only)
 
-- **weewx 5.5.0 → 5.5.2 is live as `:v2.0.19` since 2026-10-02 00:18:38 ET.** PR #429 moved the
-  Dockerfile stamp and `soak_check.sh`'s fallback (`ws.6` canary unchanged: no driver change); built
-  on marvin from `dev`@`fee78e3`. `exec-ro` against v2.0.18: the Go binary and the five baked
-  modules are sha-identical, only the engine differs. `soak_check.sh`: 19 passed. Tagged `v2.0.19`
-  with a GitHub release.
-- **`:v2.0.19` is on Docker Hub: the first real `marvinctl --tenant weewx push`** (00:31 ET, exit 0).
-  The manifest's `publish` line had been ratified since 2026-09-04, so `eaglehunt-ops#265`'s trigger
-  fired; commented there. Hub's digest equals prod's index digest. `:latest` stays at v2.0.13 (owner
-  route); v2.0.17 and v2.0.18 were never pushed.
-- **The one prod-visible change is confirmed.** The rapidfire thread now posts to
-  `rtupdate.wunderground.com`. Its failures never reach `weewx.log`, so the check was external: the
-  station's public wunderground.com page read CONNECTED, 2 seconds old, after the restart.
+- DEC-0221 (accepted, not built) amends DEC-0220 item 5: `loop_interval_s` is the gap between successful writes of `loop-data.txt`, reported from the first gap, omitted outside [1, 3600] s; INTERFACES section 1's liveness paragraph moves to `max(30, 3 × loop_interval_s)` (dash DEC-0404) with the 1.1.0 build.
 
-## [S148] — 2026-09-30/10-01 — #423's swap path proved end to end as `t-weewx`; `weewx.service` under #360's flags, accepted
+## [S167] — 2026-10-25 — closeout for S164–S166
 
-- **No campaign was queued** (the schedule has been empty since DEC-0128), so the owner chose a
-  test-only one: new arm `T` (prod's cmd plus an explicit `-ex 0`, the flag's default), then
-  `BASELINE`, driven by two hand-started passes of `weewx-rx-experiment.service`. No timer and no
-  `install`: the tenant-root snapshot was verified byte-identical to the live conf, and the state
-  file was seeded over sftp. PR #427; its dates moved once when it sat unmerged past the first
-  terminator.
-- **Both passes worked.** 2026-10-01 21:04:30 ET, `NONE -> T`: config write verified, restart through
-  `sudo -n marvin-own weewx restart`, healthy in 106 s via `systemctl is-active`. 22:31:22,
-  `T -> BASELINE`: live conf restored byte-exact (mode 0600 kept), harvest wrote 17 rx and 85 dup
-  rows under `T`, no mail failure. Schedule stood down again on the closeout PR.
-- **`eaglehunt-ops#360`: the 21:04:30 restart was also `weewx.service`'s flag restart.**
-  `NoNewPrivs: 1`, every capability set 0, uid 996. One record lost (21:05), 21:06 partial with
-  `rxCheckPercent` NULL, 21:07 at 100%. Posted; heartofgold confirmed on the box.
-- `GOTCHAS.md` §3: `marvinctl grep` also refuses `/` in a pattern. S144 rolled to the archive.
+- `BOOT.md` Resume block rewritten (S166 → S167): S164's ERR-0011, #474 released, #473 designed, #475 parked, #481 filed; job 1c corrected (the `influx-v0.20+ws.2` release exists). Filed #473–#475 from dash#936 section A; dash's duplicates #476–478 closed in their favor.
 
-## [S147] — 2026-09-30 — `rx_experiment.sh` runs as `t-weewx` (#423, MARVIN-DEC-0189)
+## [S166] — 2026-10-25 — DEC-0220, the loop-JSON writer's extra_fields design (#473, design only)
 
-- **Campaigns would have refused at preflight, and then aborted.** marvin moved
-  `weewx-rx-experiment.service` from root to `t-weewx`. Preflight's `systemctl cat` went through
-  `marvin-own`, which grants no read verbs; new `RX_READ_SYSTEMCTL` (default plain `systemctl`) does
-  the reads. `health_ok` also ran `docker inspect` every pass, which fails without the docker group,
-  so every swap would have timed out; new `weewx_running()` asks `systemctl is-active` in systemd
-  mode. Docker mode is unchanged. Five tests; three fail against the old script.
-- **Mirrors and docs.** `ops/weewx-monitor.service` and `ops/weewx-rx-experiment.service` are now
-  verbatim copies of marvin's installed units (credential file under `/etc/marvin/env.d/weewx/`, the
-  old tenant path a root-owned symlink that must stay a symlink). `ARCHITECTURE.md` corrected.
-- **Not verified:** no arm swap has run end to end as `t-weewx`. The first campaign is that test.
-- **weewx 5.5.0 → 5.5.2 staged for v2.0.19 (DEC-0207), not built.** PR #420's green checks proved
-  nothing (CI installs only pytest; the tests stub weewx). New `ops/weewx_bump_check.sh` boots a
-  scratch station on the Simulator with our baked modules; it passes on 5.5.2 and fails on 5.5.0. The
-  one prod-visible change: with `rapidfire` and `archive_post` both on, 5.5.2 posts the rapidfire
-  thread to `rtupdate.wunderground.com` (5.5.0 used the archive URL for both). Dependabot now
-  targets `dev`; #420 targeted `main`.
-- **Merged and one prod restart.** #424 and #425 are on `dev` (`a039a65`); #420 closed. At marvin's
-  request (`eaglehunt-ops#360`, `MARVIN-DEC-0191`) `weewx-influxdb.service` was restarted 13:53:45 ET
-  to pick up `--cap-drop ALL` and `no-new-privileges`: `NoNewPrivs: 1`, `CapBnd` 0, the next archive
-  post went through. The `weewx.service` restart is left for the owner's window.
+- DEC-0220 (accepted, not built): opt-in `[LoopJsonWriter] extra_fields` emitted under weewx-influx2's names, refusing per-packet deltas (any observation whose accumulator extractor is `sum`), plus `loop_interval_s`; contract `loop_json_writer/1.1.0`. Filed #481 (the driver drops message 9's 10-minute gust).
+## [S165] — 2026-10-25 — influx.py ships as a WeeWX extension (#474, DEC-0219; PR #479, not released)
 
-## [S146] — 2026-09-29 — v2.0.18 in prod (DEC-0206): DEC-0205's driver and uploader fixes, the monitor's #413 restarted; ROADMAP full pass; ERR-0010; a wrong INTERFACES claim corrected
+- `extensions/influx/`, `scripts/build_influx_zip.sh`, `scripts/prove_influx.sh`, `.github/workflows/influx.yml`: CI builds `weewx-influx-VERSION.zip`, installs it into WeeWX 5.5.2 with the Simulator driver and builds the service from the installed config; an `influx-vVERSION` tag publishes it (`--latest=false`). Replaces upstream's `influx` extension in place; file unchanged at `0.20+ws.2`.
+- Dockerfile installs the extension from the root `influx.py`; the weewx-influx2 download and `INFLUX2_*` pins are gone. mypy gate gains `--explicit-package-bases` (two `install.py` files).
 
-- **Deployed, the owner's go at each prod step (DEC-0206).** #419 (Dockerfile stamp, `soak_check.sh`
-  canaries) merged 09:30 ET and was pulled. The monitor restarted 09:31:16 (`Remedy armed: … none`,
-  clean for seven hours). The image built in 13 s on BuildKit's cache (09:31:33 to 09:31:46) and was
-  verified by `exec-ro` sha256 of 224 baked files against v2.0.17: exactly four differ, each equal to
-  `dev`@`4fd9039`. Cutover 16:37:37: banner `0.20+ws.6`, 129 INFO and 0 errors in four minutes, soak
-  19/0/0, first real record 100% (16:38 and 16:39 missing while the hop re-acquired).
-- **Tagged `v2.0.18` on `4fd9039` with a GitHub release.** Not on Docker Hub (`eaglehunt-ops#265`).
-  #402 to #405 closed with deploy evidence; #421 filed for the secret gate's four detector holes.
-- **Records.** #408 recorded as deliberate (the parent init would start a second set of Wunderground
-  threads). ERR-0010 logs OWM's 10× low `rain_1h` and Windy's wrong-window `precip` since 2026-05-21.
-  ROADMAP tripwire ran: four lines moved, P0.7 opened, next check S156.
-- **INTERFACES.md was wrong and is corrected.** It said the archive's `pressure` and `altimeter`
-  columns go NULL (DEC-0091). They are derived by `StdWXCalculate` from the sea-level `barometer`
-  and populated in 99.5% of rows. Found while answering `eaglehunt-ops#357` (HLF's `bar_absolute`
-  ask); the design is not started, and the reply on the tracker gives two shapes. The stale comment
-  in `pressure_service.py` waits for that work, since editing it changes the baked file.
-- **Other tracker.** `eaglehunt-ops#360` answered for weewx (cap-drop, no-new-privileges and
-  `nosuid,nodev` are all fine; two gaps named).
-- Closeout: DEC-0206; GOTCHAS gains eight traps (§1 ×3, §2 ×3, §3 ×2); S143 rolled to the archive.
-  S145's seven worktrees and fourteen local branches removed after each was checked against its
-  merged PR. heartofgold's CHANGELOG row pushed (`ebe2a59`).
+## [S164] — 2026-10-23 — ERR-0011, the 2026-10-22 marvin outage gap
 
-## [S145] — 2026-09-28/29 — Code audit (DEC-0205): 39 findings, the ten high ones fixed on seven PRs; driver to 0.20+ws.6 (unreleased)
+- `docs/DATA_ERRATA.md` ERR-0011: 62 archive minutes absent (marvin's own host outage, `eaglehunt-ops#429`); 3 minutes backfilled from WU history (backup `weewx.sdb.bak-S164-preBackfill-20261023`), `rebuild-daily` for 2026-10-22; the other ~59 minutes stay empty (PR #472).
 
-- **Audit.** Six read-only reviewers (Sonnet ×5 by file set, Haiku ×1 cross-ref) over the whole tree
-  at `7d06cbf`; every high finding re-verified by the main thread before filing. Record:
-  `docs/CODE_REVIEW_S145.md`. Two subagent false zeros caught by hand (GOTCHAS §1).
-- **Filed.** #402 driver slot-count seed off by one · #403 monitor FULL OUTAGE phase dependence ·
-  #404 an unknown `REMEDY_MODE` runs the USB reset · #405 OWM/Windy rain in cm, not mm · #406 ws.N
-  stagnant since 2026-08-11 · #407 soak_check image default stale · #408 OgoXe init divergence
-  undocumented · #409 secret gate lacks a control per class · #410 vacuous tests · #411 order-dependent
-  suite · `eaglehunt-ops#358` (private) planted addresses.
-- **Fixed and merged to `dev` 2026-09-29 (owner's go, squash, each behind green checks).** #412 driver (ws.6, 14 header entries) · #413 monitor · #414
-  uploaders · #415 gate (63 → 160 controls; mutation kills 35 → 101 of 110) · #416 `tests/conftest.py`
-  · #417 soak_check · the docs PR (README table, influx ws.2, inventory recount +1239/−167, lheijst#23
-  status, OgoXe notice, this closeout). Combined tree: 591 passed / 17 skipped in both orders.
-  Issues #406–#411 closed at merge; #402–#405 stay open until v2.0.18 and the monitor restart.
-- **S144 job 1 done:** `ISS battery: OK` in three 6-hourly reports. **Job 2 moot:** the dupgate patch
-  applies clean (offset 0, fuzz 0) to today's tarball.
-- Closeout: DEC-0205 logged; DEC-0199 amended; `MANIFEST.md` row for the review record; GOTCHAS §1/§2
-  gain four traps.
+## [S163] — 2026-10-22 — v2.0.21 prep (not cut, not deployed)
+
+- Dockerfile: the seed-config backups are removed after the last `weectl` call (#468, a plain POSIX glob), and the two brace-expansion `rm -rf` lines, no-ops under dash (audit 15), are now explicit paths. `/usr/share/doc` stays for the Debian copyright files and `/var/lib/dpkg` for the package record. Two tests in `test_dockerfile_pins.py`. Driver banner `0.20+ws.6` → `ws.7` in `rtldavis.py`, README, `ops/soak_check.sh` and `CHANGES-FROM-UPSTREAM.md`. Before the tag: build, compare the baked config's sha before and after, then the release mechanics.
+
+## [S162] — 2026-10-22 — quickstart's container half proven on arm64
+
+- README Quick start steps 3, 5 and 6 run against `:v2.0.20` as `linux/arm64` on the owner's Mac (no dongle): seed copy gives a `weewx.conf`, the unprivileged container writes `archive/weewx.sdb` and `weewx.log`, the log carries the `0.20+ws.6` banner, and it retries every 60 s on "No supported devices found". Filed #468 (two stray `weewx.conf.<timestamp>` backups in the seeded directory) and ops#427 (a disposable Debian VM from marvin for the host steps).
+
+## [S161] — 2026-10-21 — deploy of #464's `influx.py`
+
+- `marvinctl pull` to `dev` `1d96587`, then `weewx.service` restart at 23:14:42 ET. Live `influx.py` sha `526d2ac6…` = `dev`'s (was `23f21235…`); the pull also carried `loop_json_writer.py` (docstring only). Soak 19/0/0 after the first record. #465/#466 had already merged and #465 was closed with comments. No image change.
+
+## [S160] — 2026-10-21 — rain recovery judged against the last accepted count (#465, DEC-0218)
+
+- **#465 (DEC-0218):** a rain reading after a rejected one is judged first against the last
+  accepted counter value, then against the resync baseline as before
+  (`rain_tips_with_anchor()`). A counter that dipped and came back (115 → 114 → 115) used to book
+  the climb back as rain, up to 16 tips (0.16 in), on a clean frame, unlogged. Everything the old
+  check accepted is still accepted, so no stall. Exhaustive check: all 241,536 glitch-and-recover
+  cases now book the true tips, storm jumps are unchanged, and the only cost is an undercount after
+  a counter reset from a count of 18 or less. An INFO line marks each recovery. 14 tests in
+  `tests/test_rain_anchor_465.py`; the four phantom cases fail on the pre-fix driver with the
+  predicted 1, 16, 7 and 5 tips. Baked driver: ships with the next image release. Prompted by the
+  weewx-packages continuation's reply on lheijst#22; the four upstream replies need no answer.
+
+## [S159] — 2026-10-19 — monitor defaults and USB discovery (#453, DEC-0217); tests that cannot fail and two bugs (#456)
+
+- **#453 (PR #463, DEC-0217):** `weewx_monitor.py` defaults describe no host. `REMEDY_MODE` defaults
+  to `none` (logged at startup when unset), `WEEWX_RTLDAVIS_DIR` to the script's own directory (a
+  missing `logs/` exits 2 with one line), helper scripts sit beside it, docker comes from PATH, the
+  container is `weewx-rtldavis`. `usb_reset.sh` resets the one RTL2832U it finds by USB id and
+  refuses on none or several, instead of unbinding port `1-3`; the port is never an input. Synology
+  installs must now set `REMEDY_MODE=usb_reset` (`docs/DEPLOY.md`). Prod pins every value: no effect.
+- **#456 (PR #464):** the dedup guard and the duplicate and repeat counters are tested through the
+  real `genLoopPackets` (deleting any of them used to leave 14 tests green); audit items 36 and 38
+  fixed; 29, 33 and 34 had shipped at S145. **Audit 32:** every driver start now gets the 240 s init
+  grace a hot swap had (`INIT_GRACE_S`): Go's US init waits up to 51 loop periods, 143 s for ID 5 and
+  153 s for ID 8, against a 150 s watchdog; prod's 9 retained starts took 10-134 s. Baked, so it
+  rides v2.0.21. **Audit 20:** `influx.py`'s lease check no longer kills the upload thread on JSON
+  that is not an object (mounted: needs its own deploy).
+- Watches: the `frame failed message-type proof` line fired for the first time (2026-10-10, 10-13,
+  10-18); measured `pressure` steady; no freeze since 10-11; `loopjson` logged no ERROR since its
+  10-14 restart. WOW and Windy rate-limit rejections noted in `BACKLOG.md`.
+
+## [S158] — 2026-10-18 — P0.8 phase 1, the cheap items (#451, #452, #454, #455; ops#423)
+
+- **#451:** `pressure_service.py` no longer crashes WeeWX on `station_id = YOUR_STATION_ID`: a
+  non-numeric id takes the existing "missing ... not binding" path. The fetched inHg value is
+  converted to mbar for METRIC and METRICWX packets. Tests in `tests/test_pressure_injection.py`. A
+  baked file, so it rides v2.0.21; prod (US units, numeric id) is unaffected.
+- **#452:** `weewx.conf.example` starts at auto gain, says 5.5.2, drops the dead top-level
+  `[LoopData]`, `[WeatherCloud]`, `[Windy]` and `[OWM]` sections, gains `[LoopJsonWriter]`, the four
+  missing `qc_*_max_delta` keys and `hotswap_ack_file`, and recommends `fetch_interval = 300`.
+- **#454:** `CHANGES-FROM-UPSTREAM.md` recounted (`rtldavis.py` **+1316 / −167**, 1422 → 2571 at
+  `c57a964`), rows 19–26 added (#219–#222, #233, DEC-0056, Layer B, `dup_count`), the upstreaming
+  table lists the unoffered fixes, `wcloud.py` and `influx.py` edits recorded, the CRC patch noted.
+- **#455:** `loop_json_writer.py`'s deploy block is generic; "this NAS" wording reworded; a one-line
+  RETIRED header on the NAS-era ops scripts; `ruff.toml` now lints `influx.py` (E402/F401 ignored for
+  upstream's imports) and `ogoxeUploader.py` (clean). Comment and config edits only.
+- **ops#423:** `MANIFEST.md` folded into classes, 6399 → 3985 characters (cap 1000 tokens).
+- Not done: #453 (design first), #456, the fresh-host quickstart proof.
+
+## [S157] — 2026-10-18 — CRC failures counted in the Go decoder, measurement only (#458, DEC-0216)
+
+- `patch/rtldavis-crcstats.patch` (applied after `rtldavis-dupgate.patch`) counts every CRC failure
+  per receiver hop slot and how many fall within 100 ms of an accepted frame, either order, and
+  prints `crc_stats: crc_fail=N near=M slots=…` once a minute. The driver sums it per archive period
+  and logs `crc failures this period` at INFO beside the duplicate and repeat counts. **Log only:**
+  no accept, drop or hop decision reads it. Not deployed; rides the next release.
+- Proofs: `tests/test_crcstats_patch.py` (the patch removes one line and adds only counters; the
+  real `Parse` returns byte-identical messages patched and unpatched, with a positive control) and
+  `tests/go/crcstat_test.go` (the tracker against a brute-force oracle; four mutations caught).
+- Found on the way: `main.go` builds against the **vendored** `protocol` package, so the top-level
+  `protocol/` directory is dead code for this build.

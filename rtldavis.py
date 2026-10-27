@@ -40,7 +40,7 @@
 #
 #   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
 #   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
-#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.6'
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.7'
 #   so the difference is visible in the logs. Bugs here are ours, not upstream's.
 #
 #   Changes, with the date each was recorded in git. Entries dated 2026-07-04
@@ -117,6 +117,10 @@
 #   2026-09-28  co-rejection: battery flags, impossible message types (DEC-0203).
 #   2026-09-29  #402: first rxCheckPercent after a start or reset was off by one.
 #   2026-09-29  #406: ws.5 -> ws.6; the 2026-08-19 to 09-28 entries shipped as ws.5.
+#   2026-10-21  #465: a rain reading after a rejected one is judged first against the
+#               last ACCEPTED count, so a counter that dips and comes back books 0
+#               tips, not the dip. Today's resync stays as the fallback. (DEC-0218)
+#   2026-10-22  ws.6 -> ws.7 for the v2.0.21 release.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -220,7 +224,7 @@ DRIVER_NAME = 'Rtldavis'
 # up with every behavior change to this file (README rule 1, #406). Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.6'
+DRIVER_VERSION = '0.20+ws.7'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
@@ -345,6 +349,65 @@ def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     if delta < 0 or delta > max_tips:       # small-negative glitch, or implausible spike
         return None
     return delta
+
+
+def rain_tips_with_anchor(anchor, last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
+    """Rain tips for a new reading, judged first against the last ACCEPTED count.
+
+    WHY (#465, DEC-0218): the caller resyncs `last_count` to every reading, even
+    a rejected one, so a rejected step can never freeze the baseline (DEC-0029,
+    DEC-0103). The cost was a phantom on recovery: a counter that glitches DOWN
+    and comes back (115 -> 114 -> 115) had the 114 rejected, then booked the
+    climb back to 115 as 1 tip -- up to max_tips (0.16") for a 16-tip dip, on a
+    clean frame, with nothing logged.
+
+    `anchor` is the last count whose delta was accepted. When it differs from
+    `last_count` (the previous reading was rejected) and the new reading is
+    plausible against it, the rejected reading was the glitch: book against the
+    anchor. Otherwise fall back to `rain_delta_tips(last_count, new_count)`,
+    which is the old behavior exactly -- so every reading the old code accepted
+    is still accepted, and no stall is possible.
+
+    Exhaustive over every (anchor, rejected, next) counter triple: every
+    glitch-and-recover case books the true tips (the old code got all 241,536
+    wrong); real over-cap storm jumps book exactly as before. The one cost: a
+    genuine counter RESET (ISS power cycle) from a count of 18 or less, with
+    enough rain before the next reading to climb back within max_tips of the old
+    count, is undercounted. See tests/test_rain_anchor_465.py.
+
+    Returns (tips, recovered): tips as rain_delta_tips returns them (None =
+    rejected), and recovered=True when the anchor path booked them.
+    """
+    if anchor is not None and anchor != last_count:
+        tips = rain_delta_tips(anchor, new_count, max_tips)
+        if tips is not None:
+            return tips, True
+    return rain_delta_tips(last_count, new_count, max_tips), False
+
+
+_CRC_STATS = re.compile(r"crc_stats: crc_fail=(\d+) near=(\d+) slots=(-|\d+:\d+(?:,\d+:\d+)*)\s*$")
+
+
+def parse_crc_stats(line):
+    """Parse Go's `crc_stats: crc_fail=N near=M slots=S:N,...` summary (#458).
+
+    Returns (crc_fail, near, {slot: n}) or None for any other line. Strict on
+    purpose: a malformed or foreign line is ignored, never half-counted, and
+    near > crc_fail (impossible from a correct Go) is refused rather than logged.
+    Pure function (no I/O) so it is unit-testable -- tests/test_crc_stats.py.
+    """
+    m = _CRC_STATS.search(line)
+    if m is None:
+        return None
+    fail, near = int(m.group(1)), int(m.group(2))
+    if near > fail:
+        return None
+    slots = {}
+    if m.group(3) != "-":
+        for part in m.group(3).split(","):
+            slot, n = part.split(":")
+            slots[int(slot)] = int(n)
+    return fail, near, slots
 
 
 def dedup_key(data):
@@ -841,14 +904,23 @@ def reap_spawned_children():
 # repo is public and the file lives on a NAS share -- keep the boundary.
 STALL_TIMEOUT_S = 150
 
-# A freshly spawned child is legitimately silent for the radio's init period
-# (US/AU/NZ: 133s, EU: 16s), so the normal 150s stall watchdog leaves only 17s
-# of margin on a post-swap respawn. Nowhere near enough to run a campaign on:
-# a slow init would raise WeeWxIOError and tear the driver down, reintroducing
-# the abort-on-unhealthy-swap failure class this feature exists to retire.
-# The first packet after a swap gets this longer deadline instead; the normal
-# threshold returns as soon as anything is received.
-HOTSWAP_GRACE_S = 240
+# A freshly spawned child is legitimately silent for the radio's init period.
+# Go's init listens on one channel for the transmitter to hop onto it, and caps
+# the wait at (channels + 2) loop periods, where the loop period grows with the
+# transmitter ID: 2.5625 s + 62.5 ms per ID step. US/AU/NZ have 51 channels, so
+# the transmitter arrives within 51 periods: 131 s for ID 1, 143 s for ID 5
+# (this station), 153 s for ID 8. Go's cap is 136-159 s; EU (5 channels) is
+# about 16 s. Measured on this station across 9 starts (2026-09-27 to 10-14):
+# first packet 10-134 s after start (#456, audit item 32).
+#
+# So the normal 150 s watchdog leaves about 5 s of margin for ID 5, none for
+# IDs 7 and 8, and none for any ID if the one packet init waits for is lost.
+# A slow init would raise WeeWxIOError and tear the driver down mid-init. The
+# first packet after any start -- the driver's own start or a hot-swap respawn
+# -- gets this longer deadline instead; the normal threshold returns as soon as
+# anything is received. (Until #456 only the hot swap got it.)
+INIT_GRACE_S = 240
+HOTSWAP_GRACE_S = INIT_GRACE_S
 
 # Accepted control-file keys and their inclusive bounds. gain is tuner gain in
 # tenths of a dB (0 = the binary's "auto"; 496 = the R820T's 49.6 dB maximum);
@@ -1412,6 +1484,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         loginf('sensor map is: %s' % self.sensor_map)
         self._init_stats()
         self.last_rain_count = None
+        self.last_accepted_rain_count = None    # anchor for recovery after a reject (DEC-0218)
         # sensor plausibility filter (DEC-0029); deltas overridable per field
         self._sensor_qc_enabled = tobool(stn_dict.get('sensor_qc', True))
         qc_limits = {}
@@ -1604,7 +1677,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 packet['rain'] = None               # null-on-rejection, DEC-0006
             else:
                 prev = self.last_rain_count
-                tips = rain_delta_tips(prev, data['rain_count'])
+                anchor = self.last_accepted_rain_count
+                tips, recovered = rain_tips_with_anchor(anchor, prev, data['rain_count'])
                 self.last_rain_count = data['rain_count']   # always resync, even on reject
                 if tips is None:
                     logerr("rain: rejecting implausible counter delta last=%s new=%s "
@@ -1612,6 +1686,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                            (prev, data['rain_count']))
                     packet['rain'] = None               # null-on-rejection, DEC-0006
                 else:
+                    self.last_accepted_rain_count = data['rain_count']
+                    if recovered:
+                        loginf("rain: counter recovered to %s after rejected %s; "
+                               "booked %s tips against last accepted %s (DEC-0218)" %
+                               (data['rain_count'], prev, tips, anchor))
                     packet['rain'] = float(tips) * self.rain_per_tip
                 if DEBUG_RAIN:
                     logdbg("rain=%s tips=%s last=%s new=%s" %
@@ -1661,7 +1740,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             'pct_good': [None] * 4,    # percentage of good messages per transmitter
             'pct_good_all': None,      # percentage of good messages for all transmitters
             'dup_count': 0,            # DEC-0035 (S43): Go demodulator double-decodes this period
-            'repeat_count': 0}         # DEC-0135 (S116): transmitter re-sent an unchanged payload
+            'repeat_count': 0,         # DEC-0135 (S116): transmitter re-sent an unchanged payload
+            'crc_fail': 0,             # #458: CRC-failing frames Go dropped this period
+            'crc_near': 0,             # #458: of those, within 100 ms of an accepted frame
+            'crc_slots': {}}           # #458: failures per receiver hop slot this period
 
     def _reset_stats(self):
         self.stats['last_ts'] = self.stats['curr_ts']
@@ -1671,6 +1753,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self.stats['pct_good_all'] = None
         self.stats['dup_count'] = 0
         self.stats['repeat_count'] = 0
+        self.stats['crc_fail'] = 0
+        self.stats['crc_near'] = 0
+        self.stats['crc_slots'] = {}
 
     def _update_stats(self, curr_cnt0, curr_cnt1, curr_cnt2, curr_cnt3):
         # update the statistics
@@ -1711,6 +1796,13 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         # these were counted as duplicates AND booked as misses; dup_count was
         # roughly 10x its true value and rxCheckPercent about 26 points under.
         loginf("repeat frames this period: %d" % self.stats['repeat_count'])
+        # #458: the CRC failures Go used to drop uncounted. Measurement only --
+        # nothing reads these to decide what is accepted. `near` is the share that
+        # sits within 100 ms of an accepted frame: the corrupted-second-decode
+        # signature of DEC-0033/DEC-0035.
+        loginf("crc failures this period: %d (near an accepted frame: %d) slots: %s" % (
+            self.stats['crc_fail'], self.stats['crc_near'],
+            ",".join("%d:%d" % kv for kv in sorted(self.stats['crc_slots'].items())) or "-"))
         # if not the first time since startup
         if self.stats['last_ts'] > 0:
             total_count = 0
@@ -1929,16 +2021,16 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         periodShowOneTransm = 2*24*3600  # 2 days
         self.transm_to_store = None  # forces the first loop pass to log below
 
-        # Normally 150s; widened to HOTSWAP_GRACE_S for the first packet after
-        # a hot swap, then restored below when anything is received.
-        stall_timeout = STALL_TIMEOUT_S
+        # INIT_GRACE_S until the first packet after a start or a hot swap, then
+        # STALL_TIMEOUT_S once anything is received (#456; see INIT_GRACE_S).
+        stall_timeout = INIT_GRACE_S
 
         while self._mgr.running():
             # Hot-swap poll (S103, DEC-0117). This runs about every 10s on its
             # own -- get_stderr() below budgets 10s per pass -- so no thread or
             # signal handler is needed. Resetting the watchdog state here is
             # not optional: a respawned child restarts its init period (US:
-            # 133s) and would otherwise be judged against a time_last_received
+            # up to ~150s, INIT_GRACE_S) and would otherwise be judged against a time_last_received
             # inherited from before the swap.
             if self._maybe_hotswap():
                 _swapped_at = int(time.time())
@@ -1948,8 +2040,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 hop_since_data = 0
                 stall_timeout = HOTSWAP_GRACE_S
                 continue
-            # the stalled timeout must be greater than the init period
-            # init period is EU: 16 s, US, AU and NZ: 133 s
+            # the stalled timeout must be greater than the init period, so it
+            # starts at INIT_GRACE_S (see there for the measured init times)
             _now = int(time.time())
             # Recomputed every iteration (a few integer ops -- the loop
             # already blocks up to 10s per get_stderr() call, so this is
@@ -1996,6 +2088,14 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         # (no debug gate); summarized once per archive period
                         # by _update_summaries().
                         self.stats['dup_count'] += 1
+                    _crc = parse_crc_stats(_line)
+                    if _crc is not None:
+                        # #458: Go's once-a-minute CRC-failure summary, summed
+                        # into this archive period; reported by _update_summaries().
+                        self.stats['crc_fail'] += _crc[0]
+                        self.stats['crc_near'] += _crc[1]
+                        for _slot, _n in _crc[2].items():
+                            self.stats['crc_slots'][_slot] = self.stats['crc_slots'].get(_slot, 0) + _n
                     if "repeat packet:" in _line:
                         # DEC-0135 (S116): Go accepted an identical payload that
                         # arrived a full loop period later -- a real transmission

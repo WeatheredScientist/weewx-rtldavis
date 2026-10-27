@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# RETIRED (NAS era, DEC-0118): kept as a record of the method. Its paths and nasctl calls no longer reach a live system.
 """ops/nas_build.py -- NAS-LEASE holder wrapper for weewx's rare heavy NAS
 jobs: the NAS-native image build, and manual bulk historical analysis --
 weewx's two named holder cases (NAS-LEASE.md Section 6).

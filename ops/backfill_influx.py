@@ -25,6 +25,8 @@ import sys
 
 INFLUX_URL   = "http://localhost:8086"
 INFLUX_BUCKET = "weewx"
+# RETIRED default: this NFS-overlay path was removed with the NAS-era layout
+# (2026-09-05, DEC-0118). Always pass --db-path, or use ops/backfill_container.py.
 DB_PATH      = "/volume1/docker/weewx-rtldavis/weewx-data/archive/weewx.sdb"
 MEASUREMENT  = "record"
 BATCH_SIZE   = 500   # records per POST

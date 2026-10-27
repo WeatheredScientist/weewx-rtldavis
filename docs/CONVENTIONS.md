@@ -39,6 +39,13 @@ gitignored local-infra doc (DEC-0012).
   both exist. Five releases (v2.0.12–v2.0.16) shipped to prod and Docker Hub with no `vX.Y.Z` tag
   and no GitHub release for weeks before this line existed (#331) — nothing in the promotion path
   named the step, so no session was ever prompted to do it.
+- **Docker Hub release tags are multi-arch (DEC-0215).** After marvin's build is verified:
+  `marvinctl tag …:vX.Y.Z …:vX.Y.Z-amd64` and `marvinctl push …:vX.Y.Z-amd64` (never `:vX.Y.Z`
+  from marvin). Pushing the `vX.Y.Z` tag starts `image-publish.yml`, which builds, smoke-tests and
+  pushes `ghcr.io/weatheredscientist/weewx-rtldavis:vX.Y.Z-arm64`. Then, from the laptop,
+  `scripts/join_multiarch.sh vX.Y.Z --expect-amd64 <prod's image ID>` (a dry run) and, after the
+  owner's go in chat, the same with `--apply`. That creates `:vX.Y.Z` with both platforms. If the
+  arm64 run failed, `--amd64-only` publishes amd64 alone. `:latest` stays the owner's gesture.
 - **Start of session:** `git fetch && git status`. **End:** `git status` shows *up to date*.
 - **Pause for approval before every commit and before any push.** Show `git status` + a diff summary
   first; show `git log --oneline --all` before any push.
@@ -77,6 +84,16 @@ gitignored local-infra doc (DEC-0012).
 - **Token-pattern grep before every commit** — over the staged diff and the whole tracked tree.
   Also sweep for personal identifiers: the WU PWS id, place names, coordinates, the org name, the
   NAS IP/user (the exact patterns live in gitignored `scripts/.identifiers`).
+- **After any change to `scripts/check_secrets.sh`, run `bash scripts/scan_history.sh`** (about
+  2.5 minutes; needs the gitignored `scripts/.identifiers`, so run it in the main checkout or copy
+  the list into a worktree). It runs the whole gate over every blob in history and prints only
+  `SECRET-SCAN:` headers. Exit 0 means history matches `scripts/history_scan_known.txt`; 1 is a
+  new finding to triage before the change merges; 3 means a known finding vanished and the gate
+  has gone blind (DEC-0212). A search for the spelling you just fixed proves nothing about the
+  rest. DEC-0076 and DEC-0084 both claimed "never leaked" that way.
+- **A redacting printer fingerprints every value-like token, whatever its length** (hash prefix plus
+  length). Never a length floor: short tokens such as four-letter app-password groups are the ones
+  that slip under one (S153).
 - **Never paste a live secret into an LLM chat.** Treat anything that reaches a prompt as compromised;
   rotate it server-side. `gh`/SSH creds live in the OS keychain — an assistant runs `gh`/`git`/`scp`
   against that auth and never needs the raw value.
@@ -89,7 +106,7 @@ gitignored local-infra doc (DEC-0012).
   ```
   .venv/bin/python -m ruff check .
   .venv/bin/python -m pytest
-  .venv/bin/python -m mypy --ignore-missing-imports --no-strict-optional $(git ls-files '*.py')
+  .venv/bin/python -m mypy --ignore-missing-imports --no-strict-optional --explicit-package-bases $(git ls-files '*.py')
   ```
 
   **`.venv/bin/python` is the only interpreter on this box that has the tooling** (verified S59).
@@ -100,7 +117,9 @@ gitignored local-infra doc (DEC-0012).
 
   **mypy needs the flags and the file list spelled out**: this repo has no mypy config at all (no
   `pyproject.toml`, no `mypy.ini`, no `setup.cfg` — only `ruff.toml`), so a bare `python -m mypy`
-  exits `Missing target module, package, files, or command`. The invocation above is what
+  exits `Missing target module, package, files, or command`. `--explicit-package-bases` is there because every extension's installer
+  must be named `install.py` (`extensions/loopjson/`, `extensions/influx/`); without it mypy reports
+  the duplicate module name and stops (DEC-0219). The invocation above is what
   `.pre-commit-config.yaml` passes, and it reproduces CI locally.
 
   **`ruff format` is NOT a gate — do not run it (DEC-0027).** It was listed here as one until S59.

@@ -110,11 +110,12 @@ def test_recognized_value_loads_unchanged_and_quiet(monkeypatch, tmp_path, mode)
     assert text == "", "a valid REMEDY_MODE must not log anything at import"
 
 
-def test_unset_variable_keeps_the_legacy_default_and_is_quiet(monkeypatch, tmp_path):
-    """Validation must not turn 'unset' into 'none': the default stays the published
-    extension's Synology behavior (see test_input_staleness.py)."""
+def test_unset_variable_is_none_and_quiet_at_import(monkeypatch, tmp_path):
+    """Unset is the default, none since DEC-0217 (see test_input_staleness.py), not
+    an unrecognized value: it must not log the #404 warning. The daemon's startup
+    log, not the import, says that the default applied."""
     mod, text = _load(monkeypatch, tmp_path, None)
-    assert mod.REMEDY_MODE == "usb_reset"
+    assert mod.REMEDY_MODE == "none"
     assert text == ""
 
 

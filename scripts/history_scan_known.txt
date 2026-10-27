@@ -1,0 +1,12 @@
+# Known history findings for scan_history.sh. Format: count<TAB>gate header. Kinds and paths only: no value, no commit.
+# S154 triage read every flagged line with all value-like tokens fingerprinted. All are benign (the gate's own
+# documented examples, placeholders, all-letter prose, test fixtures) EXCEPT the two blobs of the monitor
+# daemon: a dead credential, ops#404, DEC-0212. The two identifier lines are the positive control for the
+# identifier check (station ids are public listings, dash DEC-0350).
+2	SECRET-SCAN: personal identifier in weewx.conf.example:
+2	SECRET-SCAN: possible embedded secret in docs/handoffs/S36-to-eaglehunt-dashboard.md:
+1	SECRET-SCAN: possible embedded secret in monitor.env.example:
+2	SECRET-SCAN: possible embedded secret in ops/weewx_bump_probe.py:
+9	SECRET-SCAN: possible embedded secret in scripts/check_secrets.sh:
+2	SECRET-SCAN: possible embedded secret in tests/test_pressure_injection.py:
+2	SECRET-SCAN: possible embedded secret in weewx_monitor.py:

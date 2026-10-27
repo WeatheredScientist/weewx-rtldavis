@@ -1,0 +1,38 @@
+# weewx-rtldavis as a systemd service: the container runs unprivileged, as a
+# dedicated host user, and systemd restarts it. See docs/DEPLOY.md.
+#
+# Before enabling, replace in this file:
+#   990:990          the weewx user's uid:gid (`id -u weewx`, `id -g weewx`)
+#   /srv/weewx       where weewx-data/ and logs/ live, owned by that user
+#   America/New_York your time zone
+#   v2.0.21          the image tag you want
+#
+# Install: sudo install -m 0644 weewx-rtldavis.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now weewx-rtldavis
+
+[Unit]
+Description=weewx-rtldavis (Davis ISS via RTL-SDR)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStopSec=90
+# Refuse to start on a missing config: WeeWX would otherwise crash-loop.
+ExecStartPre=/usr/bin/test -e /srv/weewx/weewx-data/weewx.conf
+ExecStartPre=-/usr/bin/docker rm -f weewx-rtldavis
+ExecStart=/usr/bin/docker run --rm --name weewx-rtldavis \
+    --user 990:990 --cap-drop ALL --security-opt no-new-privileges \
+    --device /dev/bus/usb:/dev/bus/usb \
+    -e HOME=/tmp -e TZ=America/New_York -e BIAS_TEE=0 \
+    --mount type=bind,source=/srv/weewx/weewx-data,target=/opt/weewx-data \
+    --mount type=bind,source=/srv/weewx/logs,target=/var/log/weewx \
+    weatheredscientist/weewx-rtldavis:v2.0.21
+# kill, not stop: weewx has no state a SIGTERM grace period would save, and
+# a hung stop holds the dongle.
+ExecStop=/usr/bin/docker kill weewx-rtldavis
+
+[Install]
+WantedBy=multi-user.target

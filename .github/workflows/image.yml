@@ -1,0 +1,54 @@
+name: image
+
+# DEC-0214: build the Docker image natively on amd64 AND arm64 (a Raspberry Pi is the most common
+# RTL-SDR host), then smoke-test what was built. This PROVES the build; it publishes nothing.
+# Docker Hub's amd64 images are still built on marvin and pushed by marvinctl, so Hub's amd64
+# digest keeps equaling prod's; arm64 is published by image-publish.yml on a release tag (DEC-0215).
+# No secrets here, on purpose: this is a public repo.
+#
+# GitHub-hosted runners only. Never a self-hosted runner (OPS-DEC-0117): on a public repo any PR
+# could run code on it.
+#
+# Runs on every PR and push (CI is free on a public repo), plus weekly: the pins (DEC-0214) fix the
+# upstream sources, but the base stage's apt packages (golang, cmake, rtl-sdr) still float with
+# Ubuntu 26.04, and the schedule catches a drift that breaks either architecture.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            uname: x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            uname: aarch64
+    name: build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      # Native build, no QEMU: the arm64 job runs on an arm64 host. The Dockerfile's own
+      # assertions (the pins' sha256 checks, dupgate's grep, the [[root]] logger, StdPrint's
+      # removal) fail this step if they fail.
+      - name: Build
+        run: docker build --progress=plain -t weewx-rtldavis:ci .
+
+      # The same checks run on the arm64 image before image-publish.yml pushes it (DEC-0215).
+      - name: Smoke test
+        run: scripts/smoke_image.sh weewx-rtldavis:ci ${{ matrix.uname }} requirements.txt

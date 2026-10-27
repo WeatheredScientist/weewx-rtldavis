@@ -32,13 +32,40 @@ def _redact_secrets(text):
     return _SECRET_PARAM_RE.sub(r'\1=REDACTED', text)
 
 
+_INHG_TO_MBAR = 33.8639  # 1 inHg in mbar, the pressure unit of METRIC and METRICWX
+
+
+def _parse_station_id(raw):
+    """Return the numeric station id, or 0 when it is missing or not a number.
+
+    The example config ships `YOUR_STATION_ID`; int() on that raised at service
+    init and WeeWX did not start (#451). 0 falls into the existing "missing
+    ... not binding" path.
+    """
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _from_inhg(value, us_units):
+    """WeatherLink reports inHg; express it in the packet's unit system (#451).
+
+    US packets are inHg already; METRIC and METRICWX both carry pressure in mbar.
+    A packet with no usUnits is treated as US, as before.
+    """
+    if us_units in (None, weewx.US):
+        return value
+    return value * _INHG_TO_MBAR
+
+
 class DavisPressureFetcher(StdService):
     def __init__(self, engine, config_dict):
         super().__init__(engine, config_dict)
         pressure_dict = config_dict.get('DavisPressure', {})
         self.api_key = pressure_dict.get('api_key', '')
         self.api_secret = pressure_dict.get('api_secret', '')
-        self.station_id = int(pressure_dict.get('station_id', 0))
+        self.station_id = _parse_station_id(pressure_dict.get('station_id', 0))
         self.fetch_interval = int(pressure_dict.get('fetch_interval', 3600))
         self.last_pressure = None
         # DEC-0209 (eaglehunt-ops#357): WeatherLink's bar_absolute, the raw
@@ -138,7 +165,7 @@ class DavisPressureFetcher(StdService):
             # None, so weewx derived pressure by reversing the sea-level value
             # and altimeter from that.
             if packet.get('barometer') is None:
-                packet['barometer'] = self.last_pressure
+                packet['barometer'] = _from_inhg(self.last_pressure, packet.get('usUnits'))
         if self.last_station_pressure is not None:
             # pressure IS measured now: WeatherLink's bar_absolute, from the
             # same fetch (DEC-0209, eaglehunt-ops#357). Injected as a hardware
@@ -146,7 +173,8 @@ class DavisPressureFetcher(StdService):
             # measurement instead of a reversed reduction. altimeter is never
             # injected: the station does not measure it.
             if event.packet.get('pressure') is None:
-                event.packet['pressure'] = self.last_station_pressure
+                event.packet['pressure'] = _from_inhg(self.last_station_pressure,
+                                                      event.packet.get('usUnits'))
         if self.last_success is not None:
             # #172: the fetch's own freshness, distinct from last_fetch (a
             # throttle stamp that advances on FAILED attempts too). Stamped

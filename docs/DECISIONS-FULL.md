@@ -249,7 +249,7 @@ WeatherLink Live console). Defense in depth:
 
 *Rationale:* honest null > fabricated rain (DEC-0006). The cap thresholds are physically grounded
 (world 1-min rainfall record ~1.23"; local worst ~1.8"/hr sustained) with generous leeway, so they
-catch the characteristic 64/128 glitches without ever clipping real Chester-County rain. CRC is
+catch the characteristic 64/128 glitches without ever clipping real local rain. CRC is
 enforced, so these are multi-bit/mis-decode glitches that pass CRC — the filter is defensive against
 the *class* of implausible value, not a specific bit. The rainRate bound is minor insurance: the
 driver fix already closes the main rainRate-pollution path (StdRainRater computing from phantom rain).
@@ -11452,3 +11452,905 @@ boundary. The archive read used `marvinctl exec` with a read-only sqlite probe (
 the WeatherLink probe earlier in the session was not). Three archive minutes (22:15–22:17) lost to
 the restart. Rollback: retag `:v2.0.19`, restart — and note that puts the columns back on the
 derived path.
+
+## DEC-0210 — The secret gate's allow-list judges each match, not the line (#421)
+
+**Date:** 2026-10-07 (S151). **Status:** shipped (the PR for #421). Extends DEC-0039 and DEC-0045.
+
+### Context
+
+S145's mutation pass (#409) found four holes in the detectors themselves and left them for a
+design pass: (1) allow terms applied per line, so a real literal beside an env lookup passed;
+(2) quoted key names were never scanned (`"api_key": "<value>"`); (3) `SECRET_KEY`,
+`private_key` and `access_key` were missed; (4) `os.getenv('X')` was a false positive.
+
+### Decision
+
+All four, in one change, controls first. Each hole got a planted payload and was shown LEAKED
+(or FALSE POSITIVE) against the old gate before any detector edit: 15 BAD controls and 2 GOOD
+controls red.
+
+- Item 1: the allow-list splits in two. `allow_line` (the line's own key is `description`, or it
+  is `self.x = x`) still excuses the whole line. `allow_match` (a placeholder, reference or prose
+  VALUE) is tested per match: the scan loop cuts a flagged line into one segment per match (a
+  match's start to the next one's; literal string surgery, no offsets, locale-independent) and
+  every segment must carry its own term. A flagged line that yields no match stays flagged.
+- Item 2: `_sep` lets a closing quote sit between key and separator. It is shared by `_assign`,
+  `_apppw_assign` and `allow_value`, and `allow_prose` accepts the closing quote too.
+- Item 3: `(secret|access|private)_?[Kk]ey` plus the uppercase spellings (the allow-list is
+  case-sensitive, DEC-0045's reason).
+- Item 4: `os\.getenv` as its own allow alternate.
+
+### Consequences
+
+- Quoted-key scanning made four tracked lines visible. Two files' fixtures
+  (`ops/weewx_bump_probe.py`, `tests/test_pressure_injection.py`) now use `YOUR_*` values, and
+  windy.py's `'PASSWORD': self.password` needed `PASSWORD` on the key list (the reason `PASS` is
+  there, S68).
+- Mutation run, fourteen of fifteen deletions of a new alternate or of the per-match logic go
+  red. The survivor is the loop's fail-closed branch for a line that yields no match, which cannot
+  occur while the detector and the splitter share one regex. It stays as a guard against a future
+  edit to either.
+- Not changed: a default literal inside a lookup (`os.getenv('X', '<literal>')`) is still excused
+  as a runtime lookup. That is the existing `os.environ.get('K', '')` behaviour, now applied to
+  getenv.
+
+## DEC-0211 — `loop_json_writer.py` ships as a WeeWX extension from this repo (#440)
+
+**Date:** 2026-10-10 (S153, Opus 5.5; owner: "go with all your recommendations"). **Status:**
+accepted, shipped S155 (`loopjson-v1.0.0`, PR #447). Answers `weewx#440`, the dashboard's ask under its
+DEC-0348. Applies DEC-0006 and DEC-0202; extends DEC-0093.
+
+### Context
+
+The dashboard is being generalized so other stations can adopt it (dash DEC-0348). Its live-data
+contract is this repo's loop JSON (INTERFACES §1), written by `LoopJsonWriter`, a `StdService` that
+works with any driver. The only way to get it today is to clone this repo and copy the file. #440
+asks for a `weectl extension install` path, a README on the fields, units and cadence, a field map
+kept as it is, and a version string in the output. Where it ships was left to this repo.
+
+Checked before deciding (WeeWX 5.5.2 source, `weecfg/extension.py` and `weecfg/__init__.py`, plus
+live HTTP headers and the dashboard's code):
+
+- `weectl extension install <URL>` takes the archive type from the download's Content-Disposition
+  filename and needs one root directory in the archive. GitHub release assets and tag archives both
+  send the filename.
+- A service named under `process_services` in `install.py` is appended to the end of that list,
+  which is where this writer must run (ARCHITECTURE §1, S152). An extension installed later into
+  the same list lands after it.
+- At runtime `config_dict['WEEWX_ROOT']` is always absolute: a relative or missing value is resolved
+  against the config file's directory.
+- The dashboard's `/loopdata` route passes the file through with an object spread, so a new string
+  key reaches the client untouched.
+
+### Decision
+
+1. **Ship from this repo, not a new one.** The repo-root `loop_json_writer.py` stays the only copy,
+   since it is prod's mount source. `extensions/loopjson/` holds `install.py` and an adopter README.
+   A CI workflow packs those two plus the root file into `weewx-loopjson-X.Y.Z.zip` (one root
+   directory, `weewx-loopjson/`) and, on a pushed `loopjson-vX.Y.Z` tag, attaches it to a GitHub
+   release created with `--latest=false`, so the image releases keep "Latest". Rejected: a separate
+   `weewx-loopjson` repo. It needs either a second copy of the file or a change to prod's mount
+   source on marvin, plus its own governance scaffold, for one consumer. It can still be split out
+   later, with history, if outside adopters show up.
+2. **`install.py`:** extension name `loopjson`; adds `user.loop_json_writer.LoopJsonWriter` to
+   `process_services`; injects `[LoopJsonWriter]` with `path = feed/loop-data.txt`,
+   `current_path = feed/current.json`, `current_interval = 60`, `ttl_default = 300`.
+3. **Three code changes, each a no-op under prod's config:**
+   - Relative `path` and `current_path` resolve against `WEEWX_ROOT`, and the defaults become
+     `loop-data.txt` and `current.json`. In this image `WEEWX_ROOT` is `/opt/weewx-data`, so those
+     are the same files as today's absolute defaults; prod sets absolute paths (CONSTANTS).
+   - The writer creates its output directory at startup if it is missing. Today a missing
+     directory is an ERROR on every packet.
+   - `barometer_inHg`'s long TTL (2 × `[DavisPressure] fetch_interval`) applies only when a
+     `[DavisPressure]` section exists; otherwise the field uses `ttl_default`. Without this, a station
+     with no such section gets 7,200 s, which serves a dead barometer stale for two hours (DEC-0006).
+4. **Version.** `__version__ = '1.0.0'` in the module, and every write to both files carries
+   `"writer": "loop_json_writer/<version>"`. Semver against the contract: major for a key renamed,
+   removed or given new units; minor for a new optional key; patch for a behavior fix. CI fails if
+   the release tag, `__version__` and `install.py`'s version disagree. The key is additive, so it
+   is not a break under INTERFACES' change discipline, and the consumer asked for it.
+5. **Docs.** The field table stays in INTERFACES §1, the contract of record. The extension README
+   covers install, the last-in-`process_services` rule, paths, and cadence (every packet vs
+   `current_interval`, atomic rename, mount the directory), and links to §1 at the release tag: one
+   table, nothing to drift. It also says the extension is not interchangeable with chaunceygardiner's
+   weewx-loopdata, which writes a file of the same name (`loop-data.txt`) with a different key shape;
+   this repo ran it until S47 (DEC-0005). INTERFACES §1's opening still calls the writer a
+   `data_service` and says both files are written every packet; #441 fixed ARCHITECTURE but not
+   this, so the same change corrects it.
+6. **CI proof on every PR.** Install WeeWX 5.5.2 from PyPI, `weectl station create`, install the
+   built zip, assert the writer is last in `process_services` and the stanza is present, then run
+   `weewxd` with the Simulator driver for about 20 s and assert `feed/loop-data.txt` carries
+   `dateTime` and `writer`. That measures the "works with any driver" claim instead of asserting it.
+
+### Consequences
+
+- Prod sees one change: the `writer` key in both files. The file is mounted, so the deploy is
+  `marvinctl pull` plus a `weewx.service` restart (a brief `/loopdata` 503), with no image build and
+  no v2.0.x bump.
+- Two keys #440 listed are not writer keys and will not be documented as such: `dayRain_in` comes
+  from the dashboard's InfluxDB snapshot (`eh-ui.js` `_distributeLiveSnapshot`) and `loopSpeed_mph`
+  is a dashboard cache key. Said on #440, with an FYI that `eh-ui.js`'s comment claiming the writer
+  emits no cloud base or wind chill is stale (it emits `cloudbase_foot` and `windchill_F`).
+- The release tag and `gh release create` ride the PR that sets or bumps `__version__`, the same
+  rule as image releases (CLAUDE.md closeout step 0), except that the workflow creates the release.
+- The published image is unchanged: it still does not bake the writer, and docker-compose keeps
+  mounting it.
+
+## DEC-0212 — History is scanned with the whole current gate; "never leaked" in DEC-0076 and DEC-0084 is superseded (ops#404)
+
+**Date:** 2026-10-12 (S154, Sonnet 5.5). **Status:** accepted, shipped. Supersedes the "never
+leaked" statements in DEC-0076 and DEC-0084. Applies DEC-0012 and DEC-0045.
+
+### Context
+
+S153 ran the current `check_secrets.sh` over every unique blob in history and found an app password
+for the monitor's mail account, held as a quoted literal in the monitor daemon for a short stretch
+in May and public since. DEC-0076 and DEC-0084 had each recorded "never leaked" after a history
+search, but each searched only the spelling it had just fixed. A search for one shape finds that
+shape and says nothing about the rest, so both claims were false zeros (GOTCHAS §1).
+
+The owner's account showed the leaked value was already dead: it was revoked in July 2026, when the
+July app password replaced it (the May date is the commit's, not a creation date). The July one was
+rotated anyway on 2026-10-11, because the same pass that found the
+literal also printed it into a session transcript. The new value is on the host only, the old one
+is revoked, and the monitor was restarted and sent its start mail with no auth errors.
+
+### Decision
+
+1. **The "never leaked" lines in DEC-0076 and DEC-0084 are superseded.** The corrected fact: those
+   searches were spelling-specific, and history held one such value, since dead and since rotated.
+   Nothing else in this DEC locates it.
+2. **`scripts/scan_history.sh` runs the whole gate over every `(blob, path)` pair that
+   `git rev-list --all --objects` reaches, and prints only the gate's own `SECRET-SCAN:` header
+   lines** (a kind and a path, never a matched line). It requires the identifier list
+   (`CHECK_SECRETS_REQUIRE_IDENTIFIERS=1`), so a worktree without the gitignored list fails loudly
+   instead of skipping the check.
+3. **`scripts/history_scan_known.txt` is the positive control.** History is immutable, so its
+   findings never go away; the list holds each as `count<TAB>header`. A finding not in the list
+   exits 1. A listed finding that is no longer reported, or whose count changed, exits 3 ("control
+   dead"), because a gate that stops catching what it used to catch is the failure this exists to
+   expose. The two identifier hits in `weewx.conf.example` are the control for the identifier
+   check. Verified S154 by deleting a line (exit 1) and adding a phantom one (exit 3).
+4. **Run it after any change to `check_secrets.sh`**, and treat a new header as a finding to triage
+   before the change merges (CONVENTIONS, Secrets).
+5. **Any redacting printer fingerprints every value-like token, whatever its length.** S153's
+   triage printer redacted only tokens of six or more characters, and the credential's four-letter
+   groups passed through. Short tokens are the dangerous ones, because app passwords and PINs are
+   short. Fingerprint plus length is enough to compare two values without showing either.
+
+### Consequences
+
+- First full run, 1,731 blobs: 7 distinct headers, all triaged with the fingerprinting printer.
+  Six are benign (the gate's own documented examples in `check_secrets.sh`, placeholders, all-letter
+  prose, test fixtures); the seventh is the monitor daemon's two blobs. The run takes about 2.5
+  minutes, so it is a manual step after a detector change, not a CI job.
+- No history rewrite: GitHub keeps old commits reachable by SHA, and the value is dead.
+- The private-range addresses planted by the gate's own test history are `eaglehunt-ops#358`, not
+  this DEC.
+
+## DEC-0213 — The public face is written for a new user; systemd recommended, Synology kept
+
+**Date:** 2026-10-17 (S156, Opus 5.5). **Status:** accepted. Applies DEC-0012; extends DEC-0010.
+
+### Context
+
+The dashboard is preparing to go public, and its own public-release material (`how-it-works.md`
+and the deck) points readers at this repo's README first. That README had grown to 634 lines,
+mostly per-release notes, with about ten stale version references (`:latest` "still v2.0.13", a
+"current version" of v2.0.16). Its quickstart ran `--privileged`, and it could not have worked:
+it bind-mounted an empty host directory over `/opt/weewx-data`, which hides the `weewx.conf` the
+image bakes there, so `weewxd` starts with no config. The monitor setup was Synology-only, though
+prod has run on a Debian host under systemd since DEC-0118, unprivileged since #360.
+
+### Decision
+
+1. **README is for a new user.** What it is, what differs from stock (pointing to
+   CHANGES-FROM-UPSTREAM), requirements, a six-step quickstart, uploads, the data contract, pressure,
+   versions, troubleshooting, credits. Release history lives on the Releases page; service
+   registration detail lives in `weewx.conf.example`.
+2. **The quickstart seeds the config** by copying `/opt/weewx-data` out of a created, never-run
+   container (`docker create` + `docker cp`), which also makes the files the invoking user's.
+3. **Every user-facing run recipe is unprivileged**, in prod's shape: `--user`, `--cap-drop ALL`,
+   `no-new-privileges`, `--device /dev/bus/usb`, `HOME=/tmp`, plus a udev rule giving the user's
+   group the dongle (`0bda:2838`). `--privileged` is mentioned only as the Synology fallback.
+4. **`docs/DEPLOY.md`: systemd recommended, Synology kept.** The Synology path (Task Scheduler, the
+   limited monitor user, the sudo-scoped USB reset, logrotate) is preserved for anyone running a
+   NAS, marked as how the station ran through August 2026, with non-root on DSM marked untested.
+5. **`examples/systemd/`** holds the two units, cleaned from prod's: no host, tenant, slice, unit or
+   network names, placeholders listed in each header. The monitor example starts in
+   `REMEDY_MODE=none`. `docker-compose.yml` takes the same hardened shape and drops the per-file
+   mounts, which on a fresh install would make Docker create directories where files belong.
+6. **Scrub line.** User-facing text follows the dashboard's public-release rules (its Appendix A).
+   The internal records (BOOT, CONSTANTS, DECISIONS, CHANGELOG, `ops/`) keep their machine names:
+   the owner's call, since they have been public for months, are permanent in history, and carry
+   no addresses. Fixed now: a home-directory path in `.claude/settings.json`, a county name in
+   DEC-0021's body (history keeps it; no rewrite, per `eaglehunt-ops#358`), and the station's own
+   ISS channel in `weewx.conf.example` (5 → 1, the factory default).
+
+### Consequences
+
+- The seed step and the non-root recipe follow prod's proven flags but were not run end to end on
+  a fresh host this session (no Docker daemon on the laptop). The first adopter report, or a test
+  on a spare host, confirms them.
+- The Docker Hub overview syncs from README only on a push to `main` with the Hub secrets set.
+- Out of scope, proposed separately: arm64 images and pinning the upstream `src.tgz`.
+
+## DEC-0214 — Pin the image's upstream downloads; prove the build on amd64 and arm64 in CI (S156)
+
+**Date:** 2026-10-17 (S156, Opus 5.5). **Status:** accepted. Amends DEC-0078's backlogged "CI
+builds" (built and proved here, not published). Applies OPS-DEC-0117.
+
+### Context
+
+The adopter pass that rewrote the README (S156) found two image-level gaps. First, the Dockerfile
+fetched `src.tgz` from `weewx-contrib/weewx-rtldavis` at `refs/heads/main` and installed
+`david-lutz/weewx-influx2` from `archive/master.zip`, with no checksum on either: a public build got
+whatever upstream held that day, and a replaced file would have slipped in silently. Second, Docker
+Hub has carried amd64-only images since v2.0.1, while a Raspberry Pi is the most common RTL-SDR
+host, and no one had built the image on arm64.
+
+Measured 2026-10-17: the last commit touching `src.tgz` is `bfa9e3d` (2026-01-03), and the file at
+that commit is byte-identical to today's `refs/heads/main` copy (sha256 `7c1a7de1…`), so v2.0.20 was
+built from these bytes. The Go dependencies are vendored inside it, so `go install` does not touch
+the network. `weewx-influx2`'s master has not moved since `f791f2e` (2021-02-11); its archive zip
+hashed the same on two downloads (`33b819e7…`) and its contents match `master.zip` exactly (the
+bytes differ only by the top directory's name).
+
+### Decision
+
+1. **Each download names one commit and its sha256**, as `ARG` defaults in the base stage, fetched
+   with `curl -fsSL` and checked with `sha256sum -c` before use. Moving a pin is a deliberate change:
+   a new commit and a new sha256 in the same PR. The dupgate assertion (DEC-0135) is unchanged.
+2. **A raw file at a commit is a git blob**, so `src.tgz` cannot change under its pin. GitHub
+   generates archive zips on request and does not promise their bytes; if it ever regenerates the
+   influx2 zip, the check fails closed and the fix is to vendor the 22 KB zip.
+3. **`tests/test_dockerfile_pins.py` guards the shape**: no branch-tracking URL, every GitHub fetch
+   names a `_COMMIT` arg, every pin is a full commit id with a full sha256, every downloaded file is
+   checked, and the dupgate assertion is present. Against `dev`'s unpinned Dockerfile, four of its
+   five tests fail.
+4. **`.github/workflows/image.yml` builds the image natively** on GitHub-hosted `ubuntu-24.04`
+   (amd64) and `ubuntu-24.04-arm` (arm64), with no QEMU, then checks that the image reports the
+   runner's architecture, that `rtldavis` links, that `weectl` is the `requirements.txt` version, and
+   that the patched driver imports. It runs on every PR and push to `main`/`dev` (CI is free on a
+   public repo) and weekly, because the base stage's apt packages still float. Never a self-hosted
+   runner (OPS-DEC-0117).
+5. **CI publishes nothing (the owner's call, S156).** Docker Hub stays built on marvin and pushed by
+   `marvinctl`, so Hub's amd64 digest keeps equaling prod's, and no Hub credential enters a public
+   repo's Actions. The owner wants ready-made arm64 images on Hub soon, because the goal is the
+   widest possible reach. That publishing path is its own design; one shape that keeps the digest
+   invariant is to push an arm64 image separately and join it with marvin's amd64 image into one
+   multi-arch tag with `docker buildx imagetools create`.
+
+### Consequences
+
+- The next image built on marvin carries the pins. The bytes it fetches are the ones v2.0.20 used,
+  so the pin alone changes no behavior.
+- Until arm64 images are published, a Pi user builds from source; the README says so and CI proves
+  that build.
+
+## DEC-0215 — Ready-made arm64 images: CI → GHCR, joined into Docker Hub's multi-arch tag (S156)
+
+**Date:** 2026-10-17 (S156, Opus 5.5). **Status:** accepted (the owner chose the shape, the tag
+scheme and the backfill in chat). Amends DEC-0214 item 5 and the CONSTANTS Docker Hub check. Applies
+OPS-DEC-0117 and OPS-DEC-0254.
+
+### Context
+
+DEC-0214 proved the image builds and runs on arm64 but published nothing. The owner wants
+ready-made Pi images, because the point of this project is the widest possible reach. Three fixed
+constraints: Hub's amd64 image must stay byte-identical to prod's (marvin builds it, `marvinctl
+push` publishes it, a tag that exists remotely is refused, `:latest` moves only by the owner's
+gesture); no self-hosted runner, ever; no metered service in a public path.
+
+Measured 2026-10-17:
+- Hub `:v2.0.20` is an OCI index holding one linux/amd64 manifest (`sha256:5dc8c3ae…`) and one
+  BuildKit attestation manifest. Any multi-arch index has a new index digest, so "Hub index digest
+  = prod's image ID" cannot hold on a multi-arch tag. The amd64 manifest inside it can.
+- A Docker Hub personal access token has one permission level across every repository the account
+  reaches; tokens scoped to one repository exist only for paid Team/Business organizations. This
+  account has one repository, so a PAT means write on it, `:latest` included.
+- `buildx imagetools create` copies each source's manifests to the target (`Resolver.Copy`),
+  so a ghcr.io source and a docker.io target should join directly. The docs show only same-repo
+  examples, so the first run is the proof; the fallback is pull, tag and push of the arm64 image to
+  Hub, then a same-repo join.
+- The repo has no Actions secrets, so `dockerhub-description.yml` has never run.
+- `workflow_dispatch` works only for a workflow on the default branch, which here is `main`
+  (production truth). So the backfill uses a tag trigger instead.
+
+### Options weighed
+
+1. **Actions pushes arm64 to Hub with a stored token.** The token is account-wide and can move
+   `:latest`. A GitHub environment with a required reviewer narrows the window but leaves a
+   long-lived write credential in a public repo's Actions. It still needs the join step, because
+   only marvin has the amd64 half, so it saves nothing over option 3.
+2. **The owner's arm64 Mac builds and pushes.** No CI credential, but no public build log, the
+   laptop's Docker state decides the bytes, every smoke test is a Class C `docker run`, and the
+   placement rule keeps long jobs off a sleeping Mac.
+3. **Actions pushes arm64 to GHCR with the job's own `GITHUB_TOKEN`; the laptop joins it into
+   Hub.** Chosen. The token is ephemeral and scoped to this repo's packages. The worst a compromised
+   job can do is publish a bad GHCR image, and that reaches Hub only through the join's checks and a
+   human go.
+
+### Decision
+
+1. **Tags on Docker Hub per release.** `:vX.Y.Z-amd64` is marvin's image, pushed with `marvinctl
+   push` (it replaces pushing `:vX.Y.Z` from marvin). Its index digest equals prod's image ID, which
+   is today's index-to-index check, unchanged. `:vX.Y.Z` is the joined multi-arch index: marvin's
+   amd64 manifest and its attestation, plus CI's arm64 manifest. Its linux/amd64 entry is prod's
+   amd64 manifest, checked at manifest level. `:latest` stays the owner's gesture after prod proof
+   (`imagetools create -t …:latest …:vX.Y.Z` copies the multi-arch index).
+2. **`.github/workflows/image-publish.yml`** runs on a pushed `vX.Y.Z` tag, a `backfill-vX.Y.Z` tag
+   (it builds the tree of the existing tag `vX.Y.Z`), or `workflow_dispatch` once the file is on
+   `main`. On GitHub-hosted `ubuntu-24.04-arm` it checks that the Dockerfile header names the
+   version, builds the tagged tree with the `org.opencontainers.image.revision`/`.version`/`.source`
+   labels, runs `scripts/smoke_image.sh` (shared with `image.yml`), and only then pushes
+   `ghcr.io/weatheredscientist/weewx-rtldavis:vX.Y.Z-arm64`. It refuses to overwrite an existing
+   tag. Permissions are `contents: read` and `packages: write`; there are no stored secrets, and both
+   checkouts are pinned to a commit. It never runs on a pull request. A tree from before DEC-0214
+   (unpinned) is built only if upstream's `main` `src.tgz` still hashes to DEC-0214's pin and
+   weewx-influx2's `master` is still the pinned commit.
+3. **`scripts/join_multiarch.sh vX.Y.Z`** runs on the laptop, which holds the Hub login. It is a dry
+   run by default. It checks that Hub's `-amd64` is linux/amd64 only (with `--expect-amd64`, that
+   its index digest equals prod's image ID), and that GHCR's `-arm64` is linux/arm64 only, labeled
+   with `git rev-parse vX.Y.Z^{commit}`. It prints the index, and refuses to overwrite an existing
+   `:vX.Y.Z` without `--replace`. With `--apply` (only after the owner's go in chat) it creates the
+   index from digest-pinned sources, then re-reads Hub and confirms both manifest digests.
+   `--amd64-only` makes `:vX.Y.Z` a carbon copy of `-amd64` (index digest = prod's) when a release
+   has no arm64. `--seed-amd64` is for the backfill.
+4. **First multi-arch tag: v2.0.20, backfilled.** Push a `backfill-v2.0.20` tag on a `dev` commit
+   that carries the workflow; once GHCR holds `:v2.0.20-arm64`, run `join_multiarch.sh v2.0.20
+   --seed-amd64 --replace --expect-amd64 sha256:f617c9ca…`. That carbon-copies `:v2.0.20` to
+   `:v2.0.20-amd64` (same digest, prod's), then re-points `:v2.0.20` at the joined index. The amd64
+   bytes don't change, and prod pulls nothing from Hub. Then the owner moves `:latest`, and the
+   backfill tag is deleted. This is the one time a published tag is rewritten.
+5. **One-time owner steps:** make the GHCR package public after its first push, if GitHub created
+   it private (the laptop's join and any reader then pull it anonymously). Optional: Hub's
+   immutable-tags setting for `^v[0-9]+\.[0-9]+\.[0-9]+(-amd64)?$` after the backfill, which keeps
+   `latest` mutable.
+
+### Consequences
+
+- A Pi on a 64-bit OS (Pi 3, 4, 5) pulls the same tag as everyone else. 32-bit Raspberry Pi OS
+  (armv7) is not covered.
+- The two halves share a commit, the DEC-0214 pins and the Dockerfile, but they are separate builds
+  at different times: the base image and apt packages float, so they are "same source, same
+  recipe", not one build.
+- The arm64 image is proved by CI's smoke test, not by a station: no one runs it on a live ISS
+  here. The README says so.
+- The release session gains two commands (`marvinctl tag` + `push` of `-amd64`, then the join) and
+  waits about one CI run for the arm64 image.
+- `dockerhub-description.yml` needs a Hub token this decision keeps out of GitHub. Replacing it with
+  a laptop-run sync, or deleting it, is a separate follow-up.
+
+## DEC-0216 — Count the decoder's CRC failures, change nothing it accepts (S157)
+
+**Date:** 2026-10-18 (S157, Sonnet 5.5). **Status:** accepted; built on PR #461, not deployed. The
+owner approved the design in chat and set two conditions: rigorous testing before it goes live, and
+no false positives that kill good data packets.
+
+### Context
+
+ROADMAP P1.9 step 1 (#458). The Go decoder drops every CRC-failing frame silently, so the size of
+the corrupted-second-decode problem (DEC-0033, DEC-0035) was unmeasured; only the CRC-valid
+survivors were visible, as phantom readings. #459 (a content-agnostic burst gate) needs the numbers
+to size its window, because a gate that is too wide swallows a real packet.
+
+### Decision
+
+1. **Count, don't decide.** `crcstat.Tracker` records each failure with the receiver's hop slot and
+   whether it lies within 100 ms of an accepted frame (the accepted frame first, or the failure
+   first). `main.go` drains the failures `Parse` records, feeds the tracker, and logs one summary a
+   minute. No value from the tracker is read by any accept, drop or hop path.
+2. **A separate package.** `package main` calls `flag.Parse()` and links librtlsdr at init, so it
+   cannot be unit-tested. The tracker lives in `crcstat/`; the patch is a sibling of the dupgate
+   patch and applies after it.
+3. **The hook is in the vendored `protocol`.** `main.go` imports `github.com/lheijst/rtldavis/protocol`
+   and builds against `vendor/`, so the top-level `protocol/` directory is dead code for this build.
+   A first attempt patched it and the build failed to see the field.
+4. **Safety is a checked property.** (a) A static audit: the patch removes exactly one line and every
+   added line in existing files is on an allow-list; a positive control proves the audit rejects added
+   control flow. (b) A differential run of the real `Parse` on valid, bit-flipped and duplicate frames:
+   byte-identical messages patched and unpatched; a positive control (a tree whose CRC branch no
+   longer drops) proves the comparison can fail. (c) The tracker against a brute-force oracle over
+   3,000 random streams; four mutations of it were each caught.
+5. **Driver.** The `crc_stats:` line is parsed strictly (a foreign or malformed line, or `near` greater
+   than `crc_fail`, is ignored, never half-counted), summed per archive period, and logged at INFO.
+
+### Not done
+
+Nothing ran against a dongle: Docker was down locally and there is no simulator-backed container.
+CI proves the image builds on amd64 and arm64. The live proof is a day of production counts after the
+next release; compare `rxCheckPercent`, the duplicate and repeat counts, and loop-packet rate before
+and after. Rollback is the previous image.
+
+### Consequences
+
+- The `near` count against the CRC-valid phantom rate gives #459 its window and its baseline.
+- A wider rule that drops frames, #459, must pass the same differential test and add a case for a real
+  packet inside the window.
+
+## DEC-0217 — The monitor's defaults describe no host, and `usb_reset.sh` finds the dongle by USB id (S159)
+
+**Date:** 2026-10-19 (S159, Opus 5.5). **Status:** accepted; the owner approved the design in chat,
+including discovery in place of a port read from the environment. Built on a feature branch for
+#453 (ROADMAP P0.8 phase 1). Changes no image and no running process: the monitor is a host daemon,
+and prod's unit sets every value this changes.
+
+### Context
+
+`weewx_monitor.py`'s defaults described the original Synology deployment. A monitor started with
+no environment got `REMEDY_MODE=usb_reset`, paths under `/volume1/docker/weewx-rtldavis`,
+`DOCKER_BIN=/usr/local/bin/docker`, and the maintainer's container name `weewx-rtldavis-v2`.
+`usb_reset.sh` then unbound USB port `1-3` as root, whatever device sat there. A new user who ran
+the monitor without the example unit got all of it, including a root unbind of a port that may hold
+another device. The issue proposed reading the reset port from the environment, and setting
+`WEEWX_CONTAINER` on prod's unit first because prod relied on the old default.
+
+Two findings changed that plan:
+
+- **The prod ordering step is not needed.** `WEEWX_CONTAINER` and `DOCKER_BIN` feed only
+  `build_recreate_cmd()`, the `docker inspect` behind the escalation email's recreate line.
+  heartofgold's tenant rule is "never grant the docker group" (`TENANT-ACCESS.md`), so on marvin
+  that inspect fails today and the email already says it could not build the command. Prod's unit
+  sets `REMEDY_MODE=none` and `WEEWX_RTLDAVIS_DIR` explicitly. No default changed here reaches
+  prod.
+- **A port from the environment would widen a root grant.** `usb_reset.sh` runs under a NOPASSWD
+  sudoers line scoped to its path with no arguments. Under sudo's default `env_reset` the value would
+  never arrive; under `sudo -E` or an `env_keep` entry the monitor's user could unbind any USB device
+  as root. The same holds for a command-line argument the grant does not pin.
+
+### Decision
+
+1. **`REMEDY_MODE` defaults to `none`.** Doing nothing is harmless on any host; a remedy armed by
+   default acts on hosts nobody checked, and the USB reset never demonstrably fixed a stall across
+   ~17 captured events (RESET_MAX_TRIES' comment, ERR-0005). The daemon's startup log says when
+   the variable is unset and that `usb_reset` was the old default, so an existing Synology install
+   can see why its resets stopped. `docs/DEPLOY.md` and `monitor.env.example` set it explicitly for
+   Synology. This reverses S107's "keep usb_reset as the default so an existing install doesn't
+   change silently": the log line is the mitigation, and a release note carries it.
+2. **`WEEWX_RTLDAVIS_DIR` defaults to the script's own directory.** Prod (`/srv/docker/weewx`), the
+   systemd example (`/srv/weewx`) and the Synology guide (`/volume1/docker/weewx-rtldavis`) all put
+   `weewx_monitor.py` in the directory that holds `logs/` and `weewx-data/`, so none needs the
+   variable. When the log or pidfile directory is missing, the daemon exits 2 with one line naming
+   the variable, before opening anything (it used to die on the pidfile's `FileNotFoundError`).
+   `--test-alert` imports skip the check.
+3. **Every other default follows.** `USB_RESET_SCRIPT` and `USB_FORENSICS_SCRIPT` are
+   `BASE_DIR/usb_reset.sh` and `BASE_DIR/usb_forensics.sh`; `DOCKER_BIN` is `$DOCKER_BIN`, else
+   `which docker`, else `/usr/local/bin/docker` (Synology's docker is off the default PATH);
+   `WEEWX_CONTAINER` is `weewx-rtldavis`, the README's name.
+4. **`usb_reset.sh` finds the port.** It scans `/sys/bus/usb/devices` for device entries (not
+   interfaces, not root hubs) whose `idVendor:idProduct` is an RTL2832U (`0bda:2838`, the RTL-SDR
+   Blog v3, or `0bda:2832`). Exactly one match is reset. None, or more than one, is refused on
+   stderr with exit 3 and nothing written to sysfs. With two dongles the admin sets `PORT` at the
+   top of the root-owned script; a pinned port must be a bus port name and must still carry an
+   RTL2832U id, or it is refused. `PORT` and `SYSFS` are assigned only inside the script, never read
+   from `$1` or the environment. It prints `usb_reset: port=<p> id=<vid:pid>`, which `do_reset()`
+   parses for its log line and email (there is no fixed port left for the monitor to read
+   `idVendor` from).
+5. **The forensics helper is told, not left to defaults.** `usb_reset.sh` passes the port and its
+   own directory to `usb_forensics.sh` explicitly, since sudo drops the environment, and finds the
+   helper beside itself. When the monitor runs the helper directly (the +verify capture) with no
+   port, the helper runs the same id scan read-only and records `unknown` unless exactly one dongle
+   matches; it no longer documents port `1-3` by default.
+
+### Proof
+
+`tests/test_monitor_defaults_453.py` (25 cases): defaults with every override unset; each override
+still wins; the docker PATH lookup and fallback; the daemon's exit 2 on a missing directory, with no
+traceback and nothing created; `do_reset()` parsing the discovered device; and `usb_reset.sh` run
+for real against a fake sysfs tree — discovery on any port, a generic RTL2832U, interfaces and root
+hubs skipped, refusal with nothing written for no dongle, two dongles, a pinned non-dongle and seven
+malformed port names. The fake tree is substituted into a test copy of the script's own `SYSFS=` and
+`PORT=` lines, because the real script reads neither from outside. Two mutations (falling back to
+`1-3` when nothing matches; skipping the pinned port's id check) were each caught. The existing
+reset tests in `tests/test_usb_forensics.py` moved to the same fake tree.
+
+### Not done
+
+Nothing ran on a Synology or against a real dongle: Foundation hosts no weewx workload since
+DEC-0141. Prod is unaffected (it pins every value). An existing Synology install that relied on
+the old default stops resetting after it upgrades the monitor until it sets
+`REMEDY_MODE=usb_reset`; the startup line and the release notes say so.
+
+### Consequences
+
+- The escalation email on a systemd host still offers a `docker kill/rm/run` recreate line when
+  docker is reachable, though the unit owns the container there. Out of scope here.
+- #453's remaining audit text (CODE_REVIEW_S145 item 12's other `/volume1` defaults in `ops/`
+  scripts) is maintainer tooling, not what a new user copies; left as is.
+
+## DEC-0218 — A rain reading after a rejected one is judged first against the last accepted count (S160)
+
+**Date:** 2026-10-21 (S160, Opus 5.5). **Status:** accepted; the owner chose option C of four on
+#465 in chat. Built on a feature branch. The driver is baked (DEC-0031), so nothing reaches prod
+until the next image release.
+
+### Context
+
+`_data_to_packet` resyncs `last_rain_count` to every clean frame's counter, even when
+`rain_delta_tips()` rejects the delta. That is deliberate: a rejected step can never freeze the
+baseline (DEC-0029's "rain-filter trick", DEC-0103's no-stall rule), and a rejected genuine storm
+delta is lost for that one step only (DEC-0056). The cost had never been written down: a counter
+that glitches **down** and comes back books the climb back as rain. 115 → 114 → 115 rejects the
+114, then books 114 → 115 as 1 tip. A 16-tip dip books 16 tips (0.16 in), the cap. The recovery
+step is plausible, on a clean frame, so nothing logs it. DEC-0054's co-rejection does not help: it
+fires only when another field in the same frame fails its bounds, and here the counter byte is
+the only thing wrong.
+
+The observation came from the weewx-packages continuation of lheijst/weewx-rtldavis (created
+2026-10-21, not endorsed by the original maintainers), whose maintainer noted on lheijst#22 that
+their version "preserves the previous baseline after rejection". Cited for the idea, not taken
+as a dependency.
+
+### Options (#465)
+
+- **A. Keep today's behavior.** Phantom of up to 16 tips per small downward glitch.
+- **B. Equality confirmation (the continuation's).** A rejected value does not move the baseline.
+  It becomes a candidate, adopted with 0 tips only when the next reading equals it. Fixes the
+  dip, but after a genuine over-cap jump during heavy rain the counter keeps climbing, so no
+  reading ever equals the candidate. Every reading is nulled until the rain slows below one tip
+  per rain message, then the whole interval is booked as 0. Our cap of 16 (theirs is 60) makes
+  that more reachable. Rejected.
+- **C. Anchor first, old check second.** Chosen.
+- **D. Log the signature and correct by hand.** Does not remove the phantom. Rejected, but C's log
+  line gives the same visibility.
+
+### Decision
+
+1. The driver keeps `last_accepted_rain_count` (the anchor): the last counter whose delta was
+   accepted, set on cold start and on every accepted reading, never on a rejected one and never
+   on a co-rejected frame.
+2. `rain_tips_with_anchor(anchor, last_count, new_count)`, a pure function beside
+   `rain_delta_tips()`. When the anchor differs from `last_count` (the previous reading was
+   rejected) and the new reading is plausible against the anchor, book that delta: the rejected
+   reading was the glitch. Otherwise return `rain_delta_tips(last_count, new_count)`, the old
+   check exactly.
+3. `last_rain_count` still resyncs to every clean reading. Because step 2's fallback is the old
+   check, C accepts every reading the old code accepted. It cannot stall and cannot null more. It
+   changes only how many tips are booked, and only when the new reading agrees with the anchor.
+4. Each time the anchor path books a reading, one INFO line:
+   `rain: counter recovered to N after rejected M; booked K tips against last accepted A (DEC-0218)`.
+   It does not contain `weewx_monitor.py`'s `RAIN_GLITCH_MARKER`, so it sends no email. It makes the
+   recovery rate countable from logs, a number #465 asked for and nobody has.
+
+### Evidence
+
+Exhaustive over every (anchor, rejected reading, next reading) triple, 0–127 each, with today's
+constants (cap 16, wraparound threshold −100):
+
+| Scenario | Old | C |
+|---|---|---|
+| Glitch, then recovery: truth stays at the anchor, next reading = anchor + 0..16 (241,536 cases) | wrong in every case: phantom tips, or a valid reading nulled | correct in every case |
+| Real storm jump over the cap (17–60 tips), then real progress | loses the jump | identical: 0 differences |
+| Real counter reset to 0–2, then real progress | correct | differs in 408 cases, all with an anchor of 18 or less: undercounts |
+
+The last row is the whole cost. It needs an ISS power cycle while the counter sits at 0–18 *and*
+enough rain before the next rain message to climb back within 16 of the old count.
+
+`tests/test_rain_anchor_465.py` (14 tests). Nine run named sequences through the real
+`_data_to_packet`. Against the pre-fix driver, the four phantom cases fail with exactly the
+predicted amounts: 1, 16, 7 and 5 tips (0.2, 3.2, 1.4 and 1.0 mm on the test's 0.2 mm bucket).
+The two anchor-field tests fail because the field does not exist. The three regression guards
+(storm jump, reset, repeated rejects) pass on both, as they should. The five exhaustive tests
+assert the table above on the pure helper, including its case counts (241,536 and 408) so a loop
+that silently ran nothing would fail. On the pre-fix driver they fail only at import. So a mutation
+disabling the anchor path was run separately: 6 failures, all on assertions, and the file was
+restored by sha.
+
+### Not addressed
+
+A reset from a count of 112 or above looks like a 127 → 0 wraparound, so both the old code and C
+book 128 − count tips (1–16) of phantom rain. It needs a battery swap late in the counter's cycle,
+so it's rare. Left as a footnote on #465.
+
+### Consequences
+
+- Ships with the next driver image release, not one of its own. It needs a version bump in the
+  banner (ws.6 → ws.7) at that release.
+- The continuation's maintainer could be told about B's heavy-rain stall. Not done here: it would
+  be a comment in a third-party org's tracker, and it's the owner's call.
+
+---
+
+## DEC-0219 — `influx.py` ships as a WeeWX extension, and the image installs it from there (S165)
+
+**Date:** 2026-10-25 (S165, Sonnet 5.5). **Status:** accepted; the owner approved the design in chat,
+including dropping the upstream download from the Dockerfile. Built on a feature branch. Issue #474
+(from dash#936, merged proposal `non-davis-platforms-s398.md` section A.2).
+
+### Context
+
+The uploader fixes (DEC-0007 and the items in `CHANGES-FROM-UPSTREAM.md`) reached only people who run
+our image: the Dockerfile fetched upstream's zip and copied our `influx.py` over it. Upstream
+`david-lutz/weewx-influx2` was last pushed 2021-02-22. As published it imports `distutils` (gone in
+Python 3.12) and uses `ssl._create_unverified_context()` for every https URL. Our PR
+(david-lutz/weewx-influx2#1) has had no maintainer response since 2026-07-13, and `matthewwall`'s
+original is InfluxDB 1.x. An adopter outside the image either cannot start WeeWX on a current
+Python or sends a token over unverified TLS.
+
+### Decision
+
+1. Release the patched file as an extension, on DEC-0211's pattern. The root `influx.py` is the only
+   copy. `extensions/influx/install.py` and `README.md` are the only new source files.
+2. Keep upstream's extension name `influx`, its `restful_services` class `user.influx.Influx` and its
+   `[StdRESTful][[Influx]]` placeholder stanza. Installing our zip over upstream's replaces it in
+   place (measured with WeeWX 5.5.2: upstream first, ours second, both exit 0, `weectl extension
+   list` shows one `influx 0.20+ws.2`). An existing config needs no edit.
+3. Version: `VERSION = "0.20+ws.N"` in `influx.py` and in `install.py`; the build script fails if
+   they disagree with each other or with the tag. Tag prefix `influx-v`, so `influx-v0.20+ws.2`;
+   release with `--latest=false` so "Latest" stays on the image releases. First release ships the
+   file unchanged at ws.2, the bytes prod already mounts; bump N only when the code changes.
+4. CI (`.github/workflows/influx.yml`): build the zip, install it into a fresh WeeWX 5.5.2 with the
+   Simulator driver, check the service is registered and the stanza exists, import `user.influx` on
+   Python 3.14, and construct the service from the installed config (asserts the version line and
+   that the upload thread was created). weewxd is not run: it logs to syslog, which a runner does not
+   keep, and the service needs nothing from a running engine to prove it loads.
+5. Owner's call, beyond the issue's minimum: the Dockerfile stops downloading weewx-influx2. It lays
+   the root `influx.py` and `extensions/influx/install.py` out as the zip does and runs
+   `weectl extension install` on that directory, so the image and the release install the same
+   thing from the same copy. The `INFLUX2_COMMIT` and `INFLUX2_SHA256` pins and the trailing
+   `COPY influx.py` are gone. `.dockerignore` admits `extensions/influx/install.py`.
+
+### Consequences
+
+- Prod keeps mounting the root `influx.py` (CONSTANTS' deploy-layers table): the file is unchanged,
+  so nothing is deployed. The Dockerfile change is baked-layer and rides the next image release;
+  the installed bytes are the same file.
+- The baked config stanza is unchanged in shape: the extension's config block matches upstream's,
+  and the ExtensionInstaller `version` is the only difference.
+- `image-publish.yml`'s legacy-tree check (trees from before DEC-0214) compared upstream's head with
+  the Dockerfile's `INFLUX2_COMMIT`; that commit now lives in the workflow.
+- `tests/test_dockerfile_pins.py` expected two pinned downloads; it now expects at least one.
+- A release is a separate step: push `influx-v0.20+ws.2` after merge. Not done in this session.
+- Not covered locally: a full image build. The image CI builds and smoke-tests it on the PR.
+
+
+### Correction (S169, found by the v2.0.21 build gate)
+
+Item 5 dropped the venv copy of `influx.py` along with the download, and the consequence list
+missed what that does. WeeWX appends `weewx-data/bin` to `sys.path` last (`weeutil/startup.py`), so
+the venv's own `user` package shadows the extension's install directory: in the v2.0.21 build
+`python -m user.influx` failed with "No module named user.influx", and a container with no mount
+would not have started weewxd (the baked config names `user.influx.Influx`). Prod was safe only
+because its mount supplies the file. The Dockerfile now also `COPY`s the same root `influx.py` into
+the venv `user` package (still one source file); `tests/test_dockerfile_pins.py` pins the line and
+`scripts/smoke_image.sh` imports `user.influx`, which the image CI never did. Also measured: the
+baked config's Influx placeholders are now `YOUR_INFLUX_ORG/BUCKET/TOKEN` (were `replace_me`), the
+only difference in the baked config sha (`ee62b7a2…` to `f67762d9…`).
+
+## DEC-0220 — The loop-JSON writer passes opt-in extra observations under weewx-influx2's names, never a per-packet delta, and reports its own cadence (S166)
+
+**Date:** 2026-10-25 (S166, Opus 5.5). **Status:** accepted; the owner approved the design as
+drafted, in chat. Design only, no code written yet. Issue #473, from eaglehunt-weather-dashboard#936 (merged
+proposal `docs/proposals/non-davis-platforms-s398.md`, section A.1).
+
+### Context
+
+`loop_json_writer.py` copies a fixed list of 13 observations (`_FIELDS`, lines 109-123) out of each
+LOOP packet. Since DEC-0211 anyone running another driver can install it as an extension, and for
+them the list is the limit: lightning, air quality, soil, leaf, indoor, extra temperature and
+humidity, battery and signal never reach `loop-data.txt`. Worse, the commonest non-Davis paths have
+no `radiation` at all. Both Ecowitt gateway drivers emit lux (`luminosity`, `illuminance`), weewx-sdr
+emits `lux` or `light`, AcuRite Atlas raw lux. So the solar tile, ET's input and the sky
+classifier's input are lost before any extra sensor is considered.
+
+Facts this design rests on, each checked at source (dash's research marked two of them inferred):
+
+1. The 13 existing output keys already follow weewx-influx2's naming rule, so it is one rule, not
+   two. `influx.py` names a field `<obs>_<label>`, where label is the observation's US unit
+   (`weewx.units.getStandardUnitType(US, obs)`) shortened by `UNIT_REDUCTIONS` (`influx.py:238`),
+   and leaves it bare when the label reduces to `None` (compass degrees, UV index, percent, epoch)
+   or the observation has no unit group. `rainRate` → `rainRate_inch_per_hour`, `cloudbase` →
+   `cloudbase_foot`, `windDir` → `windDir`: all 13 match.
+2. Per-packet deltas exist and the drivers mark them. weewx-contrib/weewx-gw1000's
+   `calculate_lightning_count` (`lightning_strike_count` = change in `lightningcount` since the last
+   period) and `calculate_rain` (`t_rain`, mapped to WeeWX `rain` by its default field map, and `p_rain`), and its installer writes `[Accumulator]`
+   entries with `extractor = sum` for exactly those three. weewx-ecowitt_local_http writes the same
+   three. weewx-sdr's `DEFAULT_DELTAS` are `rain` and `lightning_strike_count`, both already `sum` in
+   WeeWX's own accumulator defaults, along with `ET` and `windrun` (`accum.py` `DEFAULTS_INI`,
+   5.5.2). Our own driver's `rain` is a delta too; it is simply not in `_FIELDS`. So "the
+   accumulator extractor is `sum`" identifies every delta found, with no driver-specific list.
+3. The accumulator map is not ready when the writer is built. `weewx.accum.initialize(config_dict)`
+   runs in `StdArchive.__init__`, an archive service, and WeeWX builds `process_services` before
+   `archive_services` (`weewx.all_service_groups`). The writer runs in `process_services`, so at its
+   `__init__` the map holds only WeeWX's defaults, not the site's `[Accumulator]` section.
+4. Unit groups can come from the driver. `luminosity` is not in WeeWX's `obs_group_dict`; gw1000
+   adds it (`group_illuminance`) at import. Battery and signal observations have no group at all.
+   A name computed at runtime from the live registry therefore matches what `influx.py` computes in
+   the same process; a static table would not.
+5. The consumer passes the file through. eh-proxy's `/loopdata` parses it, checks `dateTime`
+   (`age > 30` → 503) and returns `{...parsed, skyState, ongoingEvents}`. Nothing in the dashboard
+   reads `writer`. New optional keys are invisible to it until a tile asks for one.
+6. The research's driver repository name is off by a hyphen: the gateway driver is
+   `weewx-contrib/weewx-gw1000` (file `bin/user/gw1000.py`), not `weewx-gw-1000`.
+
+### Options
+
+Delta handling (the open question on #473):
+
+- A. Cache-forward like every other field. Repeats a delta on every write for up to 300 s: one
+  strike becomes dozens. Rejected.
+- B. TTL 0: emit a delta only on the write of the packet that carried it. Still wrong. The file is
+  overwritten in place and read on the consumer's own clock, so a consumer reads one write twice
+  (double count) or not at all (lost count). A delta needs exactly-once delivery, which this
+  transport cannot give. Rejected.
+- C. A running sum since the writer started. Invents a quantity that resets on every restart and
+  matches nothing in the archive. Rejected.
+- D. Exclude: refuse any configured observation whose accumulator extractor is `sum`, with a
+  WARNING naming the cumulative counterpart to list instead (`lightningcount`, `dayRain`,
+  `rain_total`; gw1000 registers `lightningcount` as `group_count`), which is a state and safe to cache. Chosen.
+
+Key naming:
+
+- A. Free-form names in the config (`luminosity = light_lux`). Lets loop and archive diverge, and
+  the dashboard would need two registry entries. Rejected.
+- B. weewx-influx2's default rule under US units, computed at runtime. Chosen. It names the archive
+  field the same way only when the site's `[[Influx]]` keeps the defaults (`append_units_label` on,
+  no per-input `name`); the contract states the rule, not the site's uploader config.
+
+`loop_interval_s`:
+
+- A. Leave cadence to the consumer. A consumer starting cold cannot know it, and the dashboard's 30 s
+  gate fails every 60-300 s platform (proposal section B.2).
+- B. Emit the measured median gap. Chosen, on the same minor bump, so the contract moves once.
+
+### Decision
+
+1. Config: `[LoopJsonWriter] extra_fields = luminosity, lightning_distance, pm2_5`, a plain list of
+   WeeWX observation names, empty by default. A scalar list, not the `[[extra_fields]]` subsection
+   #473 sketched: there is nothing per field to say except a TTL, which goes in an optional
+   `[[ttl]]` subsection keyed by observation name (seconds; default `ttl_default`).
+2. Names: `<obs>_<label>` by fact 1's rule, with the label from `weewx.units` at runtime and the
+   reduction table copied from `influx.py` (the writer is a separate extension and cannot import
+   it). Bare when the label reduces to `None` or the observation has no group.
+3. Refusals, each one WARNING at startup or first packet, never an exception: a name whose
+   extractor is `sum` (D above); a name whose key equals an existing output key (`outTemp` →
+   already `outTemp_F`; ignored, INFO); a key in the reserved set (`dateTime`, `writer`,
+   `barometer_fetch_epoch`, `loop_interval_s`). The `sum` check reads `config_dict['Accumulator']`
+   first and falls back to `weewx.accum`'s defaults, because the map is not built yet (fact 3).
+4. Values: same `to_US()` packet, same bounded cache and expiry WARNING as the 13 (DEC-0006),
+   rounded nowhere. Group-less values pass as the driver set them.
+5. `loop_interval_s`: the median of the last 32 gaps between `new_loop` calls on a monotonic clock
+   (packet `dateTime` is whole seconds on rtldavis, `int(time.time() + 0.5)`, so its gaps alternate
+   2 and 3 s), one decimal, omitted until 8 gaps exist. Always on.
+6. Contract `loop_json_writer/1.1.0`: new optional keys only. With `extra_fields` empty, output
+   differs from 1.0.0 only by `writer` and `loop_interval_s`. Release `loopjson-v1.1.0`;
+   `install.py`'s version moves with `__version__` (CI checks the pair).
+7. INTERFACES section 1 gains one table of sensor classes, not one row per field:
+
+| Class | Example observations → keys (US, WeeWX 5.5.2 groups) | Kind |
+|---|---|---|
+| Light | `luminosity` → `luminosity_lux`, `illuminance` → `illuminance_lux` | state. Lux is not `radiation_Wpm2`; the writer converts nothing |
+| Lightning | `lightning_distance` → `lightning_distance_mile`, `lightning_last_det_time` (bare, an epoch), `lightningcount` → `lightningcount_count` (cumulative) | state. `lightning_strike_count` is a delta, refused |
+| Air quality | `pm2_5` → `pm2_5_microgram_per_meter_cubed`, `pm10_0` → `pm10_0_microgram_per_meter_cubed`, `co2` → `co2_ppm` | state |
+| Soil and leaf | `soilMoist1` → `soilMoist1_centibar`, `soilTemp1` → `soilTemp1_F`, `leafWet1` → `leafWet1_count`, `leafTemp1` → `leafTemp1_F` | state |
+| Extra and indoor T/H | `extraTemp1` → `extraTemp1_F`, `extraHumid1`, `inTemp` → `inTemp_F`, `inHumidity` | state |
+| Battery and signal | driver-defined names, bare, driver-defined meaning | state |
+| Piezo and second rain | `p_rain`, `t_rain`, `rain` refused; `p_rainRate` and cumulative totals pass | delta refused, totals state |
+
+   Each key is computed, not listed; the table's examples are what 5.5.2 produces, and the doc
+   says so.
+8. The dashboard needs nothing to stay working. Using an extra key is dash's own registry change,
+   one entry per key shared with the archive field. `loop_interval_s` is dash's to adopt in its
+   liveness gate (proposal B.2).
+
+### Tests that cannot pass vacuously (GOTCHAS section 1)
+
+The unit tests stub `weewx`, so a green there says nothing about real unit groups or the real
+accumulator (the S147 entry). Therefore:
+
+1. A real-WeeWX test file, run in `loopjson.yml`'s job (which already installs `weewx==5.5.2`) with
+   `REQUIRE_REAL_WEEWX=1`, under which a missing `weewx` fails instead of skipping. It asserts the
+   rule reproduces all 13 existing keys from their observation names, and the class table's keys
+   after registering `luminosity` the way gw1000 does.
+2. Drift: the writer's reduction table equals `influx.py`'s, read with `ast` (no import). Positive
+   control: one mutated entry turns it red.
+3. Delta refusal with engine order: build the writer, then call `weewx.accum.initialize` with an
+   `[Accumulator]` declaring `t_rain` `sum`, as `StdArchive` would. With `extra_fields = t_rain,
+   lightning_strike_count, luminosity`, `luminosity_lux` must be present and both deltas absent, on
+   the packet that carries them and on the next one that does not. The presence assertion is what
+   stops an emit-nothing bug from passing.
+4. Default compatibility: the same packet sequence through 1.0.0 (from git) and 1.1.0 with no
+   extras gives equal dicts apart from `writer` and `loop_interval_s`.
+5. `loop_interval_s` with an injected clock: absent below 8 gaps, the median after, and a
+   stopped feed does not change the last value (no write happens to change it).
+6. End to end: `prove_loopjson.sh` adds `extra_fields = inTemp, rain` to the Simulator station and
+   asserts `inTemp_F` present and `rain_in` absent in the real feed.
+7. Pre-fix proof: tests 1, 3, 5 and 6 run against 1.0.0 and fail on their assertions, not at
+   import or on a signature (shim if needed).
+
+### Implementation plan (each step its own commit on one branch, PR against `dev`)
+
+1. Naming: `_extra_key(obs)` plus the copied reduction table; tests 1 (rule half) and 2.
+2. Config parsing and refusals: `extra_fields`, `[[ttl]]`, reserved set, duplicate keys; offline
+   tests with the stub.
+3. Delta refusal resolved at first packet from `config_dict` plus defaults; test 3.
+4. Cache path: extras ride the existing cache loop; test 4.
+5. `loop_interval_s`; test 5.
+6. Version 1.1.0 in the writer and `install.py`; `prove_loopjson.sh` extension (test 6); extension
+   README.
+7. Docs: INTERFACES section 1 (the class table, `loop_interval_s`, the delta rule), CHANGELOG,
+   `weewx.conf.example` commented sample.
+8. Release `loopjson-v1.1.0` and a tracker note to dash#936; prod deploy of the mounted writer is
+   its own step (scp to the project root, restart, one feed read showing `loop_interval_s`).
+
+### Consequences
+
+- Prod changes only by one new key. Our station needs no extras today.
+- A site whose `[[Influx]]` renames fields loses the shared name; documented, not prevented.
+- Sibling DEC-0219 (#474) moves `influx.py` into an extension but keeps the root file, so test 2's
+  path stands.
+- Not addressed, and its own issue: our live loop has no `windGust_mph`. The rtldavis driver parses
+  message 9's 10-minute gust and drops it (`rtldavis.py:2401-2412`). WeeWX's `windGust10`
+  (extractor `last`) fits it. That is a baked driver change with its own semantics question (a
+  10-minute maximum, not an instant gust), so it stays out of this writer change.
+
+## DEC-0221 — `loop_interval_s` is the gap between writes of `loop-data.txt`, reported from the first gap and only inside [1, 3600] s (S168)
+
+Date: 2026-10-26 (S168, Opus 5.5). Status: accepted; the owner approved it as drafted,
+in chat. Design only. Amends DEC-0220 decision item 5 and its implementation plan's steps 5 and 7. Everything
+else in DEC-0220 stands. Prompted by dash's four contract asks on #473 (2026-10-26), after dash
+merged its DEC-0404 (eaglehunt-weather-dashboard PR #1067): the `/loopdata` gate is now
+`max(30, 3 × cadence)`, where the cadence comes from the feed's `loop_interval_s` when it is a finite
+number in [1, 3600]. Failing that, the proxy uses the last such value it has seen, then the site fact
+`data.loop_cadence_s`, then 2.5 s.
+
+### Context
+
+DEC-0220 item 5 emitted `loop_interval_s` only once 8 gaps existed. Dash measured the cost. On a 300 s
+platform the key is missing for 40 minutes after every WeeWX restart. The proxy's memory covers that
+only while the proxy itself keeps running, so after a host reboot the dashboard shows "station
+offline" for those 40 minutes unless the site has set `data.loop_cadence_s`. Dash also asked that the
+quantity be defined as the file's cadence, not the sensor's, and that the producer and the consumer
+use the same range.
+
+### Decisions, one per ask
+
+1. Cold start: report from the first gap. Once two writes have happened, `loop_interval_s` is the
+   median of the gaps that exist, up to the last 32. The 8-gap floor is dropped. Reasons:
+   - A short early estimate is harmless. The consumer's gate never goes below 30 s, and the median
+     corrects itself within three gaps. For example, if a driver's first poll comes 1 s after startup
+     and the next ones come 300 s apart, the medians run 1, 150.5, 300.
+   - A missing value costs the whole wait.
+   - We also tell slow-platform adopters to set `data.loop_cadence_s` on a cold host: before the
+     second write the key cannot exist, and at 300 s that wait is 5 minutes.
+2. The quantity: seconds between consecutive successful writes of `loop-data.txt`.
+   - The clock is monotonic and is read after `os.replace` succeeds, so a failed write neither counts
+     nor resets anything.
+   - The writer writes once per LOOP packet, so for a driver that emits bursts this is the burst
+     cadence, not any one sensor's. AcuRite's two alternating field sets come out at 18 s; Tempest's
+     3 s `rapid_wind` packets come out at 3 s beside its 60 s observations.
+   - Liveness is about the file, so this is the right number. INTERFACES section 1 states it in those
+     words.
+3. INTERFACES section 1's liveness paragraph moves to "within `max(30, 3 × loop_interval_s)` s"
+   and cites dash DEC-0404. It lands with the 1.1.0 build (DEC-0220 step 7), not now.
+   - The paragraph also says what the consumer does when the key is absent: a 1.0.x writer, or before
+     the second write. It falls back to the proxy's memory, then the site's `data.loop_cadence_s`,
+     then 30 s.
+   - For our own station the gate is unchanged: a 2.5 s cadence gives `max(30, 7.5)` = 30 s.
+4. Range: omit outside [1, 3600], never clamp.
+   - The value is rounded to one decimal first, and the range is checked on the rounded value, so the
+     writer emits exactly what the consumer will accept.
+   - A clamped value would state a cadence the station does not have. Omitting it lets the consumer
+     fall back the way it already does for a missing key.
+   - The edges really are edge cases. A median under 1 s would gate at 30 s anyway, and a loop slower
+     than an hour is not a live feed.
+   - One DEBUG line the first time the value leaves the range.
+
+### Test changes (DEC-0220's tests section, test 5)
+
+The test injects a clock. It asserts:
+- the key is absent after one write and present after the second;
+- the medians follow the sequence 1, 150.5, 300 for gaps of 1, 300, 300;
+- the key is absent for a 0.94 s median (rounds to 0.9) and for a 3600.06 s median (rounds to 3600.1),
+  and present at exactly 1.0 and at 3600.0;
+- a failed write, simulated by making `os.replace` raise, adds no gap.
+
+The presence assertions are what keep an emit-nothing bug from passing.
+
+### Consequences
+
+- No change to DEC-0220's contract version. `loop_json_writer/1.1.0` still brings `loop_interval_s`
+  in as a new optional key.
+- Dash needs nothing more. Its range check, its fallbacks and its 30 s floor already match this.

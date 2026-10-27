@@ -1,5 +1,5 @@
 #--------------------------------------------
-# weewx-rtldavis v2.0.20
+# weewx-rtldavis v2.0.21
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
@@ -41,13 +41,25 @@ RUN mkdir -p /etc/modprobe.d && \
     echo "blacklist dvb_usb_rtl28xxu" > /etc/modprobe.d/blacklist_rtlsdr.conf
 
 #--------------------------------------------
+# Upstream sources, pinned (DEC-0214). Each download names one commit and its sha256, so a public
+# build gets the same bytes every time, and a changed or replaced upstream file stops the build
+# instead of slipping in. Moving a pin is a deliberate change: new commit, new sha256, same PR.
+#   src.tgz: the last commit that touched the file (2026-01-03). A raw file at a commit is a git
+#     blob, so its bytes cannot change. v2.0.20 was built from these same bytes off `main`.
+#--------------------------------------------
+ARG RTLDAVIS_SRC_COMMIT=bfa9e3d9e1a9fc198fcf81124b709d63d8c30a1f
+ARG RTLDAVIS_SRC_SHA256=7c1a7de1923d2c96844adfba51ec0497f5e8f0a629cc3a6ba64a86d62f26e368
+
+#--------------------------------------------
 # Build librtlsdr and rtldavis Go binary from src.tgz
 # librtlsdr is bundled in src.tgz — no git clone needed
 #--------------------------------------------
 COPY patch/rtldavis-dupgate.patch /tmp/rtldavis-dupgate.patch
+COPY patch/rtldavis-crcstats.patch /tmp/rtldavis-crcstats.patch
 
-RUN curl -L -o /tmp/src.tgz \
-    https://github.com/weewx-contrib/weewx-rtldavis/raw/refs/heads/main/src.tgz && \
+RUN curl -fsSL -o /tmp/src.tgz \
+    "https://github.com/weewx-contrib/weewx-rtldavis/raw/${RTLDAVIS_SRC_COMMIT}/src.tgz" && \
+    echo "${RTLDAVIS_SRC_SHA256}  /tmp/src.tgz" | sha256sum -c - && \
     cd /tmp && tar zxf src.tgz && \
     cd /tmp/src/librtlsdr && \
     mkdir build && cd build && \
@@ -58,18 +70,25 @@ RUN curl -L -o /tmp/src.tgz \
     patch -p1 --batch --forward < /tmp/rtldavis-dupgate.patch && \
     echo "dupgate (DEC-0135): the duplicate filter is time-gated; -dupwindow must appear twice below:" && \
     test "$(grep -c dupwindow main.go)" = "2" && \
+    patch -p1 --batch --forward < /tmp/rtldavis-crcstats.patch && \
+    echo "crcstats (#458): CRC failures are counted, measurement only; crc_stats must be built into main.go and crcstat/crcstat.go:" && \
+    test "$(grep -c crcT main.go)" = "4" && test -f crcstat/crcstat.go && \
     GOBIN=/usr/local/bin go install -buildvcs=false -v .
 
 #--------------------------------------------
 # Install weewx and configure for rtldavis
 #--------------------------------------------
 COPY requirements.txt /tmp/requirements.txt
+# The uploader installs as the extension this repo releases (DEC-0219): the root influx.py is the
+# only copy, laid out here the way the release zip lays it out. No upstream download.
+COPY extensions/influx/install.py /tmp/weewx-influx/install.py
+COPY influx.py /tmp/weewx-influx/bin/user/influx.py
 RUN python3 -m venv --copies /opt/weewx-venv && \
     /opt/weewx-venv/bin/pip install -q -r /tmp/requirements.txt && \
     /opt/weewx-venv/bin/weectl station create /opt/weewx-data --no-prompt && \
     /opt/weewx-venv/bin/weectl extension install /tmp/src/weewx-rtldavis \
         --yes --config=/opt/weewx-data/weewx.conf && \
-    /opt/weewx-venv/bin/weectl extension install https://github.com/david-lutz/weewx-influx2/archive/master.zip --yes --config=/opt/weewx-data/weewx.conf && \
+    /opt/weewx-venv/bin/weectl extension install /tmp/weewx-influx --yes --config=/opt/weewx-data/weewx.conf && \
     /opt/weewx-venv/bin/weectl station reconfigure \
         --driver=user.rtldavis --no-prompt --config=/opt/weewx-data/weewx.conf && \
     sed -i 's/frequency = EU/frequency = US/' /opt/weewx-data/weewx.conf && \
@@ -79,6 +98,7 @@ RUN python3 -m venv --copies /opt/weewx-venv && \
     sed -i 's/cmd = \/usr\/local\/bin\/rtldavis \[options\]/cmd = \/usr\/local\/bin\/rtldavis/' \
         /opt/weewx-data/weewx.conf && \
     sed -i 's/debug = 0/debug = 0/' /opt/weewx-data/weewx.conf && \
+    rm -f /opt/weewx-data/weewx.conf.[0-9]* && \
     rm -rf /tmp/*
 
 #--------------------------------------------
@@ -124,6 +144,9 @@ COPY pressure_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/press
 COPY owm.py /opt/weewx-venv/lib/python3.14/site-packages/user/owm.py
 COPY windy.py /opt/weewx-venv/lib/python3.14/site-packages/user/windy.py
 COPY wcloud.py /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
+# The extension install above puts influx.py in /opt/weewx-data/bin/user, which the venv's own
+# `user` package shadows (weewx appends that directory to sys.path last), so `user.influx` must
+# also live here or weewxd cannot import it. Same root file, no second copy in the repo.
 COPY influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py
 
 #--------------------------------------------
@@ -166,8 +189,7 @@ RUN apt-get update && apt-get install -y \
     rtl-sdr \
     && apt-get clean autoclean \
     && apt-get autoremove --yes \
-    && rm -rf /var/lib/{apt,dpkg,cache,log} \
-    && rm -rf /usr/share/{doc,man,info} \
+    && rm -rf /var/lib/apt/lists/* /usr/share/man /usr/share/info \
     && ln -sf /usr/bin/python3 /opt/weewx-venv/bin/python3 \
     && chmod +x /entrypoint.sh
 

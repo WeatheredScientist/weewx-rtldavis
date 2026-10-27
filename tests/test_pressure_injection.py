@@ -58,13 +58,16 @@ if not hasattr(getattr(weewx_engine, "StdService", None), "bind"):
 weewx_units = _mod("weewx.units")
 weewx_units.to_US = getattr(weewx_units, "to_US", lambda pkt: pkt)
 weewx.engine, weewx.units = weewx_engine, weewx_units
+weewx.US = getattr(weewx, "US", 1)
+weewx.METRIC = getattr(weewx, "METRIC", 16)
+weewx.METRICWX = getattr(weewx, "METRICWX", 17)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pressure_service as ps  # noqa: E402
 
 
 def _make_fetcher():
-    cfg = {'DavisPressure': {'api_key': 'test-key', 'api_secret': 'test-secret',
+    cfg = {'DavisPressure': {'api_key': 'YOUR_API_KEY', 'api_secret': 'YOUR_API_SECRET',
                              'station_id': '1'}}
     return ps.DavisPressureFetcher(engine=None, config_dict=cfg)
 
@@ -239,3 +242,39 @@ def test_failed_fetch_leaves_last_success_untouched(monkeypatch):
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_placeholder_station_id_does_not_crash_and_does_not_bind():
+    """#451: the example config ships station_id = YOUR_STATION_ID. int() on it
+    raised ValueError at service init and WeeWX did not start. It must log the
+    missing-credentials path and skip binding instead."""
+    cfg = {'DavisPressure': {'api_key': 'YOUR_API_KEY', 'api_secret': 'YOUR_API_SECRET',
+                             'station_id': 'YOUR_STATION_ID'}}
+    f = ps.DavisPressureFetcher(engine=None, config_dict=cfg)
+    assert f.station_id == 0
+    assert not hasattr(f, '_bound'), "a service with no usable station id must not bind"
+
+
+def test_us_packet_gets_inhg_unchanged():
+    f = _make_fetcher()
+    f.last_pressure = 30.04
+    f.last_station_pressure = 29.46
+    f.last_fetch = ps.time.time()
+    ev = _event(usUnits=weewx.US, barometer=None, pressure=None)
+    f.new_loop_packet(ev)
+    assert ev.packet['barometer'] == 30.04
+    assert ev.packet['pressure'] == 29.46
+
+
+def test_metric_packets_get_mbar_not_inhg():
+    """#451: the fetched value is inHg; a METRIC or METRICWX packet carries mbar,
+    so injecting 30.04 raw put a ~1 mbar 'pressure' in the packet."""
+    for units in (weewx.METRIC, weewx.METRICWX):
+        f = _make_fetcher()
+        f.last_pressure = 30.04
+        f.last_station_pressure = 29.46
+        f.last_fetch = ps.time.time()
+        ev = _event(usUnits=units, barometer=None, pressure=None)
+        f.new_loop_packet(ev)
+        assert abs(ev.packet['barometer'] - 30.04 * 33.8639) < 1e-6
+        assert abs(ev.packet['pressure'] - 29.46 * 33.8639) < 1e-6
