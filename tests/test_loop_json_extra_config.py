@@ -211,3 +211,83 @@ def test_refusal_is_logged_once_and_holds_on_later_packets(tmp_path, caplog, sum
         w.new_loop(types.SimpleNamespace(packet={'dateTime': t, 'outTemp': 70.0}))
     assert w.extras == [('luminosity', 'luminosity_lux')]
     assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
+
+
+# --- extras ride the cache (DEC-0220 step 4) ---------------------------------------
+
+def _feed(w):
+    import json
+    with open(w.path) as f:
+        return json.load(f)
+
+
+def _step(w, t, **fields):
+    w.new_loop(types.SimpleNamespace(packet=dict(fields, dateTime=t)))
+    return _feed(w)
+
+
+def test_extra_value_is_written_cached_forward_and_expires(tmp_path, caplog):
+    w = _writer(tmp_path, extra_fields=['luminosity'], ttl={'luminosity': '60'})
+    assert _step(w, 1000, outTemp=70.0, luminosity=500.0)['luminosity_lux'] == 500.0
+    assert _step(w, 1030, outTemp=70.1)['luminosity_lux'] == 500.0, 'cached forward'
+    caplog.set_level(logging.INFO)
+    feed = _step(w, 1100, outTemp=70.2)
+    assert 'luminosity_lux' not in feed, 'past its 60 s TTL: omitted, not served stale'
+    assert feed['outTemp_F'] == 70.2, 'the standard fields are untouched'
+    assert any(r.levelno == logging.WARNING and 'luminosity_lux expired' in r.message
+               for r in caplog.records)
+    assert _step(w, 1103, outTemp=70.3, luminosity=480.0)['luminosity_lux'] == 480.0
+
+
+def test_extra_uses_the_default_ttl_without_an_entry(tmp_path):
+    w = _writer(tmp_path, extra_fields=['luminosity'])
+    _step(w, 1000, luminosity=500.0)
+    assert _step(w, 1000 + w.ttl_default, outTemp=70.0)['luminosity_lux'] == 500.0
+    assert 'luminosity_lux' not in _step(w, 1000 + w.ttl_default + 1, outTemp=70.0)
+
+
+def test_group_less_string_value_passes_untouched(tmp_path, monkeypatch):
+    w = _writer(tmp_path, extra_fields=['txBatteryStatus'])
+    assert _step(w, 1000, txBatteryStatus='OK')['txBatteryStatus'] == 'OK'
+
+
+def test_unlisted_observation_in_the_packet_is_not_written(tmp_path):
+    w = _writer(tmp_path, extra_fields=['luminosity'])
+    feed = _step(w, 1000, outTemp=70.0, luminosity=500.0, pm2_5=12.0)
+    assert feed['luminosity_lux'] == 500.0 and 'pm2_5_microgram_per_meter_cubed' not in feed
+
+
+# Golden output of the 1.0.0 writer (git: origin/dev at S170) for this packet sequence,
+# `writer` key removed. With no extras configured the output must not change (DEC-0220 item 6).
+_GOLDEN_SEQUENCE = [
+    {'dateTime': 1000, 'windSpeed': 4.0, 'windDir': 90.0, 'outTemp': 61.5,
+     'outHumidity': 70, 'barometer': 29.9},
+    {'dateTime': 1003, 'windSpeed': 5.0, 'radiation': 120.0, 'UV': 2.0, 'rainRate': 0.0},
+    {'dateTime': 1100, 'outTemp': 61.8, 'windSpeed': 0.0},
+    {'dateTime': 1400, 'outTemp': 62.0},
+    {'dateTime': 1404, 'windSpeed': 3.0, 'windDir': 100.0},
+]
+_GOLDEN_OUTPUT = [
+    {'windSpeed_mph': 4.0, 'windDir': 90.0, 'outTemp_F': 61.5, 'outHumidity': 70,
+     'barometer_inHg': 29.9, 'dateTime': 1000},
+    {'windSpeed_mph': 5.0, 'windDir': 90.0, 'outTemp_F': 61.5, 'outHumidity': 70,
+     'barometer_inHg': 29.9, 'rainRate_inch_per_hour': 0.0, 'radiation_Wpm2': 120.0,
+     'UV': 2.0, 'dateTime': 1003},
+    {'windSpeed_mph': 0.0, 'windDir': 90.0, 'outTemp_F': 61.8, 'outHumidity': 70,
+     'barometer_inHg': 29.9, 'rainRate_inch_per_hour': 0.0, 'radiation_Wpm2': 120.0,
+     'UV': 2.0, 'dateTime': 1100},
+    {'windSpeed_mph': 0.0, 'outTemp_F': 62.0, 'dateTime': 1400},
+    {'windSpeed_mph': 3.0, 'windDir': 100.0, 'outTemp_F': 62.0, 'dateTime': 1404},
+]
+
+
+def test_no_extras_output_equals_the_1_0_0_golden(tmp_path):
+    w = _writer(tmp_path)
+    got = []
+    for pkt in _GOLDEN_SEQUENCE:
+        fields = {k: v for k, v in pkt.items() if k != 'dateTime'}
+        feed = _step(w, pkt['dateTime'], **fields)
+        feed.pop('writer')
+        got.append(feed)
+    assert len(got) == len(_GOLDEN_OUTPUT) == 5, 'the golden is not empty'
+    assert got == _GOLDEN_OUTPUT

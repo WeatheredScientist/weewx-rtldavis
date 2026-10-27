@@ -342,8 +342,10 @@ class LoopJsonWriter(StdService):
         # idiom dewpoint_service.py uses, so the two caches age identically.
         now = pkt.get('dateTime') or time.time()
 
-        # Update cache with any non-None values from this packet
-        for pkt_key, out_key in _FIELDS:
+        # Update cache with any non-None values from this packet. The opt-in
+        # extras (DEC-0220) share the cache, its TTLs and the expiry warning
+        # with the 13 standard fields; there is no second code path.
+        for pkt_key, out_key in _FIELDS + self.extras:
             val = pkt.get(pkt_key)
             if val is not None:
                 self._cache[out_key] = (val, now)
