@@ -62,7 +62,9 @@ served stale; consumers already must treat any field as possibly-missing
 import json
 import logging
 import os
+import statistics
 import time
+from collections import deque
 import weewx
 import weewx.units
 from weewx.engine import StdService
@@ -150,6 +152,12 @@ _RESERVED_KEYS = frozenset(
     ['dateTime', 'writer', 'barometer_fetch_epoch', 'loop_interval_s'])
 
 
+# loop_interval_s (DEC-0221): the median of up to this many gaps, reported inside the
+# range the consumer accepts (dash DEC-0404).
+_GAPS_KEPT = 32
+_INTERVAL_MIN_S = 1
+_INTERVAL_MAX_S = 3600
+
 # Cumulative observations to suggest in place of a refused delta.
 _CUMULATIVE_HINTS = {
     'lightning_strike_count': 'lightningcount',
@@ -218,6 +226,13 @@ class LoopJsonWriter(StdService):
         # [Accumulator] section from the config, at the first packet (DEC-0220).
         self._accumulator_cfg = config_dict.get('Accumulator', {})
         self._deltas_checked = False
+        # loop_interval_s (DEC-0221): seconds between consecutive SUCCESSFUL
+        # writes of loop-data.txt, on a monotonic clock, as the median of the
+        # last _GAPS_KEPT gaps. A gap is known only after the write that ends
+        # it, so the key first appears in the third file written.
+        self._clock = time.monotonic
+        self._last_write = None
+        self._gaps = deque(maxlen=_GAPS_KEPT)
         self._cache = {}      # out_key -> (value, timestamp last seen)
         self._expired = set()  # out_keys currently expired, for one-shot logging
         # out_keys whose current expiry was the benign calm-windDir case
@@ -295,6 +310,26 @@ class LoopJsonWriter(StdService):
             return False
         val, seen = cached
         return val == 0.0 and (now - seen) <= self._ttl('windSpeed_mph')
+
+    def _note_write(self):
+        """Record a successful loop-data.txt write; the clock is read after
+        os.replace returns, so a failed write adds no gap and resets nothing."""
+        now = self._clock()
+        if self._last_write is not None:
+            self._gaps.append(now - self._last_write)
+        self._last_write = now
+
+    def _loop_interval(self):
+        """The median gap rounded to one decimal, or None when no gap exists or
+        the rounded value falls outside [1, 3600] s. Omitted, never clamped: a
+        clamped value would state a cadence the station does not have, and the
+        consumer (dash DEC-0404) already falls back for a missing key."""
+        if not self._gaps:
+            return None
+        value = round(statistics.median(self._gaps), 1)
+        if _INTERVAL_MIN_S <= value <= _INTERVAL_MAX_S:
+            return value
+        return None
 
     def _extractor(self, obs):
         """Accumulator extractor for obs: the site's [Accumulator] first, then
@@ -397,6 +432,9 @@ class LoopJsonWriter(StdService):
             data['barometer_fetch_epoch'] = fe
         data['dateTime'] = pkt.get('dateTime')
         data['writer'] = 'loop_json_writer/' + __version__
+        interval = self._loop_interval()
+        if interval is not None:
+            data['loop_interval_s'] = interval
 
         # loop-data.txt on EVERY packet -- it carries the liveness signal.
         # current.json only when its interval has elapsed (DEC-0093). The first
@@ -412,6 +450,8 @@ class LoopJsonWriter(StdService):
                 with open(tmp, 'w') as f:
                     json.dump(data, f)
                 os.replace(tmp, path)
+                if path == self.path:
+                    self._note_write()
                 if path == self.current_path:
                     # only on success -- a failed write retries next packet
                     self._current_last = now

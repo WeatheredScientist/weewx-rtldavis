@@ -288,6 +288,80 @@ def test_no_extras_output_equals_the_1_0_0_golden(tmp_path):
         fields = {k: v for k, v in pkt.items() if k != 'dateTime'}
         feed = _step(w, pkt['dateTime'], **fields)
         feed.pop('writer')
+        feed.pop('loop_interval_s', None)  # the one new key in 1.1.0 (DEC-0221)
         got.append(feed)
     assert len(got) == len(_GOLDEN_OUTPUT) == 5, 'the golden is not empty'
     assert got == _GOLDEN_OUTPUT
+
+
+# --- loop_interval_s (DEC-0221 step 5) ---------------------------------------------
+
+def _interval_feeds(tmp_path, clock_times, monkeypatch=None, fail_on=()):
+    """Feed one packet per clock reading; return each file's loop_interval_s (or None)."""
+    w = _writer(tmp_path)
+    ticks = iter(clock_times)
+    w._clock = lambda: next(ticks)
+    out = []
+    for i in range(len(clock_times) + len(fail_on)):
+        if i in fail_on:
+            real = ljw.os.replace
+            ljw.os.replace = lambda *a: (_ for _ in ()).throw(OSError('disk full'))
+            try:
+                w.new_loop(types.SimpleNamespace(packet={'dateTime': 1000 + i}))
+            finally:
+                ljw.os.replace = real
+            out.append('failed')
+            continue
+        out.append(_step(w, 1000 + i, outTemp=70.0).get('loop_interval_s'))
+    return out
+
+
+def test_interval_absent_until_a_gap_exists_then_median_from_the_first_gap(tmp_path):
+    # writes at 0, 1, 301, 601 give gaps 1, 300, 300: the key shows from the third file
+    got = _interval_feeds(tmp_path, [0.0, 1.0, 301.0, 601.0])
+    assert got == [None, None, 1.0, 150.5]
+
+
+def test_interval_median_settles(tmp_path):
+    got = _interval_feeds(tmp_path, [0.0, 1.0, 301.0, 601.0, 901.0])
+    assert got[-1] == 300.0
+
+
+def test_interval_is_omitted_outside_one_to_3600_never_clamped(tmp_path):
+    assert _interval_feeds(tmp_path, [0.0, 0.4, 0.8])[2] is None        # 0.4 s
+    assert _interval_feeds(tmp_path, [0.0, 4000.0, 8000.0])[2] is None  # 4000 s
+
+
+def test_interval_range_is_checked_on_the_rounded_value(tmp_path):
+    assert _interval_feeds(tmp_path, [0.0, 0.96, 1.92])[2] == 1.0       # 0.96 rounds to 1.0
+    assert _interval_feeds(tmp_path, [0.0, 3600.0, 7200.0])[2] == 3600.0
+    assert _interval_feeds(tmp_path, [0.0, 0.94, 1.88])[2] is None      # 0.94 rounds to 0.9
+
+
+def test_a_failed_write_adds_no_gap(tmp_path):
+    # write 0 at t=0 ok; write 1 fails (no clock read); write 2 ok at t=10; write 3 at t=20
+    got = _interval_feeds(tmp_path, [0.0, 10.0, 20.0], fail_on=(1,))
+    assert got == [None, 'failed', None, 10.0]
+
+
+def test_only_the_last_32_gaps_count(tmp_path):
+    # 16 gaps of 100 s, then 32 gaps of 5 s: the 100 s gaps have all aged out
+    times = [0.0]
+    for gap in [100.0] * 16 + [5.0] * 32:
+        times.append(times[-1] + gap)
+    assert _interval_feeds(tmp_path, times)[-1] == 5.0
+
+
+def test_interval_also_rides_current_json(tmp_path):
+    import json
+    w = _writer(tmp_path)
+    ticks = iter([0.0, 2.0, 4.0])
+    w._clock = lambda: next(ticks)
+    for t in (1000, 1002, 1004):
+        w.new_loop(types.SimpleNamespace(packet={'dateTime': t, 'outTemp': 70.0}))
+    w.current_interval = 0
+    ticks = iter([6.0])
+    w._clock = lambda: next(ticks)
+    w.new_loop(types.SimpleNamespace(packet={'dateTime': 1006, 'outTemp': 70.0}))
+    with open(w.current_path) as f:
+        assert json.load(f)['loop_interval_s'] == 2.0
