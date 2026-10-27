@@ -511,23 +511,26 @@ and is still there. What the Go side has shown, and where each stands:
   (`patch/rtldavis-dupgate.patch`, DEC-0135, v2.0.15), offered as lheijst/rtldavis#7. Done.
 - **One burst decoded twice, the second copy sometimes corrupted** (DEC-0033, DEC-0035): the clean
   copy is dropped as a duplicate; a corrupted one differs, so it passes the filter, and about 1 in
-  65,536 also passes CRC and arrives as a valid-looking frame. Only the Python filters catch it, and
-  only when the value is impossible. Open.
+  65,536 also passes CRC and arrives as a valid-looking frame. Cause found at S173 (DEC-0223): a
+  burst whose matching preamble offsets cross a 512-sample block boundary is sliced in both blocks.
+  Gate built, not deployed.
 - **CRC failures were dropped silently** (`protocol.go` ~L218): counted since v2.0.21 (#458,
-  DEC-0216), so the size of the problem above is being measured. Counting only.
+  DEC-0216). Baseline: about 9,700 near-burst failures a day beyond chance, so roughly one
+  CRC-valid phantom a week. Done.
 - **Which upstream version the bundled source is** (`BACKLOG.md`, open since S21): #450 pins it;
-  nobody has diffed it against `lheijst/rtldavis` master. Open.
+  nobody has diffed it against `lheijst/rtldavis` master. Open, not blocking.
 
 Steps, in order:
 
-- [~] #458 **Measure.** *(built S157, DEC-0216, PR #461; in prod with v2.0.21 since 2026-10-26; the
-      day of counts is `BOOT.md` job 4)* Count CRC failures per hop slot and how many fall within ~100 ms of an
-      accepted frame; surface it through the driver's counter line; diff the pinned source against
-      upstream. Log only, no data change. A day of production counts is the baseline.
-- [ ] #459 **Fix.** A content-agnostic burst gate in Go, keyed on the receiver's own hop slot (the
-      frame's ID can be the corrupted part), designed against #458's numbers. Credits LloydR's
-      lheijst/rtldavis#2, which gates at 2 s on the frame ID. The Python filters stay as the
-      backstop. Design first (tier: frontier).
+- [x] #458 **Measure.** *(built S157, DEC-0216, PR #461; in prod with v2.0.21 since 2026-10-26;
+      baseline recorded and closed S173)* Count CRC failures per hop slot and how many fall within
+      ~100 ms of an accepted frame; surface it through the driver's counter line. The upstream diff
+      moved to `BACKLOG.md`.
+- [~] #459 **Fix.** *(designed and built S173, DEC-0223; not deployed, rides the next image
+      release)* A content-agnostic burst gate in Go keyed on the frame's position in the sample
+      stream, not the hop slot (the receiver has retuned before the next block's copy arrives).
+      Window: one packet's airtime, 1,344 samples. Credits LloydR's lheijst/rtldavis#2. The Python
+      filters stay as the backstop. Live check: the driver's `largest duplicate gap` line.
 - [ ] **Offer upstream** (owner's go): a comment on lheijst/rtldavis#2 or a follow-on PR, joining P0.8
       phase 4.
 

@@ -1,0 +1,230 @@
+From: weewx-rtldavis (WeatheredScientist fork)
+Subject: rtldavis: drop a second decode of one RF burst (burst gate)
+
+ROADMAP P1.9 step 2 / #459, DEC-0223.  The demodulator works in 512-sample
+blocks and finds a burst's preamble at about ten neighboring sample offsets.
+When that run of offsets crosses a block boundary, the burst is decoded again
+from the next block, and offsets at the ends of the run can carry bit errors,
+inside one block too.  A corrupted copy differs from the original, so the
+byte-equality duplicate filter (rtldavis-dupgate.patch) passes it, and about 1
+in 65,536 also passes CRC and reaches the driver as a plausible wrong reading
+(DEC-0033, DEC-0035).  #458's counters put the corrupted-copy population at
+about 9,700 a day on a live station.
+
+The gate keys on each frame's position in the sample stream (blocks read x 512
++ the frame's offset in the buffer): the receiver's own count, which the frame
+cannot corrupt and which survives a retune.  A copy sits 1 to 13 samples from
+the original; the next transmission from the same ISS is at least 2.5625 s
+(688,800 samples) away.  The window is one packet's airtime, preamble plus
+packet (1,344 samples, 5 ms), read from the packet config at startup:
+
+  * a frame inside the window of the last ACCEPTED frame is a copy of a burst
+    already accepted and hopped on: dropped, no hop, `burst copy:` logged;
+  * two CRC-valid frames inside the window in one block are distinct decodes
+    of one burst (Parse already removed identical ones): neither can be
+    trusted, both dropped, `burst conflict:` logged.
+
+The duplicate filter runs first and is unchanged; its log line gains the gap
+in samples so the window can be checked against real copies.  Only an
+accepted frame moves the reference.  Prior art for a content-agnostic gate:
+lheijst/rtldavis#2 (LloydR), which keys a 2 s wall-clock window on the frame's
+own transmitter id.
+
+tests/test_burstgate_patch.py audits every line this patch adds to or removes
+from main.go, runs the gate's Go tests, and replays synthetic bursts through
+the real Demodulate and Parse.
+
+Applies AFTER rtldavis-dupgate.patch and rtldavis-crcstats.patch, to the
+rtldavis source bundled in src.tgz.
+
+--- a/burstgate/burstgate.go
++++ b/burstgate/burstgate.go
+@@ -0,0 +1,94 @@
++package burstgate
++
++// Modified by the weewx-rtldavis project (WeatheredScientist): the burst gate,
++// ROADMAP P1.9 step 2 / #459, DEC-0223.
++//
++// The demodulator works in 512-sample blocks and finds a burst's preamble at
++// about ten neighboring sample offsets. When that run of offsets crosses a block
++// boundary, the burst is decoded again from the next block; offsets at the ends
++// of the run sample near symbol edges and can carry bit errors, inside one block
++// too. A corrupted copy differs from the original, so the byte-equality
++// duplicate filter (DEC-0135) passes it, and about 1 in 65,536 also passes CRC
++// (DEC-0033, DEC-0035).
++//
++// The gate keys on the frame's position in the sample stream -- the receiver's
++// own count, which the frame cannot corrupt and which survives a retune. A copy
++// sits 1 to 13 samples from the original; the next real transmission from the
++// same ISS is at least 2.5625 s (688,800 samples) away. A frame that starts
++// within one packet's airtime of the last accepted frame is the same burst.
++//
++// The gate decides nothing on its own: main.go asks Copy and Conflicts and
++// drops the frame. Only Accept moves the reference, so a chain of dropped copies
++// cannot ratchet the window forward.
++
++// Pos is a frame's position in the demodulator's sample stream: the number of
++// blocks read times the block size, plus the frame's offset in the buffer. The
++// buffer's origin trails the newest block by a constant, so differences between
++// positions are exact sample counts.
++func Pos(block int64, blockSize, idx int) int64 {
++	return block*int64(blockSize) + int64(idx)
++}
++
++type Gate struct {
++	window int64 // samples; a frame closer than this to the last accepted one is the same burst
++	last   int64 // position of the last ACCEPTED frame
++	have   bool  // false until the first accept
++}
++
++func New(window int64) *Gate {
++	return &Gate{window: window}
++}
++
++func (g *Gate) Window() int64 {
++	return g.window
++}
++
++// Gap returns the distance in samples from pos to the last accepted frame, or
++// -1 before the first accept.
++func (g *Gate) Gap(pos int64) int64 {
++	if !g.have {
++		return -1
++	}
++	if pos < g.last {
++		return g.last - pos
++	}
++	return pos - g.last
++}
++
++// Copy reports whether a frame at pos lies inside the window of the last
++// accepted frame: a second decode of a burst that was already accepted.
++func (g *Gate) Copy(pos int64) bool {
++	d := g.Gap(pos)
++	return d >= 0 && d < g.window
++}
++
++// Accept records an accepted frame at pos.
++func (g *Gate) Accept(pos int64) {
++	g.last = pos
++	g.have = true
++}
++
++// Conflicts takes the positions of the CRC-valid frames from one Parse call.
++// Parse has already removed byte-identical frames, so two of them inside the
++// window are distinct decodes of one burst and neither can be trusted. For each
++// frame it returns the distance to its nearest such neighbor, or -1 when there
++// is none.
++func (g *Gate) Conflicts(pos []int64) []int64 {
++	out := make([]int64, len(pos))
++	for i := range pos {
++		out[i] = -1
++		for j := range pos {
++			if i == j {
++				continue
++			}
++			d := pos[i] - pos[j]
++			if d < 0 {
++				d = -d
++			}
++			if d < g.window && (out[i] < 0 || d < out[i]) {
++				out[i] = d
++			}
++		}
++	}
++	return out
++}
+--- a/main.go
++++ b/main.go
+@@ -45,6 +45,7 @@
+ 
+     "github.com/lheijst/rtldavis/protocol"
+     "lheijst/rtldavis/crcstat"
++    "lheijst/rtldavis/burstgate"
+     "github.com/jpoirier/gortlsdr"
+ )
+ 
+@@ -52,6 +53,8 @@
+ // time-gated the duplicate-packet filter below so a transmitter re-send is
+ // no longer misbooked as a lost packet. See DEC-0135 and
+ // patch/rtldavis-dupgate.patch (weewx-rtldavis repo) for the full diff.
++// Modified again 2026-10-27: a burst gate drops a second decode of one RF
++// burst (#459, DEC-0223, patch/rtldavis-burstgate.patch).
+ 
+ const maxTr = 8
+ 
+@@ -117,6 +120,8 @@
+     lastRecMsg        string         // string of last received raw code
+     crcT              = crcstat.New(int64(100 * time.Millisecond), int64(60 * time.Second)) // #458 CRC-failure stats
+     lastRecTime       int64          // curTime of the last ACCEPTED packet (not of a dropped duplicate)
++    burstG            *burstgate.Gate // #459 burst gate (DEC-0223), set in main() from the packet config
++    blockNum          int64          // blocks read so far; with msg.Idx, a frame's position in the sample stream
+ 
+     // test
+     testFreq          bool
+@@ -196,6 +201,9 @@
+     var sdrIndex int = -1
+     p := protocol.NewParser(14, *transmitterFreq)
+     p.Cfg.Log()
++    // #459 (DEC-0223): one packet's airtime, preamble plus packet, in samples.
++    burstG = burstgate.New(int64(p.Cfg.PreambleLength + p.Cfg.PacketLength))
++    log.Printf("burstWindow=%d samples", burstG.Window())
+ 
+     fs := p.Cfg.SampleRate
+ 
+@@ -386,6 +394,7 @@
+ 
+         default:
+             in.Read(block)
++            blockNum++
+             handleNxtPacket = false
+             parsed := p.Parse(p.Demodulate(block))
+             // #458: measurement only. Tally the CRC failures Parse dropped; nothing
+@@ -398,7 +407,14 @@
+             if line, ok := crcT.Report(time.Now().UnixNano()); ok {
+                 log.Print(line)
+             }
+-            for _, msg := range parsed {
++            // #459 (DEC-0223): each frame's position in the sample stream, and the
++            // frames that share one burst with another frame of this same block.
++            burstPos := make([]int64, len(parsed))
++            for i, msg := range parsed {
++                burstPos[i] = burstgate.Pos(blockNum, p.Cfg.BlockSize, msg.Idx)
++            }
++            burstConflict := burstG.Conflicts(burstPos)
++            for i, msg := range parsed {
+                 if testFreq {
+                     if testNumber > 0 {
+                         if msgIdToChan[int(msg.ID)] != 9 {
+@@ -439,15 +455,30 @@
+                 // the window forward one drop at a time.
+                 seen := string(msg.Data)
+                 if seen == lastRecMsg && curTime - lastRecTime < int64(dupWindow) * int64(time.Millisecond) {
+-                    log.Printf("duplicate packet: %02X (%.3f s)", msg.Data, float64(curTime - lastRecTime) / float64(time.Second))
++                    log.Printf("duplicate packet: %02X (%.3f s) (+%d smp)", msg.Data, float64(curTime - lastRecTime) / float64(time.Second), burstG.Gap(burstPos[i]))
+                     continue  // read next message
+                 }
++                // #459 (DEC-0223): the burst gate. A frame inside one packet's
++                // airtime of another is a second decode of the same burst, not a
++                // new transmission. Two such frames in one block: neither can be
++                // trusted, drop both. A frame inside the window of the last
++                // ACCEPTED frame: that burst was already accepted and hopped on,
++                // drop this copy and do not hop. Neither drop moves the reference.
++                if burstConflict[i] >= 0 {
++                    log.Printf("burst conflict: %02X (+%d smp)", msg.Data, burstConflict[i])
++                    continue  // read next message
++                }
++                if burstG.Copy(burstPos[i]) {
++                    log.Printf("burst copy: %02X (+%d smp)", msg.Data, burstG.Gap(burstPos[i]))
++                    continue  // read next message
++                }
+                 if seen == lastRecMsg {
+                     log.Printf("repeat packet: %02X (%.3f s)", msg.Data, float64(curTime - lastRecTime) / float64(time.Second))
+                 }
+                 lastRecMsg = seen
+                 lastRecTime = curTime
+                 crcT.Accept(curTime)
++                burstG.Accept(burstPos[i])
+                 // check if msg comes from undefined sensor
+                 if msgIdToChan[int(msg.ID)] == 9 {
+                     if *undefined {

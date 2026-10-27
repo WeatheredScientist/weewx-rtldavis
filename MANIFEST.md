@@ -28,7 +28,7 @@ A file in no class gets its own row. Check size with `boot-cap-check.sh`.
 | `ops/*`, `scripts/*`, `usb_reset.sh`, `entrypoint.sh`, `docs/CAMPAIGN-B-RUNBOOK.md`, `docs/INFLUXDB-MIGRATION.md` | any ops task, swap night, InfluxDB cutover. A script's header is its manual; `ops/campaign_analyze.py` is the only campaign readout (DEC-0069) |
 | `extensions/influx/` + `scripts/build_influx_zip.sh`, `prove_influx.sh`, `.github/workflows/influx.yml` (DEC-0219) | changing `influx.py`'s version, the installer, or the image's uploader install; cutting an `influx-v*` release |
 | `extensions/loopjson/` + `scripts/build_loopjson_zip.sh`, `prove_loopjson.sh`, `.github/workflows/loopjson.yml` (DEC-0211) | changing the writer's version, paths or install; cutting a `loopjson-v*` release |
-| Go decoder: `patch/rtldavis-*.patch` (dup time-gate DEC-0135, CRC counters DEC-0216), `tests/go/` | any change to the Go decoder |
+| Go decoder: `patch/rtldavis-*.patch` (dup time-gate DEC-0135, CRC counters DEC-0216, burst gate DEC-0223), `tests/go/` | any change to the Go decoder |
 | Image and release: `Dockerfile`, `.github/workflows/image*.yml`, `scripts/join_multiarch.sh` and its helpers (DEC-0214/0215) | cutting a release, changing the Dockerfile, anything a Pi user pulls |
 | Public face: `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `LICENSE`, `docs/DEPLOY.md`, `examples/`, `docker-compose.yml` | changing anything user-visible, an adopter install, or handling a report. Written to the dashboard's scrub rules: no host, tenant or unit names |
 
