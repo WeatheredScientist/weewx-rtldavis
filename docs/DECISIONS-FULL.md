@@ -12122,7 +12122,7 @@ only difference in the baked config sha (`ee62b7a2…` to `f67762d9…`).
 ## DEC-0220 — The loop-JSON writer passes opt-in extra observations under weewx-influx2's names, never a per-packet delta, and reports its own cadence (S166)
 
 **Date:** 2026-10-25 (S166, Opus 5.5). **Status:** accepted; the owner approved the design as
-drafted, in chat. Design only, no code written yet. Issue #473, from eaglehunt-weather-dashboard#936 (merged
+drafted, in chat. Steps 1 to 7 built S170 on one branch (PR #490, merge `12340a4`), step 5 as amended by DEC-0221. Step 8 (release, prod deploy) is open. Issue #473, from eaglehunt-weather-dashboard#936 (merged
 proposal `docs/proposals/non-davis-platforms-s398.md`, section A.1).
 
 ### Context
@@ -12289,7 +12289,7 @@ accumulator (the S147 entry). Therefore:
 ## DEC-0221 — `loop_interval_s` is the gap between writes of `loop-data.txt`, reported from the first gap and only inside [1, 3600] s (S168)
 
 Date: 2026-10-26 (S168, Opus 5.5). Status: accepted; the owner approved it as drafted,
-in chat. Design only. Amends DEC-0220 decision item 5 and its implementation plan's steps 5 and 7. Everything
+in chat. Built S170 with DEC-0220 (PR #490). Amends DEC-0220 decision item 5 and its implementation plan's steps 5 and 7. Everything
 else in DEC-0220 stands. Prompted by dash's four contract asks on #473 (2026-10-26), after dash
 merged its DEC-0404 (eaglehunt-weather-dashboard PR #1067): the `/loopdata` gate is now
 `max(30, 3 × cadence)`, where the cadence comes from the feed's `loop_interval_s` when it is a finite

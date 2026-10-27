@@ -136,6 +136,21 @@ alone did not catch.
   even when the file is a scratch stock config with no secrets. Do not dodge it by spelling; `cp` the
   scratch file to a neutral name in one call and read that, or put the work in a script file so the
   command line is just `bash script.sh`.
+- **zsh does not word-split `$VAR`, so a "clean" scan can follow a failed stage (S170).** `F="a b c";
+  git add $F` fails with `pathspec ... did not match any files`, and the next
+  `scripts/check_secrets.sh` still prints exit 0 because nothing is staged. The planted-secret
+  control then stages its poisoned copy and the restoring `git add` fails, leaving the planted
+  line in the index. Stage with separate path arguments, count the planted marker in the index
+  (`git show :path | grep -c MARKER`) after restoring, and read `git diff --cached --stat` before
+  the scan.
+- **A commit piped through `grep` hides a failed hook (S170).** `git commit -q ... | grep -E
+  "Failed|rror"` printed nothing when mypy rejected the commit, and `git log -1` then showed the
+  previous commit's hash, which was the only sign. Read `git log -1` and `git status` after every
+  commit, and treat an unchanged hash as a failed commit.
+- **`secret-read-guard.sh` also fires on a `*a` glob next to `tail` or `grep`, and on `~/.claude`
+  paths (S170).** A Python lambda with `*args` in a heredoc, or a `grep` over a path under the
+  WeeWX venv's config, was blocked as a possible secret read. Write such edits with the Edit tool,
+  and read tool sources with a plain `find`/`gh --jq` call, not a pipe.
 
 ## §2 Git, PRs, and the handoff
 

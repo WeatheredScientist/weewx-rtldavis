@@ -927,6 +927,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       DEC-0348 ask) — **designed S153, shipped S155 (DEC-0211)**: release `loopjson-v1.0.0` of this
       repo, proved on a clean WeeWX 5.5.2; prod writes `writer: loop_json_writer/1.0.0`. The
       adopter README is `extensions/loopjson/README.md`, linked from the main README since S156.
+- [ ] Opt-in extra fields and `loop_interval_s` in the loop-JSON feed (#473) — **designed S166/S168
+      (DEC-0220, DEC-0221), built S170**: `loopjson` 1.1.0 is on `dev` (PR #490). Release, prod
+      deploy and the v2.1.0 image (DEC-0222) are open; `BOOT.md` job 1.
 - [x] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005) — done S47.
 
 ---
