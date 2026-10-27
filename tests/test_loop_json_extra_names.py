@@ -137,3 +137,38 @@ def test_drift_check_goes_red_on_a_mutated_entry():
     assert not _same(mutated, theirs)
     del mutated['inch']
     assert not _same(mutated, theirs)
+
+
+# Engine order (DEC-0220 fact 3): the writer is built first, then StdArchive calls
+# weewx.accum.initialize with the site's [Accumulator]. Runs under real WeeWX.
+_ENGINE_ORDER_SCRIPT = '''
+import importlib.util, json, sys, tempfile, types
+import weewx, weewx.accum, weewx.units
+spec = importlib.util.spec_from_file_location("ljw", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+weewx.units.obs_group_dict.extend({"luminosity": "group_illuminance"})
+tmp = tempfile.mkdtemp()
+cfg = {"LoopJsonWriter": {"path": tmp + "/loop-data.txt", "current_path": tmp + "/current.json",
+                          "extra_fields": ["t_rain", "lightning_strike_count", "luminosity"]},
+       "Accumulator": {"t_rain": {"extractor": "sum"}}}
+engine = types.SimpleNamespace(bind=lambda *a: None)
+w = mod.LoopJsonWriter(engine, cfg)
+weewx.accum.initialize(cfg)
+seen = []
+for t, extra in ((1000, {"t_rain": 0.2, "lightning_strike_count": 1}), (1003, {})):
+    pkt = {"dateTime": t, "usUnits": weewx.US, "outTemp": 70.0, "luminosity": 50.0}
+    pkt.update(extra)
+    w.new_loop(types.SimpleNamespace(packet=pkt))
+    seen.append([k for _o, k in w.extras])
+print(json.dumps(seen))
+'''
+
+
+def test_deltas_refused_in_engine_order(real_python):
+    r = subprocess.run([real_python, '-I', '-c', _ENGINE_ORDER_SCRIPT, WRITER],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    after_first, after_second = json.loads(r.stdout)
+    assert after_first == ['luminosity_lux'], 'luminosity kept, both deltas refused'
+    assert after_second == ['luminosity_lux'], 'the refusal holds on a packet with no delta'

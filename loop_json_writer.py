@@ -150,6 +150,22 @@ _RESERVED_KEYS = frozenset(
     ['dateTime', 'writer', 'barometer_fetch_epoch', 'loop_interval_s'])
 
 
+# Cumulative observations to suggest in place of a refused delta.
+_CUMULATIVE_HINTS = {
+    'lightning_strike_count': 'lightningcount',
+    'rain': 'dayRain',
+}
+
+
+def _accumulator_defaults():
+    """WeeWX's built-in [Accumulator] defaults ({} when weewx.accum is absent)."""
+    try:
+        import weewx.accum
+        return weewx.accum.defaults_dict.get('Accumulator', {})
+    except (ImportError, AttributeError):
+        return {}
+
+
 def _extra_key(obs):
     """Output key for an extra observation, by weewx-influx2's rule (DEC-0220):
     '<obs>_<label>', the label being the observation's US unit shortened by
@@ -197,6 +213,11 @@ class LoopJsonWriter(StdService):
         # non-None value for each field, with the time we saw it, and include it
         # in every write until it exceeds its TTL (see module docstring).
         self.extras = self._parse_extras(cfg)  # [(observation, out_key)]
+        # StdArchive builds WeeWX's accumulator map after the process services
+        # (this one) are constructed, so the delta check reads the site's own
+        # [Accumulator] section from the config, at the first packet (DEC-0220).
+        self._accumulator_cfg = config_dict.get('Accumulator', {})
+        self._deltas_checked = False
         self._cache = {}      # out_key -> (value, timestamp last seen)
         self._expired = set()  # out_keys currently expired, for one-shot logging
         # out_keys whose current expiry was the benign calm-windDir case
@@ -275,7 +296,39 @@ class LoopJsonWriter(StdService):
         val, seen = cached
         return val == 0.0 and (now - seen) <= self._ttl('windSpeed_mph')
 
+    def _extractor(self, obs):
+        """Accumulator extractor for obs: the site's [Accumulator] first, then
+        WeeWX's own defaults, else None (the observation takes the 'last'
+        default, a state)."""
+        for table in (self._accumulator_cfg, _accumulator_defaults()):
+            entry = table.get(obs)
+            if hasattr(entry, 'get') and entry.get('extractor'):
+                return entry.get('extractor')
+        return None
+
+    def _refuse_deltas(self):
+        """Drop every extra whose extractor is 'sum' (DEC-0220 item 3).
+
+        Such an observation is a per-packet delta (rain, lightning_strike_count,
+        a driver's t_rain). The file is overwritten in place and read on the
+        consumer's clock, so a delta would be counted twice or not at all."""
+        kept = []
+        for obs, out_key in self.extras:
+            if self._extractor(obs) == 'sum':
+                hint = _CUMULATIVE_HINTS.get(
+                    obs, 'its cumulative counterpart, if the driver has one')
+                log.warning('LoopJsonWriter: extra_fields %s refused, it is a '
+                            'per-packet delta (accumulator extractor sum) that '
+                            'this file cannot deliver exactly once; list %s '
+                            'instead' % (obs, hint))
+            else:
+                kept.append((obs, out_key))
+        self.extras = kept
+        self._deltas_checked = True
+
     def new_loop(self, event):
+        if not self._deltas_checked:
+            self._refuse_deltas()
         pkt = event.packet
 
         # Normalize to US (imperial) units so output keys match their names.

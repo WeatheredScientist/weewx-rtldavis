@@ -152,3 +152,62 @@ def test_ttl_for_an_unlisted_observation_is_ignored_with_a_warning(tmp_path, cap
     assert w._ttl('pm2_5_microgram_per_meter_cubed') == w.ttl_default
     assert any(r.levelno == logging.WARNING and 'pm2_5' in r.message
                for r in caplog.records)
+
+
+# --- delta refusal (DEC-0220 step 3) -----------------------------------------------
+
+SUM_DEFAULTS = {'rain': {'extractor': 'sum'}, 'lightning_strike_count': {'extractor': 'sum'}}
+PACKET = types.SimpleNamespace(packet={'dateTime': 1000, 'outTemp': 70.0})
+
+
+@pytest.fixture
+def sum_defaults(monkeypatch):
+    monkeypatch.setattr(ljw, '_accumulator_defaults', lambda: SUM_DEFAULTS)
+
+
+def test_default_sum_observation_is_refused_at_the_first_packet(tmp_path, caplog,
+                                                                  sum_defaults, monkeypatch):
+    monkeypatch.setitem(UNITS, 'rain', ('inch', 'group_rain'))
+    w = _writer(tmp_path, extra_fields=['rain', 'luminosity'])
+    assert [o for o, _k in w.extras] == ['rain', 'luminosity'], 'checked only at packet one'
+    w.new_loop(PACKET)
+    assert w.extras == [('luminosity', 'luminosity_lux')]
+    refusals = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(refusals) == 1 and 'rain' in refusals[0].message
+    assert 'dayRain' in refusals[0].message, 'the warning names the cumulative counterpart'
+
+
+def test_site_accumulator_section_is_read_from_the_config(tmp_path, caplog, sum_defaults,
+                                                           monkeypatch):
+    """t_rain is a driver delta: only the site's [Accumulator] says so."""
+    monkeypatch.setitem(UNITS, 't_rain', ('inch', 'group_rain'))
+    w = ljw.LoopJsonWriter(engine=None, config_dict={
+        'LoopJsonWriter': {'extra_fields': ['t_rain', 'luminosity'],
+                           'path': str(tmp_path / 'a'),
+                           'current_path': str(tmp_path / 'b')},
+        'Accumulator': {'t_rain': {'extractor': 'sum'}}})
+    w.new_loop(PACKET)
+    assert w.extras == [('luminosity', 'luminosity_lux')]
+    assert any(r.levelno == logging.WARNING and 't_rain' in r.message
+               for r in caplog.records)
+
+
+def test_site_accumulator_overrides_the_default(tmp_path, caplog, sum_defaults, monkeypatch):
+    monkeypatch.setitem(UNITS, 'rain', ('inch', 'group_rain'))
+    w = ljw.LoopJsonWriter(engine=None, config_dict={
+        'LoopJsonWriter': {'extra_fields': ['rain'], 'path': str(tmp_path / 'a'),
+                           'current_path': str(tmp_path / 'b')},
+        'Accumulator': {'rain': {'extractor': 'max'}}})
+    w.new_loop(PACKET)
+    assert w.extras == [('rain', 'rain_in')]
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_refusal_is_logged_once_and_holds_on_later_packets(tmp_path, caplog, sum_defaults,
+                                                            monkeypatch):
+    monkeypatch.setitem(UNITS, 'rain', ('inch', 'group_rain'))
+    w = _writer(tmp_path, extra_fields=['rain', 'luminosity'])
+    for t in (1000, 1003, 1006):
+        w.new_loop(types.SimpleNamespace(packet={'dateTime': t, 'outTemp': 70.0}))
+    assert w.extras == [('luminosity', 'luminosity_lux')]
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
