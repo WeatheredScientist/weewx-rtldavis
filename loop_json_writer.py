@@ -145,6 +145,11 @@ _UNIT_REDUCTIONS = {
 }
 
 
+# Output keys an extra observation may not take: the writer stamps these itself.
+_RESERVED_KEYS = frozenset(
+    ['dateTime', 'writer', 'barometer_fetch_epoch', 'loop_interval_s'])
+
+
 def _extra_key(obs):
     """Output key for an extra observation, by weewx-influx2's rule (DEC-0220):
     '<obs>_<label>', the label being the observation's US unit shortened by
@@ -191,6 +196,7 @@ class LoopJsonWriter(StdService):
         # so not every field appears in every packet. We keep the most recent
         # non-None value for each field, with the time we saw it, and include it
         # in every write until it exceeds its TTL (see module docstring).
+        self.extras = self._parse_extras(cfg)  # [(observation, out_key)]
         self._cache = {}      # out_key -> (value, timestamp last seen)
         self._expired = set()  # out_keys currently expired, for one-shot logging
         # out_keys whose current expiry was the benign calm-windDir case
@@ -205,6 +211,54 @@ class LoopJsonWriter(StdService):
                     if self.current_interval > 0 else 'packet',
                     self.ttl_default, _BAROMETER_KEY,
                     self._ttl(_BAROMETER_KEY)))
+
+    def _parse_extras(self, cfg):
+        """Read [LoopJsonWriter] extra_fields and [[ttl]] (DEC-0220 items 1-3).
+
+        Returns [(observation, out_key)]. Every refusal is one WARNING (an
+        ignored duplicate is INFO), never an exception: a typo in this opt-in
+        list must not stop the 13 standard fields. A [[ttl]] entry lands in
+        self.ttls under the output key, next to the barometer's."""
+        names = cfg.get('extra_fields', [])
+        if isinstance(names, str):
+            names = [names]
+        existing = {out_key for _pkt_key, out_key in _FIELDS}
+        taken = {}      # out_key -> observation that claimed it
+        extras = []
+        for obs in (n.strip() for n in names):
+            if not obs:
+                continue
+            try:
+                out_key = _extra_key(obs)
+            except Exception as e:
+                log.warning('LoopJsonWriter: extra_fields %s skipped, cannot name '
+                            'it: %s' % (obs, e))
+                continue
+            if out_key in _RESERVED_KEYS:
+                log.warning('LoopJsonWriter: extra_fields %s skipped, %s is a key '
+                            'the writer stamps itself' % (obs, out_key))
+            elif out_key in existing:
+                log.info('LoopJsonWriter: extra_fields %s ignored, %s is already '
+                         'written' % (obs, out_key))
+            elif out_key in taken:
+                log.warning('LoopJsonWriter: extra_fields %s skipped, %s already '
+                            'comes from %s' % (obs, out_key, taken[out_key]))
+            else:
+                taken[out_key] = obs
+                extras.append((obs, out_key))
+        by_obs = dict(extras)
+        ttl_cfg = cfg.get('ttl', {})
+        for obs in ttl_cfg:
+            if obs not in by_obs:
+                log.warning('LoopJsonWriter: [[ttl]] %s ignored, it is not a '
+                            'configured extra field' % obs)
+                continue
+            try:
+                self.ttls[by_obs[obs]] = int(ttl_cfg[obs])
+            except (TypeError, ValueError):
+                log.warning('LoopJsonWriter: [[ttl]] %s = %r is not a number of '
+                            'seconds, using %d' % (obs, ttl_cfg[obs], self.ttl_default))
+        return extras
 
     def _ttl(self, out_key):
         """Seconds a cached value for out_key may still be served."""
