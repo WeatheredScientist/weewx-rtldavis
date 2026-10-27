@@ -48,7 +48,8 @@ drops message 9's 10-minute gust.
    Windy rain in millimeters (needs rain; ERR-0010) · freeze lead (blocker 1) at the next freeze.
 3. **Collect a day of v2.0.21 evidence, then design #459** (frontier tier, DEC first): the `crc
    failures this period` lines and DEC-0218's `rain: counter recovered` lines.
-4. **Build #473 from DEC-0220/0221** (tier:mid, Sonnet): small steps, tests that cannot pass
+4. **Build #473 from DEC-0220/0221** (tier:mid, Sonnet; **ships as v2.1.0**, the first release under
+   DEC-0222's SemVer rule, S169): small steps, tests that cannot pass
    vacuously (GOTCHAS §1), INTERFACES §1 rows per sensor class, tell dash when the contract ships.
    **#481** (`windGust10`) is its own mid-tier issue; design the key name first.
 5. **ROADMAP tripwire is overdue** (next check was S166; S166 to S169 skipped it): run the full

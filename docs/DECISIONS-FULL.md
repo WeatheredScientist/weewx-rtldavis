@@ -12354,3 +12354,63 @@ The presence assertions are what keep an emit-nothing bug from passing.
 - No change to DEC-0220's contract version. `loop_json_writer/1.1.0` still brings `loop_interval_s`
   in as a new optional key.
 - Dash needs nothing more. Its range check, its fallbacks and its 30 s floor already match this.
+
+
+## DEC-0222 — Image tags follow SemVer against the data contract; the base OS is recorded, not versioned (S169)
+
+Date: 2026-10-26 (S169, Sonnet 5.5). Status: accepted; the owner approved it as drafted, in chat. Docs only: no
+code, Dockerfile or tag changes. Prompted by the owner's question after the v2.0.21 release: the
+numbering had become hard to explain.
+
+### Context
+
+The image major number tracked the base OS and Python generation: v1 was Ubuntu 22 (`v1.0-ubuntu22`),
+v2 began on Ubuntu 26, Python 3.14 and WeeWX 5.5 (`v2.0-ubuntu26`). Everything since has been a patch
+number, v2.0.1 to v2.0.21, whatever it changed. That hides the things a consumer pins a tag for:
+v2.0.20 changed what `pressure` means, and v2.0.21 changed the Go decoder and the rain logic, and
+both read as a one-digit step. A future OS or Python move would also force a v3 with no change to
+the data. The repo and Docker Hub names (`weewx-rtldavis`) cannot be changed without breaking every
+link and pull command, and the `+ws` suffix on the driver and the uploader already marks the fork.
+
+Four version numbers exist and move independently: the image tag, the driver (`0.20+ws.N`, upstream's
+0.20 plus this project's patch level), the data contract (`loop_json_writer/<version>`, already
+SemVer since DEC-0211) and the extension release tags (`loopjson-vX`, `influx-v0.20+ws.N`).
+
+### Decision
+
+1. **Keep both names.** No rename of the repo, the Hub repository or the driver. The project is
+   "weewx-rtldavis, the WeatheredScientist fork"; a brand, if one is wanted, waits for a major
+   boundary and a reason.
+2. **The image tag is SemVer against what consumers read** (the loop-JSON contract, the InfluxDB
+   line-protocol schema, the archive's column meanings, and the documented run and mount layout):
+   - **major**: a breaking change to any of those;
+   - **minor**: a consumer gains something (a new key, field or option) or the meaning of an existing
+     value changes (v2.0.20's `pressure` would have been a minor);
+   - **patch**: everything else, including driver and decoder fixes that leave the contract alone.
+3. **The base OS, Python and WeeWX versions are recorded in each release's notes, and in the README,
+   and no longer set the major.** The `-ubuntuNN` aliases (`v1.0-ubuntu22`, `v2.0-ubuntu26`) stay as
+   history; new releases need none.
+4. **v2.1.0 is the first release under this rule, whatever it carries**, so the switch is visible in
+   the tag. Content decides after that. #473 (contract 1.1.0) is a minor on its own.
+5. **The past is not renumbered.** No tag is moved, deleted or reissued. v2.0.1 to v2.0.21 mean what
+   they meant; the README says so in one line.
+6. **The other three numbers keep their rules**: the driver's `0.20+ws.N` rises with every driver
+   behavior change; the contract is SemVer (DEC-0211); extensions release on their own tags. The
+   README shows the four in one table.
+
+### Alternatives considered
+
+- **Keep major = OS.** Honest about the base image, but it turns an OS bump into a v3 that says
+  nothing about the data, and leaves patch numbers carrying everything.
+- **CalVer.** Dates say when, not what; consumers pin by contract, not by month.
+- **Rename the fork.** Breaks the Hub repository and every pull command; the `ws` suffix already
+  does the job.
+- **An OCI label for the base image** (`org.opencontainers.image.base.name`). Cheap, but a Dockerfile
+  change. Left for a later release; the notes carry the fact in the meantime.
+
+### Consequences
+
+- README "Versions" is rewritten (the table and the rule above). CONSTANTS and BOOT need no change.
+- A release's notes gain one line naming the base OS, Python and WeeWX.
+- The release checklist asks one question the old numbering never did: did a consumer-visible thing
+  change? If yes, the tag is a minor or a major.
