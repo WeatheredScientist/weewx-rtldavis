@@ -7,7 +7,7 @@ from weecfg.extension import ExtensionInstaller
 
 # Keep equal to loop_json_writer.__version__; scripts/build_loopjson_zip.sh
 # fails the build if they differ, or if the release tag disagrees.
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 
 
 def loader():

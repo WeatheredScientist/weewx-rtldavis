@@ -747,3 +747,10 @@ version = 5.5.2
     #ttl_default = 300
     # current.json is a cold-load snapshot; seconds between writes (0 = every packet).
     #current_interval = 60
+    # Pass more of your driver's observations through, by WeeWX name (loopjson 1.1.0).
+    # Each is written as <name>_<unit label>, e.g. luminosity_lux. A per-packet delta
+    # (rain, lightning_strike_count) is refused; list its cumulative counterpart.
+    #extra_fields = luminosity, lightning_distance, pm2_5
+    # Optional per-observation TTL in seconds; the default is ttl_default.
+    #[[ttl]]
+    #    luminosity = 60

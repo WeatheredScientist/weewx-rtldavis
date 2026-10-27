@@ -29,6 +29,13 @@ jobs:
       - name: Install WeeWX 5.5.2
         run: python -m pip install --upgrade pip weewx==5.5.2
 
+      # DEC-0220: the extra-field naming rule runs against real WeeWX here. With
+      # REQUIRE_REAL_WEEWX=1 a missing weewx fails the test instead of skipping it.
+      - name: Test the extra-field naming rule against real WeeWX
+        run: |
+          python -m pip install pytest
+          REQUIRE_REAL_WEEWX=1 python -m pytest -q tests/test_loop_json_extra_names.py
+
       # Fails if the module's __version__, install.py's VERSION and (on a tag
       # run) the tag disagree.
       - name: Build the zip
