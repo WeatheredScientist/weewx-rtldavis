@@ -54,6 +54,10 @@ restart.
 
 Logs are `/srv/weewx/logs/weewx.log`. WeeWX rotates it itself.
 
+If the unit loops on exit 125 and `journalctl -u weewx-rtldavis` shows `not a device node`,
+`/dev/bus/usb` is empty: the host has no USB device at all. Plug in the dongle (a VM needs a virtual
+USB controller with one device attached). Creating the directory by hand does not help.
+
 ## Synology NAS (alternative)
 
 Install Container Manager from Package Center, then run the README's `docker run` command over SSH,

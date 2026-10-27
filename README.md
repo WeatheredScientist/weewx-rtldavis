@@ -95,6 +95,9 @@ setting, including each upload service.
 docker run -d --name weewx-rtldavis --restart unless-stopped --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges --device /dev/bus/usb -e HOME=/tmp -e TZ=America/New_York -e BIAS_TEE=0 -v ~/weewx/weewx-data:/opt/weewx-data -v ~/weewx/logs:/var/log/weewx weatheredscientist/weewx-rtldavis:v2.0.21
 ```
 
+Plug the dongle in first. `--device /dev/bus/usb` needs at least one USB device on the host, and
+on an empty bus Docker fails with `not a device node`.
+
 Set `TZ` to your own zone so daily rain resets at local midnight. `BIAS_TEE=0` leaves the
 dongle's antenna power off; set it to `1` only if you run an LNA powered through the dongle.
 
