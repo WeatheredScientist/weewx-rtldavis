@@ -151,11 +151,23 @@ across healthy reception, and when its own input goes stale. Setup is in
 
 ## Versions
 
-- **Image tags** (`v2.0.21`) version this distribution. The major number tracks the base OS and
-  Python generation (v2 is Ubuntu 26.04, Python 3.14, WeeWX 5.5). Pin a tag. `:latest` moves only
-  after a release has run in production.
-- **The driver** reports `0.20+ws.N`: upstream's 0.20 plus this project's patch level, which rises
-  with every behavior change. The startup line is how to tell which driver is running.
+Four numbers move independently:
+
+| What | Looks like | Moves when |
+|---|---|---|
+| Image tag | `v2.0.21` | every release, by the rule below |
+| Driver | `0.20+ws.7` | upstream's 0.20 plus this project's patch level; rises with every driver behavior change. The startup line says which one is running |
+| Data contract | `loop_json_writer/1.0.0` | the shape or meaning of `loop-data.txt` and `current.json` changes (the `writer` key in both files) |
+| Extensions | `loopjson-v1.0.0`, `influx-v0.20+ws.2` | each extension releases on its own tag |
+
+**Image tags follow [SemVer](https://semver.org) against what you read from the image**: the loop
+JSON, the InfluxDB schema, the archive's columns and the documented run and mount layout. A major
+bump breaks one of those, a minor bump adds something or changes what a value means, and a patch
+changes none of them. Pin a tag. `:latest` moves only after a release has run in production.
+
+The base system is recorded in each release's notes, not in the version number. v2.0.x runs Ubuntu 26.04,
+Python 3.14 and WeeWX 5.5. Up to v2.0.21 the major number tracked the base system (v1 was Ubuntu 22),
+and no earlier tag was renumbered; the rule above starts at v2.1.0.
 
 Release notes are on the [Releases](https://github.com/WeatheredScientist/weewx-rtldavis/releases)
 page.
