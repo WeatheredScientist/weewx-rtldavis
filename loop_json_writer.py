@@ -39,6 +39,9 @@ Fields written (None → omitted, last known value used for sparse fields):
   barometer_inHg, rainRate_inch_per_hour
   radiation_Wpm2, UV, cloudbase_foot
   dateTime
+  extra_fields (1.1.0, opt-in, DEC-0220): observations named in [LoopJsonWriter]
+    extra_fields, written as <obs>_<unit label>; per-packet deltas are refused
+  loop_interval_s (1.1.0, DEC-0221): median seconds between loop-data.txt writes
   barometer_fetch_epoch (#172 — passthrough, NOT cached/TTL'd; see new_loop)
   writer ("loop_json_writer/<__version__>", DEC-0211; semver against the
   contract: major = a key renamed, removed or given new units, minor = a new
@@ -74,7 +77,7 @@ log = logging.getLogger(__name__)
 # Contract version (DEC-0211), stamped into every write as the "writer" key.
 # Keep it equal to extensions/loopjson/install.py's version; CI checks the pair
 # against the release tag.
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 
 # How long a cached value may stand in for a missing reading. The ISS rotates
 # its sensors across message types (one reading each ~25-60 s at this station's
