@@ -12414,3 +12414,110 @@ SemVer since DEC-0211) and the extension release tags (`loopjson-vX`, `influx-v0
 - A release's notes gain one line naming the base OS, Python and WeeWX.
 - The release checklist asks one question the old numbering never did: did a consumer-visible thing
   change? If yes, the tag is a minor or a major.
+
+## DEC-0223 — The burst gate keys on sample-stream position: a frame inside one packet's airtime of the last accepted one is the same burst (S173)
+
+Date: 2026-10-27 (S173, Opus 5.5). Status: accepted; the owner approved the design as proposed, in
+chat. Build: `patch/rtldavis-burstgate.patch`, not deployed. ROADMAP P1.9 step 2 (#459), sized by
+step 1's counters (#458, DEC-0216).
+
+### Context
+
+DEC-0033/0035: the demodulator sometimes decodes one RF burst twice. An identical second copy is
+dropped by DEC-0135's duplicate filter; a corrupted one differs, so it passes that filter, and about
+1 in 65,536 also passes CRC and reaches the driver as a plausible-looking wrong reading. #459
+proposed a content-agnostic gate keyed on the receiver's hop slot, with a window of tens of
+milliseconds.
+
+**Baseline (#458, v2.0.21, 2026-10-26 18:20 to 2026-10-27 15:01 ET, 1,241 minutes).** 315,845 CRC
+failures (4.24/s, spread over every channel: noise, about ten times the real packet rate). 32,988
+within 100 ms of an accepted frame; noise coincidence alone predicts about 24,600 (23.4 packets/min
+× 0.2 s × 4.24/s). The excess, about 9,700/day, is the corrupted-copy population; at 1 in 65,536 that
+is roughly one CRC-valid phantom a week (an estimate, not a count). Identical copies: about 680/day
+(DEC-0035 counted 730). Two reading notes on DEC-0216's lines: one minute in three logs 0 and the
+next about 500, because Go's 60 s summary and the driver's archive period alias; and a failure in the
+block after an accept is attributed to the post-hop slot.
+
+**Mechanism, from the pinned source.** The demodulator works in 512-sample blocks (1.9 ms at
+268,800 samples/s). `Search` finds the 16-symbol preamble at every sample offset where it quantizes
+cleanly, about ten neighbors around the true start, and `Slice` decodes one candidate per offset
+whose start lies at or before sample 512 of the buffer. When that run of offsets crosses the
+boundary, the next block decodes the same burst again from the remaining offsets. In wall time the
+copies are one block apart (the 2 ms of DEC-0035); in the sample stream they are 1 to 13 samples
+apart. Offsets at the ends of the run sample near symbol edges and pick up bit errors, inside one
+block too (LloydR's 262 µs pair). The straddle rate checks: 680 of about 33,700 packets a day is 2%,
+about ten offsets in 512.
+
+### Decision
+
+1. **Key on sample-stream position.** Each frame's position is the block count times 512 plus its
+   offset in the buffer (`burstgate.Pos`). It is the receiver's own count: the frame cannot corrupt
+   it, and it is immune to pipe jitter and to retuning. The hop slot is rejected: the receiver hops
+   right after an accept, so the copy decoded from the next block is attributed to the new slot.
+2. **Window: one packet's airtime, preamble plus packet, 1,344 samples (5 ms).** A frame that starts
+   while the accepted one is still on the air cannot be a separate transmission received cleanly.
+   Copies sit 1 to 13 samples away; the next transmission from the same ISS is at least 2.5625 s
+   (688,800 samples) away. The window is derived from the packet config at startup and logged.
+3. **Across blocks, the first copy wins.** It has already been accepted and hopped on. A later frame
+   inside the window is dropped without a hop and logged `burst copy: <hex> (+N smp)`.
+4. **Inside one block, a conflict drops both.** `Parse` already removes byte-identical frames within
+   a block, so two CRC-valid frames inside the window in one block are distinct, and search order
+   says nothing about which is clean. Both are dropped and logged `burst conflict: <hex> (+N smp)`.
+   Cost: about one missed packet a week, booked as a miss by the existing timer.
+5. **DEC-0135's duplicate filter is unchanged and runs first,** so `duplicate frames this period`
+   keeps its meaning. Its log line gains `(+N smp)`, and the driver reports the largest gap per
+   period, so a day of identical copies (about 680) checks the window against real data.
+6. **Only accepted frames move the reference,** the duplicate filter's no-ratchet rule.
+7. **Code shape follows DEC-0216:** an own package (`burstgate/`), a sibling patch applied after
+   crcstats, a static audit of every line the patch adds to or removes from `main.go`, the gate
+   against tests, and a replay through the real `Demodulate`/`Parse`.
+8. **Driver:** counts `burst copy:` and `burst conflict:` lines per archive period at INFO, logs each
+   one's bytes (they are rare, and their contents show which copy was corrupt), and reports the
+   largest duplicate gap.
+
+### Alternatives considered
+
+- **Hop-slot key (#459 as filed).** Misses the cross-block copy, the common case (item 1).
+- **Wall-clock window (lheijst/rtldavis#2: 2 s, keyed on the frame's transmitter id).** The id is read
+  from the possibly corrupted frame, an unconfigured id indexes past an 8-entry array, and a
+  wall-clock window has to absorb pipe jitter (DEC-0035 saw 1.4 to 10 ms, one at 10 to 100 ms). Credit
+  stays: it is the prior art for a content-agnostic gate.
+- **Hold each frame one block and drop both on any conflict.** Removes the cross-block first-wins
+  residue at the cost of a 2 ms hop delay and a larger change. Deferred.
+- **Majority vote inside `dsp.Slice`** (the clean bytes come from the middle offsets). Better
+  discrimination, more invasive. Deferred until the `burst copy` logs show first-wins keeping
+  corrupt copies.
+
+### Consequences
+
+- The Python filters stay as the backstop (#459).
+- A station with more than one transmitter could lose a real packet if two transmitters' packets
+  start within 5 ms on the same tuned channel; such packets collide in the air anyway, and the loss is
+  recovered next cycle. This station has one.
+- #459's first done-criterion is restated: CRC-failing copies were already dropped, so the gate acts
+  only on the rare CRC-valid differing copy. The live proof is the duplicate-gap distribution plus
+  occasional `burst copy` lines; the decisive proof is the replay test.
+- Image change: rides the next release (a patch under DEC-0222, or v2.1.0 if it travels with #481).
+
+### Verification (S173, built, not deployed)
+
+- **Replay through the real `Demodulate` and `Parse`** (`tests/go/burst_replay_test.go`): a
+  synthetic burst at each of 512 start offsets decodes every time; 14 offsets (2.7%) decode from two
+  consecutive blocks, against the live 2%, and the largest gap between the two positions is 8 samples
+  (window 1,344). The gate, applied in main.go's order, keeps exactly one frame per burst at every
+  offset; a second burst 2.5625 s later passes, also when its payload is unchanged; a planted
+  CRC-valid corrupted copy in the next block is dropped, and with the window at 0 (positive control)
+  it reaches the driver.
+- **The gate's rules** (`tests/go/burstgate_test.go`): window edges, no-ratchet, conflicts, and
+  position arithmetic across a block boundary. Nine mutations of `burstgate.go` were each caught.
+- **Static audit** (`tests/test_burstgate_patch.py`): the patch touches only `main.go` and
+  `burstgate/`, removes two lines (the loop header gains an index; the duplicate line gains the gap),
+  adds only listed lines with exactly two new `continue`s and no hop or timer lines, and keeps the
+  checks in the order the replay mirrors. Positive controls reject added control flow, a removed
+  `continue` and a touched third file.
+- **Driver** (`tests/test_burst_gate_counter.py`): strict parse, per-period summary and reset, the
+  real line scan; five mutations caught (the first run let a loosened regex survive; two negative
+  cases were added).
+- The patched program builds against librtlsdr locally; the image build is CI's.
+- **Not done:** nothing ran against a dongle. The live check after the next release is the
+  `largest duplicate gap` line (expect single-digit samples) and `rxCheckPercent` unchanged.

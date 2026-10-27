@@ -6,6 +6,11 @@ under [Pre-S16].
 
 ---
 
+## [S173] — 2026-10-27 — #459 burst gate designed and built (DEC-0223); #458 baseline recorded and closed
+
+- #458 closed with its baseline (1,241 minutes of v2.0.21): 4.24 CRC failures/s, about 9,700/day near a burst beyond chance, roughly one CRC-valid phantom a week; Go's summary and the driver's period alias (one minute in three reads 0).
+- DEC-0223: the burst gate keys on sample-stream position, not the hop slot. `patch/rtldavis-burstgate.patch` (own `burstgate/` package, applied after crcstats, asserted in the `Dockerfile`); the driver counts and logs its drops and the largest duplicate gap. Replay through the real demodulator: 2.7% of start offsets re-decode, at most 8 samples apart. Not deployed; rides the next image release.
+
 ## [S172] — 2026-10-27 — ROADMAP reconciliation (due S166); heartofgold's three late weewx rows; ops#435 answered
 
 - `docs/ROADMAP.md` full reconciliation, six sessions late (PR #493): eight lines current (P0.8 phases 1–2, P0.7, P1.9's #458, P1's DEC-0218, P3's DEC-0219, #473 and INTERFACES lines); audit items 13, 14, 16, 18 placed in P0.8 phase 5; `docs/CODE_REVIEW_S145.md` status line corrected. Next check S182.

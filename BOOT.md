@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S172 → S173)
+## ▶ Resume here (S173 → S174)
 
 ### What's settled (do not re-derive)
 
@@ -19,20 +19,22 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 `0.20+ws.7`; rollback in CONSTANTS). `main` = `prod-baseline-20261026`. **loopjson 1.1.0** (the
 mounted writer) runs since 2026-10-27 09:16 ET; #473 closed.
 
-**S172:** ROADMAP fully reconciled (PR #493; next check **S182**). heartofgold's CHANGELOG now
-carries weewx's S161, v2.0.21 and writer-1.1.0 rows. **v2.1.0 is deferred by owner call:** cut it
-with the next substantive image change, not as a label alone (DEC-0222 still makes it the first
-release under the rule). eaglehunt-ops#435 (DST 11-01) answered: fine by design.
+**S173:** #458 closed with its baseline. **#459 designed and built (DEC-0223)** on the S173 PR to
+`dev`: a Go burst gate keyed on sample-stream position (window 1,344 samples), driver counters,
+replay tests through the real demodulator. Not deployed. ROADMAP next check **S182**. **v2.1.0 is
+deferred by owner call** to the next substantive image change; #459's patch is one.
 
 Standing facts: images are multi-arch (DEC-0214/0215); versions follow DEC-0222's SemVer rule;
 the loop writer and `influx.py` ship as extensions (`loopjson-v1.1.0`, `influx-v0.20+ws.2`), prod
-mounts both; `t-weewx` (996:986) runs under `--cap-drop ALL`. **#475 is parked on purpose.**
+mounts both; `t-weewx` (996:986) runs under `--cap-drop ALL`. **#475 is parked on purpose.** The
+prod log is `/srv/docker/weewx/logs/weewx.log` (tenant root, not `weewx-data`).
 
-### ▶▶ S173 JOB LIST
+### ▶▶ S174 JOB LIST
 
-1. **Design #459** (Opus 5.5, DEC first): a full day of v2.0.21 evidence exists from 2026-10-27
-   18:16 ET. Read the `crc failures this period` lines and DEC-0218's `rain: counter recovered`
-   lines first; close #458 once its baseline is recorded.
+1. **Ship #459:** merge the S173 PR (owner), then cut the image release with it (bump the driver
+   banner to `ws.8`; v2.1.0 if #481 travels too, else a patch under DEC-0222). After deploy, a day
+   of `largest duplicate gap` lines (expect single digits) and `rxCheckPercent` unchanged; any
+   `Go burst gate dropped a frame` line is a phantom prevented, keep its bytes.
 2. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no
    gap, no duplicate) and post the number on eaglehunt-ops#435.
 3. **#481** (`windGust10`): its own mid-tier issue; design the key name first. Its image change
@@ -46,21 +48,22 @@ mounts both; `t-weewx` (996:986) runs under `--cap-drop ALL`. **#475 is parked o
    a virtual USB device: ops#427 is closed, so file a new ops ask when wanted. Then the GitHub
    About text and topics (owner's go). First arm64 run against a live radio; until then README
    says smoke-tested.
-7. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
+7. Carry forward, none due: offer DEC-0223's gate on lheijst/rtldavis#2 (owner's go), S126's
+   job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry, the reset-from-112-or-above phantom, whether to tell the
    `weewx-packages` maintainer about DEC-0218 option B, `git worktree prune` in heartofgold (a
    stale S161 entry).
 
-## Current state (S172)
+## Current state (S173)
 
 | Thing | State |
 |---|---|
 | Prod | marvin, `v2.0.21` as `:marvin-live` since 2026-10-26 18:16:14 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `5cd09917…`, `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
-| `main`/`dev` | `main` = v2.0.21's promotion; `dev` = main + #473's build (`12340a4`) + docs (S172's ROADMAP pass); the tenant root on marvin is at `dev`@`a3f87c0` |
+| `main`/`dev` | `main` = v2.0.21's promotion; `dev` = main + #473's build (`12340a4`) + S172's docs, plus #459's build once the S173 PR merges; the tenant root on marvin is at `dev`@`a3f87c0` |
 | Docker Hub | `:v2.0.21` multi-arch; `:latest` still `:v2.0.20` until the owner moves it |
-| Trackers | repo: #481, #475 parked, #458/#459 decoder, #468 (shipped, close), #380 info · ops: #435 (11-02 count), #433 (this file), #357, #344 |
+| Trackers | repo: #481, #475 parked, #459 (built, not deployed), #468 (shipped, close), #380 info · ops: #435 (11-02 count), #433 (this file), #357, #344 |
 
 ## Blockers
 
@@ -69,8 +72,9 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 ## Model tier
 
-S172 ran on Opus 5.5 (a reconciliation audit). Judgment work (#459's design) wants Opus 5.5; #481 and the 11-02 count are Sonnet work.
-A bare `/model` switch persists in the desktop app: restore the Sonnet floor if one is used.
+S173 ran on Opus 5.5 (#459's design and build) after a bare `/model`, which persists in the
+desktop app: switch back to Sonnet before the next session. S174's work (the release, #481, the
+11-02 count) is Sonnet work.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -84,4 +88,4 @@ a commit piped through `grep` hides a failed hook; the secret-read guard's false
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-27 (S172). ROADMAP reconciled; v2.1.0 deferred to the next substantive image change._
+_Last updated: 2026-10-27 (S173). #459 built (DEC-0223), not deployed; #458 closed._
