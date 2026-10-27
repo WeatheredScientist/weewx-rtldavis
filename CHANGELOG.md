@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S171] — 2026-10-27 — #473 released and deployed: loopjson 1.1.0 in prod
+
+- `loopjson-v1.1.0` released (tag on `12340a4`, zip attached). Prod's mounted writer updated by `marvinctl pull` (tenant checkout to `dev`@`a3f87c0`) and `restart weewx.service` at 09:16 ET; first feed read shows `loop_json_writer/1.1.0` and `loop_interval_s: 2.8`, no log errors, fixed fields unchanged. #473 closed with a comment; dash#936 notified. v2.1.0 not built: the image's only change since v2.0.21 is a Dockerfile comment, so whether to cut it as a contract label is S172's call. `BOOT.md` rewritten (S171 → S172).
+
 ## [S170] — 2026-10-27 — #473 built on a branch: loopjson 1.1.0 (`extra_fields`, `loop_interval_s`); #471 closed
 
 - #471: README step 5 and DEPLOY.md say `--device /dev/bus/usb` needs a USB device present (PR #489). ops#427 answered.
