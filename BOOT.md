@@ -11,19 +11,15 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S174 → S175)
+## ▶ Resume here (S175 → S176)
 
 ### What's settled (do not re-derive)
 
-**v2.0.21 runs in prod since 2026-10-26 18:16:14 ET** (image `5ca44ede…`, driver banner
-`0.20+ws.7`; rollback in CONSTANTS). `main` = `prod-baseline-20261026`. **loopjson 1.1.0** (the
-mounted writer) runs since 2026-10-27 09:16 ET; #473 closed.
-
-**S173:** #458 closed with its baseline. **#459 designed and built (DEC-0223)** on the S173 PR to
-`dev`: a Go burst gate keyed on sample-stream position (window 1,344 samples), driver counters,
-replay tests through the real demodulator. Not deployed. ROADMAP next check **S182**. **v2.1.0 is
-the image that carries #459 and #481** (owner's call, S175): the version strings are bumped on `dev`
-once the S175 PR merges; the image is not built or deployed until job 1 below is done.
+**v2.1.0 runs in prod since 2026-10-28 15:40:40 ET** (image `6e10c71b…`, driver banner `0.20+ws.8`:
+#459's burst gate + #481's `windGust10`). Rollback: `:v2.1.0-predeploy` (`a1e6e94c…`, same driver
+bytes, the S175 pre-promotion build) then `:v2.0.21`. `main` = `prod-baseline-20261028`; Hub `:v2.1.0`
+is the multi-arch index `881e6c43…` (amd64 = prod's `6e10c71b…`); `:latest` is still `:v2.0.20`.
+**loopjson 1.1.0** runs since 2026-10-27 09:16 ET. ROADMAP next check **S182**.
 
 Standing facts: images are multi-arch (DEC-0214/0215); versions follow DEC-0222's SemVer rule;
 the loop writer and `influx.py` ship as extensions (`loopjson-v1.1.0`, `influx-v0.20+ws.2`), prod
@@ -32,17 +28,16 @@ prod log is `/srv/docker/weewx/logs/weewx.log` (tenant root, not `weewx-data`).
 
 ### ▶▶ S175 JOB LIST
 
-1. **Ship #459 + #481 as v2.1.0.** S175 checked the uploaders (below) and bumped the version strings;
-   left: promote `dev` to `main` (`prod-baseline-20261028`, `git tag -a v2.1.0`, `gh release create`), then
-   `marvinctl pull` / `build -t …:v2.1.0` / `tag …:marvin-live` / `restart` (Class C, in-chat go), push to Hub
-   and `join_multiarch.sh`. After deploy, a day
-   of `largest duplicate gap` lines (expect single digits) and `rxCheckPercent` unchanged; any
-   `Go burst gate dropped a frame` line is a phantom prevented, keep its bytes.
+1. **Watch v2.1.0 for a day:** `largest duplicate gap` lines (expect single digits, `-` when none),
+   `rxCheckPercent` unchanged; any `Go burst gate dropped a frame` line is a phantom prevented, keep
+   its bytes. First post-restart minutes were clean (S176).
 2. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no
    gap, no duplicate) and post the number on eaglehunt-ops#435.
-3. **#481 built (S174, DEC-0224):** `windGust10` from message 9, banner `ws.8`, tests green, not deployed. It and #459 are the v2.1.0 image. Checked S175: prod's `[[Influx]]` has no `inputs`, so `obs_to_upload = most` and InfluxDB gains a `windGust10_mph` field; windy, owm, wcloud, ogoxe and the loop writer read named keys only, so nothing else changes. After deploy, add `windGust10` to `[LoopJsonWriter] extra_fields` in the mounted config and tell dash#936.
-4. **Owner-only:** move `:latest` to `:v2.0.21`; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
-   profile (never CI). Close #468 (shipped in v2.0.21) with a comment.
+3. **#481 follow-through:** add `windGust10` to `[LoopJsonWriter] extra_fields` in the mounted config
+   (restart) and tell dash#936. InfluxDB already gains `windGust10_mph` (prod's `[[Influx]]` uploads
+   every archive key); the other uploaders read named keys only.
+4. **Owner-only:** move `:latest` to `:v2.1.0` (or `:v2.0.21`); `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
+   profile (never CI). Close #468 and #459/#481 (shipped) with comments.
 5. **Watch, no action unless it fires:** `no bar_absolute` WARNING (DISC-0002 needs a second
    boundary) · WU gold star · OWM/Windy rain in millimeters (needs rain; ERR-0010) · the next
    freeze (blocker 1).
@@ -56,16 +51,16 @@ prod log is `/srv/docker/weewx/logs/weewx.log` (tenant root, not `weewx-data`).
    `weewx-packages` maintainer about DEC-0218 option B, `git worktree prune` in heartofgold (a
    stale S161 entry).
 
-## Current state (S173)
+## Current state (S176)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `v2.0.21` as `:marvin-live` since 2026-10-26 18:16:14 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
+| Prod | marvin, `v2.1.0` as `:marvin-live` since 2026-10-28 15:40:40 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `5cd09917…`, `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
-| `main`/`dev` | `main` = v2.0.21's promotion; `dev` = main + #473's build (`12340a4`) + S172's docs, plus #459's build once the S173 PR merges; the tenant root on marvin is at `dev`@`a3f87c0` |
-| Docker Hub | `:v2.0.21` multi-arch; `:latest` still `:v2.0.20` until the owner moves it |
-| Trackers | repo: #481, #475 parked, #459 (built, not deployed), #468 (shipped, close), #380 info · ops: #435 (11-02 count), #433 (this file), #357, #344 |
+| `main`/`dev` | `main` = v2.1.0's promotion (`prod-baseline-20261028`); `dev` = main minus the merge commit |
+| Docker Hub | `:v2.1.0` multi-arch; `:latest` still `:v2.0.20` until the owner moves it |
+| Trackers | repo: #475 parked, #459 and #481 (shipped, close), #468 (shipped, close), #380 info · ops: #435 (11-02 count), #433 (this file), #357, #344 |
 
 ## Blockers
 
@@ -74,9 +69,7 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 ## Model tier
 
-S173 ran on Opus 5.5 (#459's design and build) after a bare `/model`, which persists in the
-desktop app: switch back to Sonnet before the next session. S174's work (the release, #481, the
-11-02 count) is Sonnet work.
+S176 ran on Sonnet. What is left (the watch, the 11-02 count, the extra_fields edit) is Sonnet work.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -90,4 +83,4 @@ a commit piped through `grep` hides a failed hook; the secret-read guard's false
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-28 (S175). v2.1.0 version strings bumped; #459 + #481 built, not deployed._
+_Last updated: 2026-10-28 (S176). v2.1.0 deployed, pushed to Hub (multi-arch), tagged._
