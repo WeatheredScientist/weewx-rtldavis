@@ -15,7 +15,7 @@
 services:
   weewx-rtldavis:
     container_name: weewx-rtldavis
-    image: weatheredscientist/weewx-rtldavis:v2.0.21
+    image: weatheredscientist/weewx-rtldavis:v2.1.0
     restart: unless-stopped
     user: "1000:1000"            # your uid:gid (`id -u`, `id -g`)
     cap_drop: [ALL]

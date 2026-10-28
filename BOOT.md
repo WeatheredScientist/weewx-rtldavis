@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S173 → S174)
+## ▶ Resume here (S174 → S175)
 
 ### What's settled (do not re-derive)
 
@@ -22,21 +22,25 @@ mounted writer) runs since 2026-10-27 09:16 ET; #473 closed.
 **S173:** #458 closed with its baseline. **#459 designed and built (DEC-0223)** on the S173 PR to
 `dev`: a Go burst gate keyed on sample-stream position (window 1,344 samples), driver counters,
 replay tests through the real demodulator. Not deployed. ROADMAP next check **S182**. **v2.1.0 is
-deferred by owner call** to the next substantive image change; #459's patch is one.
+the image that carries #459 and #481** (owner's call, S175): the version strings are bumped on `dev`
+once the S175 PR merges; the image is not built or deployed until job 1 below is done.
 
 Standing facts: images are multi-arch (DEC-0214/0215); versions follow DEC-0222's SemVer rule;
 the loop writer and `influx.py` ship as extensions (`loopjson-v1.1.0`, `influx-v0.20+ws.2`), prod
 mounts both; `t-weewx` (996:986) runs under `--cap-drop ALL`. **#475 is parked on purpose.** The
 prod log is `/srv/docker/weewx/logs/weewx.log` (tenant root, not `weewx-data`).
 
-### ▶▶ S174 JOB LIST
+### ▶▶ S175 JOB LIST
 
-1. **Ship #459 + #481 as v2.1.0** (the S173 PR is merged; the banner is already `ws.8`). After deploy, a day
+1. **Ship #459 + #481 as v2.1.0.** S175 checked the uploaders (below) and bumped the version strings;
+   left: promote `dev` to `main` (`prod-baseline-20261028`, `git tag -a v2.1.0`, `gh release create`), then
+   `marvinctl pull` / `build -t …:v2.1.0` / `tag …:marvin-live` / `restart` (Class C, in-chat go), push to Hub
+   and `join_multiarch.sh`. After deploy, a day
    of `largest duplicate gap` lines (expect single digits) and `rxCheckPercent` unchanged; any
    `Go burst gate dropped a frame` line is a phantom prevented, keep its bytes.
 2. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no
    gap, no duplicate) and post the number on eaglehunt-ops#435.
-3. **#481 built (S174, DEC-0224):** `windGust10` from message 9, banner `ws.8`, tests green, not deployed. It and #459 are the v2.1.0 image. Before release: confirm what `influx.py` and the uploaders do with a `windGust10` archive field; after deploy, add `windGust10` to `[LoopJsonWriter] extra_fields` in the mounted config and tell dash#936.
+3. **#481 built (S174, DEC-0224):** `windGust10` from message 9, banner `ws.8`, tests green, not deployed. It and #459 are the v2.1.0 image. Checked S175: prod's `[[Influx]]` has no `inputs`, so `obs_to_upload = most` and InfluxDB gains a `windGust10_mph` field; windy, owm, wcloud, ogoxe and the loop writer read named keys only, so nothing else changes. After deploy, add `windGust10` to `[LoopJsonWriter] extra_fields` in the mounted config and tell dash#936.
 4. **Owner-only:** move `:latest` to `:v2.0.21`; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
    profile (never CI). Close #468 (shipped in v2.0.21) with a comment.
 5. **Watch, no action unless it fires:** `no bar_absolute` WARNING (DISC-0002 needs a second
@@ -86,4 +90,4 @@ a commit piped through `grep` hides a failed hook; the secret-read guard's false
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-27 (S174). #459 built (DEC-0223), not deployed; #458 closed._
+_Last updated: 2026-10-28 (S175). v2.1.0 version strings bumped; #459 + #481 built, not deployed._
