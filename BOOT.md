@@ -31,14 +31,12 @@ prod log is `/srv/docker/weewx/logs/weewx.log` (tenant root, not `weewx-data`).
 
 ### ▶▶ S174 JOB LIST
 
-1. **Ship #459:** merge the S173 PR (owner), then cut the image release with it (bump the driver
-   banner to `ws.8`; v2.1.0 if #481 travels too, else a patch under DEC-0222). After deploy, a day
+1. **Ship #459 + #481 as v2.1.0** (the S173 PR is merged; the banner is already `ws.8`). After deploy, a day
    of `largest duplicate gap` lines (expect single digits) and `rxCheckPercent` unchanged; any
    `Go burst gate dropped a frame` line is a phantom prevented, keep its bytes.
 2. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no
    gap, no duplicate) and post the number on eaglehunt-ops#435.
-3. **#481** (`windGust10`): its own mid-tier issue; design the key name first. Its image change
-   would be a natural carrier for v2.1.0.
+3. **#481 built (S174, DEC-0224):** `windGust10` from message 9, banner `ws.8`, tests green, not deployed. It and #459 are the v2.1.0 image. Before release: confirm what `influx.py` and the uploaders do with a `windGust10` archive field; after deploy, add `windGust10` to `[LoopJsonWriter] extra_fields` in the mounted config and tell dash#936.
 4. **Owner-only:** move `:latest` to `:v2.0.21`; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
    profile (never CI). Close #468 (shipped in v2.0.21) with a comment.
 5. **Watch, no action unless it fires:** `no bar_absolute` WARNING (DISC-0002 needs a second
@@ -88,4 +86,4 @@ a commit piped through `grep` hides a failed hook; the secret-read guard's false
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-27 (S173). #459 built (DEC-0223), not deployed; #458 closed._
+_Last updated: 2026-10-27 (S174). #459 built (DEC-0223), not deployed; #458 closed._

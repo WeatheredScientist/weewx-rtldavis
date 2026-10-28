@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S174] — 2026-10-27 — #481 built: message 9's 10-minute gust is `windGust10` (DEC-0224)
+
+- DEC-0224: `rtldavis.py` stores message 9's gust as `wind_gust_10` (m/s), maps it to `windGust10` (never `windGust`), registers `group_speed` so it comes out `windGust10_mph`, bounds-checks it (0..89.4, no delta) and co-rejects it with a condemned frame. Banner `0.20+ws.8`. 8 new tests in `tests/test_windgust10_481.py`. Not deployed; rides the next image with #459 as v2.1.0. Prod then needs `extra_fields = windGust10` in the mounted config.
+
 ## [S173] — 2026-10-27 — #459 burst gate designed and built (DEC-0223); #458 baseline recorded and closed
 
 - #458 closed with its baseline (1,241 minutes of v2.0.21): 4.24 CRC failures/s, about 9,700/day near a burst beyond chance, roughly one CRC-valid phantom a week; Go's summary and the driver's period alias (one minute in three reads 0).

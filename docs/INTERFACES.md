@@ -115,6 +115,7 @@ not this repo's.
 
   | Class | Example observations → keys | Kind |
   |---|---|---|
+  | Wind | `windGust10` → `windGust10_mph` (the ISS's 10-minute gust, DEC-0224; the driver registers its unit group) | state. Not `windGust_mph`, which stays absent on a Davis |
   | Light | `luminosity` → `luminosity_lux`, `illuminance` → `illuminance_lux` | state. Lux is not `radiation_Wpm2`; the writer converts nothing |
   | Lightning | `lightning_distance` → `lightning_distance_mile`, `lightning_last_det_time` (bare, an epoch), `lightningcount` → `lightningcount_count` (cumulative) | state; `lightning_strike_count` is a delta, refused |
   | Air quality | `pm2_5` → `pm2_5_microgram_per_meter_cubed`, `pm10_0` → `pm10_0_microgram_per_meter_cubed`, `co2` → `co2_ppm` | state |

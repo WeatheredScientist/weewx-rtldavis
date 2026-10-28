@@ -12521,3 +12521,50 @@ about ten offsets in 512.
 - The patched program builds against librtlsdr locally; the image build is CI's.
 - **Not done:** nothing ran against a dongle. The live check after the next release is the
   `largest duplicate gap` line (expect single-digit samples) and `rxCheckPercent` unchanged.
+
+## DEC-0224 — Message 9's 10-minute gust is `windGust10`, in m/s, with its unit group registered (S174)
+
+Date: 2026-10-27 (S174, Sonnet 5.5). Status: accepted; the owner approved the design as proposed,
+in chat, including the key name and the DEC number. Build: `rtldavis.py`, banner `0.20+ws.8`, not
+deployed. Issue #481; dash's proposal is eaglehunt-weather-dashboard#936 section A.1.
+
+### Context
+
+The loop file's `windGust_mph` row is absent on this station: the driver decodes message type 9
+(the ISS's 10-minute gust) and only logs it. The archive is unaffected, because WeeWX fills the
+archive's `windGust` from the highest loop `windSpeed` of each record.
+
+### Decision
+
+1. **Key `windGust10`, never `windGust`.** The value is a 10-minute maximum, not an instant gust.
+   `windGust` has extractor `noop` and feeds the wind max, so putting it there would mislabel it and
+   corrupt the archive gust. `windGust10` has extractor `last` and no schema column.
+2. **Unit.** The driver emits m/s (`gust_raw` mph times `MPH_TO_MPS`). WeeWX 5.3.1 gives `windGust10`
+   no unit group, so `to_US()` would leave it unconverted and weewx-influx2 would name it bare. The
+   driver registers `group_speed` for it next to the existing `frequency` registration. Checked
+   against real WeeWX: a METRICWX packet with 5.81 m/s converts to 12.997 mph; the key becomes
+   `windGust10_mph` by DEC-0220's naming rule.
+3. **QC.** `wind_gust_10` gets bounds 0..89.4 m/s (the same spec as wind speed) and no delta, since
+   a 10-minute maximum steps legitimately. It is in `FRAME_WEATHER_KEYS`, so a frame condemned by
+   another field's bounds proof nulls it (DEC-0054).
+4. **Scope kept out.** The `(0, 0)` "no sensor" frame stays silent. `gust_index_raw` has no WeeWX
+   field and stays a debug log. The loop writer needs no code change.
+5. **Surfacing.** Through DEC-0220's `extra_fields`: prod adds `windGust10` to `[LoopJsonWriter]
+   extra_fields` in the mounted config (DEC-0046; a separate layer from the baked driver). No contract
+   bump. The dashboard reading it is its own work.
+
+### Consequences
+
+- The archive record also carries `windGust10`, with no schema column. The database ignores it;
+  restful services that read the record may gain `windGust10_mph` (InfluxDB included). That is
+  checked before release, not assumed.
+- Message 9 arrives less often than wind frames, so the loop file shows the value through the
+  writer's cache and `ttl_default`, not on every packet.
+- Baked driver change (DEC-0031): ships with the next image, which carries #459 too, so v2.1.0.
+
+### Tests
+
+`tests/test_windgust10_481.py`: message 9 decodes to m/s, the no-sensor frame is silent, the sensor
+map carries `windGust10` and never `windGust`, the unit group is registered, an impossible gust is
+nulled, the spec limit passes, and a condemned frame takes the gust with it. Before the change six
+of eight failed on the missing key, not on a stub error.
