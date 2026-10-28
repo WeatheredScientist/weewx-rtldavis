@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S175 → S176)
+## ▶ Resume here (S176 → S177)
 
 ### What's settled (do not re-derive)
 
@@ -26,26 +26,24 @@ the loop writer and `influx.py` ship as extensions (`loopjson-v1.1.0`, `influx-v
 mounts both; `t-weewx` (996:986) runs under `--cap-drop ALL`. **#475 is parked on purpose.** The
 prod log is `/srv/docker/weewx/logs/weewx.log` (tenant root, not `weewx-data`).
 
-### ▶▶ S175 JOB LIST
+### ▶▶ S177 JOB LIST
 
 1. **Watch v2.1.0 for a day:** `largest duplicate gap` lines (expect single digits, `-` when none),
    `rxCheckPercent` unchanged; any `Go burst gate dropped a frame` line is a phantom prevented, keep
-   its bytes. First post-restart minutes were clean (S176).
+   its bytes. First post-restart minutes were clean (S176); S177's look at 14 minutes was clean too.
 2. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no
    gap, no duplicate) and post the number on eaglehunt-ops#435.
-3. **#481 follow-through:** add `windGust10` to `[LoopJsonWriter] extra_fields` in the mounted config
-   (restart) and tell dash#936. InfluxDB already gains `windGust10_mph` (prod's `[[Influx]]` uploads
-   every archive key); the other uploaders read named keys only.
-4. **Owner-only:** move `:latest` to `:v2.1.0` (or `:v2.0.21`); `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
-   profile (never CI). Close #468 and #459/#481 (shipped) with comments.
-5. **Watch, no action unless it fires:** `no bar_absolute` WARNING (DISC-0002 needs a second
+3. **Owner-only:** move `:latest` to `:v2.1.0` (or `:v2.0.21`); `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in
+   the shell profile (never CI).
+4. **Watch, no action unless it fires:** `no bar_absolute` WARNING (DISC-0002 needs a second
    boundary) · WU gold star · OWM/Windy rain in millimeters (needs rain; ERR-0010) · the next
    freeze (blocker 1).
-6. **P0.8:** phase 1's last item, `docs/DEPLOY.md`'s three systemd-unit checks, needs a guest with
+5. **P0.8:** phase 1's last item, `docs/DEPLOY.md`'s three systemd-unit checks, needs a guest with
    a virtual USB device: ops#427 is closed, so file a new ops ask when wanted. Then the GitHub
    About text and topics (owner's go). First arm64 run against a live radio; until then README
    says smoke-tested.
-7. Carry forward, none due: offer DEC-0223's gate on lheijst/rtldavis#2 (owner's go), S126's
+6. Carry forward, none due: the 13 `claude/*` and `s1xx` branches the session-end hook lists (audit for
+   squash-merged work, then delete with the owner's go), offer DEC-0223's gate on lheijst/rtldavis#2 (owner's go), S126's
    job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry, the reset-from-112-or-above phantom, whether to tell the
    `weewx-packages` maintainer about DEC-0218 option B, `git worktree prune` in heartofgold (a
@@ -60,7 +58,7 @@ prod log is `/srv/docker/weewx/logs/weewx.log` (tenant root, not `weewx-data`).
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
 | `main`/`dev` | `main` = v2.1.0's promotion (`prod-baseline-20261028`); `dev` = main minus the merge commit |
 | Docker Hub | `:v2.1.0` multi-arch; `:latest` still `:v2.0.20` until the owner moves it |
-| Trackers | repo: #475 parked, #459 and #481 (shipped, close), #468 (shipped, close), #380 info · ops: #435 (11-02 count), #433 (this file), #357, #344 |
+| Trackers | repo: #475 parked, #380 info (#459, #481, #468 closed S177) · ops: #435 (11-02 count), #433 (this file), #357, #344 |
 
 ## Blockers
 
@@ -69,7 +67,7 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 ## Model tier
 
-S176 ran on Sonnet. What is left (the watch, the 11-02 count, the extra_fields edit) is Sonnet work.
+S177 ran on Sonnet. What is left (the watch, the 11-02 count, the branch audit) is Sonnet work.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -83,4 +81,4 @@ a commit piped through `grep` hides a failed hook; the secret-read guard's false
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-28 (S176). v2.1.0 deployed, pushed to Hub (multi-arch), tagged._
+_Last updated: 2026-10-28 (S177). `windGust10` live in the feed; #459, #481, #468 closed._

@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S177] — 2026-10-28 — #481 follow-through: `windGust10` in the live feed; shipped issues closed
+
+- `extra_fields = windGust10` was already in the mounted config (edited 12:20 ET, live with the 15:40 restart); `current.json` carries `windGust10_mph`. Added the same line to the tenant-root `weewx.conf.rx-baseline` (a restore would have dropped it). Told dash#936. Closed #481, #459 and #468 with comments. First 14 minutes of v2.1.0: duplicate gaps single-digit or none, no gate drops, no warnings.
+
 ## [S176] — 2026-10-28 — v2.1.0 deployed, on Hub, baseline tagged
 
 - Prod had run an earlier v2.1.0-era build (`a1e6e94c…`) since 12:24 ET with no matching tag; retagged it `:v2.1.0-predeploy`, moved `:marvin-live` to `:v2.1.0` (`6e10c71b…`) and restarted at 15:40:40 ET (first records clean). Pushed `:v2.1.0-amd64` and joined `:v2.1.0` multi-arch (`881e6c43…`). Tagged `prod-baseline-20261028` on `main`. `:latest` untouched.
