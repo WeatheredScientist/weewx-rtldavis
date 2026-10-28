@@ -77,7 +77,7 @@ mkdir -p ~/weewx/weewx-data ~/weewx/logs
 ```
 
 ```bash
-docker create --name wx-seed weatheredscientist/weewx-rtldavis:v2.0.21
+docker create --name wx-seed weatheredscientist/weewx-rtldavis:v2.1.0
 ```
 
 ```bash
@@ -92,7 +92,7 @@ setting, including each upload service.
 **5. Run it.**
 
 ```bash
-docker run -d --name weewx-rtldavis --restart unless-stopped --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges --device /dev/bus/usb -e HOME=/tmp -e TZ=America/New_York -e BIAS_TEE=0 -v ~/weewx/weewx-data:/opt/weewx-data -v ~/weewx/logs:/var/log/weewx weatheredscientist/weewx-rtldavis:v2.0.21
+docker run -d --name weewx-rtldavis --restart unless-stopped --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges --device /dev/bus/usb -e HOME=/tmp -e TZ=America/New_York -e BIAS_TEE=0 -v ~/weewx/weewx-data:/opt/weewx-data -v ~/weewx/logs:/var/log/weewx weatheredscientist/weewx-rtldavis:v2.1.0
 ```
 
 Plug the dongle in first. `--device /dev/bus/usb` needs at least one USB device on the host, and
@@ -102,7 +102,7 @@ Set `TZ` to your own zone so daily rain resets at local midnight. `BIAS_TEE=0` l
 dongle's antenna power off; set it to `1` only if you run an LNA powered through the dongle.
 
 **6. Check it.** `tail -f ~/weewx/logs/weewx.log` should show
-`driver version is 0.20+ws.7 (fork of 0.20, patched by WeatheredScientist -- not stock upstream)`,
+`driver version is 0.20+ws.8 (fork of 0.20, patched by WeatheredScientist -- not stock upstream)`,
 then `LOOP` data and, once uploads are enabled, `Published record` lines.
 
 To run it as a system service, see [docs/DEPLOY.md](docs/DEPLOY.md). systemd is the recommended
@@ -158,8 +158,8 @@ Four numbers move independently:
 
 | What | Looks like | Moves when |
 |---|---|---|
-| Image tag | `v2.0.21` | every release, by the rule below |
-| Driver | `0.20+ws.7` | upstream's 0.20 plus this project's patch level; rises with every driver behavior change. The startup line says which one is running |
+| Image tag | `v2.1.0` | every release, by the rule below |
+| Driver | `0.20+ws.8` | upstream's 0.20 plus this project's patch level; rises with every driver behavior change. The startup line says which one is running |
 | Data contract | `loop_json_writer/1.0.0` | the shape or meaning of `loop-data.txt` and `current.json` changes (the `writer` key in both files) |
 | Extensions | `loopjson-v1.0.0`, `influx-v0.20+ws.2` | each extension releases on its own tag |
 

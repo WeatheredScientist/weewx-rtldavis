@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S175] — 2026-10-28 — v2.1.0 version strings; windGust10's uploader check
+
+- Bumped the image tag to v2.1.0 in `Dockerfile`, `README.md`, `docker-compose.yml`, the systemd example, the `image-publish.yml` example and `CHANGES-FROM-UPSTREAM.md` (driver `0.20+ws.8`). Checked DEC-0224's open item: prod's `[[Influx]]` uploads every archive key, so InfluxDB gains `windGust10_mph`; the other uploaders read named keys only. Not built or deployed yet.
+
 ## [S174] — 2026-10-27 — #481 built: message 9's 10-minute gust is `windGust10` (DEC-0224)
 
 - DEC-0224: `rtldavis.py` stores message 9's gust as `wind_gust_10` (m/s), maps it to `windGust10` (never `windGust`), registers `group_speed` so it comes out `windGust10_mph`, bounds-checks it (0..89.4, no delta) and co-rejects it with a condemned frame. Banner `0.20+ws.8`. 8 new tests in `tests/test_windgust10_481.py`. Not deployed; rides the next image with #459 as v2.1.0. Prod then needs `extra_fields = windGust10` in the mounted config.
