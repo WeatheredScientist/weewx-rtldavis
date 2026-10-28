@@ -1,7 +1,9 @@
 # Code review — S145 audit, dev @ 7d06cbf (v2.0.17 in prod), 2026-09-28
 
 **Status:** items 1–9, 33 and 34 (the HIGH set) are fixed in PRs #412–#418, merged to `dev` 2026-09-29, filed as
-#402–#411 (item 5 as `eaglehunt-ops#358`, private). Items 10–32 and 35–39 are open; pick from here.
+#402–#411 (item 5 as `eaglehunt-ops#358`, private). Since then, ROADMAP P0.8 phases 1–3 (S158–S163)
+fixed 10, 11, 12, 15, 17, 19, 20, 32, 35, 36 and 38 (29 shipped with the HIGH set). Open, all in P0.8
+phase 5: 13, 14, 16, 18, 21–28, 30, 31, 37, 39 (status line corrected S172).
 Predecessor: `docs/CODE_REVIEW_S24.md`. Decision record: DEC-0205.
 
 Method: six read-only reviewers (Sonnet x5 by file set, Haiku x1 mechanical cross-ref), synthesized and

@@ -1,5 +1,5 @@
 #--------------------------------------------
-# weewx-rtldavis v2.0.21
+# weewx-rtldavis v2.1.0
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
@@ -56,6 +56,7 @@ ARG RTLDAVIS_SRC_SHA256=7c1a7de1923d2c96844adfba51ec0497f5e8f0a629cc3a6ba64a86d6
 #--------------------------------------------
 COPY patch/rtldavis-dupgate.patch /tmp/rtldavis-dupgate.patch
 COPY patch/rtldavis-crcstats.patch /tmp/rtldavis-crcstats.patch
+COPY patch/rtldavis-burstgate.patch /tmp/rtldavis-burstgate.patch
 
 RUN curl -fsSL -o /tmp/src.tgz \
     "https://github.com/weewx-contrib/weewx-rtldavis/raw/${RTLDAVIS_SRC_COMMIT}/src.tgz" && \
@@ -73,6 +74,9 @@ RUN curl -fsSL -o /tmp/src.tgz \
     patch -p1 --batch --forward < /tmp/rtldavis-crcstats.patch && \
     echo "crcstats (#458): CRC failures are counted, measurement only; crc_stats must be built into main.go and crcstat/crcstat.go:" && \
     test "$(grep -c crcT main.go)" = "4" && test -f crcstat/crcstat.go && \
+    patch -p1 --batch --forward < /tmp/rtldavis-burstgate.patch && \
+    echo "burstgate (#459, DEC-0223): a second decode of one burst is dropped; burstG must appear 8 times in main.go:" && \
+    test "$(grep -c burstG main.go)" = "8" && test -f burstgate/burstgate.go && \
     GOBIN=/usr/local/bin go install -buildvcs=false -v .
 
 #--------------------------------------------

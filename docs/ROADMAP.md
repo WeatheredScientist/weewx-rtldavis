@@ -3,7 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-10-17 (S156 — **scheduled full reconciliation, tripwire fired exactly on
+**Last updated:** 2026-10-27 (S172 — **scheduled full reconciliation, six sessions late**: the
+tripwire said S166 and nothing fired it, because S166–S171 each updated only their own line. Eight
+lines moved, detail in the guardrail section. Next check: S182.)
+Prior: 2026-10-17 (S156 — **scheduled full reconciliation, tripwire fired exactly on
 time**: three lines moved, detail in the guardrail section. Next check: S166.)
 Prior: 2026-09-29 (S146 — **scheduled full reconciliation, tripwire fired exactly on
 time**: every open P0–P3 item read against `BOOT.md`/`DECISIONS.md`/`CHANGELOG.md` fresh, plus
@@ -135,11 +138,30 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S166** (~10 sessions out). If the session counter is
-  at or past S166 and this line still says S166, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146 and S156 did (diff every
+- **Next scheduled reconciliation check: by S182** (~10 sessions out). If the session counter is
+  at or past S182 and this line still says S182, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146, S156 and S172 did (diff every
   open/pending item here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S156, 2026-10-17** — tripwire fired exactly on time. **Three lines
+- Last full reconciliation: **S172, 2026-10-27** — **six sessions late** (due S166; `BOOT.md`
+  carried it as a job from S170). **Eight lines were behind and are fixed.** P0.8 phase 1's
+  quickstart item still waited on ops#427, closed 10-27 with the host steps proven in a disposable
+  guest (the one finding, #471, fixed as docs); only the three unit checks remain, and they need a
+  new ops ask. Phase 2 still listed the build and release as left; v2.0.21 shipped S169. P0.7
+  still said "29 medium/low open" with no record of the eleven P0.8 fixed; it now points at the
+  phases, and four audit items (13, 14, 16, 18) turned out to sit in no phase, now named in phase
+  5 (`docs/CODE_REVIEW_S145.md`'s own status line was also behind and is fixed). P1.9's #458 step
+  still said "ships in the next release": it shipped in v2.0.21, and its bullets now say CRC
+  failures are counted. P1's arc lacked DEC-0218 (the rain recovery phantom, v2.0.21). P3 lacked
+  DEC-0219 (the `influx.py` extension, released, #474 closed), the #473 line was unchecked after
+  S171's release and deploy, and the INTERFACES line lacked DEC-0220/0221 (`git log --
+  docs/INTERFACES.md`: the class table and the cadence-aware liveness paragraph, S170).
+  Classed, no line: DEC-0212 (history scan, classed at S156 too), DEC-0213 (already P0.8's
+  premise), DEC-0214, DEC-0215, DEC-0217 (already on P0.8's lines), DEC-0216 (already on P1.9's),
+  DEC-0222 (release numbering policy; the v2.1.0 call is `BOOT.md` job 1). Not added, no DEC
+  yet: #475 (portable QC, parked by owner call; a P3 candidate if it is ever designed) and #481
+  (`windGust10`, no key name yet). Verified current: the P0 freeze and DB-lock rows (`BOOT.md`'s
+  blockers unchanged since S145), P1.8, P2's header, phases 3 and 4, P1.9's #459 step.
+- Prior full reconciliation: **S156, 2026-10-17** — tripwire fired exactly on time. **Three lines
   were behind and are fixed.** P3's extension item shipped at S155 (DEC-0211) but was still
   unchecked; P3's INTERFACES line lacked DEC-0211's `writer` row; P0.7 still called #421 open
   (closed S151, DEC-0210). Classed, no line: DEC-0206 and DEC-0208 (releases of items already
@@ -338,8 +360,9 @@ Whole-tree audit at `7d06cbf` (DEC-0205): six read-only reviewers, 39 findings, 
 re-verified by the main thread before filing. The ten high items (#402–#411, `eaglehunt-ops#358`)
 are fixed (PRs #412–#418) and **shipped**: the monitor's fixes (#413) went live with a restart on
 2026-09-29 09:31 ET, and the driver and uploader fixes (#412, #414) as the v2.0.18 image at
-16:37 ET (DEC-0206). The 29 medium/low items are the open cleanup queue in
-`docs/CODE_REVIEW_S145.md`: unordered, not scheduled. The secret gate's four detector holes (#421)
+16:37 ET (DEC-0206). The medium/low items in `docs/CODE_REVIEW_S145.md` are now scheduled by P0.8:
+phases 1–3 fixed 10, 11, 12, 15, 17, 19, 20, 32, 35, 36 and 38 (S158–S163, shipped by v2.0.21 or
+the mounted `influx.py`), and the rest are phase 5 (S172). The secret gate's four detector holes (#421)
 are closed (S151, DEC-0210). Same shape as P0.6 above
 (`docs/CODE_REVIEW_S24.md`).
 
@@ -363,14 +386,20 @@ items inside a phase don't depend on each other.
         need no dongle. **Container half proven S162 on arm64** (this Mac's Docker, `:v2.0.20`
         `--platform linux/arm64`, uid 501, `--cap-drop ALL`: seed copy, `archive/weewx.sdb` and
         `weewx.log` written, banner `0.20+ws.6`; found #468, two stray backups in the seed).
-        Left: the host steps (blacklist, udev rule, systemd unit), asked of marvin as ops#427.
-- [ ] **Phase 2 — the image, one release (v2.0.21).** Merged S156: #450 (both downloads pinned;
+        **Host steps proven 10-23** in marvin's disposable Debian 13 guest (ops#427, closed 10-27);
+        its one finding, `--device /dev/bus/usb` failing on an empty USB bus, is fixed as docs
+        (#471, PR #489). Left: `docs/DEPLOY.md`'s three systemd-unit checks, which need a guest
+        with a virtual USB device; ops#427 is closed, so that is a new ops ask.
+- [~] **Phase 2 — the image, one release (v2.0.21). Released S169**: in prod since 2026-10-26
+      18:16 ET, multi-arch `:v2.0.21` on Hub, tag and GitHub release on `a7bf7ec`, `main` =
+      `prod-baseline-20261026`. Left: the first arm64 run against a live radio (README says
+      smoke-tested until then) and the owner moving `:latest` off `:v2.0.20`. History: merged
+      S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
       and joins it into Docker Hub's multi-arch tag, DEC-0215; `:latest` and `:v2.0.20` multi-arch
       since 2026-10-17 18:41 ET). S163 prepped on a branch: audit 15 and #468 fixed in the
-      Dockerfile, banner bumped to `ws.7`. Left: build and compare the baked config's sha, the
-      release mechanics, and the first arm64 run against a live radio. S160's #465 (DEC-0218, rain
-      recovery) is one of the driver edits that ride along.
+      Dockerfile, banner bumped to `ws.7`. S160's #465 (DEC-0218, rain recovery) and #458's CRC
+      counter (DEC-0216) rode along.
 - [x] **Phase 3 — tests that cannot fail, then the bugs they hide.** #456: audit 29 and 33–39 first
       (each fix proved by a mutation turning it red), then audit 32 (the US init time against the
       150 s watchdog, check real logs first) and audit 20 (lease JSON kills the Influx thread).
@@ -387,7 +416,11 @@ items inside a phase don't depend on each other.
       a place to offer the four fixes is part of this phase's owner call.
 - [ ] **Phase 5 — cleanup, no user-visible change.** Audit 21–28 and 30–31: duplication in the
       monitor, `ops/` and the OWM/Windy pair, SPDX gaps, CI pinning. Audit 28 (the
-      `-or-later` tags on three uploaders) is an owner read, not a code fix.
+      `-or-later` tags on three uploaders) is an owner read, not a code fix. Also 37 and 39, left
+      by phase 3, and (placed S172, they were in no phase) 13, 14, 16, 18: `ops/*.service` copies
+      lagging heartofgold's units, a stale `sortedcontainers` comment, README monitor wording vs
+      code, driver comments that misstate the code. 16 may be moot after DEC-0213's README
+      rewrite; unverified.
 
 Errors in the Go decoder itself are their own track, P1.9 below; its image changes ride phase 2's
 release or the one after.
@@ -425,6 +458,10 @@ here.
   battery flag in each 6-hourly reception summary and emails once when it persists across healthy
   reception; four reports have read `OK -- flag clear`. Not yet seen live: a `frame failed
   message-type proof` line (it needs a glitch; 8 in 31 days, none since the cutover).
+- **Rain recovery phantom → v2.0.21** (S160, shipped S169): DEC-0218 — a counter that dipped and
+  came back (115 → 114 → 115) booked the climb back as up to 16 tips on a clean frame, unlogged; a
+  reading after a rejected one is now judged against the last accepted count first. Exhaustive
+  over every counter triple; the always-resync stays, so no stall is possible.
 
 **Still open — ordinary watches, not a new arc.** Current status (co-rejecting grep, humidity-spike
 signature DEC-0044, first-frost test of the signed-decode negative branch, DEC-0056's
@@ -474,22 +511,26 @@ and is still there. What the Go side has shown, and where each stands:
   (`patch/rtldavis-dupgate.patch`, DEC-0135, v2.0.15), offered as lheijst/rtldavis#7. Done.
 - **One burst decoded twice, the second copy sometimes corrupted** (DEC-0033, DEC-0035): the clean
   copy is dropped as a duplicate; a corrupted one differs, so it passes the filter, and about 1 in
-  65,536 also passes CRC and arrives as a valid-looking frame. Only the Python filters catch it, and
-  only when the value is impossible. Open.
-- **CRC failures are dropped silently** (`protocol.go` ~L218): no count exists, so the size of the
-  problem above is unmeasured. Open.
+  65,536 also passes CRC and arrives as a valid-looking frame. Cause found at S173 (DEC-0223): a
+  burst whose matching preamble offsets cross a 512-sample block boundary is sliced in both blocks.
+  Gate built, not deployed.
+- **CRC failures were dropped silently** (`protocol.go` ~L218): counted since v2.0.21 (#458,
+  DEC-0216). Baseline: about 9,700 near-burst failures a day beyond chance, so roughly one
+  CRC-valid phantom a week. Done.
 - **Which upstream version the bundled source is** (`BACKLOG.md`, open since S21): #450 pins it;
-  nobody has diffed it against `lheijst/rtldavis` master. Open.
+  nobody has diffed it against `lheijst/rtldavis` master. Open, not blocking.
 
 Steps, in order:
 
-- [~] #458 **Measure.** *(built S157, DEC-0216, PR #461; ships in the next release, then a day of counts)* Count CRC failures per hop slot and how many fall within ~100 ms of an
-      accepted frame; surface it through the driver's counter line; diff the pinned source against
-      upstream. Log only, no data change. A day of production counts is the baseline.
-- [ ] #459 **Fix.** A content-agnostic burst gate in Go, keyed on the receiver's own hop slot (the
-      frame's ID can be the corrupted part), designed against #458's numbers. Credits LloydR's
-      lheijst/rtldavis#2, which gates at 2 s on the frame ID. The Python filters stay as the
-      backstop. Design first (tier: frontier).
+- [x] #458 **Measure.** *(built S157, DEC-0216, PR #461; in prod with v2.0.21 since 2026-10-26;
+      baseline recorded and closed S173)* Count CRC failures per hop slot and how many fall within
+      ~100 ms of an accepted frame; surface it through the driver's counter line. The upstream diff
+      moved to `BACKLOG.md`.
+- [~] #459 **Fix.** *(designed and built S173, DEC-0223; not deployed, rides the next image
+      release)* A content-agnostic burst gate in Go keyed on the frame's position in the sample
+      stream, not the hop slot (the receiver has retuned before the next block's copy arrives).
+      Window: one packet's airtime, 1,344 samples. Credits LloydR's lheijst/rtldavis#2. The Python
+      filters stay as the backstop. Live check: the driver's `largest duplicate gap` line.
 - [ ] **Offer upstream** (owner's go): a comment on lheijst/rtldavis#2 or a follow-on PR, joining P0.8
       phase 4.
 
@@ -916,6 +957,8 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       measured station pressure is option (A) — it becomes weewx's own `pressure`, `altimeter`
       derives from it; ships with v2.0.20, boundary in `DATA_ERRATA.md` DISC-0002. **S155
       (DEC-0211)** added the `writer` version row to §1 and fixed its stale `data_service` opening.
+      **S170 (DEC-0220/DEC-0221)** added the opt-in `extra_fields` class table and the
+      cadence-aware liveness rule, `max(30, 3 × loop_interval_s)` s (dash DEC-0404).
       **Corrected S97:** this line
       previously also claimed DEC-0053's station-identity finding was documented — it was not; only
       DEC-0053's cache-bounding finding (Finding 1) had actually made it into the doc. §2 now carries
@@ -927,6 +970,14 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       DEC-0348 ask) — **designed S153, shipped S155 (DEC-0211)**: release `loopjson-v1.0.0` of this
       repo, proved on a clean WeeWX 5.5.2; prod writes `writer: loop_json_writer/1.0.0`. The
       adopter README is `extensions/loopjson/README.md`, linked from the main README since S156.
+- [x] Ship `influx.py` as an installable WeeWX extension (#474, dash#936 section A.2) — **shipped
+      S165 (DEC-0219)**: release `influx-v0.20+ws.2`, proved in CI on WeeWX 5.5.2 with the
+      Simulator; the image installs it from this repo since v2.0.21. Upstream had not moved since
+      2021 (`distutils`, TLS verification off).
+- [x] Opt-in extra fields and `loop_interval_s` in the loop-JSON feed (#473) — **designed S166/S168
+      (DEC-0220, DEC-0221), built S170, shipped S171**: release `loopjson-v1.1.0`, in prod since
+      2026-10-27 09:16 ET (prod sets no `extra_fields`). Whether a v2.1.0 image labels the widened
+      contract (DEC-0222) is `BOOT.md` job 1.
 - [x] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005) — done S47.
 
 ---

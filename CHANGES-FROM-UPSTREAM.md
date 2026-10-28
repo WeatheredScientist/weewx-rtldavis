@@ -29,7 +29,7 @@ since S165, DEC-0219; the pin is the `ARG` lines in the base stage):
 
 | Component | Chain |
 |-----------|-------|
-| Go decoder | [bemasher/rtldavis](https://github.com/bemasher/rtldavis) → [lheijst/rtldavis](https://github.com/lheijst/rtldavis) → bundled in `weewx-contrib` `src.tgz` → **patched by us** ([`patch/rtldavis-dupgate.patch`](patch/rtldavis-dupgate.patch), [DEC-0135](docs/DECISIONS.md)) |
+| Go decoder | [bemasher/rtldavis](https://github.com/bemasher/rtldavis) → [lheijst/rtldavis](https://github.com/lheijst/rtldavis) → bundled in `weewx-contrib` `src.tgz` → **patched by us** ([`patch/rtldavis-dupgate.patch`](patch/rtldavis-dupgate.patch), [DEC-0135](docs/DECISIONS.md); [`rtldavis-crcstats.patch`](patch/rtldavis-crcstats.patch), DEC-0216; [`rtldavis-burstgate.patch`](patch/rtldavis-burstgate.patch), DEC-0223) |
 | Driver | [matthewwall/weewx-sdr](https://github.com/matthewwall/weewx-sdr) + [weewx-meteostick](https://github.com/matthewwall/weewx-meteostick) → merged by **Luc Heijst** into [weewx-rtldavis](https://github.com/lheijst/weewx-rtldavis) v0.20 → repackaged by **Vince Skahan** ([weewx-contrib/weewx-rtldavis](https://github.com/weewx-contrib/weewx-rtldavis)) → **patched by us** |
 | InfluxDB uploader | [matthewwall/weewx-influx](https://github.com/matthewwall/weewx-influx) → [david-lutz/weewx-influx2](https://github.com/david-lutz/weewx-influx2) (InfluxDB 2.x port) → **patched by us** |
 | WeatherCloud uploader | [matthewwall/weewx-wcloud](https://github.com/matthewwall/weewx-wcloud) → us (unmodified except an SPDX tag) |
@@ -52,7 +52,7 @@ suffix: upstream's base version, `+ws`, our revision.
 
 | File | Upstream version | Ours |
 |------|------------------|------|
-| `rtldavis.py` | `0.20` | `0.20+ws.7` from v2.0.21 (`ws.6` v2.0.18 to v2.0.20; v2.0.13 through v2.0.17 report `0.20+ws.5`) |
+| `rtldavis.py` | `0.20` | `0.20+ws.8` from v2.1.0 (`ws.7` v2.0.21; `ws.6` v2.0.18 to v2.0.20; v2.0.13 through v2.0.17 report `0.20+ws.5`) |
 | `influx.py` | `0.20` | `0.20+ws.2` |
 
 The suffix sorts after the base version and is unambiguous about its parent. `rtldavis.py` also logs
@@ -196,6 +196,16 @@ the same `patch -p1 --batch --forward` recipe the Dockerfile uses.
 **A second patch, `patch/rtldavis-crcstats.patch` (DEC-0216, #458, 2026-10-18):** counts the frames
 the decoder drops on a CRC failure, which upstream discards silently, and reports the counts each
 archive period. Measurement only: it changes no decoded output. Applied and asserted like the first.
+
+**A third patch, `patch/rtldavis-burstgate.patch` (DEC-0223, #459, 2026-10-27):** drops a second
+decode of one RF burst. A burst whose run of matching preamble offsets crosses a 512-sample block
+boundary is decoded from both blocks, and a copy sliced at an edge offset can carry bit errors that
+the byte-equality duplicate filter cannot see. The gate keys on each frame's position in the sample
+stream: a CRC-valid frame that starts within one packet's airtime (1,344 samples) of the last
+accepted frame is dropped without a hop, and two distinct CRC-valid frames inside that window in one
+block are both dropped. Its own package (`burstgate/`), applied after crcstats, asserted like the
+others. Prior art: [lheijst/rtldavis#2](https://github.com/lheijst/rtldavis/pull/2), a 2 s
+wall-clock gate keyed on the frame's transmitter id. Not yet offered upstream (owner's go).
 
 ## `influx.py`
 

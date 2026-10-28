@@ -121,6 +121,8 @@
 #               last ACCEPTED count, so a counter that dips and comes back books 0
 #               tips, not the dip. Today's resync stays as the fallback. (DEC-0218)
 #   2026-10-22  ws.6 -> ws.7 for the v2.0.21 release.
+#   2026-10-27  #459: counts and logs the frames Go's burst gate drops, and reports
+#               the largest duplicate gap in samples per period (DEC-0223). Log only.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -224,10 +226,13 @@ DRIVER_NAME = 'Rtldavis'
 # up with every behavior change to this file (README rule 1, #406). Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.7'
+DRIVER_VERSION = '0.20+ws.8'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
+# WeeWX ships windGust10 (accumulator extractor "last") with no unit group. Without
+# one, to_US() leaves the m/s value alone and weewx-influx2 names it bare (#481, DEC-0224).
+weewx.units.obs_group_dict['windGust10'] = 'group_speed'
 weewx.units.USUnits['group_frequency'] = 'hertz'
 weewx.units.MetricUnits['group_frequency'] = 'hertz'
 weewx.units.MetricWXUnits['group_frequency'] = 'hertz'
@@ -410,6 +415,28 @@ def parse_crc_stats(line):
     return fail, near, slots
 
 
+_BURST_LINE = re.compile(
+    r"(duplicate packet|burst copy|burst conflict): [0-9A-F]+ (?:\(\d+\.\d+ s\) )?\(\+(\d+) smp\)\s*$")
+
+
+def parse_burst_line(line):
+    """Parse a Go line that carries a same-burst gap in samples (#459, DEC-0223).
+
+    `burst copy: <hex> (+N smp)` and `burst conflict: <hex> (+N smp)` are frames
+    the burst gate dropped; `duplicate packet: <hex> (T s) (+N smp)` is DEC-0135's
+    identical copy, whose gap checks the gate's window against real copies.
+    Returns ('copy'|'conflict'|'duplicate', N), or None for any other line,
+    including a duplicate line from a binary without the gate. Pure function --
+    tests/test_burst_gate_counter.py.
+    """
+    m = _BURST_LINE.search(line)
+    if m is None:
+        return None
+    kind = {"duplicate packet": "duplicate", "burst copy": "copy",
+            "burst conflict": "conflict"}[m.group(1)]
+    return kind, int(m.group(2))
+
+
 def dedup_key(data):
     """The identity of a reading, for deciding whether a packet repeats the last one.
 
@@ -488,6 +515,7 @@ SENSOR_QC_DEFAULTS = {
     'temperature':     (-40.0, 65.0, 4.0),    # spec -40..65 C; real <=~1 C/min, glitch >=7.1 C
     'humidity':        (0.0, 100.0, 10.0),    # glitch >=12.8 %RH/reading, real <=~5 %
     'wind_speed':      (0.0, 89.4, 20.0),     # 6410 spec 0..200 mph (89.4 m/s)
+    'wind_gust_10':    (0.0, 89.4, None),     # message 9, same spec; no delta (a 10-min max)
     'uv':              (0.0, 16.0, 8.0),      # spec 0..16; real cloud flicker <=~5.5 observed
     'solar_radiation': (0.0, 1800.0, None),   # spec 0..1800; no delta (cloud edges genuine)
     'rain_rate':       (0.0, 406.4, None),    # matches weewx.conf.example's StdQC backstop
@@ -511,7 +539,7 @@ SENSOR_QC_DEFAULTS = {
 # so they describe the link, not the frame's contents.
 FRAME_WEATHER_KEYS = (
     'temperature', 'humidity', 'wind_speed', 'wind_dir', 'wind_speed_ec',
-    'wind_speed_raw', 'uv', 'solar_radiation', 'rain_rate',
+    'wind_speed_raw', 'wind_gust_10', 'uv', 'solar_radiation', 'rain_rate',
     'temp_1', 'temp_2', 'humid_1', 'humid_2',
 )
 
@@ -1407,6 +1435,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         'inTemp': 'temp_in',  # temperature of optional BMP280 module
         'windSpeed': 'wind_speed',
         'windDir': 'wind_dir',
+        'windGust10': 'wind_gust_10',  # message 9's 10-minute max; never windGust (#481)
         'outTemp': 'temperature',
         'outHumidity': 'humidity',
         'inHumidity': 'humidity_in',
@@ -1743,7 +1772,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             'repeat_count': 0,         # DEC-0135 (S116): transmitter re-sent an unchanged payload
             'crc_fail': 0,             # #458: CRC-failing frames Go dropped this period
             'crc_near': 0,             # #458: of those, within 100 ms of an accepted frame
-            'crc_slots': {}}           # #458: failures per receiver hop slot this period
+            'crc_slots': {},           # #458: failures per receiver hop slot this period
+            'burst_copy': 0,           # #459: frames Go's burst gate dropped as a copy of an accepted one
+            'burst_conflict': 0,       # #459: frames dropped as one of two distinct decodes in a block
+            'dup_gap_max': None}       # #459: largest duplicate-to-original gap this period, in samples
 
     def _reset_stats(self):
         self.stats['last_ts'] = self.stats['curr_ts']
@@ -1756,6 +1788,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self.stats['crc_fail'] = 0
         self.stats['crc_near'] = 0
         self.stats['crc_slots'] = {}
+        self.stats['burst_copy'] = 0
+        self.stats['burst_conflict'] = 0
+        self.stats['dup_gap_max'] = None
 
     def _update_stats(self, curr_cnt0, curr_cnt1, curr_cnt2, curr_cnt3):
         # update the statistics
@@ -1803,6 +1838,12 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         loginf("crc failures this period: %d (near an accepted frame: %d) slots: %s" % (
             self.stats['crc_fail'], self.stats['crc_near'],
             ",".join("%d:%d" % kv for kv in sorted(self.stats['crc_slots'].items())) or "-"))
+        # #459 (DEC-0223): frames the burst gate dropped, and the largest gap
+        # between an identical copy and its original -- the live check that real
+        # copies sit far inside the gate's window (1,344 samples).
+        loginf("burst copies this period: %d (conflicts: %d) largest duplicate gap: %s smp" % (
+            self.stats['burst_copy'], self.stats['burst_conflict'],
+            "-" if self.stats['dup_gap_max'] is None else self.stats['dup_gap_max']))
         # if not the first time since startup
         if self.stats['last_ts'] > 0:
             total_count = 0
@@ -2096,6 +2137,17 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         self.stats['crc_near'] += _crc[1]
                         for _slot, _n in _crc[2].items():
                             self.stats['crc_slots'][_slot] = self.stats['crc_slots'].get(_slot, 0) + _n
+                    _burst = parse_burst_line(_line)
+                    if _burst is not None:
+                        # #459 (DEC-0223): the burst gate's drops are rare (about
+                        # one a week), so each is logged with its bytes; they show
+                        # which copy of a burst was the corrupt one.
+                        if _burst[0] == 'duplicate':
+                            if self.stats['dup_gap_max'] is None or _burst[1] > self.stats['dup_gap_max']:
+                                self.stats['dup_gap_max'] = _burst[1]
+                        else:
+                            self.stats['burst_' + _burst[0]] += 1
+                            loginf("Go burst gate dropped a frame: %s" % _line.strip())
                     if "repeat packet:" in _line:
                         # DEC-0135 (S116): Go accepted an identical payload that
                         # arrived a full loop period later -- a real transmission
@@ -2408,8 +2460,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 if not(gust_raw == 0 and gust_index_raw == 0):
                     dbg_parse(2, "W10=%s gust_index_raw=%s" %
                               (gust_raw, gust_index_raw))
-                    # don't store the 10-min gust data because there is no
-                    # field for it reserved in the standard wview schema
+                    # A 10-minute maximum, so it goes to windGust10 and never to
+                    # windGust (#481, DEC-0224). The index has no WeeWX field.
+                    data['wind_gust_10'] = gust_raw * MPH_TO_MPS
             elif message_type == 0xA:
                 # outside humidity
                 # message examples:

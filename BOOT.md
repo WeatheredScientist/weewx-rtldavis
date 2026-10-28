@@ -5,72 +5,67 @@ are deleted; a conclusion survives as one line. Load with `CONSTANTS.md` + `MANI
 else at start. Everything else is pulled by name from `MANIFEST.md`, on demand.
 
 **What this repo is.** The driver + Docker build for a Davis 6263 / VP2+ ISS *passively intercepted*
-at 915 MHz via an RTL-SDR Blog v3 — the "escape the WeatherLink lock" tool. A public, published
-WeeWX extension (Docker Hub + GitHub releases), GPLv3. Its real contract is the **data it emits**
-(loop-JSON + InfluxDB line-protocol schema), not any one consumer. The dashboard that consumes it
-is a **separate repo** — don't make dashboard changes here.
+at 915 MHz via an RTL-SDR Blog v3. A public, published WeeWX extension (Docker Hub + GitHub
+releases), GPLv3. Its real contract is the **data it emits** (loop-JSON + InfluxDB line protocol),
+not any one consumer. The dashboard is a **separate repo** — no dashboard changes here.
 
 ---
 
-## ▶ Resume here (S169 → S170)
+## ▶ Resume here (S174 → S175)
 
 ### What's settled (do not re-derive)
 
-**v2.0.21 runs in prod since 2026-10-26 18:16:14 ET** (image `5ca44ede…`, built on marvin from
-`dev`@`c9c5934`, driver banner `0.20+ws.7`). It carries: #451 (`pressure_service.py`), #458 (the Go
-decoder counts CRC failures, log-only), #456's 240 s init grace, #465/DEC-0218 (rain recovery judged
-against the last accepted count), #468 (seed backups removed), audit 15, and #474's Dockerfile
-change. **The build gate caught a DEC-0219 gap (S169, PR #484):** the extension install alone left
-`user.influx` unimportable, because the venv's `user` package shadows `weewx-data/bin/user`; the
-Dockerfile copies the root `influx.py` into the venv again, and `smoke_image.sh` now imports it. The
-baked config sha moved `ee62b7a2…` to `f67762d9…` (only the Influx placeholders, now
-`YOUR_INFLUX_*`). Rollback: retag `:v2.0.20` as `:marvin-live` + restart (CONSTANTS).
+**v2.0.21 runs in prod since 2026-10-26 18:16:14 ET** (image `5ca44ede…`, driver banner
+`0.20+ws.7`; rollback in CONSTANTS). `main` = `prod-baseline-20261026`. **loopjson 1.1.0** (the
+mounted writer) runs since 2026-10-27 09:16 ET; #473 closed.
 
-**v2.0.20 (2026-10-06, DEC-0209):** WeatherLink's `bar_absolute` is `pressure`, `altimeter` derives
-from it; archive `pressure` is measured from 22:18:00 ET (DISC-0002). **`main` = `prod-baseline-20261026`
-(v2.0.21, promoted S169); `dev` carries only design records and docs past it.** Images are multi-arch (DEC-0214/0215, `scripts/join_multiarch.sh`). `LoopJsonWriter` and
-`influx.py` ship as extensions (`loopjson-v1.0.0`, `influx-v0.20+ws.2`); prod still mounts both.
-`t-weewx` (996:986) under `--cap-drop ALL` (ops#360 done); swap path proved (#423). The S145 audit's
-ten high items shipped; 29 medium/low stay in `docs/CODE_REVIEW_S145.md`. The public face was
-rewritten in S156 (DEC-0213); a continuation org, `weewx-packages`, folded our upstream PRs on
-2026-10-21 (no reply owed). The 2026-10-22 marvin outage is ERR-0011. Designs accepted, not built:
-**#473 / DEC-0220 + DEC-0221** (`extra_fields`, `loop_interval_s`, contract
-`loop_json_writer/1.1.0`). **#475 (portable SensorQC) is parked on purpose.** #481: the driver
-drops message 9's 10-minute gust.
+**S173:** #458 closed with its baseline. **#459 designed and built (DEC-0223)** on the S173 PR to
+`dev`: a Go burst gate keyed on sample-stream position (window 1,344 samples), driver counters,
+replay tests through the real demodulator. Not deployed. ROADMAP next check **S182**. **v2.1.0 is
+the image that carries #459 and #481** (owner's call, S175): the version strings are bumped on `dev`
+once the S175 PR merges; the image is not built or deployed until job 1 below is done.
 
-### ▶▶ S170 JOB LIST
+Standing facts: images are multi-arch (DEC-0214/0215); versions follow DEC-0222's SemVer rule;
+the loop writer and `influx.py` ship as extensions (`loopjson-v1.1.0`, `influx-v0.20+ws.2`), prod
+mounts both; `t-weewx` (996:986) runs under `--cap-drop ALL`. **#475 is parked on purpose.** The
+prod log is `/srv/docker/weewx/logs/weewx.log` (tenant root, not `weewx-data`).
 
-1. **v2.0.21 is released** (tag, GitHub release, multi-arch Hub tag, `main` promoted). Left: the
-   owner moves `:latest` to `:v2.0.21` (a stale `:latest` makes `docker pull` fetch v2.0.20), and
-   **#474** closes with a comment once the owner calls it done.
-2. **Watch, no action unless it fires:** measured `pressure` keeps arriving (a `no bar_absolute`
-   WARNING means DISC-0002 needs a second boundary) · WU gold star (owner reads it off WU) · OWM and
-   Windy rain in millimeters (needs rain; ERR-0010) · freeze lead (blocker 1) at the next freeze.
-3. **Collect a day of v2.0.21 evidence, then design #459** (frontier tier, DEC first): the `crc
-   failures this period` lines and DEC-0218's `rain: counter recovered` lines.
-4. **Build #473 from DEC-0220/0221** (tier:mid, Sonnet): small steps, tests that cannot pass
-   vacuously (GOTCHAS §1), INTERFACES §1 rows per sensor class, tell dash when the contract ships.
-   **#481** (`windGust10`) is its own mid-tier issue; design the key name first.
-5. **ROADMAP tripwire is overdue** (next check was S166; S166 to S169 skipped it): run the full
-   reconciliation pass (`docs/ROADMAP.md`, "Keeping this current").
-6. **P0.8 phase 1:** the host steps wait on marvin's answer to **ops#427** (disposable Debian VM);
-   then the GitHub About text and topics (owner's go). First arm64 run against a live radio (any
-   Pi with a dongle); until then README says smoke-tested only.
-7. **Owner-only:** `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell profile, never CI. Whether to
-   tell the `weewx-packages` maintainer about DEC-0218 option B.
-8. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
-   the local-infra marvin entry, audit 37 and 39 (phase 5), the reset-from-112-or-above phantom.
+### ▶▶ S175 JOB LIST
 
-## Current state (S169)
+1. **Ship #459 + #481 as v2.1.0.** S175 checked the uploaders (below) and bumped the version strings;
+   left: promote `dev` to `main` (`prod-baseline-20261028`, `git tag -a v2.1.0`, `gh release create`), then
+   `marvinctl pull` / `build -t …:v2.1.0` / `tag …:marvin-live` / `restart` (Class C, in-chat go), push to Hub
+   and `join_multiarch.sh`. After deploy, a day
+   of `largest duplicate gap` lines (expect single digits) and `rxCheckPercent` unchanged; any
+   `Go burst gate dropped a frame` line is a phantom prevented, keep its bytes.
+2. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no
+   gap, no duplicate) and post the number on eaglehunt-ops#435.
+3. **#481 built (S174, DEC-0224):** `windGust10` from message 9, banner `ws.8`, tests green, not deployed. It and #459 are the v2.1.0 image. Checked S175: prod's `[[Influx]]` has no `inputs`, so `obs_to_upload = most` and InfluxDB gains a `windGust10_mph` field; windy, owm, wcloud, ogoxe and the loop writer read named keys only, so nothing else changes. After deploy, add `windGust10` to `[LoopJsonWriter] extra_fields` in the mounted config and tell dash#936.
+4. **Owner-only:** move `:latest` to `:v2.0.21`; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
+   profile (never CI). Close #468 (shipped in v2.0.21) with a comment.
+5. **Watch, no action unless it fires:** `no bar_absolute` WARNING (DISC-0002 needs a second
+   boundary) · WU gold star · OWM/Windy rain in millimeters (needs rain; ERR-0010) · the next
+   freeze (blocker 1).
+6. **P0.8:** phase 1's last item, `docs/DEPLOY.md`'s three systemd-unit checks, needs a guest with
+   a virtual USB device: ops#427 is closed, so file a new ops ask when wanted. Then the GitHub
+   About text and topics (owner's go). First arm64 run against a live radio; until then README
+   says smoke-tested.
+7. Carry forward, none due: offer DEC-0223's gate on lheijst/rtldavis#2 (owner's go), S126's
+   job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
+   the local-infra marvin entry, the reset-from-112-or-above phantom, whether to tell the
+   `weewx-packages` maintainer about DEC-0218 option B, `git worktree prune` in heartofgold (a
+   stale S161 entry).
+
+## Current state (S173)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, **`v2.0.21`** as `:marvin-live` (image `5ca44ede…`) since 2026-10-26 18:16:14 ET, weewx 5.5.2, gain 372, `t-weewx`. `:v2.0.20` (`f617c9ca…`) is local for rollback |
-| InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `5cd09917…` since 2026-09-29, `REMEDY_MODE=none` |
+| Prod | marvin, `v2.0.21` as `:marvin-live` since 2026-10-26 18:16:14 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
+| InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `5cd09917…`, `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
-| `main`/`dev` | `main` = v2.0.21's promotion (`prod-baseline-20261026`); `dev` ahead by docs only |
-| Docker Hub | `:v2.0.21` multi-arch (index `e2177ffc…`, amd64 = prod's `5ca44ede…`) since 2026-10-26; `:latest` still `:v2.0.20` until the owner moves it |
-| Trackers | repo: #458/#459 decoder, #473/#481 live feed, #474 (close), #475 parked, #380 info · ops: #427 VM, #357 done on our side, #344 macOS LAN, #433 (this file's size) |
+| `main`/`dev` | `main` = v2.0.21's promotion; `dev` = main + #473's build (`12340a4`) + S172's docs, plus #459's build once the S173 PR merges; the tenant root on marvin is at `dev`@`a3f87c0` |
+| Docker Hub | `:v2.0.21` multi-arch; `:latest` still `:v2.0.20` until the owner moves it |
+| Trackers | repo: #481, #475 parked, #459 (built, not deployed), #468 (shipped, close), #380 info · ops: #435 (11-02 count), #433 (this file), #357, #344 |
 
 ## Blockers
 
@@ -79,24 +74,20 @@ Unchanged from S145: 1 freeze mechanism (DEC-0068/0094; lead: corrupt frames at 
 
 ## Model tier
 
-S169 ran on Sonnet 5.5 (release execution of a locked design). S166 (#473 design) ran on Opus 5.5 at
-medium. A bare `/model` switch persists in the desktop app: restore the Sonnet floor if one is used.
+S173 ran on Opus 5.5 (#459's design and build) after a bare `/model`, which persists in the
+desktop app: switch back to Sonnet before the next session. S174's work (the release, #481, the
+11-02 count) is Sonnet work.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
-any NAS, marvin or campaign task (§3) · judging a component live, dead, or shipped (§4). **Read §3
-before the marvin task, not after.** S169 adds one to §4: an image build is not proof of an import
-path (the smoke test now imports `user.influx`).
+any NAS, marvin or campaign task (§3) · judging a component live, dead, or shipped (§4).
+S170 adds three to §1: zsh does not word-split `$VAR` (a failed stage, then a "clean" scan);
+a commit piped through `grep` hides a failed hook; the secret-read guard's false trips.
 
 ## Files needed at session start
 
-This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else. Everything else is pulled by name from
-`MANIFEST.md`, mid-session, when the task touches it. Full rationale: `CLAUDE.md`'s Documentation
-map (DEC-0063).
+This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
+Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-## Style
-
-Git workflow, secrets handling, and the exact test-gate commands: `docs/CONVENTIONS.md`.
-
-_Last updated: 2026-10-26 (S169). v2.0.21 in prod, on Hub and on `main`; `:latest` and #474 are the owner's._
+_Last updated: 2026-10-28 (S175). v2.1.0 version strings bumped; #459 + #481 built, not deployed._

@@ -12122,7 +12122,7 @@ only difference in the baked config sha (`ee62b7a2…` to `f67762d9…`).
 ## DEC-0220 — The loop-JSON writer passes opt-in extra observations under weewx-influx2's names, never a per-packet delta, and reports its own cadence (S166)
 
 **Date:** 2026-10-25 (S166, Opus 5.5). **Status:** accepted; the owner approved the design as
-drafted, in chat. Design only, no code written yet. Issue #473, from eaglehunt-weather-dashboard#936 (merged
+drafted, in chat. Steps 1 to 7 built S170 on one branch (PR #490, merge `12340a4`), step 5 as amended by DEC-0221. Step 8 (release, prod deploy) is open. Issue #473, from eaglehunt-weather-dashboard#936 (merged
 proposal `docs/proposals/non-davis-platforms-s398.md`, section A.1).
 
 ### Context
@@ -12289,7 +12289,7 @@ accumulator (the S147 entry). Therefore:
 ## DEC-0221 — `loop_interval_s` is the gap between writes of `loop-data.txt`, reported from the first gap and only inside [1, 3600] s (S168)
 
 Date: 2026-10-26 (S168, Opus 5.5). Status: accepted; the owner approved it as drafted,
-in chat. Design only. Amends DEC-0220 decision item 5 and its implementation plan's steps 5 and 7. Everything
+in chat. Built S170 with DEC-0220 (PR #490). Amends DEC-0220 decision item 5 and its implementation plan's steps 5 and 7. Everything
 else in DEC-0220 stands. Prompted by dash's four contract asks on #473 (2026-10-26), after dash
 merged its DEC-0404 (eaglehunt-weather-dashboard PR #1067): the `/loopdata` gate is now
 `max(30, 3 × cadence)`, where the cadence comes from the feed's `loop_interval_s` when it is a finite
@@ -12354,3 +12354,217 @@ The presence assertions are what keep an emit-nothing bug from passing.
 - No change to DEC-0220's contract version. `loop_json_writer/1.1.0` still brings `loop_interval_s`
   in as a new optional key.
 - Dash needs nothing more. Its range check, its fallbacks and its 30 s floor already match this.
+
+
+## DEC-0222 — Image tags follow SemVer against the data contract; the base OS is recorded, not versioned (S169)
+
+Date: 2026-10-26 (S169, Sonnet 5.5). Status: accepted; the owner approved it as drafted, in chat. Docs only: no
+code, Dockerfile or tag changes. Prompted by the owner's question after the v2.0.21 release: the
+numbering had become hard to explain.
+
+### Context
+
+The image major number tracked the base OS and Python generation: v1 was Ubuntu 22 (`v1.0-ubuntu22`),
+v2 began on Ubuntu 26, Python 3.14 and WeeWX 5.5 (`v2.0-ubuntu26`). Everything since has been a patch
+number, v2.0.1 to v2.0.21, whatever it changed. That hides the things a consumer pins a tag for:
+v2.0.20 changed what `pressure` means, and v2.0.21 changed the Go decoder and the rain logic, and
+both read as a one-digit step. A future OS or Python move would also force a v3 with no change to
+the data. The repo and Docker Hub names (`weewx-rtldavis`) cannot be changed without breaking every
+link and pull command, and the `+ws` suffix on the driver and the uploader already marks the fork.
+
+Four version numbers exist and move independently: the image tag, the driver (`0.20+ws.N`, upstream's
+0.20 plus this project's patch level), the data contract (`loop_json_writer/<version>`, already
+SemVer since DEC-0211) and the extension release tags (`loopjson-vX`, `influx-v0.20+ws.N`).
+
+### Decision
+
+1. **Keep both names.** No rename of the repo, the Hub repository or the driver. The project is
+   "weewx-rtldavis, the WeatheredScientist fork"; a brand, if one is wanted, waits for a major
+   boundary and a reason.
+2. **The image tag is SemVer against what consumers read** (the loop-JSON contract, the InfluxDB
+   line-protocol schema, the archive's column meanings, and the documented run and mount layout):
+   - **major**: a breaking change to any of those;
+   - **minor**: a consumer gains something (a new key, field or option) or the meaning of an existing
+     value changes (v2.0.20's `pressure` would have been a minor);
+   - **patch**: everything else, including driver and decoder fixes that leave the contract alone.
+3. **The base OS, Python and WeeWX versions are recorded in each release's notes, and in the README,
+   and no longer set the major.** The `-ubuntuNN` aliases (`v1.0-ubuntu22`, `v2.0-ubuntu26`) stay as
+   history; new releases need none.
+4. **v2.1.0 is the first release under this rule, whatever it carries**, so the switch is visible in
+   the tag. Content decides after that. #473 (contract 1.1.0) is a minor on its own.
+5. **The past is not renumbered.** No tag is moved, deleted or reissued. v2.0.1 to v2.0.21 mean what
+   they meant; the README says so in one line.
+6. **The other three numbers keep their rules**: the driver's `0.20+ws.N` rises with every driver
+   behavior change; the contract is SemVer (DEC-0211); extensions release on their own tags. The
+   README shows the four in one table.
+
+### Alternatives considered
+
+- **Keep major = OS.** Honest about the base image, but it turns an OS bump into a v3 that says
+  nothing about the data, and leaves patch numbers carrying everything.
+- **CalVer.** Dates say when, not what; consumers pin by contract, not by month.
+- **Rename the fork.** Breaks the Hub repository and every pull command; the `ws` suffix already
+  does the job.
+- **An OCI label for the base image** (`org.opencontainers.image.base.name`). Cheap, but a Dockerfile
+  change. Left for a later release; the notes carry the fact in the meantime.
+
+### Consequences
+
+- README "Versions" is rewritten (the table and the rule above). CONSTANTS and BOOT need no change.
+- A release's notes gain one line naming the base OS, Python and WeeWX.
+- The release checklist asks one question the old numbering never did: did a consumer-visible thing
+  change? If yes, the tag is a minor or a major.
+
+## DEC-0223 — The burst gate keys on sample-stream position: a frame inside one packet's airtime of the last accepted one is the same burst (S173)
+
+Date: 2026-10-27 (S173, Opus 5.5). Status: accepted; the owner approved the design as proposed, in
+chat. Build: `patch/rtldavis-burstgate.patch`, not deployed. ROADMAP P1.9 step 2 (#459), sized by
+step 1's counters (#458, DEC-0216).
+
+### Context
+
+DEC-0033/0035: the demodulator sometimes decodes one RF burst twice. An identical second copy is
+dropped by DEC-0135's duplicate filter; a corrupted one differs, so it passes that filter, and about
+1 in 65,536 also passes CRC and reaches the driver as a plausible-looking wrong reading. #459
+proposed a content-agnostic gate keyed on the receiver's hop slot, with a window of tens of
+milliseconds.
+
+**Baseline (#458, v2.0.21, 2026-10-26 18:20 to 2026-10-27 15:01 ET, 1,241 minutes).** 315,845 CRC
+failures (4.24/s, spread over every channel: noise, about ten times the real packet rate). 32,988
+within 100 ms of an accepted frame; noise coincidence alone predicts about 24,600 (23.4 packets/min
+× 0.2 s × 4.24/s). The excess, about 9,700/day, is the corrupted-copy population; at 1 in 65,536 that
+is roughly one CRC-valid phantom a week (an estimate, not a count). Identical copies: about 680/day
+(DEC-0035 counted 730). Two reading notes on DEC-0216's lines: one minute in three logs 0 and the
+next about 500, because Go's 60 s summary and the driver's archive period alias; and a failure in the
+block after an accept is attributed to the post-hop slot.
+
+**Mechanism, from the pinned source.** The demodulator works in 512-sample blocks (1.9 ms at
+268,800 samples/s). `Search` finds the 16-symbol preamble at every sample offset where it quantizes
+cleanly, about ten neighbors around the true start, and `Slice` decodes one candidate per offset
+whose start lies at or before sample 512 of the buffer. When that run of offsets crosses the
+boundary, the next block decodes the same burst again from the remaining offsets. In wall time the
+copies are one block apart (the 2 ms of DEC-0035); in the sample stream they are 1 to 13 samples
+apart. Offsets at the ends of the run sample near symbol edges and pick up bit errors, inside one
+block too (LloydR's 262 µs pair). The straddle rate checks: 680 of about 33,700 packets a day is 2%,
+about ten offsets in 512.
+
+### Decision
+
+1. **Key on sample-stream position.** Each frame's position is the block count times 512 plus its
+   offset in the buffer (`burstgate.Pos`). It is the receiver's own count: the frame cannot corrupt
+   it, and it is immune to pipe jitter and to retuning. The hop slot is rejected: the receiver hops
+   right after an accept, so the copy decoded from the next block is attributed to the new slot.
+2. **Window: one packet's airtime, preamble plus packet, 1,344 samples (5 ms).** A frame that starts
+   while the accepted one is still on the air cannot be a separate transmission received cleanly.
+   Copies sit 1 to 13 samples away; the next transmission from the same ISS is at least 2.5625 s
+   (688,800 samples) away. The window is derived from the packet config at startup and logged.
+3. **Across blocks, the first copy wins.** It has already been accepted and hopped on. A later frame
+   inside the window is dropped without a hop and logged `burst copy: <hex> (+N smp)`.
+4. **Inside one block, a conflict drops both.** `Parse` already removes byte-identical frames within
+   a block, so two CRC-valid frames inside the window in one block are distinct, and search order
+   says nothing about which is clean. Both are dropped and logged `burst conflict: <hex> (+N smp)`.
+   Cost: about one missed packet a week, booked as a miss by the existing timer.
+5. **DEC-0135's duplicate filter is unchanged and runs first,** so `duplicate frames this period`
+   keeps its meaning. Its log line gains `(+N smp)`, and the driver reports the largest gap per
+   period, so a day of identical copies (about 680) checks the window against real data.
+6. **Only accepted frames move the reference,** the duplicate filter's no-ratchet rule.
+7. **Code shape follows DEC-0216:** an own package (`burstgate/`), a sibling patch applied after
+   crcstats, a static audit of every line the patch adds to or removes from `main.go`, the gate
+   against tests, and a replay through the real `Demodulate`/`Parse`.
+8. **Driver:** counts `burst copy:` and `burst conflict:` lines per archive period at INFO, logs each
+   one's bytes (they are rare, and their contents show which copy was corrupt), and reports the
+   largest duplicate gap.
+
+### Alternatives considered
+
+- **Hop-slot key (#459 as filed).** Misses the cross-block copy, the common case (item 1).
+- **Wall-clock window (lheijst/rtldavis#2: 2 s, keyed on the frame's transmitter id).** The id is read
+  from the possibly corrupted frame, an unconfigured id indexes past an 8-entry array, and a
+  wall-clock window has to absorb pipe jitter (DEC-0035 saw 1.4 to 10 ms, one at 10 to 100 ms). Credit
+  stays: it is the prior art for a content-agnostic gate.
+- **Hold each frame one block and drop both on any conflict.** Removes the cross-block first-wins
+  residue at the cost of a 2 ms hop delay and a larger change. Deferred.
+- **Majority vote inside `dsp.Slice`** (the clean bytes come from the middle offsets). Better
+  discrimination, more invasive. Deferred until the `burst copy` logs show first-wins keeping
+  corrupt copies.
+
+### Consequences
+
+- The Python filters stay as the backstop (#459).
+- A station with more than one transmitter could lose a real packet if two transmitters' packets
+  start within 5 ms on the same tuned channel; such packets collide in the air anyway, and the loss is
+  recovered next cycle. This station has one.
+- #459's first done-criterion is restated: CRC-failing copies were already dropped, so the gate acts
+  only on the rare CRC-valid differing copy. The live proof is the duplicate-gap distribution plus
+  occasional `burst copy` lines; the decisive proof is the replay test.
+- Image change: rides the next release (a patch under DEC-0222, or v2.1.0 if it travels with #481).
+
+### Verification (S173, built, not deployed)
+
+- **Replay through the real `Demodulate` and `Parse`** (`tests/go/burst_replay_test.go`): a
+  synthetic burst at each of 512 start offsets decodes every time; 14 offsets (2.7%) decode from two
+  consecutive blocks, against the live 2%, and the largest gap between the two positions is 8 samples
+  (window 1,344). The gate, applied in main.go's order, keeps exactly one frame per burst at every
+  offset; a second burst 2.5625 s later passes, also when its payload is unchanged; a planted
+  CRC-valid corrupted copy in the next block is dropped, and with the window at 0 (positive control)
+  it reaches the driver.
+- **The gate's rules** (`tests/go/burstgate_test.go`): window edges, no-ratchet, conflicts, and
+  position arithmetic across a block boundary. Nine mutations of `burstgate.go` were each caught.
+- **Static audit** (`tests/test_burstgate_patch.py`): the patch touches only `main.go` and
+  `burstgate/`, removes two lines (the loop header gains an index; the duplicate line gains the gap),
+  adds only listed lines with exactly two new `continue`s and no hop or timer lines, and keeps the
+  checks in the order the replay mirrors. Positive controls reject added control flow, a removed
+  `continue` and a touched third file.
+- **Driver** (`tests/test_burst_gate_counter.py`): strict parse, per-period summary and reset, the
+  real line scan; five mutations caught (the first run let a loosened regex survive; two negative
+  cases were added).
+- The patched program builds against librtlsdr locally; the image build is CI's.
+- **Not done:** nothing ran against a dongle. The live check after the next release is the
+  `largest duplicate gap` line (expect single-digit samples) and `rxCheckPercent` unchanged.
+
+## DEC-0224 — Message 9's 10-minute gust is `windGust10`, in m/s, with its unit group registered (S174)
+
+Date: 2026-10-27 (S174, Sonnet 5.5). Status: accepted; the owner approved the design as proposed,
+in chat, including the key name and the DEC number. Build: `rtldavis.py`, banner `0.20+ws.8`, not
+deployed. Issue #481; dash's proposal is eaglehunt-weather-dashboard#936 section A.1.
+
+### Context
+
+The loop file's `windGust_mph` row is absent on this station: the driver decodes message type 9
+(the ISS's 10-minute gust) and only logs it. The archive is unaffected, because WeeWX fills the
+archive's `windGust` from the highest loop `windSpeed` of each record.
+
+### Decision
+
+1. **Key `windGust10`, never `windGust`.** The value is a 10-minute maximum, not an instant gust.
+   `windGust` has extractor `noop` and feeds the wind max, so putting it there would mislabel it and
+   corrupt the archive gust. `windGust10` has extractor `last` and no schema column.
+2. **Unit.** The driver emits m/s (`gust_raw` mph times `MPH_TO_MPS`). WeeWX 5.3.1 gives `windGust10`
+   no unit group, so `to_US()` would leave it unconverted and weewx-influx2 would name it bare. The
+   driver registers `group_speed` for it next to the existing `frequency` registration. Checked
+   against real WeeWX: a METRICWX packet with 5.81 m/s converts to 12.997 mph; the key becomes
+   `windGust10_mph` by DEC-0220's naming rule.
+3. **QC.** `wind_gust_10` gets bounds 0..89.4 m/s (the same spec as wind speed) and no delta, since
+   a 10-minute maximum steps legitimately. It is in `FRAME_WEATHER_KEYS`, so a frame condemned by
+   another field's bounds proof nulls it (DEC-0054).
+4. **Scope kept out.** The `(0, 0)` "no sensor" frame stays silent. `gust_index_raw` has no WeeWX
+   field and stays a debug log. The loop writer needs no code change.
+5. **Surfacing.** Through DEC-0220's `extra_fields`: prod adds `windGust10` to `[LoopJsonWriter]
+   extra_fields` in the mounted config (DEC-0046; a separate layer from the baked driver). No contract
+   bump. The dashboard reading it is its own work.
+
+### Consequences
+
+- The archive record also carries `windGust10`, with no schema column. The database ignores it;
+  restful services that read the record may gain `windGust10_mph` (InfluxDB included). That is
+  checked before release, not assumed.
+- Message 9 arrives less often than wind frames, so the loop file shows the value through the
+  writer's cache and `ttl_default`, not on every packet.
+- Baked driver change (DEC-0031): ships with the next image, which carries #459 too, so v2.1.0.
+
+### Tests
+
+`tests/test_windgust10_481.py`: message 9 decodes to m/s, the no-sensor frame is silent, the sensor
+map carries `windGust10` and never `windGust`, the unit group is registered, an impossible gust is
+nulled, the spec limit passes, and a condemned frame takes the gust with it. Before the change six
+of eight failed on the missing key, not on a stub error.

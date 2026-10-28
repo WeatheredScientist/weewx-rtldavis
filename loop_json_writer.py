@@ -39,6 +39,9 @@ Fields written (None → omitted, last known value used for sparse fields):
   barometer_inHg, rainRate_inch_per_hour
   radiation_Wpm2, UV, cloudbase_foot
   dateTime
+  extra_fields (1.1.0, opt-in, DEC-0220): observations named in [LoopJsonWriter]
+    extra_fields, written as <obs>_<unit label>; per-packet deltas are refused
+  loop_interval_s (1.1.0, DEC-0221): median seconds between loop-data.txt writes
   barometer_fetch_epoch (#172 — passthrough, NOT cached/TTL'd; see new_loop)
   writer ("loop_json_writer/<__version__>", DEC-0211; semver against the
   contract: major = a key renamed, removed or given new units, minor = a new
@@ -62,7 +65,9 @@ served stale; consumers already must treat any field as possibly-missing
 import json
 import logging
 import os
+import statistics
 import time
+from collections import deque
 import weewx
 import weewx.units
 from weewx.engine import StdService
@@ -72,7 +77,7 @@ log = logging.getLogger(__name__)
 # Contract version (DEC-0211), stamped into every write as the "writer" key.
 # Keep it equal to extensions/loopjson/install.py's version; CI checks the pair
 # against the release tag.
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 
 # How long a cached value may stand in for a missing reading. The ISS rotates
 # its sensors across message types (one reading each ~25-60 s at this station's
@@ -122,6 +127,66 @@ _FIELDS = [
     ('cloudbase',            'cloudbase_foot'),
 ]
 
+# Unit-label shortening for opt-in extra observations (DEC-0220). A copy of
+# influx.py's UNIT_REDUCTIONS: this file ships as its own extension and cannot
+# import it. tests/test_loop_json_extra_names.py fails if the two drift apart.
+_UNIT_REDUCTIONS = {
+    'degree_F': 'F',
+    'degree_C': 'C',
+    'inch': 'in',
+    'mile_per_hour': 'mph',
+    'mile_per_hour2': 'mph',
+    'km_per_hour': 'kph',
+    'km_per_hour2': 'kph',
+    'knot': 'knot',
+    'knot2': 'knot',
+    'meter_per_second': 'mps',
+    'meter_per_second2': 'mps',
+    'degree_compass': None,
+    'watt_per_meter_squared': 'Wpm2',
+    'uv_index': None,
+    'percent': None,
+    'unix_epoch': None,
+}
+
+
+# Output keys an extra observation may not take: the writer stamps these itself.
+_RESERVED_KEYS = frozenset(
+    ['dateTime', 'writer', 'barometer_fetch_epoch', 'loop_interval_s'])
+
+
+# loop_interval_s (DEC-0221): the median of up to this many gaps, reported inside the
+# range the consumer accepts (dash DEC-0404).
+_GAPS_KEPT = 32
+_INTERVAL_MIN_S = 1
+_INTERVAL_MAX_S = 3600
+
+# Cumulative observations to suggest in place of a refused delta.
+_CUMULATIVE_HINTS = {
+    'lightning_strike_count': 'lightningcount',
+    'rain': 'dayRain',
+}
+
+
+def _accumulator_defaults():
+    """WeeWX's built-in [Accumulator] defaults ({} when weewx.accum is absent)."""
+    try:
+        import weewx.accum
+        return weewx.accum.defaults_dict.get('Accumulator', {})
+    except (ImportError, AttributeError):
+        return {}
+
+
+def _extra_key(obs):
+    """Output key for an extra observation, by weewx-influx2's rule (DEC-0220):
+    '<obs>_<label>', the label being the observation's US unit shortened by
+    _UNIT_REDUCTIONS, and the bare name when the label reduces to None or the
+    observation has no unit group. Read from the live registry, because drivers
+    register their own groups (gw1000 adds luminosity)."""
+    unit_type, _group = weewx.units.getStandardUnitType(weewx.US, obs)
+    label = _UNIT_REDUCTIONS.get(unit_type, unit_type)
+    return obs if label is None else '%s_%s' % (obs, label)
+
 
 class LoopJsonWriter(StdService):
     def __init__(self, engine, config_dict):
@@ -158,6 +223,19 @@ class LoopJsonWriter(StdService):
         # so not every field appears in every packet. We keep the most recent
         # non-None value for each field, with the time we saw it, and include it
         # in every write until it exceeds its TTL (see module docstring).
+        self.extras = self._parse_extras(cfg)  # [(observation, out_key)]
+        # StdArchive builds WeeWX's accumulator map after the process services
+        # (this one) are constructed, so the delta check reads the site's own
+        # [Accumulator] section from the config, at the first packet (DEC-0220).
+        self._accumulator_cfg = config_dict.get('Accumulator', {})
+        self._deltas_checked = False
+        # loop_interval_s (DEC-0221): seconds between consecutive SUCCESSFUL
+        # writes of loop-data.txt, on a monotonic clock, as the median of the
+        # last _GAPS_KEPT gaps. A gap is known only after the write that ends
+        # it, so the key first appears in the third file written.
+        self._clock = time.monotonic
+        self._last_write = None
+        self._gaps = deque(maxlen=_GAPS_KEPT)
         self._cache = {}      # out_key -> (value, timestamp last seen)
         self._expired = set()  # out_keys currently expired, for one-shot logging
         # out_keys whose current expiry was the benign calm-windDir case
@@ -172,6 +250,54 @@ class LoopJsonWriter(StdService):
                     if self.current_interval > 0 else 'packet',
                     self.ttl_default, _BAROMETER_KEY,
                     self._ttl(_BAROMETER_KEY)))
+
+    def _parse_extras(self, cfg):
+        """Read [LoopJsonWriter] extra_fields and [[ttl]] (DEC-0220 items 1-3).
+
+        Returns [(observation, out_key)]. Every refusal is one WARNING (an
+        ignored duplicate is INFO), never an exception: a typo in this opt-in
+        list must not stop the 13 standard fields. A [[ttl]] entry lands in
+        self.ttls under the output key, next to the barometer's."""
+        names = cfg.get('extra_fields', [])
+        if isinstance(names, str):
+            names = [names]
+        existing = {out_key for _pkt_key, out_key in _FIELDS}
+        taken = {}      # out_key -> observation that claimed it
+        extras = []
+        for obs in (n.strip() for n in names):
+            if not obs:
+                continue
+            try:
+                out_key = _extra_key(obs)
+            except Exception as e:
+                log.warning('LoopJsonWriter: extra_fields %s skipped, cannot name '
+                            'it: %s' % (obs, e))
+                continue
+            if out_key in _RESERVED_KEYS:
+                log.warning('LoopJsonWriter: extra_fields %s skipped, %s is a key '
+                            'the writer stamps itself' % (obs, out_key))
+            elif out_key in existing:
+                log.info('LoopJsonWriter: extra_fields %s ignored, %s is already '
+                         'written' % (obs, out_key))
+            elif out_key in taken:
+                log.warning('LoopJsonWriter: extra_fields %s skipped, %s already '
+                            'comes from %s' % (obs, out_key, taken[out_key]))
+            else:
+                taken[out_key] = obs
+                extras.append((obs, out_key))
+        by_obs = dict(extras)
+        ttl_cfg = cfg.get('ttl', {})
+        for obs in ttl_cfg:
+            if obs not in by_obs:
+                log.warning('LoopJsonWriter: [[ttl]] %s ignored, it is not a '
+                            'configured extra field' % obs)
+                continue
+            try:
+                self.ttls[by_obs[obs]] = int(ttl_cfg[obs])
+            except (TypeError, ValueError):
+                log.warning('LoopJsonWriter: [[ttl]] %s = %r is not a number of '
+                            'seconds, using %d' % (obs, ttl_cfg[obs], self.ttl_default))
+        return extras
 
     def _ttl(self, out_key):
         """Seconds a cached value for out_key may still be served."""
@@ -188,7 +314,59 @@ class LoopJsonWriter(StdService):
         val, seen = cached
         return val == 0.0 and (now - seen) <= self._ttl('windSpeed_mph')
 
+    def _note_write(self):
+        """Record a successful loop-data.txt write; the clock is read after
+        os.replace returns, so a failed write adds no gap and resets nothing."""
+        now = self._clock()
+        if self._last_write is not None:
+            self._gaps.append(now - self._last_write)
+        self._last_write = now
+
+    def _loop_interval(self):
+        """The median gap rounded to one decimal, or None when no gap exists or
+        the rounded value falls outside [1, 3600] s. Omitted, never clamped: a
+        clamped value would state a cadence the station does not have, and the
+        consumer (dash DEC-0404) already falls back for a missing key."""
+        if not self._gaps:
+            return None
+        value = round(statistics.median(self._gaps), 1)
+        if _INTERVAL_MIN_S <= value <= _INTERVAL_MAX_S:
+            return value
+        return None
+
+    def _extractor(self, obs):
+        """Accumulator extractor for obs: the site's [Accumulator] first, then
+        WeeWX's own defaults, else None (the observation takes the 'last'
+        default, a state)."""
+        for table in (self._accumulator_cfg, _accumulator_defaults()):
+            entry = table.get(obs)
+            if hasattr(entry, 'get') and entry.get('extractor'):
+                return entry.get('extractor')
+        return None
+
+    def _refuse_deltas(self):
+        """Drop every extra whose extractor is 'sum' (DEC-0220 item 3).
+
+        Such an observation is a per-packet delta (rain, lightning_strike_count,
+        a driver's t_rain). The file is overwritten in place and read on the
+        consumer's clock, so a delta would be counted twice or not at all."""
+        kept = []
+        for obs, out_key in self.extras:
+            if self._extractor(obs) == 'sum':
+                hint = _CUMULATIVE_HINTS.get(
+                    obs, 'its cumulative counterpart, if the driver has one')
+                log.warning('LoopJsonWriter: extra_fields %s refused, it is a '
+                            'per-packet delta (accumulator extractor sum) that '
+                            'this file cannot deliver exactly once; list %s '
+                            'instead' % (obs, hint))
+            else:
+                kept.append((obs, out_key))
+        self.extras = kept
+        self._deltas_checked = True
+
     def new_loop(self, event):
+        if not self._deltas_checked:
+            self._refuse_deltas()
         pkt = event.packet
 
         # Normalize to US (imperial) units so output keys match their names.
@@ -202,8 +380,10 @@ class LoopJsonWriter(StdService):
         # idiom dewpoint_service.py uses, so the two caches age identically.
         now = pkt.get('dateTime') or time.time()
 
-        # Update cache with any non-None values from this packet
-        for pkt_key, out_key in _FIELDS:
+        # Update cache with any non-None values from this packet. The opt-in
+        # extras (DEC-0220) share the cache, its TTLs and the expiry warning
+        # with the 13 standard fields; there is no second code path.
+        for pkt_key, out_key in _FIELDS + self.extras:
             val = pkt.get(pkt_key)
             if val is not None:
                 self._cache[out_key] = (val, now)
@@ -255,6 +435,9 @@ class LoopJsonWriter(StdService):
             data['barometer_fetch_epoch'] = fe
         data['dateTime'] = pkt.get('dateTime')
         data['writer'] = 'loop_json_writer/' + __version__
+        interval = self._loop_interval()
+        if interval is not None:
+            data['loop_interval_s'] = interval
 
         # loop-data.txt on EVERY packet -- it carries the liveness signal.
         # current.json only when its interval has elapsed (DEC-0093). The first
@@ -270,6 +453,8 @@ class LoopJsonWriter(StdService):
                 with open(tmp, 'w') as f:
                     json.dump(data, f)
                 os.replace(tmp, path)
+                if path == self.path:
+                    self._note_write()
                 if path == self.current_path:
                     # only on success -- a failed write retries next packet
                     self._current_last = now
