@@ -35,3 +35,7 @@ docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
 echo "== the uploader the baked config names imports (weewxd cannot start without it)"
 docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
   "import user.influx as i; print('influx', i.VERSION)"
+
+echo "== the OWM and Windy uploaders import, with their shared base from the user package"
+docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
+  "import user.owm as o, user.windy as w; b = o.OWMThread.__mro__[1].__module__; print('owm', b, 'windy', w.WindyThread.__mro__[1].__module__); assert b == 'user.rest_site'"

@@ -24,6 +24,7 @@ Run:  python3 -m pytest tests/ (pytest only)
 import sys
 import types
 import urllib.parse
+import urllib.request
 
 
 # --- stub the weewx deps so windy.py imports without weewx installed ---
@@ -57,6 +58,32 @@ class _RESTThread:
     def __init__(self, queue, **kwargs):
         self.queue = queue
         self.rest_kwargs = kwargs
+
+    # process_record, get_request and get_post_body follow weewx 5.5.2's RESTThread,
+    # less the database read and the record checks, so the payload test below sees
+    # exactly what would go on the wire. post_with_retries is the HTTP call; the
+    # test replaces it.
+    def process_record(self, record, dbmanager):
+        _url = self.format_url(record)
+        _request = self.get_request(_url)
+        _payload = self.get_post_body(record)
+        if _payload:
+            _request.add_header('Content-Type', _payload[1])
+            data = _payload[0]
+        else:
+            data = None
+        self.post_with_retries(_request, data)
+
+    def get_request(self, url):
+        _request = urllib.request.Request(url)
+        _request.add_header("User-Agent", "weewx/5.5.2")
+        return _request
+
+    def get_post_body(self, record):
+        return None
+
+    def post_with_retries(self, request, data=None):
+        raise AssertionError("the test must capture the HTTP call")
 
 
 def _get_site_dict(config_dict, *args, **kwargs):
@@ -193,3 +220,53 @@ def test_none_fields_are_omitted():
     # only the always-present keys survive
     assert set(_params(record)) == {"id", "PASSWORD", "time"}
     print("  [PASS] test_none_fields_are_omitted")
+
+
+# Payload identity (S180a, audit 23). The bytes each record produced before owm.py and
+# windy.py moved onto the shared rest_site base, captured from the old code and pinned
+# here. A refactor must send the same thing; a deliberate payload change must update
+# these with a reason. The records cover a US archive record (the production path, with
+# an int humidity that must stay an int), values sitting on a rounding boundary in both
+# US and METRIC, a METRICWX record, and missing fields.
+PAYLOAD_RECORDS = [
+    {"dateTime": 1783256300, "usUnits": US, "outTemp": 70.73, "outHumidity": 63,
+     "barometer": 29.921, "windSpeed": 7.333333333333333, "windGust": 15,
+     "windDir": 247.5, "dewpoint": 58.12, "heatindex": 71.6,
+     "hourRain": 0.01 + 0.01 + 0.01, "rain": 0.01, "UV": 5.5, "radiation": 512.25},
+    {"dateTime": 1783256600, "usUnits": US, "windSpeed": 0.5592340730136006,
+     "windGust": 0.0, "hourRain": 0.0, "outTemp": -40.0},
+    {"dateTime": 1783256900, "usUnits": METRIC, "windSpeed": 0.18,
+     "windGust": 36.0, "barometer": 1013.25, "hourRain": 0.254, "outHumidity": 99.5},
+    {"dateTime": 1783257200, "usUnits": METRICWX, "outTemp": 21.45, "windSpeed": 4.25,
+     "windGust": 8.95, "hourRain": 2.54, "dewpoint": None, "UV": None},
+    {"dateTime": 1783257500, "usUnits": US, "outTemp": None, "windSpeed": None,
+     "hourRain": None, "rain": 0.02},
+]
+
+
+def _sent(record):
+    """What process_record hands to the HTTP call: (url, Content-Type, body)."""
+    t = _make_thread()
+    calls = []
+    t.post_with_retries = lambda request, data=None: calls.append(
+        (request.full_url, request.get_header("Content-type"), data))
+    t.process_record(record, None)
+    assert len(calls) == 1
+    return calls[0]
+
+
+_WINDY_URL = "https://stations.windy.com/api/v2/observation/update?id=STN&PASSWORD=PW&time=now"
+
+
+def test_payload_bytes_unchanged():
+    expected = [
+        "&temp=21.5&dewpoint=14.5&humidity=63&wind=3.3&gust=6.7&winddir=248"
+        "&pressure=101324&precip=0.76&uv=5.5&solarradiation=512.2",
+        "&temp=-40.0&wind=0.2&gust=0.0&precip=0.00",
+        "&humidity=100&wind=0.0&gust=10.0&pressure=101325&precip=2.54",
+        "&temp=21.4&wind=4.2&gust=8.9&precip=2.54",
+        "",
+    ]
+    for record, query in zip(PAYLOAD_RECORDS, expected):
+        # a GET: no body and no Content-Type
+        assert _sent(record) == (_WINDY_URL + query, None, None), record

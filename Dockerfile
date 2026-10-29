@@ -146,6 +146,7 @@ RUN sed -i 's|^\([[:space:]]*\)report_services = weewx.engine.StdPrint, weewx.en
 #--------------------------------------------
 COPY dewpoint_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/dewpoint_service.py
 COPY pressure_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/pressure_service.py
+COPY rest_site.py /opt/weewx-venv/lib/python3.14/site-packages/user/rest_site.py
 COPY owm.py /opt/weewx-venv/lib/python3.14/site-packages/user/owm.py
 COPY windy.py /opt/weewx-venv/lib/python3.14/site-packages/user/windy.py
 COPY wcloud.py /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
