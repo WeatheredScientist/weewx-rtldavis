@@ -55,7 +55,7 @@ DEC-0046).**
 
 | Layer | Wins in prod | The silent no-op |
 |---|---|---|
-| Driver (`rtldavis.py`), `pressure_service.py`, **`dewpoint_service.py`** (verified S94) | the **image** | an `scp` to `weewx-data/bin/user/` does nothing — needs a rebuild |
+| Driver (`rtldavis.py`), `pressure_service.py`, **`dewpoint_service.py`** (verified S94), `owm.py`, `windy.py` and their shared base **`rest_site.py`** (added S180, #507: Dockerfile COPY + `.dockerignore` + a smoke step; on `dev`, in no image until v2.1.1) | the **image** | an `scp` to `weewx-data/bin/user/` does nothing — needs a rebuild |
 | `weewx.conf` and other mounted config | the **mount** | an image rebuild does nothing — needs a live edit **on marvin** (since DEC-0118; was the NAS through S104). The old NAS-side path is gone (export retired 2026-09-05, MARVIN-DEC-0134), so marvin's tree is the only copy |
 | `influx.py` | mounted → `scp` **is** correct | — |
 | **`loop_json_writer.py`** (verified S85) | the **mount** — `<project root>/loop_json_writer.py`, bind-mounted `ro` over the venv copy | **an image rebuild does nothing** — the Dockerfile never `COPY`s this file. Deploy = `scp` to the **project root** + restart. **The copy in `weewx-data/bin/user/` is a DECOY**: it is not the mount source and editing it changes nothing |

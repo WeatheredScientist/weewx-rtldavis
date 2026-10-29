@@ -389,7 +389,7 @@ items inside a phase don't depend on each other.
         **Host steps proven 10-23** in marvin's disposable Debian 13 guest (ops#427, closed 10-27);
         its one finding, `--device /dev/bus/usb` failing on an empty USB bus, is fixed as docs
         (#471, PR #489). Left: `docs/DEPLOY.md`'s three systemd-unit checks, which need a guest
-        with a virtual USB device; ops#427 is closed, so that is a new ops ask.
+        with a virtual USB device: asked as eaglehunt-ops#439 (S180, 10-29), waiting on marvin.
 - [~] **Phase 2 — the image, one release (v2.0.21). Released S169**: in prod since 2026-10-26
       18:16 ET, multi-arch `:v2.0.21` on Hub, tag and GitHub release on `a7bf7ec`, `main` =
       `prod-baseline-20261026`. Left: the first arm64 run against a live radio (README says
@@ -406,15 +406,18 @@ items inside a phase don't depend on each other.
       **Done S159 (PR #464):** 35, 36, 38 fixed (29, 33, 34 had shipped at S145; 37's boilerplate and
       39's untested modules left for phase 5). Audit 32 was real (153 s worst case for ID 8): every
       start now gets the 240 s init grace, rides v2.0.21. Audit 20 fixed in the mounted `influx.py`.
-- [ ] **Phase 4 — upstream, in the owner's voice; nothing posted without a go.** Offer the four
-      unoffered driver fixes, highest value first: the `[options]` token's silent EU fallback (14),
-      zombie reaping (12), windDir (2), `NameError` and `rxCheckPercent` (3, 4). The driver repos have
-      been quiet since 2023, so the first move is one courtesy note to weewx-contrib, the package
-      everyone installs. Answer the reviewer note on david-lutz/weewx-influx2#1 (`verify_ssl`).
-      New since S160: `weewx-packages/weewx-rtldavis`, an unendorsed continuation created
-      2026-10-21, absorbed lheijst#22, #23 and lheijst/rtldavis#7 with credit. Whether it is also
-      a place to offer the four fixes is part of this phase's owner call.
-- [~] **Phase 5 — cleanup, no user-visible change.** *(S178 did 13, 14, 18, 25, 26, 27, 31 and the boilerplate half of 37, PRs #501/#502; left: 21–24 code dedup, 28, 30, 39, and 37's duplicated helpers.)* Audit 21–28 and 30–31: duplication in the
+- [~] **Phase 4 — upstream, in the owner's voice; nothing posted without a go.** *(S180, 10-29,
+      posted on the owner's go: weewx-contrib#2 — a one-maintainer packaging repo bundling the 2023
+      sources, told of #22/#23/rtldavis#7 and of the continuation; weewx-packages#6 — the string
+      version compare, the one of the four driver fixes (14, 12, 2, 3, 4) the continuation does not
+      already carry, so the lheijst four-fixes issue was dropped; and the DEC-0223 mechanism as a
+      comment on lheijst/rtldavis#2. Left: the david-lutz/weewx-influx2#1 reply — CodeRabbit's two
+      points are valid (`influx.py:501` still logs per record; `verify_ssl` undocumented) and need a
+      two-edit commit on the fork branch before the held reply is true, `BOOT.md` job 2.)*
+      `weewx-packages/weewx-rtldavis` is the live continuation (created 2026-10-21, absorbed
+      lheijst#22, #23 and lheijst/rtldavis#7 with credit); the lheijst repos have been quiet since
+      2023 and keep only the record.
+- [~] **Phase 5 — cleanup, no user-visible change.** *(S178 did 13, 14, 18, 25, 26, 27, 31 and the boilerplate half of 37, PRs #501/#502; S179 did 21, 22 and 37's helpers, PRs #504/#505; S180 did 23, 24, 30 and 39 in four parallel sessions, PRs #506–#509 — #507's `rest_site.py` and #509's driver changes are baked and ship with v2.1.1. Left: 28, the owner's read.)* Audit 21–28 and 30–31: duplication in the
       monitor, `ops/` and the OWM/Windy pair, SPDX gaps, CI pinning. Audit 28 (the
       `-or-later` tags on three uploaders) is an owner read, not a code fix. Also 37 and 39, left
       by phase 3, and (placed S172, they were in no phase) 13, 14, 16, 18: `ops/*.service` copies
@@ -526,13 +529,14 @@ Steps, in order:
       baseline recorded and closed S173)* Count CRC failures per hop slot and how many fall within
       ~100 ms of an accepted frame; surface it through the driver's counter line. The upstream diff
       moved to `BACKLOG.md`.
-- [~] #459 **Fix.** *(designed and built S173, DEC-0223; not deployed, rides the next image
-      release)* A content-agnostic burst gate in Go keyed on the frame's position in the sample
+- [x] #459 **Fix.** *(designed and built S173, DEC-0223; in prod with v2.1.0 since 2026-10-28
+      15:40 ET, S176; the first watch was clean, S178)* A content-agnostic burst gate in Go keyed on the frame's position in the sample
       stream, not the hop slot (the receiver has retuned before the next block's copy arrives).
       Window: one packet's airtime, 1,344 samples. Credits LloydR's lheijst/rtldavis#2. The Python
       filters stay as the backstop. Live check: the driver's `largest duplicate gap` line.
-- [ ] **Offer upstream** (owner's go): a comment on lheijst/rtldavis#2 or a follow-on PR, joining P0.8
-      phase 4.
+- [x] **Offer upstream** *(S180, 2026-10-29, owner's go: the mechanism posted as a comment on
+      lheijst/rtldavis#2, pointing at `patch/rtldavis-burstgate.patch`; no PR, the repo is quiet
+      since 2023 and the continuation has its own gate)*.
 
 Not here on purpose: the RF-dead episodes (`BOOT.md` blocker 2, DEC-0081), where the Go child goes
 silent and recovers with time. Nothing has shown a decoder bug behind them yet; if #458's counters

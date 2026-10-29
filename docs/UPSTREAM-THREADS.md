@@ -41,10 +41,26 @@ conflate them, and don't commit the drafts.
   128, producing phantom rain. **OPEN.** Our side shipped as DEC-0021 (v2.0.3).
 - **[david-lutz/weewx-influx2#1](https://github.com/david-lutz/weewx-influx2/pull/1)** — TLS
   verification on by default (it was a **silent** verification bypass) plus four more fixes.
-  **OPEN**; that repo's first-ever PR.
+  **OPEN**; that repo's first-ever PR. The only review is CodeRabbit's (a bot, 2026-07-13), two
+  valid points: `influx.py:501` still `loginf`s per record, and `verify_ssl` is undocumented. The
+  reply (`docs/upstream/phase4-influx2-reply.md`) is held until a two-edit commit lands on the fork
+  branch `fix/tls-verification-and-py312-compat` (S180).
+- **[weewx-contrib/weewx-rtldavis#2](https://github.com/weewx-contrib/weewx-rtldavis/issues/2)** —
+  **POSTED 2026-10-29** (S180, owner's go). A one-maintainer packaging repo that bundles the 2023
+  lheijst sources in `src.tgz`; told of #22, #23 and rtldavis#7 and of the continuation. **OPEN.**
+- **[weewx-packages/weewx-rtldavis#6](https://github.com/weewx-packages/weewx-rtldavis/issues/6)** —
+  **POSTED 2026-10-29** (S180, owner's go). The continuation's driver already carries the shlex
+  split, reaping, `rxCheckPercent`, the wind decode and the unknown-station log (checked at HEAD);
+  what it lacks is the numeric weewx-version compare, offered here with a maybe on `show-packets`
+  and the fork link. The lheijst four-fixes issue was dropped as moot. **OPEN.**
 
 ## Posted / closed
 
+- **[lheijst/rtldavis#2 comment](https://github.com/lheijst/rtldavis/pull/2#issuecomment-6499785445)**
+  — **POSTED 2026-10-29** (S180, owner's go). DEC-0223's mechanism (preamble offsets straddling a
+  512-sample block; copies 1 to 13 samples apart) and our sample-position gate, placed next to
+  LloydR's wall-time gate and hilman2's per-transmitter one; points at
+  `patch/rtldavis-burstgate.patch`. No field result claimed (the watch was 1 h 42 min).
 - **[Issue #15 comment](https://github.com/lheijst/weewx-rtldavis/issues/15#issuecomment-4960224128)**
   — **POSTED 2026-07-13** (owner-approved). The first comment on that thread since **2022-11-14**.
   Explains the duplicate-frame mechanism (DEC-0033/0035), the wraparound bug, and — the part that
