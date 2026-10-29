@@ -1110,23 +1110,32 @@ def period_label(start_ts, end_ts):
     return time.strftime("%Y-%m-%d %H:%M", s) + "–" + time.strftime(end_fmt, e)
 
 
+def _db_window_rows(query, label, start_ts, end_ts, db_path=None):
+    """Read-only archive query over [START_TS, END_TS) with two bound parameters.
+    Returns the rows, or None on any DB error, which is logged under LABEL and
+    swallowed so the monitor never dies on a DB hiccup."""
+    db_path = db_path or ARCHIVE_DB
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        try:
+            return con.execute(query, (start_ts, end_ts)).fetchall()
+        finally:
+            con.close()
+    except Exception as e:
+        log(f"DB {label} SUMMARY ERROR: {e}")
+        return None
+
+
 def db_reception_summary(start_ts, end_ts, db_path=None):
     """Read rxCheckPercent for the [START_TS, END_TS) epoch window from the archive
     DB (read-only) and return the reception summary dict, or None if the DB can't be
     read / the window is empty. Any DB error is logged and swallowed so the monitor
     never dies on a DB hiccup (the caller falls back to the legacy WU-scrape summary)."""
-    db_path = db_path or ARCHIVE_DB
-    try:
-        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
-        try:
-            rows = con.execute(
-                "SELECT dateTime, interval, rxCheckPercent FROM archive "
-                "WHERE dateTime >= ? AND dateTime < ? ORDER BY dateTime",
-                (start_ts, end_ts)).fetchall()
-        finally:
-            con.close()
-    except Exception as e:
-        log(f"DB RECEPTION SUMMARY ERROR: {e}")
+    rows = _db_window_rows(
+        "SELECT dateTime, interval, rxCheckPercent FROM archive "
+        "WHERE dateTime >= ? AND dateTime < ? ORDER BY dateTime",
+        "RECEPTION", start_ts, end_ts, db_path)
+    if rows is None:
         return None
     return summarize_reception_rows(rows, RF_TX_PER_MIN)
 
@@ -1213,18 +1222,11 @@ def db_battery_summary(start_ts, end_ts, db_path=None):
     DB (read-only) and return summarize_battery_rows() of it, or None. Any DB error
     is logged and swallowed, like db_reception_summary(): a battery line is never
     worth the monitor dying for."""
-    db_path = db_path or ARCHIVE_DB
-    try:
-        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
-        try:
-            rows = con.execute(
-                "SELECT dateTime, rxCheckPercent, txBatteryStatus FROM archive "
-                "WHERE dateTime >= ? AND dateTime < ? ORDER BY dateTime",
-                (start_ts, end_ts)).fetchall()
-        finally:
-            con.close()
-    except Exception as e:
-        log(f"DB BATTERY SUMMARY ERROR: {e}")
+    rows = _db_window_rows(
+        "SELECT dateTime, rxCheckPercent, txBatteryStatus FROM archive "
+        "WHERE dateTime >= ? AND dateTime < ? ORDER BY dateTime",
+        "BATTERY", start_ts, end_ts, db_path)
+    if rows is None:
         return None
     return summarize_battery_rows(rows)
 
