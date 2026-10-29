@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S181] — 2026-10-29 — P0.8 phase 4 closed: the weewx-influx2#1 reply
+
+- Two edits on the fork branch (commit `0c5d394`: `influx.py:501` `loginf` → `logdbg`; a `verify_ssl` line in the readme's option list), pushed on the owner's go, then the held reply posted on david-lutz/weewx-influx2#1. ROADMAP phase 4 checked, `docs/UPSTREAM-THREADS.md` and `BOOT.md` updated. A parallel session (S182) is researching an install path; its two untracked drafts are not part of this change.
+
 ## [S180] — 2026-10-29 — P0.8 phase 5 done but audit 28 (four parallel sessions); phase 4 posted; S179's closeout
 
 - Coordinator session (Fable 5.1, owner's call) ran four child sessions in their own worktrees: PR #507 (S180a, Opus): `owm.py`/`windy.py` share a new baked `rest_site.py` base, payloads pinned byte-identical, Dockerfile/`.dockerignore`/smoke-step plumbing (audit 23). PR #509 (S180b, Opus): driver QC block out to `_apply_sensor_qc`, `genLoopPackets` 183 → 135 lines, dead `windBatteryStatus` line removed, a 600-pass characterization test with an unchanged digest (audit 24); hot-swap code flagged, kept. PR #508 (S180c, Sonnet): 673 lines of tests for `wcloud.py` and `ogoxeUploader.py` (audit 39). PR #506 (S180d, Sonnet): dupgate patch hunk headers fixed, all three patches apply at offset 0 / fuzz 0 with Apple patch (audit 30). Merged in that order after `gh pr update-branch` each (the repo requires current branches). Gates on the result: ruff clean, 808 passed / 21 skipped, mypy clean (98 files).

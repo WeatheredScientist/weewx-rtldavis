@@ -3,7 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-10-27 (S172 — **scheduled full reconciliation, six sessions late**: the
+**Last updated:** 2026-10-29 (S181 — targeted line update per DEC-0057, not a full pass: P0.8 phase 4
+closed, the weewx-influx2#1 reply posted; tripwire still S182.)
+Prior: 2026-10-27 (S172 — **scheduled full reconciliation, six sessions late**: the
 tripwire said S166 and nothing fired it, because S166–S171 each updated only their own line. Eight
 lines moved, detail in the guardrail section. Next check: S182.)
 Prior: 2026-10-17 (S156 — **scheduled full reconciliation, tripwire fired exactly on
@@ -406,14 +408,15 @@ items inside a phase don't depend on each other.
       **Done S159 (PR #464):** 35, 36, 38 fixed (29, 33, 34 had shipped at S145; 37's boilerplate and
       39's untested modules left for phase 5). Audit 32 was real (153 s worst case for ID 8): every
       start now gets the 240 s init grace, rides v2.0.21. Audit 20 fixed in the mounted `influx.py`.
-- [~] **Phase 4 — upstream, in the owner's voice; nothing posted without a go.** *(S180, 10-29,
+- [x] **Phase 4 — upstream, in the owner's voice; nothing posted without a go.** *(S180, 10-29,
       posted on the owner's go: weewx-contrib#2 — a one-maintainer packaging repo bundling the 2023
       sources, told of #22/#23/rtldavis#7 and of the continuation; weewx-packages#6 — the string
       version compare, the one of the four driver fixes (14, 12, 2, 3, 4) the continuation does not
       already carry, so the lheijst four-fixes issue was dropped; and the DEC-0223 mechanism as a
-      comment on lheijst/rtldavis#2. Left: the david-lutz/weewx-influx2#1 reply — CodeRabbit's two
-      points are valid (`influx.py:501` still logs per record; `verify_ssl` undocumented) and need a
-      two-edit commit on the fork branch before the held reply is true, `BOOT.md` job 2.)*
+      comment on lheijst/rtldavis#2. S181, same day: the david-lutz/weewx-influx2#1 reply — CodeRabbit's
+      two valid points (`influx.py:501` logged per record; `verify_ssl` undocumented) fixed in
+      commit `0c5d394` on the fork branch, then replied. Nothing left but watching for answers,
+      `BOOT.md` job 2.)*
       `weewx-packages/weewx-rtldavis` is the live continuation (created 2026-10-21, absorbed
       lheijst#22, #23 and lheijst/rtldavis#7 with credit); the lheijst repos have been quiet since
       2023 and keep only the record.
