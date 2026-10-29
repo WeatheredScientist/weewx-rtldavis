@@ -42,9 +42,10 @@ conflate them, and don't commit the drafts.
 - **[david-lutz/weewx-influx2#1](https://github.com/david-lutz/weewx-influx2/pull/1)** — TLS
   verification on by default (it was a **silent** verification bypass) plus four more fixes.
   **OPEN**; that repo's first-ever PR. The only review is CodeRabbit's (a bot, 2026-07-13), two
-  valid points: `influx.py:501` still `loginf`s per record, and `verify_ssl` is undocumented. The
-  reply (`docs/upstream/phase4-influx2-reply.md`) is held until a two-edit commit lands on the fork
-  branch `fix/tls-verification-and-py312-compat` (S180).
+  valid points: `influx.py:501` still `loginf`ed per record, and `verify_ssl` was undocumented.
+  **Both fixed and replied 2026-10-29** (S181, owner's go): commit `0c5d394` on the fork branch
+  `fix/tls-verification-and-py312-compat` (`logdbg`, plus a `verify_ssl` line in the readme's option
+  list), then the reply as a PR comment. The maintainer has not commented.
 - **[weewx-contrib/weewx-rtldavis#2](https://github.com/weewx-contrib/weewx-rtldavis/issues/2)** —
   **POSTED 2026-10-29** (S180, owner's go). A one-maintainer packaging repo that bundles the 2023
   lheijst sources in `src.tgz`; told of #22, #23 and rtldavis#7 and of the continuation. **OPEN.**
