@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Freeze-aware reception analysis for the RX campaigns (DEC-0069).
 
 WHY THIS EXISTS

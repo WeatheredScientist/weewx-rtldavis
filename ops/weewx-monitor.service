@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # weewx-monitor.service -- marvin-side alerting for weewx-rtldavis (S107, ops#233)
 #
 # WHAT THIS REPLACES
@@ -14,11 +15,10 @@
 #     evaluating any threshold, and reports blindness as its own alert class.
 #   - REMEDY_MODE: the Foundation USB unbind/rebind is not ported. See below.
 #
-# INSTALL (marvin session / owner -- NOT from the weewx repo session)
-# ------------------------------------------------------------------
-#   install -m 0644 weewx-monitor.service /etc/systemd/system/
-#   systemctl daemon-reload
-#   systemctl enable --now weewx-monitor.service
+# INSTALL: not from this repo. The deployed unit is owned by heartofgold
+# (host/etc/systemd/system/, ADR-0005) and installed from there; this copy is a
+# reference that can lag it (S178 diffed the pair: comments only, for this file).
+# Edit the heartofgold copy, not this one, for anything that must reach the box.
 #
 # Deploy `weewx_monitor.py` from the MERGED dev tip, never from a local edit --
 # the repo is the source of truth, and marvin's copy was already found stale
@@ -116,8 +116,9 @@ Environment="REMEDY_SYSTEMCTL=sudo -n /usr/local/lib/marvin/marvin-own weewx"
 
 # Campaign inhibit. An RX campaign restarts weewx once per arm on purpose; every
 # one of those looks exactly like the fault this watchdog remedies, and a remedy
-# landing mid-arm corrupts the block being measured. The campaign script creates
-# this file for its duration. Detection and alerting continue; only action stops.
+# landing mid-arm corrupts the block being measured. Nothing creates this file
+# automatically today (ops/rx_experiment.sh is retired, DEC-0118); touch it by hand
+# to pause the remedy. Detection and alerting continue; only action stops.
 Environment=CAMPAIGN_INHIBIT=/srv/docker/weewx/logs/campaign.inhibit
 
 ExecStart=/usr/bin/python3 /srv/docker/weewx/weewx_monitor.py

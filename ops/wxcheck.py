@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 import sqlite3
 from datetime import datetime
 conn = sqlite3.connect('/opt/weewx-data/archive/weewx.sdb')

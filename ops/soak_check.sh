@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # soak_check.sh — is the station actually healthy, or does it just look "Up"?
 #
 # A soak is not "keep an eye on it". Prose does not execute (DEC-0040), and a soak

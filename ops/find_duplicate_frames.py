@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Census of spurious duplicate frames from the rtldavis Go demodulator.
 
 THE MECHANISM (DEC-0033, confirmed locally in DEC-0035):
@@ -33,6 +34,14 @@ Separating the two populations is the whole job:
   * gap ~2.8 s  -> the ISS transmitted the same payload twice. Transmitter
                    cadence, genuine, harmless.
   * gap ~ms     -> the RECEIVER manufactured the second frame. The mechanism.
+
+STATUS (S178): the text above describes the Go binary before v2.0.15. Since DEC-0135
+the Go side time-gates repeats (`-dupwindow`), so a genuine transmitter repeat no
+longer prints `duplicate packet:` and the "transmitter repeats" count below reads 0
+on current logs; only the millisecond-gap population is still meaningful. Since
+v2.1.0 (DEC-0223) a burst gate also drops the second copy of a double-decoded burst
+before this line is printed. For a standing check use the driver's per-period
+`duplicate frames` and `largest duplicate gap` lines instead.
 
 Requires `debug_rtld = 1` (or higher) AND the `user` logger at DEBUG in
 weewx.conf -- the line is emitted via dbg_rtld(1) -> log.debug. That is noisy;
