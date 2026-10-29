@@ -255,9 +255,14 @@ line (2026-07-05) and three `# type: ignore[...]` comments on the Python 2/3 imp
 
 These are original to this project (GPLv3, same as the stack they plug into) and are not derived from
 an upstream file: `dewpoint_service.py`, `pressure_service.py`, `loop_json_writer.py`, `owm.py`,
-`windy.py`, `weewx_monitor.py`, everything in `ops/` and `tests/`, the `Dockerfile`, `entrypoint.sh`
-and the compose file. `owm.py` and `windy.py` follow the weewx `RESTThread` pattern
+`windy.py`, `rest_site.py`, `weewx_monitor.py`, everything in `ops/` and `tests/`, the `Dockerfile`,
+`entrypoint.sh` and the compose file. `owm.py` and `windy.py` follow the weewx `RESTThread` pattern
 ([DEC-0007](docs/DECISIONS.md)) but were written here.
+
+| File | Date | Change |
+|------|------|--------|
+| `owm.py` | 2026-10-29 | The service and thread boilerplate moved to a shared base, `rest_site.py`; `owm.py` keeps its field map, URL and JSON body. The payload is byte-for-byte unchanged, pinned by `tests/test_owm_post_body.py` (S180a, audit 23). |
+| `windy.py` | 2026-10-29 | The same move to `rest_site.py`; `windy.py` keeps its field map and GET URL. The dead `weewx.restx.get_queue` branch is gone (weewx has no such function, so it always fell back to `queue.Queue()`). The payload is byte-for-byte unchanged, pinned by `tests/test_windy_post_body.py` (S180a, audit 23). |
 
 ---
 
