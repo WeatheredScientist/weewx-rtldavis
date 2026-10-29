@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # weewx-rx-experiment.service -- periodic tick/guard driver for RX campaigns (S108)
 #
 # WHAT THIS REPLACES

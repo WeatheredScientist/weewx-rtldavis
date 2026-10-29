@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # test_check_secrets.sh — prove the secret gate actually catches secrets.
 #
 # WHY THIS EXISTS (DEC-0039). `scripts/check_secrets.sh` passed every commit for

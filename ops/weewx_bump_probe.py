@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Helpers for ops/weewx_bump_check.sh, run under the scratch venv's interpreter.
 
   wu                     assert how StdWunderground wires its two threads

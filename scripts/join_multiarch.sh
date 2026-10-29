@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Join marvin's amd64 image and CI's arm64 image into Docker Hub's multi-arch :vX.Y.Z (DEC-0215).
 #
 #   scripts/join_multiarch.sh vX.Y.Z [--apply] [--expect-amd64 sha256:...] [--amd64-only]

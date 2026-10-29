@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# coding: latin-1
+# coding: utf-8
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # This driver is a merge of modified versions of both
@@ -1268,7 +1268,7 @@ class CHANNELPacket(Packet):
 
             if abs(int(m.group(3))) > 20000:
                 raise weewx.WeeWxIOError("RESTART RTLDAVIS PROGRAM: abs freqOffset channel %s too big (> 20000): %s" % (m.group(1), m.group(3)))
-            # save frequency errors only for EU band
+            # save frequency errors for the EU, US and NZ bands
             if self.frequency in ['EU', 'US', 'NZ']:
                 # Store the FreqErrors only for one transmitter
                 # The data for each transmitter is stored during 2 full days
@@ -1294,7 +1294,7 @@ class CHANNELPacket(Packet):
 
                 if abs(int(m.group(3))) > 20000:
                     raise weewx.WeeWxIOError("RESTART RTLDAVIS PROGRAM: abs freqOffset channel %s too big (> 20000): %s" % (m.group(1), m.group(3)))
-                # save frequency errors only for EU band
+                # save frequency errors for the EU, US and NZ bands
                 if self.frequency in ['EU', 'US', 'NZ']:
                     # Unlike PATTERNv13 above, this protocol has no
                     # Transmitter field to gate on -- with more than one
@@ -1591,7 +1591,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # more importantly, so a container restart cannot silently revert
             # a swapped gain back to the config value while the ack file still
             # advertises the swapped one. That silent-revert shape is exactly
-            # what DEC-0116 cost four weeks to notice.
+            # what DEC-0117 (the hot-swap control file) exists to prevent.
             settings, mtime = self._read_hotswap_settings()
             self._hotswap_mtime = mtime
             if settings:
@@ -2207,10 +2207,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                                 dbg_parse(3, "pkt= %s" % packet)
                                 yield packet
                         else:
-                            # Was `if packet:` -- a NameError waiting for the
-                            # first iteration on which this branch was reached
-                            # before `packet` was ever bound. Unreachable while
-                            # the guard above could never be false; reachable now.
+                            # A repeat of the previous reading (same dedup_key):
+                            # drop it. Reachable since DEC-0135 made the guard
+                            # above able to be false; `packet` is bound at the
+                            # top of genLoopPackets, so this branch never read an
+                            # unbound name.
                             dbg_parse(3, "ignoring repeat packet %s" % pkt_key)
                     elif lines:
                         # NOTE (S24 L6): effectively unreachable -- PacketFactory

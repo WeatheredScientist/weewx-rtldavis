@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # scan_history.sh — run the WHOLE current secret gate over every blob git history
 # reaches (S154, ops#404). check_secrets.sh only ever sees the staged diff or the
 # tracked tree; a detector change says nothing about what the old blobs hold. S153's

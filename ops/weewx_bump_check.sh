@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # weewx_bump_check.sh -- does this weewx version work with our runtime modules? (DEC-0011)
 #
 # There is no dev receiver, so a weewx bump cannot be proven on the live signal. This is the

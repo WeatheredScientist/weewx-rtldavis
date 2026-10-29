@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 mkdir -p /var/log/weewx
 echo "Starting weewx..."
 # BIAS_TEE=1 (default) powers an inline LNA through the RTL-SDR v3 bias tee.

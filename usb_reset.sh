@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # USB reset script for RTL-SDR dongle
 # This script is intentionally minimal — only USB unbind/rebind
 # Owned by root, not writable by weewx-monitor

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # RETIRED (NAS era, DEC-0118): kept as a record of the method. Its paths and nasctl calls no longer reach a live system.
 # freeze_watch.sh — read-only diagnostic watcher for the DEC-0067/DEC-0068 process
 # freeze (weewxd stops advancing weewx.log for ~2-4 min, roughly once a day, cause

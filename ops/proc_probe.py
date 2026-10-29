@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Sample weewxd's kernel scheduler counters across a window (BOOT job 6, DEC-0068).
 
 WHY THIS EXISTS

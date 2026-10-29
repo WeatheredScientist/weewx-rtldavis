@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Build dist/weewx-influx-VERSION.zip (DEC-0219). One root directory, as
 # `weectl extension install` requires. Fails if the VERSION in influx.py,
 # extensions/influx/install.py and (when given) the release tag disagree.
