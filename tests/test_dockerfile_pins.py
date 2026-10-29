@@ -9,7 +9,7 @@ full commit id / full sha256.
 Since DEC-0219 the image installs `influx.py` from this repo's extension, so `src.tgz` is the one
 remaining download; the checks below no longer expect two.
 
-Run:  python3 -m pytest tests/    OR    python3 tests/test_dockerfile_pins.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import os
 import re
@@ -88,8 +88,3 @@ def test_influx_copied_into_the_venv_user_package():
     # `user.influx` unimportable (v2.0.21 build, S169); the root file must be COPY'd into the venv
     assert ("COPY influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py"
             in _dockerfile())
-
-
-if __name__ == "__main__":
-    import pytest
-    raise SystemExit(pytest.main([__file__, "-v"]))

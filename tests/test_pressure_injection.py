@@ -21,9 +21,8 @@ packet as `barometer_fetch_epoch` for loop_json_writer to publish.
 
 weewx is stubbed before import, same pattern as test_loop_json_writer.py.
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_pressure_injection.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
-import os
 import sys
 import types
 
@@ -62,7 +61,6 @@ weewx.US = getattr(weewx, "US", 1)
 weewx.METRIC = getattr(weewx, "METRIC", 16)
 weewx.METRICWX = getattr(weewx, "METRICWX", 17)
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pressure_service as ps  # noqa: E402
 
 
@@ -237,11 +235,6 @@ def test_failed_fetch_leaves_last_success_untouched(monkeypatch):
     f.fetch_pressure()
     assert f.last_success == 1_600_000_000.0, \
         "a fetch that yielded nothing must not refresh the freshness stamp"
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))
 
 
 def test_placeholder_station_id_does_not_crash_and_does_not_bind():

@@ -18,11 +18,7 @@ wrong, and this repo's secret gate was green-and-wrong for nine sessions):
 
 Run:  python3 -m pytest tests/test_campaign_analyze.py
 """
-import os
-import sys
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ops"))
 import campaign_analyze as ca  # noqa: E402
 
 MIN = 60
@@ -210,7 +206,3 @@ def test_summarize_reports_clean_and_raw_side_by_side():
     assert s.arm == "A"
     assert s.n < s.raw_n                 # exclusions actually removed records
     assert s.mean > s.raw_mean           # and the raw figure was dragged down
-
-
-if __name__ == "__main__":
-    sys.exit(os.system(f"python3 -m pytest -q {__file__}"))

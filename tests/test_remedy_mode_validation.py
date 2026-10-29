@@ -24,7 +24,6 @@ import pytest
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
 import weewx_monitor as wm  # noqa: E402
 
 VALID_MODES = ("usb_reset", "restart_unit", "none")

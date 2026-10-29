@@ -5,9 +5,7 @@ tests pin the strict parse (a foreign or malformed line is ignored, never
 half-counted) and the per-period accounting.
 """
 import os
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pytest  # noqa: E402
 import rtldavis  # noqa: E402
 from rtldavis import RtldavisDriver, parse_crc_stats  # noqa: E402

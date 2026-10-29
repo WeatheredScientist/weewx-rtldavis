@@ -14,8 +14,6 @@ from typing import Any
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
 
 # Reuse whatever stub another file installed first; build one only if weewx is absent.
 if 'weewx' not in sys.modules:

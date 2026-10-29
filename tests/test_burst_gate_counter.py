@@ -6,10 +6,7 @@ burst was corrupt), and reports the largest duplicate gap per period: the live
 check that real copies sit far inside the gate's window. Nothing here influences
 which frames are accepted.
 """
-import os
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pytest  # noqa: E402
 import rtldavis  # noqa: E402
 from rtldavis import RtldavisDriver, parse_burst_line  # noqa: E402

@@ -22,12 +22,8 @@ invented ones.
 
 Run:  .venv/bin/python -m pytest tests/test_stall_baseline.py
 """
-import os
-import sys
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ops"))
 import stall_baseline as sb  # noqa: E402
 
 

@@ -5,7 +5,7 @@ marvin the build context is the tenant root: a live checkout that also holds wee
 archive, and conf backups with credentials), influxdb/ and logs/. A COPY source added to the
 Dockerfile without its allowlist line fails the build on marvin; this test fails it in CI first.
 
-Run:  python3 -m pytest tests/    OR    python3 tests/test_dockerignore.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import os
 
@@ -49,8 +49,3 @@ def test_allowlist_names_only_existing_paths_and_no_data_dirs():
     for a in allow:
         assert os.path.exists(os.path.join(ROOT, a)), "stale allowlist entry: %s" % a
         assert a.split("/")[0] not in ("weewx-data", "influxdb", "logs", "conf-archive"), a
-
-
-if __name__ == "__main__":
-    import pytest
-    raise SystemExit(pytest.main([__file__, "-v"]))

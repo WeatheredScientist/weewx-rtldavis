@@ -9,13 +9,11 @@ of re-deriving episodes from three logs. Fields:
 Same import pattern as test_watchdog_escalation.py: weewx_monitor writes a
 pidfile at import; '--test-alert' in argv bypasses that guard.
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_episode_ledger.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
-import os
 import sys
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
 
@@ -100,8 +98,3 @@ def test_open_resets_counters_from_prior_episode(tmp_path, monkeypatch):
     assert wm.EP['stalls'] == 0
     assert wm.EP['last_cmd'] == ""
     assert wm.EP['worst_avg'] == 30.0
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))

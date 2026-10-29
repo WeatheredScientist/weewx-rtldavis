@@ -15,7 +15,6 @@ step, so a 60 s window is two polls and a flush lands every fifth window.
 weewx_monitor.py writes a pidfile at import; '--test-alert' bypasses that guard
 (same pattern as test_reception_full_outage.py).
 """
-import os
 import re
 import sys
 import time as _real_time
@@ -23,7 +22,6 @@ import time as _real_time
 import pytest
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
 # Local time, early in a 6 h report block, so a run of a few hours never crosses

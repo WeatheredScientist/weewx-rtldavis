@@ -23,7 +23,6 @@ from pathlib import Path
 # Bypass the module's PID guard so importing it doesn't touch a running monitor
 # (same trick as tests/test_monitor_incremental_read.py).
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import weewx_monitor  # noqa: E402
 

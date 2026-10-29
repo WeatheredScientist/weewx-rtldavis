@@ -22,58 +22,11 @@ weewx is not installed in the test/CI environment, so we stub the weewx
 modules in sys.modules before importing the driver (same pattern as
 test_procmanager_reap.py / test_stderr_drain.py).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_issue_226_cli_fixes.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
-import os
-import sys
-import types
 
 import pytest
 
-# --- stub the weewx deps so rtldavis.py imports without weewx installed ---
-def _pkg(name):
-    m = types.ModuleType(name)
-    m.__path__ = []
-    sys.modules[name] = m
-    return m
-
-def _mod(name):
-    m = types.ModuleType(name)
-    sys.modules[name] = m
-    return m
-
-class _AbstractDevice:
-    def __init__(self, *a, **k): pass
-class _AbstractConfEditor:
-    pass
-class _StdService:
-    def __init__(self, *a, **k): pass
-
-_weewx = _pkg("weewx")
-_weewx.__version__ = "5.3.1"
-_weewx.METRICWX = 16
-_weewx.UnsupportedFeature = type("UnsupportedFeature", (Exception,), {})
-_drivers = _mod("weewx.drivers")
-_drivers.AbstractDevice = _AbstractDevice
-_drivers.AbstractConfEditor = _AbstractConfEditor
-_engine = _mod("weewx.engine")
-_engine.StdService = _StdService
-_units = _mod("weewx.units")
-for _d in ("obs_group_dict", "USUnits", "MetricUnits", "MetricWXUnits",
-           "default_unit_format_dict", "default_unit_label_dict"):
-    setattr(_units, _d, {})
-_crc16 = _mod("weewx.crc16")
-_crc16.crc16 = lambda *a, **k: 0
-_weewx.drivers, _weewx.engine, _weewx.units, _weewx.crc16 = (
-    _drivers, _engine, _units, _crc16)
-
-_weeutil = _pkg("weeutil")
-_wu = _mod("weeutil.weeutil")
-_wu.tobool = lambda v: str(v).lower() in ("1", "true", "yes", "on")
-_wlog = _mod("weeutil.logger")
-_weeutil.weeutil, _weeutil.logger = _wu, _wlog
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import rtldavis  # noqa: E402
 
 
@@ -207,7 +160,3 @@ def test_show_packets_prints_stdout_lines(capsys):
     rtldavis.show_packets(mgr)
     out = capsys.readouterr().out
     assert "one" in out and "two" in out
-
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))
