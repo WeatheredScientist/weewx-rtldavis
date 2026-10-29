@@ -20,6 +20,7 @@ import sys
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
 import weewx_monitor as wm  # noqa: E402
+from conftest import reset_wd  # noqa: E402
 
 
 class _Harness:
@@ -33,8 +34,7 @@ class _Harness:
         self._orig = {}
 
     def __enter__(self):
-        wm.WD.update({'last_reset': 0.0, 'tries': 0,
-                      'check_at': 0.0, 'escalated': False})
+        reset_wd()
         self._orig = {'send_email': wm.send_email, 'log': wm.log,
                       'episode_open': wm.episode_open,
                       'episode_note_avg': wm.episode_note_avg,

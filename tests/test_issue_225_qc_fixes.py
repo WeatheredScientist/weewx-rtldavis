@@ -30,6 +30,7 @@ import pytest
 
 from rtldavis import (  # noqa: E402
     CHANNELPacket, RtldavisDriver, SensorQC)
+from conftest import make_driver  # noqa: E402
 
 T0 = 1_000_000.0  # arbitrary epoch for the fake clock
 
@@ -70,14 +71,7 @@ def test_rain_rate_matches_the_stdqc_backstop_upper_bound():
 
 # ── Item 5: pct_good storage, equality not substring containment ──────────
 
-def _make_driver(active_tr_ids):
-    """Bare object carrying just the state new_archive_record touches.
-    __init__ is skipped (it spawns a subprocess)."""
-    d = RtldavisDriver.__new__(RtldavisDriver)
-    RtldavisDriver._init_stats(d)
-    for i, tr_id in enumerate(active_tr_ids):
-        d.stats["activeTrIds"][i] = tr_id
-    return d
+_make_driver = make_driver
 
 
 def test_pct_good_storage_uses_equality_not_substring_containment():

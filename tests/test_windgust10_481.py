@@ -10,9 +10,9 @@ import pytest
 
 import rtldavis
 from rtldavis import MPH_TO_MPS, RtldavisDriver, SensorQC
+from conftest import DEFAULT_CHANNELS  # noqa: E402
 
-CHANNELS = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-            'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
+CHANNELS = dict(DEFAULT_CHANNELS)
 
 
 class _Parser:

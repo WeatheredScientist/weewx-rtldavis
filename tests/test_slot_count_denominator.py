@@ -37,19 +37,14 @@ import pytest
 
 import rtldavis  # noqa: E402
 from rtldavis import RtldavisDriver  # noqa: E402
+from conftest import make_driver  # noqa: E402
 
 LOOP_TIME = 2.8125  # loop_times[4] -- our own receiver's transmitter (DIP ID 5, S119/#313)
 
 
 def _make_driver():
-    """Bare object carrying just the state the stats methods touch. __init__
-    is skipped (it spawns a subprocess); one active transmitter at slot 0,
-    mapped to loop_times[4] (this station's real transmitter)."""
-    d = RtldavisDriver.__new__(RtldavisDriver)
-    RtldavisDriver._init_stats(d)
-    d.stats['activeTrIds'][0] = 4
-    d._save_pct_good_per_transmitter = False
-    return d
+    """One active transmitter at slot 0, ID 4 (this station's real transmitter)."""
+    return make_driver((4,))
 
 
 @contextlib.contextmanager

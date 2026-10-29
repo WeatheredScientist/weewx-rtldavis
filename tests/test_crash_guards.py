@@ -20,6 +20,7 @@ import rtldavis  # noqa: E402
 from rtldavis import (  # noqa: E402
     DATAPacket, DEFAULT_SOIL_TEMP, RtldavisDriver, calculate_thermistor_temp,
 )
+from conftest import DEFAULT_CHANNELS  # noqa: E402
 
 
 class _FakeDriver:
@@ -29,8 +30,7 @@ class _FakeDriver:
     unrelated to what issue #221 fixes there but needed for the function to
     run at all -- plain dicts so arbitrary-index assignment never raises,
     unlike the real list-shaped stats)."""
-    channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
+    channels = dict(DEFAULT_CHANNELS)
     rain_per_tip = 0.2
     stats: dict = {'activeTrIds': {}, 'activeTrIdPtrs': {}}
 

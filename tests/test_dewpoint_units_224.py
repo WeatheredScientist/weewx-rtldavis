@@ -46,6 +46,7 @@ import types
 
 
 import dewpoint_service  # noqa: E402
+from conftest import make_cacher  # noqa: E402
 
 weewx = dewpoint_service.weewx  # conftest.py installs the shared fake
 
@@ -65,8 +66,7 @@ METRICWX = dewpoint_service.weewx.METRICWX
 T0 = 1000.0
 
 
-def _cacher():
-    return dewpoint_service.DewpointCacher(engine=None, config_dict={})
+_cacher = make_cacher
 
 
 def _seeded(speed, when=T0):

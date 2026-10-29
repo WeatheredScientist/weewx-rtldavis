@@ -18,6 +18,7 @@ Run:  python -m pytest tests/ (pytest only)
 from rtldavis import (  # noqa: E402
     SensorQC, QC_RESEED_SECONDS, RtldavisDriver, FRAME_WEATHER_KEYS,
     FRAME_BATTERY_KEYS, IMPOSSIBLE_MSG_TYPE_KEY)
+from conftest import DEFAULT_CHANNELS  # noqa: E402
 
 T0 = 1_000_000.0  # arbitrary epoch for the fake clock
 
@@ -263,8 +264,7 @@ def test_frame_battery_keys_cover_every_battery_field():
 class _ParseDriver:
     """Minimal stand-in for parse_raw, as in test_battery_status_dispatch.py:
     parse_raw is @staticmethod but takes `self` explicitly."""
-    channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
+    channels = dict(DEFAULT_CHANNELS)
     rain_per_tip = 0.2
     last_hum = None
     _log_humidity_raw = False
