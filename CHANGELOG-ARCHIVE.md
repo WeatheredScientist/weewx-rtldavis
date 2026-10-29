@@ -7,6 +7,11 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S176] — 2026-10-28 — v2.1.0 deployed, on Hub, baseline tagged
+
+- Prod had run an earlier v2.1.0-era build (`a1e6e94c…`) since 12:24 ET with no matching tag; retagged it `:v2.1.0-predeploy`, moved `:marvin-live` to `:v2.1.0` (`6e10c71b…`) and restarted at 15:40:40 ET (first records clean). Pushed `:v2.1.0-amd64` and joined `:v2.1.0` multi-arch (`881e6c43…`). Tagged `prod-baseline-20261028` on `main`. `:latest` untouched.
+
+
 ## [S175] — 2026-10-28 — v2.1.0 version strings; windGust10's uploader check
 
 - Bumped the image tag to v2.1.0 in `Dockerfile`, `README.md`, `docker-compose.yml`, the systemd example, the `image-publish.yml` example and `CHANGES-FROM-UPSTREAM.md` (driver `0.20+ws.8`). Checked DEC-0224's open item: prod's `[[Influx]]` uploads every archive key, so InfluxDB gains `windGust10_mph`; the other uploaders read named keys only. Not built or deployed yet.
