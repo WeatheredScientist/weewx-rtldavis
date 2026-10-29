@@ -29,7 +29,9 @@ import tempfile
 import rtldavis
 from conftest import DEFAULT_CHANNELS, make_driver
 
-EXPECTED_SHA256 = "a9797c45129bddb3f4b66570c30b97f55ac22e793f67b034aa6b3a0f04caa585"
+# Changed once, deliberately, in S180b: dropping parse_raw's dead windBatteryStatus line
+# (audit 24c) removes a None-valued key from 36 DEBUG dict reprs; nothing else moved.
+EXPECTED_SHA256 = "2d45e308a9083bf8bcf5f16386ca52b3dffa58e6e94fa76a9ae807da3842fa27"
 
 T0 = 1_800_000_000.0
 MSG_TYPES = [0x8, 0x8, 0xA, 0xA, 0xE, 0xE, 0x5, 0x4, 0x6, 0x9, 0x2, 0x7, 0x3, 0xC,

@@ -2276,7 +2276,6 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     data['wind_speed_ec'] = 0
                     data['wind_speed_raw'] = wind_speed_raw
                     data['wind_dir'] = None
-                    data['windBatteryStatus'] = data.get('windBatteryStatus')
                 elif not(wind_speed_raw == 0 and wind_dir_raw == 0):
                     """ The elder Vantage Pro and Pro2 stations measured
                     the wind direction with a potentiometer. This type has
