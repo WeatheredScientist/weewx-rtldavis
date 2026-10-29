@@ -428,6 +428,13 @@ items inside a phase don't depend on each other.
       code, driver comments that misstate the code. 16 may be moot after DEC-0213's README
       rewrite; unverified.
 
+- [ ] **Phase 6 — the install path (DEC-0225, S182).** Twelve commands plus a hand edit become
+      four commands and no edit. Docs first: `docs/QUICKSTART.md` (landed with the DEC, tagged per
+      dependent line), `scripts/host-setup.sh`, compose plus `.env`. Then v2.2.0 (minor, DEC-0222):
+      the entrypoint seeds `weewx.conf` into an empty mount, first-run env vars read once,
+      `WEEWX_DRIVER=simulator`, startup summary line, informational `HEALTHCHECK`, `doctor`,
+      `HOME=/tmp` and `BIAS_TEE=0` as image defaults. Acceptance: a stock 64-bit Pi OS plus the
+      quick start, timed, by someone who has not read the repo. Research: `docs/INSTALL-RESEARCH.md`.
 Errors in the Go decoder itself are their own track, P1.9 below; its image changes ride phase 2's
 release or the one after.
 

@@ -62,6 +62,10 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
    the local-infra marvin entry, the reset-from-112-or-above phantom, whether to tell the
    `weewx-packages` maintainer about DEC-0218 option B (they now know of the fork: #6), `git worktree
    prune` in heartofgold (stale S161 entry), CI mypy pinned `2.3.0` while the pre-commit rev lags.
+8. **P0.8 phase 6 (DEC-0225, S182): build the install path.** Docs first (`scripts/host-setup.sh`,
+   compose plus `.env`, README's quick start replaced by four lines and a link to
+   `docs/QUICKSTART.md`), then v2.2.0's entrypoint and Dockerfile items; owner's three open
+   questions are at the end of `docs/INSTALL-RESEARCH.md` §6.
 
 ## Current state (S180)
 
