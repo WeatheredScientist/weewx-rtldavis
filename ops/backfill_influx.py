@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 backfill_influx.py — Eagle Hunt PWS
 Reads WeeWX SQLite archive and writes missing records to InfluxDB 2.x

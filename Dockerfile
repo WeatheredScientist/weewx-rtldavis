@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 #--------------------------------------------
 # weewx-rtldavis v2.1.0
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x

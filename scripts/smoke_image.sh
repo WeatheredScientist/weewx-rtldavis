@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Smoke-test a built weewx-rtldavis image on the architecture it was built for (DEC-0214).
 #
 #   scripts/smoke_image.sh <image> <expected `uname -m`> <requirements.txt>

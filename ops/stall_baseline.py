@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Baseline-measure the RF-dead stall rate, instead of eyeballing it (DEC-0083).
 
 WHY THIS EXISTS

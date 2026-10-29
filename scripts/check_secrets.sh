@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # check_secrets.sh — block credentials and personal identifiers from entering
 # this PUBLIC repo (DEC-0012, DEC-0039). Invoked by pre-commit on staged files,
 # and by CI over the whole tracked tree.

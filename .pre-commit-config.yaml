@@ -3,8 +3,10 @@
 # Run all:  pre-commit run --all-files
 #
 # This is a collection of WeeWX extension scripts (imported by the venv), not a
-# packaged app — so ruff/mypy run in non-blocking-lint mode and the secret scan
-# is the load-bearing gate for this PUBLIC repo (DEC-0012).
+# packaged app. ruff and mypy are NOT advisory: CI's `lint` job is a required
+# check and runs both (.github/workflows/ci.yml). The secret scan is still the
+# load-bearing gate for this PUBLIC repo (DEC-0012). The mypy rev below trails CI's
+# pin on purpose until a hook-env run on Python 3.14 is measured; CI is the authority.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.5.7

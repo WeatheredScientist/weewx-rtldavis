@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 backfill_container.py - Eagle Hunt PWS
 Backfill WeeWX archive -> InfluxDB 2.x, run INSIDE the live weewx container

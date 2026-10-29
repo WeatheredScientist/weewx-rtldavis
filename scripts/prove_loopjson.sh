@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Install a built weewx-loopjson zip into a fresh WeeWX and prove it works with
 # the Simulator driver, i.e. without the rtldavis driver (DEC-0211 item 6).
 # Needs `weectl` and `weewxd` on PATH (pip install weewx==5.5.2).

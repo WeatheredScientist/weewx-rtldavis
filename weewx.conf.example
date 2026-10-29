@@ -2,6 +2,11 @@
 #
 # Copyright (c) 2009-2024 Tom Keffer <tkeffer@gmail.com>
 # See the file LICENSE.txt for your rights.
+#
+# Modified for weewx-rtldavis: derived from WeeWX's stock weewx.conf. The [Rtldavis]
+# section, the [[Influx]] uploader and the quality-control keys are this project's
+# additions, and the stock sections were trimmed to what the Docker image uses.
+# Changes are recorded in CHANGES-FROM-UPSTREAM.md. WeeWX is GPLv3.
 
 ##############################################################################
 

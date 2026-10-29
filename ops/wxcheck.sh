@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 echo "=== WU Rapidfire ==="
 curl -s "https://api.weather.com/v2/pws/observations/current?stationId=${WU_STATION_ID}&format=json&units=e&apiKey=${WU_API_KEY}" | python3 -m json.tool | grep -i "winddir\|windSpeed\|windGust\|temp\|humidity\|pressure"
 echo "=== weewx Archive (last 3) ==="

@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# REFERENCE COPY, LAGGING (S178). The deployed unit lives in heartofgold
+# (host/etc/systemd/system/weewx-influxdb.service) and adds OnFailure=, ExecStopPost=,
+# --cgroup-parent, the bolt-store ExecStartPre guard, `--security-opt no-new-privileges
+# --cap-drop ALL`, and `--mount type=bind` for both tenant paths. Do not install this copy.
 # weewx-influxdb.service -- InfluxDB 2.x on marvin, the weewx tenant's store (S124, DEC-0141)
 #
 # WHAT THIS REPLACES

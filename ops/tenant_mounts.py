@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Derive the tree-swap restore list from LIVE unit files, not memory (ops#288).
 
 WHY THIS EXISTS
@@ -16,8 +17,10 @@ list is exactly as complete as whoever wrote it remembered to be.
 WHAT "RESTORE LIST" MEANS HERE
 -------------------------------
 Not every `-v host:container` source is a landmine. Some (`influx.py`,
-`loop_json_writer.py`, `sortedcontainers`) are files this very repo tracks in
-git -- a tenant-root git checkout (DEC-0150) recreates them for free. The
+`loop_json_writer.py`) are files this very repo tracks in git -- a tenant-root
+git checkout (DEC-0150) recreates them for free. (`sortedcontainers` is NOT one
+of them: it is gitignored with no repo copy, a vendored directory the mount
+pins, so a checkout does not recreate it.) The
 actual landmines are host paths that are NOT git-tracked: runtime data that
 only ever existed on the live box and would be silently lost (or, worse,
 silently re-created empty and root-owned by Docker's own bind-mount
