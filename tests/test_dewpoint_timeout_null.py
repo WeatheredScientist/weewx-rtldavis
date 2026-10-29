@@ -16,8 +16,8 @@ Run:  python3 -m pytest tests/ (pytest only)
 """
 
 
-import dewpoint_service  # noqa: E402
 from dewpoint_service import CACHE_TIMEOUT_SECONDS  # noqa: E402
+from conftest import make_cacher  # noqa: E402
 
 T0 = 1_700_000_000  # arbitrary packet epoch
 
@@ -27,8 +27,7 @@ class _Event:
         self.packet = packet
 
 
-def _cacher():
-    return dewpoint_service.DewpointCacher(engine=None, config_dict={})
+_cacher = make_cacher
 
 
 def _run(cacher, ts, **fields):

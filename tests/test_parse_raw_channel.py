@@ -16,14 +16,14 @@ Run:  python3 -m pytest tests/ (pytest only)
 """
 
 from rtldavis import RtldavisDriver  # noqa: E402
+from conftest import DEFAULT_CHANNELS  # noqa: E402
 
 
 class _FakeDriver:
     """Minimal stand-in carrying only what parse_raw reads: the channel map.
     All sensor channels but the ISS are 0 (not present), so a packet on any
     other channel falls through to the unknown-station else branch (H1)."""
-    channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
+    channels = dict(DEFAULT_CHANNELS)
 
 
 def _pkt_on_channel(chan):

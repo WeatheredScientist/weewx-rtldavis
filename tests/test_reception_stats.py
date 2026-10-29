@@ -21,17 +21,10 @@ import time
 import types
 
 from rtldavis import RtldavisDriver  # noqa: E402
+from conftest import make_driver  # noqa: E402
 
 
-def _make_driver():
-    """Bare object carrying just the state the stats methods touch. __init__ is
-    skipped (it spawns a subprocess); we call _init_stats to populate stats and
-    mark one active transmitter (ID 0 -> loop_times[0])."""
-    d = RtldavisDriver.__new__(RtldavisDriver)
-    RtldavisDriver._init_stats(d)
-    d.stats['activeTrIds'][0] = 0          # one active transmitter, ID 0
-    d._save_pct_good_per_transmitter = False
-    return d
+_make_driver = make_driver
 
 
 def _run_period(d, curr_cnt0, period_s=60):

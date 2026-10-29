@@ -16,6 +16,7 @@ Run:  python3 -m pytest tests/ (pytest only)
 """
 
 from rtldavis import DATAPacket, PacketFactory, RtldavisDriver  # noqa: E402
+from conftest import DEFAULT_CHANNELS  # noqa: E402
 
 # channel 1 (iss), message type 0xE (rain), rain_count=5 -- the exact byte
 # shape test_parse_raw_channel.py's test_known_iss_channel_still_parses
@@ -35,8 +36,7 @@ class _FakeDriver:
     its definition, rtldavis.py ~1546) -- wrapping it in staticmethod()
     here too keeps it unbound so the explicit-self call matches, same as a
     real RtldavisDriver instance would resolve it."""
-    channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
+    channels = dict(DEFAULT_CHANNELS)
     parse_raw = staticmethod(RtldavisDriver.parse_raw)
 
 

@@ -19,14 +19,10 @@ Run:  python3 -m pytest tests/ (pytest only)
 
 import rtldavis  # noqa: E402
 from rtldavis import RtldavisDriver  # noqa: E402
+from conftest import make_driver  # noqa: E402
 
 
-def _make_driver():
-    d = RtldavisDriver.__new__(RtldavisDriver)
-    RtldavisDriver._init_stats(d)
-    d.stats['activeTrIds'][0] = 0
-    d._save_pct_good_per_transmitter = False
-    return d
+_make_driver = make_driver
 
 
 class _BatchMgr:

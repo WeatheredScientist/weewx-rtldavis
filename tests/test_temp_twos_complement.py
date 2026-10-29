@@ -36,14 +36,14 @@ def _FtoC(f):
 
 
 from rtldavis import RtldavisDriver, SensorQC  # noqa: E402
+from conftest import DEFAULT_CHANNELS  # noqa: E402
 
 
 class _FakeDriver:
     """Minimal stand-in carrying only what parse_raw reads: the channel map.
     Only the ISS is present, so a type-8 frame on channel 1 lands in
     data['temperature'] rather than temp_1/temp_2."""
-    channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
+    channels = dict(DEFAULT_CHANNELS)
 
 
 def _temp_frame(temp_raw, digital=True):
