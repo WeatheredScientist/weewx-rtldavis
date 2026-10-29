@@ -72,6 +72,8 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 
+from marvinctl_util import marvinctl
+
 LOGDIR = "/srv/docker/weewx/logs"  # marvin path; DEC-0118 moved the tenant off the NAS
 STALL_SIG = "rtldavis process stalled"
 NOTRUN_SIG = "rtldavis process is not running"
@@ -84,14 +86,7 @@ TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
 
 def _marvinctl(*args: str, input: str | None = None, timeout: int = 60) -> str:
-    """One `marvinctl --tenant weewx` call. Read-only throughout."""
-    proc = subprocess.run(
-        ["marvinctl", "--tenant", "weewx", *args],
-        input=input, capture_output=True, text=True, timeout=timeout)
-    if proc.returncode != 0:
-        sys.exit(f"stall_baseline: marvinctl {args[0]} failed (rc={proc.returncode}): "
-                 f"{proc.stderr.strip()[:400]}")
-    return proc.stdout
+    return marvinctl(*args, input=input, timeout=timeout, prog="stall_baseline")
 
 
 def _grep(pattern: str, path: str) -> list[str]:
