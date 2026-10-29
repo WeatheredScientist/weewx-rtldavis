@@ -414,7 +414,7 @@ items inside a phase don't depend on each other.
       New since S160: `weewx-packages/weewx-rtldavis`, an unendorsed continuation created
       2026-10-21, absorbed lheijst#22, #23 and lheijst/rtldavis#7 with credit. Whether it is also
       a place to offer the four fixes is part of this phase's owner call.
-- [ ] **Phase 5 — cleanup, no user-visible change.** Audit 21–28 and 30–31: duplication in the
+- [~] **Phase 5 — cleanup, no user-visible change.** *(S178 did 13, 14, 18, 25, 26, 27, 31 and the boilerplate half of 37, PRs #501/#502; left: 21–24 code dedup, 28, 30, 39, and 37's duplicated helpers.)* Audit 21–28 and 30–31: duplication in the
       monitor, `ops/` and the OWM/Windy pair, SPDX gaps, CI pinning. Audit 28 (the
       `-or-later` tags on three uploaders) is an owner read, not a code fix. Also 37 and 39, left
       by phase 3, and (placed S172, they were in no phase) 13, 14, 16, 18: `ops/*.service` copies
