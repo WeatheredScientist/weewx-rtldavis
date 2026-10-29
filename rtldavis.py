@@ -596,7 +596,15 @@ class SensorQC(object):
         if bounds_reason is not None:
             # impossible per sensor spec: reject, keep the old baseline
             return None, bounds_reason
-        lo, hi, max_delta = self.limits[key]
+        return self.check_delta(key, value, now)
+
+    def check_delta(self, key, value, now):
+        """The delta half of check(), for a value already known to be in
+        bounds (the driver's pre-pass established that). Returns
+        (value_or_None, reject_reason_or_None) and moves the baseline."""
+        if value is None or key not in self.limits:
+            return value, None
+        _lo, _hi, max_delta = self.limits[key]
         if max_delta is not None:
             last = self._baseline.get(key)
             if last is not None and (now - last[1]) <= self.reseed_seconds:
@@ -610,6 +618,13 @@ class SensorQC(object):
                 return value, None
         self._baseline[key] = (value, now)
         return value, None
+
+
+def log_qc_reject(key, value, reason):
+    """The one reject line both QC passes write (weewx_monitor and the
+    owner's greps read it, so its text is fixed)."""
+    logerr("%s: rejecting implausible value %s (%s -- "
+           "RF glitch, not weather; DEC-0029)" % (key, value, reason))
 
 
 def loader(config_dict, engine):
@@ -1636,57 +1651,53 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             mask = mask << 1
         return transmitters, trIdCount
 
+    def _apply_sensor_qc(self, data):
+        """Decode-layer plausibility filter (DEC-0029): null RF-glitch values
+        in `data` at the source, so every consumer (including the pre-QC
+        loop-JSON feed) sees an honest null instead of a corrupt reading.
+        Returns True when the whole frame was co-rejected (DEC-0054)."""
+        qc, now = self._sensor_qc, time.time()
+        # Frame-level co-rejection pre-pass (DEC-0054): a bounds failure is
+        # positive proof the frame is corrupt, and every weather field rides
+        # the same 8-byte frame -- so null them all and move no baselines. A
+        # delta trip never triggers this: a large step can be genuine
+        # weather; an impossible value cannot.
+        proofs = []
+        for key in qc.limits:
+            reason = qc.check_bounds(key, data.get(key))
+            if reason is not None:
+                log_qc_reject(key, data[key], reason)
+                if not proofs:
+                    proofs.append('bounds')
+        # DEC-0203: a message type no transmitter sends is the same kind of
+        # proof -- parse_raw has already logged which type it was.
+        if data.get(IMPOSSIBLE_MSG_TYPE_KEY) is not None:
+            proofs.append('message-type')
+        if proofs:
+            # The frame's own battery bit goes with it (DEC-0203).
+            nulled = [k for k in FRAME_WEATHER_KEYS + FRAME_BATTERY_KEYS
+                      if data.get(k) is not None]
+            for k in nulled:
+                data[k] = None                 # null-on-rejection, DEC-0006
+            logerr("frame failed %s proof -- co-rejecting same-frame "
+                   "fields: %s (DEC-0054)" %
+                   (' + '.join(proofs), ', '.join(sorted(nulled))))
+            return True
+        # Every value is in bounds, so only the delta test is left to run.
+        for key in qc.limits:
+            if data.get(key) is None:
+                continue
+            _, reason = qc.check_delta(key, data[key], now)
+            if reason is not None:
+                log_qc_reject(key, data[key], reason)
+                data[key] = None               # null-on-rejection, DEC-0006
+                if key == 'wind_speed':
+                    # the same-packet direction byte is equally suspect
+                    data['wind_dir'] = None
+        return False
+
     def _data_to_packet(self, data):
-        # decode-layer plausibility filter (DEC-0029): reject RF-glitch values
-        # at the source so every consumer (including the pre-QC loop-JSON
-        # feed) sees an honest null instead of a corrupt reading
-        frame_corrupt = False
-        if self._sensor_qc_enabled:
-            qc_now = time.time()
-            # Frame-level co-rejection pre-pass (DEC-0054): a bounds failure
-            # is positive proof the frame is corrupt, and every weather field
-            # rides the same 8-byte frame -- so null them all and move no
-            # baselines. A delta trip never triggers this: a large step can
-            # be genuine weather; an impossible value cannot.
-            proofs = []
-            for qc_key in self._sensor_qc.limits:
-                qc_reason = self._sensor_qc.check_bounds(
-                    qc_key, data.get(qc_key))
-                if qc_reason is not None:
-                    frame_corrupt = True
-                    logerr("%s: rejecting implausible value %s (%s -- "
-                           "RF glitch, not weather; DEC-0029)" %
-                           (qc_key, data[qc_key], qc_reason))
-            if frame_corrupt:
-                proofs.append('bounds')
-            # DEC-0203: a message type no transmitter sends is the same kind
-            # of proof -- parse_raw has already logged which type it was.
-            if data.get(IMPOSSIBLE_MSG_TYPE_KEY) is not None:
-                frame_corrupt = True
-                proofs.append('message-type')
-            if frame_corrupt:
-                # The frame's own battery bit goes with it (DEC-0203).
-                nulled = [k for k in FRAME_WEATHER_KEYS + FRAME_BATTERY_KEYS
-                          if data.get(k) is not None]
-                for k in nulled:
-                    data[k] = None             # null-on-rejection, DEC-0006
-                logerr("frame failed %s proof -- co-rejecting same-frame "
-                       "fields: %s (DEC-0054)" %
-                       (' + '.join(proofs), ', '.join(sorted(nulled))))
-            else:
-                for qc_key in self._sensor_qc.limits:
-                    if data.get(qc_key) is None:
-                        continue
-                    qc_value, qc_reason = self._sensor_qc.check(
-                        qc_key, data[qc_key], qc_now)
-                    if qc_reason is not None:
-                        logerr("%s: rejecting implausible value %s (%s -- "
-                               "RF glitch, not weather; DEC-0029)" %
-                               (qc_key, data[qc_key], qc_reason))
-                        data[qc_key] = None    # null-on-rejection, DEC-0006
-                        if qc_key == 'wind_speed':
-                            # the same-packet direction byte is equally suspect
-                            data['wind_dir'] = None
+        frame_corrupt = self._sensor_qc_enabled and self._apply_sensor_qc(data)
         packet = dict()
         # map sensor observations to database field names
         for k in self.sensor_map:
@@ -2048,14 +2059,54 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self._write_hotswap_ack(settings, "applied", gap)
         return True
 
+    def _tally_stderr_line(self, _line):
+        """Book one raw Go stderr line into this archive period's counters
+        and debug sample; summarized by _update_summaries()."""
+        if self._stderr_sample_count < 20:
+            # bounded startup sample; debug_rtld=2 (S24 M3)
+            dbg_rtld(2, "RAW_RTL_STDERR_SAMPLE: %s" % _line.strip())
+            self._stderr_sample_count += 1
+        if "Hop:" in _line or "ChannelIdx:" in _line:
+            # per-hop line -- gated at debug_rtld=3 so it no longer
+            # floods weewx.log at INFO on every freq-hop (S24 M3).
+            dbg_rtld(3, "RAW_RTL_HOP: %s" % _line.strip())
+        if "duplicate packet:" in _line:
+            # DEC-0035 (S43): Go's own dedup log -- the demodulator
+            # double-decoded one RF burst. Counted unconditionally
+            # (no debug gate).
+            self.stats['dup_count'] += 1
+        _crc = parse_crc_stats(_line)
+        if _crc is not None:
+            # #458: Go's once-a-minute CRC-failure summary, summed
+            # into this archive period.
+            self.stats['crc_fail'] += _crc[0]
+            self.stats['crc_near'] += _crc[1]
+            for _slot, _n in _crc[2].items():
+                self.stats['crc_slots'][_slot] = self.stats['crc_slots'].get(_slot, 0) + _n
+        _burst = parse_burst_line(_line)
+        if _burst is not None:
+            # #459 (DEC-0223): the burst gate's drops are rare (about
+            # one a week), so each is logged with its bytes; they show
+            # which copy of a burst was the corrupt one.
+            if _burst[0] == 'duplicate':
+                if self.stats['dup_gap_max'] is None or _burst[1] > self.stats['dup_gap_max']:
+                    self.stats['dup_gap_max'] = _burst[1]
+            else:
+                self.stats['burst_' + _burst[0]] += 1
+                loginf("Go burst gate dropped a frame: %s" % _line.strip())
+        if "repeat packet:" in _line:
+            # DEC-0135 (S116): Go accepted an identical payload that
+            # arrived a full loop period later -- a real transmission
+            # whose bytes happened not to change. Counted here so the
+            # transmitter's repeat fraction stays a standing
+            # measurement; genLoopPackets suppresses the packet itself.
+            self.stats['repeat_count'] += 1
+
     def genLoopPackets(self):
-        packet = dict()
-        time_last_received = int(time.time())
         # Self-classification state (S73, ws.5): raw stderr lines and hop-only
         # packets seen since the last real DATA packet, plus drought pacing.
-        raw_since_data = 0
-        hop_since_data = 0
-        time_last_data = time_last_received
+        time_last_received = time_last_data = int(time.time())
+        raw_since_data = hop_since_data = 0
         drought_logged = 0
         # change the presentation of the FrequencyErrors of the transmitters
         #  each period
@@ -2074,11 +2125,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # up to ~150s, INIT_GRACE_S) and would otherwise be judged against a time_last_received
             # inherited from before the swap.
             if self._maybe_hotswap():
-                _swapped_at = int(time.time())
-                time_last_received = _swapped_at
-                time_last_data = _swapped_at
-                raw_since_data = 0
-                hop_since_data = 0
+                time_last_received = time_last_data = int(time.time())
+                raw_since_data = hop_since_data = 0
                 stall_timeout = HOTSWAP_GRACE_S
                 continue
             # the stalled timeout must be greater than the init period, so it
@@ -2115,46 +2163,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             for lines in self._mgr.get_stderr():
                 for _line in lines:
                     raw_since_data += 1
-                    if self._stderr_sample_count < 20:
-                        # bounded startup sample; debug_rtld=2 (S24 M3)
-                        dbg_rtld(2, "RAW_RTL_STDERR_SAMPLE: %s" % _line.strip())
-                        self._stderr_sample_count += 1
-                    if "Hop:" in _line or "ChannelIdx:" in _line:
-                        # per-hop line -- gated at debug_rtld=3 so it no longer
-                        # floods weewx.log at INFO on every freq-hop (S24 M3).
-                        dbg_rtld(3, "RAW_RTL_HOP: %s" % _line.strip())
-                    if "duplicate packet:" in _line:
-                        # DEC-0035 (S43): Go's own dedup log -- the demodulator
-                        # double-decoded one RF burst. Counted unconditionally
-                        # (no debug gate); summarized once per archive period
-                        # by _update_summaries().
-                        self.stats['dup_count'] += 1
-                    _crc = parse_crc_stats(_line)
-                    if _crc is not None:
-                        # #458: Go's once-a-minute CRC-failure summary, summed
-                        # into this archive period; reported by _update_summaries().
-                        self.stats['crc_fail'] += _crc[0]
-                        self.stats['crc_near'] += _crc[1]
-                        for _slot, _n in _crc[2].items():
-                            self.stats['crc_slots'][_slot] = self.stats['crc_slots'].get(_slot, 0) + _n
-                    _burst = parse_burst_line(_line)
-                    if _burst is not None:
-                        # #459 (DEC-0223): the burst gate's drops are rare (about
-                        # one a week), so each is logged with its bytes; they show
-                        # which copy of a burst was the corrupt one.
-                        if _burst[0] == 'duplicate':
-                            if self.stats['dup_gap_max'] is None or _burst[1] > self.stats['dup_gap_max']:
-                                self.stats['dup_gap_max'] = _burst[1]
-                        else:
-                            self.stats['burst_' + _burst[0]] += 1
-                            loginf("Go burst gate dropped a frame: %s" % _line.strip())
-                    if "repeat packet:" in _line:
-                        # DEC-0135 (S116): Go accepted an identical payload that
-                        # arrived a full loop period later -- a real transmission
-                        # whose bytes happened not to change. Counted here so the
-                        # transmitter's repeat fraction stays a standing
-                        # measurement; the packet itself is suppressed below.
-                        self.stats['repeat_count'] += 1
+                    self._tally_stderr_line(_line)
                 for data in PacketFactory.create(self, lines):
                     if data:
                         time_last_received = int(time.time())
@@ -2165,8 +2174,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                             # A real DATA packet -- reset the classification
                             # counters (S73, ws.5).
                             time_last_data = time_last_received
-                            raw_since_data = 0
-                            hop_since_data = 0
+                            raw_since_data = hop_since_data = 0
                             self._update_stats(data['curr_cnt0'], data['curr_cnt1'], data['curr_cnt2'], data['curr_cnt3'])
                             self._merge_pending_freq_fields(data)
                         else:
@@ -2209,9 +2217,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         else:
                             # A repeat of the previous reading (same dedup_key):
                             # drop it. Reachable since DEC-0135 made the guard
-                            # above able to be false; `packet` is bound at the
-                            # top of genLoopPackets, so this branch never read an
-                            # unbound name.
+                            # above able to be false.
                             dbg_parse(3, "ignoring repeat packet %s" % pkt_key)
                     elif lines:
                         # NOTE (S24 L6): effectively unreachable -- PacketFactory
