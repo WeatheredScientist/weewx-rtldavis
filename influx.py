@@ -1,6 +1,6 @@
 # Copyright 2016-2020 Matthew Wall
 # Distributed under the terms of the GNU Public License (GPLv3)
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-only
 #
 #-------
 # 2026 patched by WeatheredScientist
@@ -10,6 +10,10 @@
 #   weewx-influx uploader. Chain: matthewwall/weewx-influx -> david-lutz/
 #   weewx-influx2 (InfluxDB 2.x port; the base we install) -> patched here.
 #   It reports VERSION '0.20+ws.2' so the difference is visible in the logs.
+#
+#   2026-10-29  SPDX tag changed from GPL-3.0-or-later to GPL-3.0-only: upstream's
+#               header says GPLv3 and its license file is the plain GPLv3 text, with no
+#               "or any later version" grant for us to repeat (DEC-0226).
 #
 #   2026-07-04  handle_exception() called `e.read.decode()` -- a missing pair of
 #               parens, so it raised AttributeError on the method object instead

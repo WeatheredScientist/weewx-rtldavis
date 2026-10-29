@@ -55,5 +55,6 @@ The InfluxDB line-protocol schema the uploader writes is described in
 
 ## License
 
-GPL-3.0-or-later, the same as upstream and the rest of this repository. The modification notice
-(GPLv3 section 5(a)) is at the top of `influx.py`.
+GPL-3.0-only, which is what upstream grants (GPLv3, with no "or any later version"). The rest of
+this repository is GPL-3.0-or-later; the installer is ours. The modification notice (GPLv3 section
+5(a)) is at the top of `influx.py`.

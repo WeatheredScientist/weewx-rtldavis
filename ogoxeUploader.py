@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-only
 #-----------------------------------------------------------------
 #         WeeWX OgoXe uploader v1.0.1
 #
@@ -26,6 +26,9 @@
 #   2026-07-05  a log.debug() reported _ambient_dict.get('server_url'), a key that
 #               is never set (the URL is the hardcoded OGOXE_API_URL constant), so
 #               it always logged None. It now logs the URL actually used.
+#   2026-10-29  SPDX tag changed from GPL-3.0-or-later to GPL-3.0-only: the upstream
+#               chain ships the plain GPLv3 text and no "or any later version" grant
+#               (DEC-0226).
 #   2026-07-05  added the SPDX-License-Identifier line above.
 #   2026-07-04  __init__ calls weewx.engine.StdService.__init__ where upstream
 #               calls super().__init__, so StdWunderground.__init__ never runs and

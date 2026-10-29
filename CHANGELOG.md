@@ -10,8 +10,9 @@ under [Pre-S16].
 
 - Research session (Fable 5.1, owner's call), parallel to S181. Surveyed felddy/weewx-docker, the sdr-enthusiasts RTL-SDR images, Debian's `rtl-sdr` package and linuxserver conventions against the README's six steps (twelve commands plus a hand edit, three silent failures). DEC-0225: the entrypoint seeds `weewx.conf` into an empty mount, first-run env vars read once, `host-setup.sh`, compose plus `.env`, a startup summary, an informational `HEALTHCHECK` and `doctor`, `HOME=/tmp` and `BIAS_TEE=0` as image defaults; together a minor release, v2.2.0. Landed: the DEC, `docs/INSTALL-RESEARCH.md`, `docs/QUICKSTART.md` (859 words, tagged per dependent line), ROADMAP P0.8 phase 6, MANIFEST rows. Nothing built; the image is unchanged. Scope line: Davis-only image; non-Davis readers get the extensions or a pointer to weewx-sdr.
 
-## [S181] — 2026-10-29 — P0.8 phase 4 closed: the weewx-influx2#1 reply
+## [S181] — 2026-10-29 — P0.8 phases 4 and 5 closed: the weewx-influx2#1 reply, audit 28 (DEC-0226)
 
+- Audit 28 closed (DEC-0226): `influx.py` and `ogoxeUploader.py` are now `GPL-3.0-only`, matching the plain GPLv3 text their upstreams ship; `wcloud.py` is `NOASSERTION` because `matthewwall/weewx-wcloud` states no license at all. Comment-only changes, no version moves. A license request for wcloud is drafted, not posted.
 - Two edits on the fork branch (commit `0c5d394`: `influx.py:501` `loginf` → `logdbg`; a `verify_ssl` line in the readme's option list), pushed on the owner's go, then the held reply posted on david-lutz/weewx-influx2#1. ROADMAP phase 4 checked, `docs/UPSTREAM-THREADS.md` and `BOOT.md` updated. A parallel session (S182) is researching an install path; its two untracked drafts are not part of this change.
 
 ## [S180] — 2026-10-29 — P0.8 phase 5 done but audit 28 (four parallel sessions); phase 4 posted; S179's closeout

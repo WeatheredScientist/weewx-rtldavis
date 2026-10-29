@@ -4,7 +4,7 @@
 #402–#411 (item 5 as `eaglehunt-ops#358`, private). Since then, ROADMAP P0.8 phases 1–3 (S158–S163)
 fixed 10, 11, 12, 15, 17, 19, 20, 32, 35, 36 and 38 (29 shipped with the HIGH set). S178 (PRs #501/#502) fixed 13, 14, 18, 25, 26, 27, 31 and the boilerplate half of 37; 16 was already
 fixed by DEC-0213's README rewrite. S179 (PRs #504/#505) fixed 21, 22 and 37's duplicated helpers;
-S180 (PRs #506–#509, four parallel sessions) fixed 23, 24, 30 and 39. Open: 28 (owner read).
+S180 (PRs #506–#509, four parallel sessions) fixed 23, 24, 30 and 39. S181 closed 28 (DEC-0226). Nothing open.
 Predecessor: `docs/CODE_REVIEW_S24.md`. Decision record: DEC-0205.
 
 Method: six read-only reviewers (Sonnet x5 by file set, Haiku x1 mechanical cross-ref), synthesized and
