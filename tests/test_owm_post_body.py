@@ -23,10 +23,9 @@ This test asserts:
 weewx is not installed in the test/CI environment, so we stub the weewx modules
 in sys.modules before importing owm (same pattern as the other tests here).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_owm_post_body.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import json
-import os
 import sys
 import types
 
@@ -127,7 +126,6 @@ weewx_manager = _mod("weewx.manager")
 weewx_manager.get_manager_dict_from_config = lambda *a, **k: {}
 weewx.manager = weewx_manager
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import owm  # noqa: E402
 
 
@@ -233,10 +231,3 @@ def test_format_url_carries_appid():
     t = _make_thread()
     assert t.format_url({}) == owm.STATION_URL + "?appid=KEY"
     print("  [PASS] test_format_url_carries_appid")
-
-
-if __name__ == "__main__":
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
-    for fn in tests:
-        fn()
-    print("\n%d/%d passed" % (len(tests), len(tests)))

@@ -21,12 +21,10 @@ pidfile guard).
 Run:  .venv/bin/python -m pytest tests/test_input_staleness.py
 """
 import importlib.util
-import os
 import sys
 import time
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
 
@@ -304,8 +302,3 @@ def test_detection_is_never_inhibited(monkeypatch, tmp_path):
 
     assert wm.check_input_freshness(now) is False
     assert len(sent) == 1
-
-
-if __name__ == '__main__':
-    import pytest
-    sys.exit(pytest.main([__file__, '-v']))

@@ -17,12 +17,10 @@ which advance on every packet -- so the guard was dead code from the day it was
 written. These tests assert the dedup key excludes those counters, that a
 genuine reading change still yields, and that the repeat counter is wired.
 
-Run:  python3 -m pytest tests/    OR    python3 tests/test_dup_time_gate.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import os
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from test_duplicate_frame_counter import _make_driver, run_loop  # noqa: E402  (shared weewx stubs)
 from rtldavis import dedup_key as _dedup_key  # noqa: E402  -- the REAL function
 
@@ -136,8 +134,3 @@ def test_patch_window_stays_below_the_shortest_loop_period():
     m = re.search(r'"dupwindow", (\d+),', text)
     assert m, "default dupwindow not found in the patch"
     assert 0 < int(m.group(1)) < 2562, "dupwindow must stay under the 2.5625 s minimum loop period"
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))

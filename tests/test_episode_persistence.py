@@ -10,14 +10,12 @@ EPISODE_STATE so a restart resumes it instead.
 Same import pattern as test_episode_ledger.py: weewx_monitor writes a pidfile
 at import; '--test-alert' in argv bypasses that guard.
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_episode_persistence.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import json
-import os
 import sys
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
 
@@ -126,8 +124,3 @@ def test_persist_failure_never_raises(tmp_path, monkeypatch):
     wm.EP['onset'] = 100.0
     wm.episode_persist()                        # must swallow the OSError
     assert any("persist failed" in m for m in logged)
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))

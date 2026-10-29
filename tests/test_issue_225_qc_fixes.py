@@ -23,56 +23,11 @@ test_sensor_qc.py / test_reception_stats.py).
 
 Run:  python3 -m pytest tests/test_issue_225_qc_fixes.py
 """
-import os
-import sys
 import time
 import types
 
 import pytest
 
-# --- stub the weewx deps so rtldavis.py imports without weewx installed ---
-def _pkg(name):
-    m = types.ModuleType(name)
-    m.__path__ = []
-    sys.modules[name] = m
-    return m
-
-def _mod(name):
-    m = types.ModuleType(name)
-    sys.modules[name] = m
-    return m
-
-class _AbstractDevice:
-    def __init__(self, *a, **k): pass
-class _AbstractConfEditor:
-    pass
-class _StdService:
-    def __init__(self, *a, **k): pass
-
-_weewx = _pkg("weewx")
-_weewx.__version__ = "5.3.1"
-_weewx.METRICWX = 16
-_drivers = _mod("weewx.drivers")
-_drivers.AbstractDevice = _AbstractDevice
-_drivers.AbstractConfEditor = _AbstractConfEditor
-_engine = _mod("weewx.engine")
-_engine.StdService = _StdService
-_units = _mod("weewx.units")
-for _d in ("obs_group_dict", "USUnits", "MetricUnits", "MetricWXUnits",
-           "default_unit_format_dict", "default_unit_label_dict"):
-    setattr(_units, _d, {})
-_crc16 = _mod("weewx.crc16")
-_crc16.crc16 = lambda *a, **k: 0
-_weewx.drivers, _weewx.engine, _weewx.units, _weewx.crc16 = (
-    _drivers, _engine, _units, _crc16)
-
-_weeutil = _pkg("weeutil")
-_wu = _mod("weeutil.weeutil")
-_wu.tobool = lambda v: str(v).lower() in ("1", "true", "yes", "on")
-_wlog = _mod("weeutil.logger")
-_weeutil.weeutil, _weeutil.logger = _wu, _wlog
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rtldavis import (  # noqa: E402
     CHANNELPacket, RtldavisDriver, SensorQC)
 
@@ -246,7 +201,3 @@ def test_v12_freqerror_still_stored_with_a_single_transmitter():
     line = "chan: 13:44:13 Hop: {ChannelIdx:0 ChannelFreq:868437250 FreqError:431}"
     pkt = CHANNELPacket.parse_text(stub, line, _FakeLines([line]))
     assert pkt.get("freqError0") == 431
-
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))

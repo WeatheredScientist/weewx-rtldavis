@@ -105,9 +105,3 @@ def test_dockerfile_asserts_root_survives_the_bake():
         "Dockerfile does not grep the baked config for [[root]]"
     assert re.search(r'FATAL:.*root', text), \
         "Dockerfile does not fail the build when [[root]] is missing"
-
-
-if __name__ == '__main__':
-    import sys
-    import pytest
-    sys.exit(pytest.main([__file__, '-v']))

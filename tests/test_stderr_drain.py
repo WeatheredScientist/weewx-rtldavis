@@ -29,59 +29,13 @@ weewx is not installed in the test/CI environment, so we stub the weewx
 modules in sys.modules before importing the driver (same pattern as
 test_parse_raw_channel / test_rain_filter).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_stderr_drain.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import inspect
 import itertools
-import os
 import queue
-import sys
 import time
-import types
 
-# --- stub the weewx deps so rtldavis.py imports without weewx installed ---
-def _pkg(name):
-    m = types.ModuleType(name)
-    m.__path__ = []
-    sys.modules[name] = m
-    return m
-
-def _mod(name):
-    m = types.ModuleType(name)
-    sys.modules[name] = m
-    return m
-
-class _AbstractDevice:
-    def __init__(self, *a, **k): pass
-class _AbstractConfEditor:
-    pass
-class _StdService:
-    def __init__(self, *a, **k): pass
-
-_weewx = _pkg("weewx")
-_weewx.__version__ = "5.3.1"
-_weewx.METRICWX = 16
-_drivers = _mod("weewx.drivers")
-_drivers.AbstractDevice = _AbstractDevice
-_drivers.AbstractConfEditor = _AbstractConfEditor
-_engine = _mod("weewx.engine")
-_engine.StdService = _StdService
-_units = _mod("weewx.units")
-for _d in ("obs_group_dict", "USUnits", "MetricUnits", "MetricWXUnits",
-           "default_unit_format_dict", "default_unit_label_dict"):
-    setattr(_units, _d, {})
-_crc16 = _mod("weewx.crc16")
-_crc16.crc16 = lambda *a, **k: 0
-_weewx.drivers, _weewx.engine, _weewx.units, _weewx.crc16 = (
-    _drivers, _engine, _units, _crc16)
-
-_weeutil = _pkg("weeutil")
-_wu = _mod("weeutil.weeutil")
-_wu.tobool = lambda v: str(v).lower() in ("1", "true", "yes", "on")
-_wlog = _mod("weeutil.logger")
-_weeutil.weeutil, _weeutil.logger = _wu, _wlog
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rtldavis import ProcManager, RtldavisDriver  # noqa: E402
 
 
@@ -204,8 +158,3 @@ def test_get_stdout_not_wired_into_the_live_driver_path():
     instead of the queue growth showing up as a mystery leak first."""
     src = inspect.getsource(RtldavisDriver.genLoopPackets)
     assert "get_stdout" not in src
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))

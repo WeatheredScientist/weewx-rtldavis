@@ -39,66 +39,19 @@ a metric packet -- the same bug one layer along.
 weewx is not installed in the test/CI environment, so we stub the weewx modules
 in sys.modules before importing dewpoint_service (same pattern as the other tests).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_dewpoint_units_224.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import contextlib
-import os
-import sys
 import types
 
 
-# --- stub the weewx deps so dewpoint_service.py imports without weewx installed ---
-def _pkg(name):
-    m = types.ModuleType(name)
-    m.__path__ = []
-    sys.modules[name] = m
-    return m
+import dewpoint_service  # noqa: E402
 
+weewx = dewpoint_service.weewx  # conftest.py installs the shared fake
 
-def _mod(name):
-    m = types.ModuleType(name)
-    sys.modules[name] = m
-    return m
-
-
-weewx = _pkg("weewx")
-weewx.NEW_LOOP_PACKET = "NEW_LOOP_PACKET"
-weewx.NEW_ARCHIVE_RECORD = "NEW_ARCHIVE_RECORD"
-# Unit systems. dewpoint_service builds module-level lookup tables keyed on these
-# AT IMPORT TIME, so they must exist before the import below. Values mirror
-# weewx's own; the service compares symbolically and never depends on them.
-weewx.US = 1
-weewx.METRIC = 16
-weewx.METRICWX = 17
-
-weewx_engine = _mod("weewx.engine")
-
-
-class _StdService:
-    def __init__(self, engine, config_dict):
-        pass
-
-    def bind(self, *a, **k):
-        pass
-
-
-weewx_engine.StdService = _StdService
-weewx.engine = weewx_engine
-
-# Sentinel returns, so a test can prove WHICH formula was reached rather than
-# inferring it from a plausible-looking number.
+# Sentinel formula results, distinct per unit system, installed by _sentinel_formulas().
 DEW_F, DEW_C = -111.0, -222.0
 HI_F, HI_C = -333.0, -444.0
-
-weewx_wxformulas = _mod("weewx.wxformulas")
-weewx_wxformulas.dewpointF = lambda t, h: DEW_F
-weewx_wxformulas.heatindexF = lambda t, h: HI_F
-weewx_wxformulas.dewpointC = lambda t, h: DEW_C
-weewx_wxformulas.heatindexC = lambda t, h: HI_C
-weewx.wxformulas = weewx_wxformulas
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import dewpoint_service  # noqa: E402
 
 # Read the unit constants back off the module under test rather than using our own
 # stub's, for the same shared-sys.modules reason described in _sentinel_formulas:
@@ -314,10 +267,3 @@ def test_gust_below_speed_still_caught_under_metric():
     c._filter_wind(pkt, now=T0 + 1)
     assert pkt["windSpeed"] is None, "gust below speed is corrupt in any unit system"
     print("  [PASS] test_gust_below_speed_still_caught_under_metric")
-
-
-if __name__ == "__main__":
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            fn()
-    print("\nAll #224 unit-system tests passed.")

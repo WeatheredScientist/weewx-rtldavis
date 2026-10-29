@@ -22,8 +22,6 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ops"))
 import nas_build as nb  # noqa: E402
 
 
@@ -247,7 +245,3 @@ def test_run_under_lease_defers_without_running_the_command(tmp_path):
             [sys.executable, "-c",
              "open(%r, 'w').close()" % str(marker)])
     assert not marker.exists()
-
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))

@@ -19,9 +19,8 @@ This test asserts:
 weewx is not installed in the test/CI environment, so we stub the weewx modules
 in sys.modules before importing windy (same pattern as the other tests here).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_windy_post_body.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
-import os
 import sys
 import types
 import urllib.parse
@@ -123,7 +122,6 @@ weewx_manager = _mod("weewx.manager")
 weewx_manager.get_manager_dict_from_config = lambda *a, **k: {}
 weewx.manager = weewx_manager
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import windy  # noqa: E402
 
 
@@ -195,10 +193,3 @@ def test_none_fields_are_omitted():
     # only the always-present keys survive
     assert set(_params(record)) == {"id", "PASSWORD", "time"}
     print("  [PASS] test_none_fields_are_omitted")
-
-
-if __name__ == "__main__":
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
-    for fn in tests:
-        fn()
-    print("\n%d/%d passed" % (len(tests), len(tests)))

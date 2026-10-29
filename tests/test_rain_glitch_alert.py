@@ -8,13 +8,12 @@ weewx_monitor.py runs the PID guard + emails at import; we set --test-alert in
 argv so the module imports cleanly (guard bypassed) and reads env-less creds
 harmlessly (send_email is not called during import).
 
-Run:  python -m pytest tests/    OR    python tests/test_rain_glitch_alert.py
+Run:  python -m pytest tests/ (pytest only)
 """
 import os
 import sys
 
 sys.argv = [sys.argv[0], "--test-alert"]   # bypass PID guard on import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
 
@@ -67,25 +66,3 @@ def test_marker_matches_driver_source():
         "monitor marker no longer present in rtldavis.py -- alert is dead"
     assert 'rain: rejecting implausible counter delta last=' in src, \
         "driver rejection message shape changed -- update parse_rain_glitch and this test together"
-
-
-if __name__ == "__main__":
-    cases = [
-        ("Jul-4 glitch detected", lambda: wm.parse_rain_glitch(JUL4) is not None),
-        ("Jul-4 phantom = 0.64in", lambda: wm.parse_rain_glitch(JUL4)[2] == 0.64),
-        ("May-25 phantom = 1.28in", lambda: wm.parse_rain_glitch(MAY25)[2] == 1.28),
-        ("real wraparound NOT flagged", lambda: wm.parse_rain_glitch(NON_MATCHES[2]) is None),
-        ("upload line NOT flagged", lambda: wm.parse_rain_glitch(NON_MATCHES[0]) is None),
-        ("empty line NOT flagged", lambda: wm.parse_rain_glitch("") is None),
-    ]
-    passed = 0
-    for name, fn in cases:
-        ok = False
-        try:
-            ok = bool(fn())
-        except Exception as e:
-            name += f" (raised {e!r})"
-        passed += ok
-        print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
-    print(f"\n{passed}/{len(cases)} passed")
-    sys.exit(0 if passed == len(cases) else 1)

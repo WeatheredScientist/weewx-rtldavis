@@ -12,12 +12,10 @@ reverse-sorted run. Two causes, both fixed here.
    replaces it. Instead this file imports the two modules that several files share
    (rtldavis, dewpoint_service) against one superset fake, so a file's own `import`
    finds the cached module. A new test for either module needs no stub of its own.
-   The per-file stubs stay. They are inert for those two modules but still serve
-   standalone `python tests/test_x.py` runs. The local workarounds in
-   test_temp_twos_complement, test_dewpoint_units_224 and test_issue_226_cli_fixes are
-   redundant now and can go with them. The stubs stay live for influx, owm,
-   loop_json_writer and pressure_service, which are each imported by a single file and
-   never had the problem.
+   The rtldavis and dewpoint_service tests carry no stub of their own any more (S178);
+   the suite is pytest-only, so a file run as `python tests/test_x.py` is unsupported.
+   The stubs stay live for influx, owm, windy, loop_json_writer and pressure_service,
+   which are each imported by a single file and never had the problem.
    A new `import weewx.x` in rtldavis.py or dewpoint_service.py needs its name added
    to the superset below; a missing one fails when this file loads.
 
@@ -34,7 +32,7 @@ import types
 
 import pytest
 
-# Repo root and ops/, once. The per-file sys.path.insert shims are redundant now.
+# Repo root and ops/, once. The per-file sys.path.insert shims are gone (S178).
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _path in (os.path.join(ROOT, "ops"), ROOT):
     if _path not in sys.path:

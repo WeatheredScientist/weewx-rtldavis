@@ -27,7 +27,6 @@ import sys
 import tempfile
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -329,8 +328,3 @@ def test_watchdog_poll_captures_on_both_verdicts():
     finally:
         wm.usb_forensics, wm.log = orig, orig_log
     assert calls == ['verify-effective', 'verify-ineffective']
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))
