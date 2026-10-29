@@ -26,7 +26,7 @@ BAKED module shared by `owm.py`/`windy.py` (Dockerfile COPY, `.dockerignore`, a 
 the MRO), and #509 made the driver's QC block and `genLoopPackets` concise and dropped the dead
 `windBatteryStatus` line. Payloads and packets are pinned identical by tests in both PRs. They ship
 with the next release, **v2.1.1** (no contract change, DEC-0222), banner `ws.9` on the release
-branch. **P0.8 phase 5 is done except audit 28** (owner read). **Phase 4 is done (posted 2026-10-29)**:
+branch. **P0.8 phase 5 is done**; audit 28 closed by DEC-0226 (S181: `influx.py` and `ogoxeUploader.py` are `GPL-3.0-only`, `wcloud.py` is `NOASSERTION`). **Phase 4 is done (posted 2026-10-29)**:
 weewx-contrib#2, weewx-packages#6, the DEC-0223 mechanism on lheijst/rtldavis#2, and the
 weewx-influx2#1 reply after commit `0c5d394` on the fork branch (`docs/UPSTREAM-THREADS.md`). The four-fixes offer to lheijst was dropped: weewx-packages already
 carries all but the string version compare.
@@ -47,7 +47,7 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
    Bump the banner to `ws.9` and the version strings on the release branch (S175's list), build on
    marvin per `CONSTANTS.md` Release mechanics, join multi-arch, tag + GitHub release ride the
    promotion (closeout step 0).
-4. **Needs the owner:** audit 28 (`-or-later` on the derived uploaders); move `:latest` to
+4. **Needs the owner:** post the wcloud license request (draft `docs/upstream/wcloud-license-request.md`, gitignored; to matthewwall/weewx-wcloud); move `:latest` to
    `:v2.1.0`; the GitHub About text and topics; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
    profile (never CI); **the hot-swap code** (~230 driver lines, no in-repo producer; #509's PR body
    has the analysis) — keep for the gain campaign `BACKLOG.md` carries, or a DEC to remove it with
@@ -67,7 +67,7 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
    `docs/QUICKSTART.md`), then v2.2.0's entrypoint and Dockerfile items; owner's three open
    questions are at the end of `docs/INSTALL-RESEARCH.md` §6.
 
-## Current state (S180)
+## Current state (S181)
 
 | Thing | State |
 |---|---|
@@ -102,4 +102,4 @@ open PR needs `gh pr update-branch` and a CI rerun before its own merge — sequ
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-29 (S180). Phase 5 done but 28; phase 4 done (influx2 reply posted); S179's closeout written here._
+_Last updated: 2026-10-29 (S181). Phases 4 and 5 done (influx2 reply posted; audit 28 closed, DEC-0226)._

@@ -12678,3 +12678,45 @@ user with an untouched ISS has nothing to change under `[Rtldavis]`.
 - Three questions stay the owner's: whether v2.2.0 ships items 1, 2, 5 and 6 together or 1 and 6
   first; whether `host-setup.sh` belongs in this repository (recommended: yes, under `scripts/`);
   and whether the `HEALTHCHECK` ever restarts (recommended: not in the first cut).
+
+## DEC-0226 — Upstream-derived files carry the license upstream granted: GPL-3.0-only for influx and OgoXe, NOASSERTION for wcloud (S181)
+
+Date: 2026-10-29 (S181, Sonnet 5.5). Status: accepted; the owner chose to draft both the retag and
+the upstream request. Closes audit 28 of `docs/CODE_REVIEW_S145.md`. Not legal advice.
+
+### Context
+
+PR #501 (S178) put `SPDX-License-Identifier: GPL-3.0-or-later` on every file that lacked a tag,
+including three files vendored from other projects. Audit 28 flagged those three: a downstream tag
+cannot claim a permission the licensor did not give, and "or any later version" is a separate grant
+that has to be stated.
+
+### What upstream says (read from the live repos, 2026-10-29)
+
+| File | Upstream | License evidence |
+|---|---|---|
+| `influx.py` | `david-lutz/weewx-influx2` from `matthewwall/weewx-influx` | Header: "Distributed under the terms of the GNU Public License (GPLv3)". The `license` file is the plain GPLv3 text; its two "any later version" hits are the standard appendix boilerplate, not a grant by the author. GitHub detects `GPL-3.0`. |
+| `ogoxeUploader.py` | `smeisens/weewx-wundergroundlike`, derived from Tom Keffer's WeeWX 5.2 `restx.py` | A plain GPLv3 `LICENSE.txt`; the file points to it and says nothing about later versions. |
+| `wcloud.py` | `matthewwall/weewx-wcloud` | No license file, no license wording in `wcloud.py`, `readme.txt` or `install.py`; GitHub detects none. Only "Copyright 2014 Matthew Wall" and a `$Id` line naming tkeffer. No license issue exists. |
+
+### Decision
+
+1. `influx.py` and `ogoxeUploader.py`: `GPL-3.0-only`. Each file's modification notice gets a dated
+   line saying why. `extensions/influx/README.md`'s license paragraph, which said "GPL-3.0-or-later,
+   the same as upstream", is corrected.
+2. `wcloud.py`: `NOASSERTION`, with a header note. No license is granted that we can repeat, and
+   guessing GPLv3 from the `$Id` line would be a guess. The code stays vendored and unmodified.
+3. A polite request to the author to add a license is drafted in `docs/upstream/` (gitignored) and
+   not posted without the owner's go.
+4. Files this project wrote stay `GPL-3.0-or-later`. A derived file may be distributed under GPLv3,
+   which this repo's `LICENSE` already is, so nothing here changes how the repo as a whole is licensed.
+
+### Consequences
+
+- The Hub image and the `influx` extension zip carry the same files with a changed comment only; no
+  version moves and no behavior changes.
+- If the wcloud author answers with GPLv3 (or later), the tag changes to match and the header note
+  goes. If there is no answer, the file stays as is; removing the uploader is the owner's call
+  and is not proposed.
+- Not checked here: other vendored files with an SPDX tag (`weewx.conf.example` is Keffer-derived).
+  Audit 28 named three files, and these are the three.

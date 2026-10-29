@@ -420,9 +420,9 @@ items inside a phase don't depend on each other.
       `weewx-packages/weewx-rtldavis` is the live continuation (created 2026-10-21, absorbed
       lheijst#22, #23 and lheijst/rtldavis#7 with credit); the lheijst repos have been quiet since
       2023 and keep only the record.
-- [~] **Phase 5 — cleanup, no user-visible change.** *(S178 did 13, 14, 18, 25, 26, 27, 31 and the boilerplate half of 37, PRs #501/#502; S179 did 21, 22 and 37's helpers, PRs #504/#505; S180 did 23, 24, 30 and 39 in four parallel sessions, PRs #506–#509 — #507's `rest_site.py` and #509's driver changes are baked and ship with v2.1.1. Left: 28, the owner's read.)* Audit 21–28 and 30–31: duplication in the
+- [x] **Phase 5 — cleanup, no user-visible change.** *(S178 did 13, 14, 18, 25, 26, 27, 31 and the boilerplate half of 37, PRs #501/#502; S179 did 21, 22 and 37's helpers, PRs #504/#505; S180 did 23, 24, 30 and 39 in four parallel sessions, PRs #506–#509 — #507's `rest_site.py` and #509's driver changes are baked and ship with v2.1.1. S181 closed 28: DEC-0226 retagged `influx.py` and `ogoxeUploader.py` to `GPL-3.0-only` and `wcloud.py` to `NOASSERTION`. Nothing left.)* Audit 21–28 and 30–31: duplication in the
       monitor, `ops/` and the OWM/Windy pair, SPDX gaps, CI pinning. Audit 28 (the
-      `-or-later` tags on three uploaders) is an owner read, not a code fix. Also 37 and 39, left
+      `-or-later` tags on three uploaders) was a license read, closed by DEC-0226. Also 37 and 39, left
       by phase 3, and (placed S172, they were in no phase) 13, 14, 16, 18: `ops/*.service` copies
       lagging heartofgold's units, a stale `sortedcontainers` comment, README monitor wording vs
       code, driver comments that misstate the code. 16 may be moot after DEC-0213's README

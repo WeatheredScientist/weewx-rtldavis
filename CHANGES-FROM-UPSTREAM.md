@@ -225,6 +225,7 @@ root copy as the `influx` extension; the image no longer downloads upstream's.
 | 6 | **NAS-LEASE courtesy yield (opt-in)** | 2026-08-21 | `InfluxThread` gains a `lease_dir` param (default `None`, off unless `weewx.conf` sets it) and a thin `skip_this_post` override: while another tenant's `NAS-LEASE.md` lease is held and unexpired, `post_interval` rises from its configured value to 1800s (safe per DEC-0092's own data-integrity analysis: prod runs `stale=None`/`max_backlog=1,000,000`, so a 30-minute deferral queues ~30 records against a million-record cap and loses none). Any lease-file read/parse failure, or weewx's own held lease, is treated as "not held" — fails toward normal operation, never toward silently slowing our own uploads. Design: DEC-0099/DEC-0104; build: DEC-0111. |
 
 | 7 | Type-checker annotations and CLI test-block cleanup | 2026-07-26 | S49, so the mypy gate passes: `# type: ignore[...]` comments on the Python 2/3 import shims, the `__main__` test block's local `queue` renamed to `q` so it no longer shadows the module, and trailing whitespace stripped. No behavior change in the uploader. |
+| 8 | License tag | 2026-10-29 | `SPDX-License-Identifier` is `GPL-3.0-only`, not `-or-later` (DEC-0226): upstream's header says GPLv3 and its license file is the plain GPLv3 text. A notice line in the header says so. No code change. |
 
 Items 1, 2, 3 and 5 are unambiguous upstream bugs. Item 2 is a security fix. Item 6 is original functionality, not an upstream-divergence fix.
 
@@ -241,6 +242,7 @@ weewx 5.2 `restx.py`).
 | 2 | SPDX tag | 2026-07-05 | Added `SPDX-License-Identifier`. |
 | 3 | `__init__` calls `StdService.__init__`, not `super().__init__` | 2026-07-04 | Upstream's constructor (`ogoxe/weewx-ogoxe`, checked at `f69b103`) calls `super(OgoxeUploader, self).__init__`, which reaches `StdWunderground.__init__`. Ours calls `weewx.engine.StdService.__init__` directly, so that step never runs. `StdWunderground.__init__` reads `[StdRESTful][[Wunderground]]` and, when it is configured, starts Wunderground archive and RapidFire threads (weewx 5.5.0 `restx.py`); skipping it means this class starts none of its own. The line was already in the file when it entered this repo (first commit `253cbcf`, which captured the production copy), so the date is when it was first recorded, not necessarily when it was made. **Deliberate, reason derived S146 ([#408](https://github.com/WeatheredScientist/weewx-rtldavis/issues/408)):** with `[[Wunderground]]` configured, as it is in this deployment, `StdWunderground.__init__` starts its own Wunderground-PWS and -RF threads and binds the same events. Calling it from this service would run a second set of Wunderground threads next to the real `StdWunderground` service and bind `new_archive_record` twice. This class builds the one `AmbientThread` it needs itself. Read from weewx 5.5.0 `restx.py` and this file, not tested by running the alternative; the original author's own reason is still unrecorded. |
 | 4 | Two comments rewritten | 2026-07-05 | The comments above the debug log and above `self.archive_queue` contradicted each other about where `server_url` comes from (`get_site_dict` versus the hardcoded `OGOXE_API_URL`). Both now say the constant. Comments only; no code changed. |
+| 5 | License tag | 2026-10-29 | `SPDX-License-Identifier` is `GPL-3.0-only`, not `-or-later` (DEC-0226): the upstream chain ships the plain GPLv3 text and no "or any later version" grant. A notice line in the header says so. No code change. |
 | 5 | Trailing whitespace | 2026-09-29 | Removed from two upstream lines (the comment ending `restx.py` in the header and the `log.info` call for the loaded configuration), because the repo's pre-commit hook strips it from any file it touches. No behavior change. |
 
 ## `wcloud.py`
@@ -248,6 +250,8 @@ weewx 5.2 `restx.py`).
 Base: `matthewwall/weewx-wcloud`. Two edits, neither changing behavior: an `SPDX-License-Identifier`
 line (2026-07-05) and three `# type: ignore[...]` comments on the Python 2/3 import shims
 (2026-07-26, S49, so the mypy gate passes). Recorded here because both are technically modifications.
+Since 2026-10-29 the SPDX line reads `NOASSERTION` (DEC-0226): upstream ships no license file and no
+license wording, so there is no grant to repeat. It changes when the author states one.
 
 ---
 
