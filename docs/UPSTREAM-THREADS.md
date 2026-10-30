@@ -46,6 +46,11 @@ conflate them, and don't commit the drafts.
   **Both fixed and replied 2026-10-29** (S181, owner's go): commit `0c5d394` on the fork branch
   `fix/tls-verification-and-py312-compat` (`logdbg`, plus a `verify_ssl` line in the readme's option
   list), then the reply as a PR comment. The maintainer has not commented.
+- **[matthewwall/weewx-wcloud#6](https://github.com/matthewwall/weewx-wcloud/issues/6)** — **POSTED
+  2026-10-29** (S181, owner's go, after DEC-0226). The repo ships no license file or license wording, so
+  our vendored `wcloud.py` is tagged `NOASSERTION`; the issue asks him to add one (GPLv3 suggested).
+  **OPEN.** On an answer, change the tag to match and drop the header note. Of his 63 `weewx-*`
+  repos, 39 carry a GPLv3 license file and 24 none (checked 2026-10-29).
 - **[weewx-contrib/weewx-rtldavis#2](https://github.com/weewx-contrib/weewx-rtldavis/issues/2)** —
   **POSTED 2026-10-29** (S180, owner's go). A one-maintainer packaging repo that bundles the 2023
   lheijst sources in `src.tgz`; told of #22, #23 and rtldavis#7 and of the continuation. **OPEN.**

@@ -13,6 +13,7 @@ under [Pre-S16].
 ## [S181] — 2026-10-29 — P0.8 phases 4 and 5 closed: the weewx-influx2#1 reply, audit 28 (DEC-0226)
 
 - Audit 28 closed (DEC-0226): `influx.py` and `ogoxeUploader.py` are now `GPL-3.0-only`, matching the plain GPLv3 text their upstreams ship; `wcloud.py` is `NOASSERTION` because `matthewwall/weewx-wcloud` states no license at all. Comment-only changes, no version moves. A license request for wcloud is drafted, not posted.
+- Posted the wcloud license request as matthewwall/weewx-wcloud#6 (owner's go), softening one draft sentence after counting his repos: 39 of 63 have a GPLv3 license file, 24 none. PRs #511, #513 merged; the closeout found the ROADMAP full reconciliation overdue (S182 passed), now job 0 in `BOOT.md`.
 - Two edits on the fork branch (commit `0c5d394`: `influx.py:501` `loginf` → `logdbg`; a `verify_ssl` line in the readme's option list), pushed on the owner's go, then the held reply posted on david-lutz/weewx-influx2#1. ROADMAP phase 4 checked, `docs/UPSTREAM-THREADS.md` and `BOOT.md` updated. A parallel session (S182) is researching an install path; its two untracked drafts are not part of this change.
 
 ## [S180] — 2026-10-29 — P0.8 phase 5 done but audit 28 (four parallel sessions); phase 4 posted; S179's closeout

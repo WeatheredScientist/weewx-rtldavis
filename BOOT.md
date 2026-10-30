@@ -11,15 +11,15 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S180 → S181)
+## ▶ Resume here (S181, S182 → S183)
 
 ### What's settled (do not re-derive)
 
 **v2.1.0 runs in prod since 2026-10-28 15:40:40 ET** (image `6e10c71b…`, driver banner `0.20+ws.8`:
 #459's burst gate + #481's `windGust10`). Rollback: `:v2.1.0-predeploy` (`a1e6e94c…`) then
 `:v2.0.21`. `main` = `prod-baseline-20261028`; Hub `:v2.1.0` is the multi-arch index `881e6c43…`;
-`:latest` is still `:v2.0.20`. **loopjson 1.1.0** runs since 2026-10-27 09:16 ET. ROADMAP next check
-**S182**. S178's v2.1.0 watch (15:40–17:22 ET) was clean.
+`:latest` is still `:v2.0.20`. **loopjson 1.1.0** runs since 2026-10-27 09:16 ET. ROADMAP full
+reconciliation is **due now** (tripwire S182 passed; job 1). S178's v2.1.0 watch (15:40–17:22 ET) was clean.
 
 **`dev` now carries baked-layer changes prod does not have** (S180): #507 added `rest_site.py`, a new
 BAKED module shared by `owm.py`/`windy.py` (Dockerfile COPY, `.dockerignore`, a smoke step asserting
@@ -37,17 +37,21 @@ loop writer and `influx.py` ship as extensions, prod mounts both; `t-weewx` (996
 The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Tests are pytest-only
 (#502). Branches: `dev`, `main`, plus the merged `claude/s180*` and `s179-*` remotes to prune.
 
-### ▶▶ S181 JOB LIST
+### ▶▶ S183 JOB LIST
 
+0. **ROADMAP full reconciliation, due** (the guardrail said by S182; S181 and S182 each touched only
+   their own lines). Diff every open P0–P3 line against DECISIONS (DEC-0223 on), CHANGELOG and this
+   file, then write both the banner and the guardrail section (`docs/ROADMAP.md`).
 1. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no gap,
    no duplicate) and post the number on eaglehunt-ops#435.
-2. **Watch the four upstream posts for replies** (weewx-contrib#2, weewx-packages#6, the
-   lheijst/rtldavis#2 comment, weewx-influx2#1) and keep `docs/UPSTREAM-THREADS.md` current.
+2. **Watch the five upstream posts for replies** (weewx-contrib#2, weewx-packages#6, the
+   lheijst/rtldavis#2 comment, weewx-influx2#1, and matthewwall/weewx-wcloud#6, the license
+   request, posted 10-29 after DEC-0226; if he adds a license, retag `wcloud.py` to match) and keep `docs/UPSTREAM-THREADS.md` current.
 3. **Next release, v2.1.1, when wanted:** carries #507, #509 and #506's header-only patch fix.
    Bump the banner to `ws.9` and the version strings on the release branch (S175's list), build on
    marvin per `CONSTANTS.md` Release mechanics, join multi-arch, tag + GitHub release ride the
    promotion (closeout step 0).
-4. **Needs the owner:** post the wcloud license request (draft `docs/upstream/wcloud-license-request.md`, gitignored; to matthewwall/weewx-wcloud); move `:latest` to
+4. **Needs the owner:** move `:latest` to
    `:v2.1.0`; the GitHub About text and topics; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
    profile (never CI); **the hot-swap code** (~230 driver lines, no in-repo producer; #509's PR body
    has the analysis) — keep for the gain campaign `BACKLOG.md` carries, or a DEC to remove it with
@@ -76,7 +80,7 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
 | `main`/`dev` | `main` = v2.1.0's promotion (`prod-baseline-20261028`); `dev` = main plus S178's #501/#502, S179's #504/#505, S180's #506–#509 (two baked-layer changes awaiting v2.1.1) |
 | Docker Hub | `:v2.1.0` multi-arch; `:latest` still `:v2.0.20` until the owner moves it |
-| Trackers | repo: #475 parked, #380 info · ops: #435 (11-02 count), #439 (virtual-USB guest), #433 (this file), #357, #344 · upstream: weewx-contrib#2, weewx-packages#6, lheijst/rtldavis#2 comment (all 10-29), weewx-influx2#1 (reply posted 10-29) |
+| Trackers | repo: #475 parked, #380 info · ops: #435 (11-02 count), #439 (virtual-USB guest), #433 (this file), #357, #344 · upstream: weewx-contrib#2, weewx-packages#6, lheijst/rtldavis#2 comment (all 10-29), weewx-influx2#1 (reply posted 10-29), matthewwall/weewx-wcloud#6 (license request, 10-29) |
 
 ## Blockers
 
@@ -102,4 +106,4 @@ open PR needs `gh pr update-branch` and a CI rerun before its own merge — sequ
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-29 (S181). Phases 4 and 5 done (influx2 reply posted; audit 28 closed, DEC-0226)._
+_Last updated: 2026-10-30 (S181 closeout; S182's DEC-0225 install path is job 8). Phases 4 and 5 done._
