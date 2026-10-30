@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S183] — 2026-10-30 — ROADMAP full reconciliation (one session late)
+
+- Diffed every open P0–P3 line against DECISIONS (DEC-0222 to DEC-0226), CHANGELOG and BOOT. Seven lines fixed: P0.7 header (nothing open), phase 5's audit-16 note, phase 2 (v2.1.0 and v2.1.1), P1.9 (gate deployed, Go source diffed; section now watch-only), P3's #473 line and INTERFACES line (DEC-0224's `windGust10`). Banner and guardrail written; next check S192. Docs only, no code.
+
 ## [S182] — 2026-10-29 — DEC-0225: the v2.2.0 install path; `docs/QUICKSTART.md`
 
 - Research session (Fable 5.1, owner's call), parallel to S181. Surveyed felddy/weewx-docker, the sdr-enthusiasts RTL-SDR images, Debian's `rtl-sdr` package and linuxserver conventions against the README's six steps (twelve commands plus a hand edit, three silent failures). DEC-0225: the entrypoint seeds `weewx.conf` into an empty mount, first-run env vars read once, `host-setup.sh`, compose plus `.env`, a startup summary, an informational `HEALTHCHECK` and `doctor`, `HOME=/tmp` and `BIAS_TEE=0` as image defaults; together a minor release, v2.2.0. Landed: the DEC, `docs/INSTALL-RESEARCH.md`, `docs/QUICKSTART.md` (859 words, tagged per dependent line), ROADMAP P0.8 phase 6, MANIFEST rows. Nothing built; the image is unchanged. Scope line: Davis-only image; non-Davis readers get the extensions or a pointer to weewx-sdr.

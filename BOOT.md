@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S181, S182 → S183)
+## ▶ Resume here (S183 → S184)
 
 ### What's settled (do not re-derive)
 
@@ -19,7 +19,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 #459's burst gate + #481's `windGust10`). Rollback: `:v2.1.0-predeploy` (`a1e6e94c…`) then
 `:v2.0.21`. `main` = `prod-baseline-20261028`; Hub `:v2.1.0` is the multi-arch index `881e6c43…`;
 `:latest` is still `:v2.0.20`. **loopjson 1.1.0** runs since 2026-10-27 09:16 ET. ROADMAP full
-reconciliation is **due now** (tripwire S182 passed; job 1). S178's v2.1.0 watch (15:40–17:22 ET) was clean.
+reconciliation done S183 (seven lines fixed; next check S192). S178's v2.1.0 watch (15:40–17:22 ET) was clean.
 
 **`dev` now carries baked-layer changes prod does not have** (S180): #507 added `rest_site.py`, a new
 BAKED module shared by `owm.py`/`windy.py` (Dockerfile COPY, `.dockerignore`, a smoke step asserting
@@ -37,11 +37,8 @@ loop writer and `influx.py` ship as extensions, prod mounts both; `t-weewx` (996
 The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Tests are pytest-only
 (#502). Branches: `dev`, `main`, plus the merged `claude/s180*` and `s179-*` remotes to prune.
 
-### ▶▶ S183 JOB LIST
+### ▶▶ S184 JOB LIST
 
-0. **ROADMAP full reconciliation, due** (the guardrail said by S182; S181 and S182 each touched only
-   their own lines). Diff every open P0–P3 line against DECISIONS (DEC-0223 on), CHANGELOG and this
-   file, then write both the banner and the guardrail section (`docs/ROADMAP.md`).
 1. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no gap,
    no duplicate) and post the number on eaglehunt-ops#435.
 2. **Watch the five upstream posts for replies** (weewx-contrib#2, weewx-packages#6, the
@@ -112,4 +109,4 @@ open PR needs `gh pr update-branch` and a CI rerun before its own merge — sequ
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-10-30 (S181 closeout; S182's DEC-0225 install path is job 8). Phases 4 and 5 done._
+_Last updated: 2026-10-30 (S183: ROADMAP full reconciliation). Phases 4 and 5 done._

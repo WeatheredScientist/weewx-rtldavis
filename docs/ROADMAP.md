@@ -3,7 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-10-29 (S181 — targeted line update per DEC-0057, not a full pass: P0.8 phase 4
+**Last updated:** 2026-10-30 (S183 — **scheduled full reconciliation, one session late**: the
+tripwire said S182, and S181/S182 each touched only their own lines. Seven lines moved, detail in
+the guardrail section. Next check: S192.)
+Prior: 2026-10-29 (S181 — targeted line update per DEC-0057, not a full pass: P0.8 phase 4
 closed, the weewx-influx2#1 reply posted; tripwire still S182.)
 Prior: 2026-10-27 (S172 — **scheduled full reconciliation, six sessions late**: the
 tripwire said S166 and nothing fired it, because S166–S171 each updated only their own line. Eight
@@ -140,11 +143,27 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S182** (~10 sessions out). If the session counter is
-  at or past S182 and this line still says S182, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146, S156 and S172 did (diff every
+- **Next scheduled reconciliation check: by S192** (~10 sessions out). If the session counter is
+  at or past S192 and this line still says S192, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146, S156, S172 and S183 did (diff every
   open/pending item here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S172, 2026-10-27** — **six sessions late** (due S166; `BOOT.md`
+- Last full reconciliation: **S183, 2026-10-30** — **one session late** (due S182; S181 and S182
+  each updated only their own lines). **Seven lines were behind and are fixed.** P0.7's header
+  still said 29 items open: every audit item is now closed (`docs/CODE_REVIEW_S145.md`'s status
+  line says "Nothing open"; 16 was fixed by DEC-0213's README rewrite, so phase 5's "may be moot,
+  unverified" is resolved). P1.9 said the burst gate was "built, not deployed" (v2.1.0 shipped it
+  10-28) and that nobody had diffed the bundled Go source (S178 did: byte-identical to
+  `lheijst/rtldavis` master); all its steps are done, so the section is now watch-only. P0.8 phase
+  2 named only v2.0.21 (v2.1.0 shipped S176; v2.1.1 carries the baked-layer changes from S180).
+  P3's #473 line still called the v2.1.0 labeling question open (it shipped; DEC-0222's policy
+  decided it), and P3's INTERFACES line lacked DEC-0224's `windGust10` row (`git log --
+  docs/INTERFACES.md`, S174). Classed, no line: DEC-0222 (release numbering policy, noted on
+  phase 2), DEC-0223 (already P1.9's), DEC-0225 (already phase 6's), DEC-0226 (already phase 5's).
+  Not added: #475 (portable QC, parked by owner call, still no DEC), #514 (an unanswered request
+  to test and maintain someone else's Python port; owner decision, `BOOT.md` job 9) and the V4
+  dongle plan (`BACKLOG.md`, eaglehunt-ops#440). Verified current: the P0 freeze and DB-lock rows
+  (`BOOT.md` blockers unchanged since S145), P1's arc, P1.8, P2's header, phases 1, 3, 4, 5, 6.
+- Prior full reconciliation: **S172, 2026-10-27** — **six sessions late** (due S166; `BOOT.md`
   carried it as a job from S170). **Eight lines were behind and are fixed.** P0.8 phase 1's
   quickstart item still waited on ops#427, closed 10-27 with the host steps proven in a disposable
   guest (the one finding, #471, fixed as docs); only the three unit checks remain, and they need a
@@ -357,14 +376,14 @@ Ranked findings in `docs/CODE_REVIEW_S24.md`; all fixes landed with regression t
 incremental read (S28). See CHANGELOG-ARCHIVE `[S24]`, `[S25]`, `[S28]`. Driver fixes shipped in
 v2.0.3 (S30/S32).
 
-## P0.7 — Code audit + fixes (S145–S146) — ✅ high findings fixed and shipped; 29 medium/low open
+## P0.7 — Code audit + fixes (S145–S146) — ✅ DONE: every finding closed (S181)
 Whole-tree audit at `7d06cbf` (DEC-0205): six read-only reviewers, 39 findings, every high one
 re-verified by the main thread before filing. The ten high items (#402–#411, `eaglehunt-ops#358`)
 are fixed (PRs #412–#418) and **shipped**: the monitor's fixes (#413) went live with a restart on
 2026-09-29 09:31 ET, and the driver and uploader fixes (#412, #414) as the v2.0.18 image at
 16:37 ET (DEC-0206). The medium/low items in `docs/CODE_REVIEW_S145.md` are now scheduled by P0.8:
 phases 1–3 fixed 10, 11, 12, 15, 17, 19, 20, 32, 35, 36 and 38 (S158–S163, shipped by v2.0.21 or
-the mounted `influx.py`), and the rest are phase 5 (S172). The secret gate's four detector holes (#421)
+the mounted `influx.py`), and the rest were phase 5 (S172), done S178–S181. The secret gate's four detector holes (#421)
 are closed (S151, DEC-0210). Same shape as P0.6 above
 (`docs/CODE_REVIEW_S24.md`).
 
@@ -394,7 +413,9 @@ items inside a phase don't depend on each other.
         with a virtual USB device: asked as eaglehunt-ops#439 (S180, 10-29), waiting on marvin.
 - [~] **Phase 2 — the image, one release (v2.0.21). Released S169**: in prod since 2026-10-26
       18:16 ET, multi-arch `:v2.0.21` on Hub, tag and GitHub release on `a7bf7ec`, `main` =
-      `prod-baseline-20261026`. Left: the first arm64 run against a live radio (README says
+      `prod-baseline-20261026`. Since then v2.1.0 (S176, DEC-0222's first SemVer minor: the burst
+      gate and `windGust10`) is in prod, and `dev` carries the baked-layer changes for v2.1.1
+      (S180's `rest_site.py` and driver QC refactor, `BOOT.md` job 3). Left: the first arm64 run against a live radio (README says
       smoke-tested until then) and the owner moving `:latest` off `:v2.0.20`. History: merged
       S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
@@ -425,8 +446,7 @@ items inside a phase don't depend on each other.
       `-or-later` tags on three uploaders) was a license read, closed by DEC-0226. Also 37 and 39, left
       by phase 3, and (placed S172, they were in no phase) 13, 14, 16, 18: `ops/*.service` copies
       lagging heartofgold's units, a stale `sortedcontainers` comment, README monitor wording vs
-      code, driver comments that misstate the code. 16 may be moot after DEC-0213's README
-      rewrite; unverified.
+      code, driver comments that misstate the code. 16 was fixed by DEC-0213's README rewrite.
 
 - [ ] **Phase 6 — the install path (DEC-0225, S182).** Twelve commands plus a hand edit become
       four commands and no edit. Docs first: `docs/QUICKSTART.md` (landed with the DEC, tagged per
@@ -516,7 +536,7 @@ NAS dependency observed, zero stall through the restore.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–) — 🔶 OPEN
+## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–S180) — ✅ DONE, watch-only
 P1 closed every corruption class with filters in the Python driver; the source is in the Go decoder
 and is still there. What the Go side has shown, and where each stands:
 
@@ -526,12 +546,12 @@ and is still there. What the Go side has shown, and where each stands:
   copy is dropped as a duplicate; a corrupted one differs, so it passes the filter, and about 1 in
   65,536 also passes CRC and arrives as a valid-looking frame. Cause found at S173 (DEC-0223): a
   burst whose matching preamble offsets cross a 512-sample block boundary is sliced in both blocks.
-  Gate built, not deployed.
+  Gate in prod since v2.1.0 (S176); the first watch was clean (S178). Done.
 - **CRC failures were dropped silently** (`protocol.go` ~L218): counted since v2.0.21 (#458,
   DEC-0216). Baseline: about 9,700 near-burst failures a day beyond chance, so roughly one
   CRC-valid phantom a week. Done.
 - **Which upstream version the bundled source is** (`BACKLOG.md`, open since S21): #450 pins it;
-  nobody has diffed it against `lheijst/rtldavis` master. Open, not blocking.
+  S178 diffed it against `lheijst/rtldavis` master: every Go source file is byte-identical. Done.
 
 Steps, in order:
 
@@ -972,7 +992,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       derives from it; ships with v2.0.20, boundary in `DATA_ERRATA.md` DISC-0002. **S155
       (DEC-0211)** added the `writer` version row to §1 and fixed its stale `data_service` opening.
       **S170 (DEC-0220/DEC-0221)** added the opt-in `extra_fields` class table and the
-      cadence-aware liveness rule, `max(30, 3 × loop_interval_s)` s (dash DEC-0404).
+      cadence-aware liveness rule, `max(30, 3 × loop_interval_s)` s (dash DEC-0404). **S174
+      (DEC-0224)** added the `windGust10` → `windGust10_mph` row (the ISS's 10-minute gust; not
+      `windGust_mph`, which stays absent on a Davis).
       **Corrected S97:** this line
       previously also claimed DEC-0053's station-identity finding was documented — it was not; only
       DEC-0053's cache-bounding finding (Finding 1) had actually made it into the doc. §2 now carries
@@ -990,8 +1012,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       2021 (`distutils`, TLS verification off).
 - [x] Opt-in extra fields and `loop_interval_s` in the loop-JSON feed (#473) — **designed S166/S168
       (DEC-0220, DEC-0221), built S170, shipped S171**: release `loopjson-v1.1.0`, in prod since
-      2026-10-27 09:16 ET (prod sets no `extra_fields`). Whether a v2.1.0 image labels the widened
-      contract (DEC-0222) is `BOOT.md` job 1.
+      2026-10-27 09:16 ET. Prod has set `extra_fields = windGust10` since 2026-10-28 15:40 ET
+      (DEC-0224). The image's contract label was settled by DEC-0222 (SemVer against the data
+      contract) and v2.1.0 (S176).
 - [x] Remove the vestigial `loopdata.py` mount + `[LoopData]` section (DEC-0005) — done S47.
 
 ---
