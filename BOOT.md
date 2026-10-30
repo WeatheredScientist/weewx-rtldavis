@@ -71,6 +71,12 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
    `docs/QUICKSTART.md`), then v2.2.0's entrypoint and Dockerfile items; owner's three open
    questions are at the end of `docs/INSTALL-RESEARCH.md` §6.
 
+9. **Second dongle (S183):** an RTL-SDR Blog V4 (USB-A) is bought, arriving in weeks, usable about
+   early December. Plan its tests where useful: the Python port in #514 (it runs beside the
+   current stack on a second dongle) and a v3-vs-V4 A/B. Compatibility checks first (BACKLOG
+   "Open ideas", top entry). **#514 (new, hilman2) asks us to test that port and maintain the
+   repo: owner decision, not yet answered.**
+
 ## Current state (S181)
 
 | Thing | State |
