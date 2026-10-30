@@ -59,6 +59,13 @@ conflate them, and don't commit the drafts.
   split, reaping, `rxCheckPercent`, the wind decode and the unknown-station log (checked at HEAD);
   what it lacks is the numeric weewx-version compare, offered here with a maybe on `show-packets`
   and the fork link. The lheijst four-fixes issue was dropped as moot. **OPEN.**
+- **[weewx-rtldavis#514](https://github.com/WeatheredScientist/weewx-rtldavis/issues/514)** (this
+  repo, opened by hilman2, the continuation's author) — asks us to test their Python port of the Go
+  receiver (weewx-packages release 0.22.x, simulated transmitters only so far) and to join
+  weewx-packages as a maintainer. **Holding reply POSTED 2026-10-30** (owner's go, S184): we test in
+  early December on the second dongle beside the Go decoder, post numbers either way, and decide on
+  maintaining after the test. Asked them for Pi CPU figures and option stability. **OPEN.** Test
+  plan in `BACKLOG.md` "Open ideas"; the hardware request is eaglehunt-ops#440.
 
 ## Posted / closed
 
