@@ -11,22 +11,16 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S183 → S184)
+## ▶ Resume here (S184 → S185)
 
 ### What's settled (do not re-derive)
 
-**v2.1.0 runs in prod since 2026-10-28 15:40:40 ET** (image `6e10c71b…`, driver banner `0.20+ws.8`:
-#459's burst gate + #481's `windGust10`). Rollback: `:v2.1.0-predeploy` (`a1e6e94c…`) then
-`:v2.0.21`. `main` = `prod-baseline-20261028`; Hub `:v2.1.0` is the multi-arch index `881e6c43…`;
-`:latest` is still `:v2.0.20`. **loopjson 1.1.0** runs since 2026-10-27 09:16 ET. ROADMAP full
-reconciliation done S183 (seven lines fixed; next check S192). S178's v2.1.0 watch (15:40–17:22 ET) was clean.
-
-**`dev` now carries baked-layer changes prod does not have** (S180): #507 added `rest_site.py`, a new
-BAKED module shared by `owm.py`/`windy.py` (Dockerfile COPY, `.dockerignore`, a smoke step asserting
-the MRO), and #509 made the driver's QC block and `genLoopPackets` concise and dropped the dead
-`windBatteryStatus` line. Payloads and packets are pinned identical by tests in both PRs. They ship
-with the next release, **v2.1.1** (no contract change, DEC-0222), banner `ws.9` on the release
-branch. **P0.8 phase 5 is done**; audit 28 closed by DEC-0226 (S181: `influx.py` and `ogoxeUploader.py` are `GPL-3.0-only`, `wcloud.py` is `NOASSERTION`). **Phase 4 is done (posted 2026-10-29)**:
+**v2.2.0 runs in prod since 2026-10-31 10:51:42 ET** (image `0a790696…`, driver banner
+`0.20+ws.9`): P0.8 phase 6's install path (DEC-0225, built as DEC-0227) plus S180's baked changes
+(#507 `rest_site.py`, #509 the concise QC block, #506), so there was no v2.1.1. First record after
+the restart: 10:54:00 ET, no errors. Rollback: `:v2.1.0-prod-pre-v2.2.0` (`6e10c71b…`) then
+`:v2.1.0-predeploy`. **loopjson 1.1.0** runs since 2026-10-27 09:16 ET. ROADMAP full
+reconciliation done S183 (next check S192). **P0.8 phase 5 is done**; audit 28 closed by DEC-0226 (S181: `influx.py` and `ogoxeUploader.py` are `GPL-3.0-only`, `wcloud.py` is `NOASSERTION`). **Phase 4 is done (posted 2026-10-29)**:
 weewx-contrib#2, weewx-packages#6, the DEC-0223 mechanism on lheijst/rtldavis#2, and the
 weewx-influx2#1 reply after commit `0c5d394` on the fork branch (`docs/UPSTREAM-THREADS.md`). The four-fixes offer to lheijst was dropped: weewx-packages already
 carries all but the string version compare.
@@ -37,19 +31,22 @@ loop writer and `influx.py` ship as extensions, prod mounts both; `t-weewx` (996
 The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Tests are pytest-only
 (#502). Branches: `dev`, `main`, plus the merged `claude/s180*` and `s179-*` remotes to prune.
 
-### ▶▶ S184 JOB LIST
+### ▶▶ S185 JOB LIST
+
+0. **Finish the v2.2.0 release (S184 left it mid-flight):** `:v2.2.0-amd64` is on Hub (= prod's
+   index digest). The tag, arm64 build, `join_multiarch.sh --apply`, `:latest` and the GitHub
+   release ride the promotion; the owner asked that `:latest` move to `:v2.2.0`. Check state first
+   (`git tag -l 'v2.2*'`, Hub tag list).
 
 1. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no gap,
    no duplicate) and post the number on eaglehunt-ops#435.
 2. **Watch the five upstream posts for replies** (weewx-contrib#2, weewx-packages#6, the
    lheijst/rtldavis#2 comment, weewx-influx2#1, and matthewwall/weewx-wcloud#6, the license
    request, posted 10-29 after DEC-0226; if he adds a license, retag `wcloud.py` to match) and keep `docs/UPSTREAM-THREADS.md` current.
-3. **Next release, v2.1.1, when wanted:** carries #507, #509 and #506's header-only patch fix.
-   Bump the banner to `ws.9` and the version strings on the release branch (S175's list), build on
-   marvin per `CONSTANTS.md` Release mechanics, join multi-arch, tag + GitHub release ride the
-   promotion (closeout step 0).
-4. **Needs the owner:** move `:latest` to
-   `:v2.1.0`; the GitHub About text and topics; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
+3. **Later releases of DEC-0225:** `doctor` and the informational `HEALTHCHECK` (E), the
+   `WEEWX_DRIVER=simulator` profile (F), then phase 6's acceptance test (a stock 64-bit Pi OS plus
+   the quick start, timed, by someone who has not read the repo).
+4. **Needs the owner:** the GitHub About text and topics; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the shell
    profile (never CI); **the hot-swap code** (~230 driver lines, no in-repo producer; #509's PR body
    has the analysis) — keep for the gain campaign `BACKLOG.md` carries, or a DEC to remove it with
    `ops/rx_experiment.sh` converted (DEC-0014).
@@ -63,26 +60,22 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
    the local-infra marvin entry, the reset-from-112-or-above phantom, whether to tell the
    `weewx-packages` maintainer about DEC-0218 option B (they now know of the fork: #6), `git worktree
    prune` in heartofgold (stale S161 entry), CI mypy pinned `2.3.0` while the pre-commit rev lags.
-8. **P0.8 phase 6 (DEC-0225, S182): build the install path.** Docs first (`scripts/host-setup.sh`,
-   compose plus `.env`, README's quick start replaced by four lines and a link to
-   `docs/QUICKSTART.md`), then v2.2.0's entrypoint and Dockerfile items; owner's three open
-   questions are at the end of `docs/INSTALL-RESEARCH.md` §6.
+8. **Second dongle, early December (reminder set for Sat 2026-12-05 09:00 ET):** the #514 A/B of
+   hilman2's Python port beside our Go decoder, and a v3-vs-V4 A/B. Our holding reply is posted
+   (10-30); hilman2 answered: option names stable through 0.22.x, Pi 4 demodulator 9.7% of one
+   core (31% in frequency search), no x86 numbers yet. **The V4 needs librtlsdr newer than Debian
+   bookworm's 0.6.0, so build the test container on trixie**; check which base our image uses.
+   The maintainer question waits on the test; any decoder swap needs a DEC (DEC-0014).
 
-9. **Second dongle (S183):** an RTL-SDR Blog V4 (USB-A) is bought, arriving in weeks, usable about
-   early December. Plan its tests where useful: the Python port in #514 (it runs beside the
-   current stack on a second dongle) and a v3-vs-V4 A/B. Compatibility checks first (BACKLOG
-   "Open ideas", top entry). **#514 (new, hilman2) asks us to test that port and maintain the
-   repo: owner decision, not yet answered.**
-
-## Current state (S181)
+## Current state (S184)
 
 | Thing | State |
 |---|---|
-| Prod | marvin, `v2.1.0` as `:marvin-live` since 2026-10-28 15:40:40 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
+| Prod | marvin, `v2.2.0` as `:marvin-live` since 2026-10-31 10:51:42 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `5cd09917…`, `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
-| `main`/`dev` | `main` = v2.1.0's promotion (`prod-baseline-20261028`); `dev` = main plus S178's #501/#502, S179's #504/#505, S180's #506–#509 (two baked-layer changes awaiting v2.1.1) |
-| Docker Hub | `:v2.1.0` multi-arch; `:latest` still `:v2.0.20` until the owner moves it |
+| `main`/`dev` | `main` = v2.1.0's promotion (`prod-baseline-20261028`) until the v2.2.0 promotion lands; `dev` = everything shipped in v2.2.0 (phase 6 PRs #519/#520/#521, S178 to S180 work) |
+| Docker Hub | `:v2.2.0-amd64` pushed (= prod's index digest); `:v2.2.0` multi-arch join and `:latest` pending (job 0); `:v2.1.0` multi-arch |
 | Trackers | repo: #475 parked, #380 info · ops: #435 (11-02 count), #439 (virtual-USB guest), #433 (this file), #357, #344 · upstream: weewx-contrib#2, weewx-packages#6, lheijst/rtldavis#2 comment (all 10-29), weewx-influx2#1 (reply posted 10-29), matthewwall/weewx-wcloud#6 (license request, 10-29) |
 
 ## Blockers

@@ -6,9 +6,10 @@ under [Pre-S16].
 
 ---
 
-## [S184] — 2026-10-31 — v2.2.0 release prep (not yet built or tagged)
+## [S184] — 2026-10-31 — v2.2.0 built and deployed; phase 6 shipped (DEC-0227)
 
-- Version strings to v2.2.0 and driver banner `0.20+ws.9` (Dockerfile, compose, systemd example, README, CHANGES-FROM-UPSTREAM, image-publish input). README quick start replaced by the four-step version over `docs/QUICKSTART.md` and `scripts/host-setup.sh`. Phase 6's image half (PR #520) and docs half (PR #519) are the content; v2.1.1's baked changes (#506, #507, #509) ride along, so there is no separate v2.1.1. Build, multi-arch join, tag and GitHub release follow on the promotion.
+- Built `:v2.2.0` on marvin from `dev`@`9e678fd`, deployed to prod 10:51:42 ET (index `0a790696…`, rollback `:v2.1.0-prod-pre-v2.2.0`), first record after the restart 10:54:00. Pushed `:v2.2.0-amd64` (= prod's digest); the tag, arm64 build, multi-arch join and `:latest` ride the promotion (BOOT job 0). Also this session: the #514 holding reply posted, hilman2's answer recorded, a reminder set for 2026-12-05.
+- Release prep (PRs #519 to #521): version strings to v2.2.0 and driver banner `0.20+ws.9` (Dockerfile, compose, systemd example, README, CHANGES-FROM-UPSTREAM, image-publish input). README quick start replaced by the four-step version over `docs/QUICKSTART.md` and `scripts/host-setup.sh`. Phase 6's image half (PR #520) and docs half (PR #519) are the content; v2.1.1's baked changes (#506, #507, #509) ride along, so there is no separate v2.1.1. Build, multi-arch join, tag and GitHub release follow on the promotion.
 
 ## [S183] — 2026-10-30 — ROADMAP full reconciliation (one session late)
 
