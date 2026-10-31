@@ -18,3 +18,4 @@
 !extensions/influx/install.py
 !rtldavis.py
 !entrypoint.sh
+!seed_config.py

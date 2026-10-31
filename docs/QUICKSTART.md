@@ -2,7 +2,10 @@
 
 Written as it reads once DEC-0225's image items ship in v2.2.0 (proposals A to D and G in
 `docs/INSTALL-RESEARCH.md`). Lines marked `[A]`, `[B]`, `[C]`, `[D]`, `[G]` depend on that item; until
-then the README's current six steps apply.
+then the README's current six steps apply. v2.2.0 builds A, B and G; C and D are in the repository.
+Three things below are written ahead of a later release: the `healthy` state, `doctor`, and
+`WEEWX_DRIVER=simulator` (proposals E and F, DEC-0225 option 1). Do not rely on them until the
+changelog says they shipped.
 
 ---
 
