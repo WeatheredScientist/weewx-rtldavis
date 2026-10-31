@@ -52,7 +52,7 @@ suffix: upstream's base version, `+ws`, our revision.
 
 | File | Upstream version | Ours |
 |------|------------------|------|
-| `rtldavis.py` | `0.20` | `0.20+ws.8` from v2.1.0 (`ws.7` v2.0.21; `ws.6` v2.0.18 to v2.0.20; v2.0.13 through v2.0.17 report `0.20+ws.5`) |
+| `rtldavis.py` | `0.20` | `0.20+ws.9` from v2.2.0 (`ws.8` v2.1.0; `ws.7` v2.0.21; `ws.6` v2.0.18 to v2.0.20; v2.0.13 through v2.0.17 report `0.20+ws.5`) |
 | `influx.py` | `0.20` | `0.20+ws.2` |
 
 The suffix sorts after the base version and is unambiguous about its parent. `rtldavis.py` also logs

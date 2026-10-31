@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S184] — 2026-10-31 — v2.2.0 release prep (not yet built or tagged)
+
+- Version strings to v2.2.0 and driver banner `0.20+ws.9` (Dockerfile, compose, systemd example, README, CHANGES-FROM-UPSTREAM, image-publish input). README quick start replaced by the four-step version over `docs/QUICKSTART.md` and `scripts/host-setup.sh`. Phase 6's image half (PR #520) and docs half (PR #519) are the content; v2.1.1's baked changes (#506, #507, #509) ride along, so there is no separate v2.1.1. Build, multi-arch join, tag and GitHub release follow on the promotion.
+
 ## [S183] — 2026-10-30 — ROADMAP full reconciliation (one session late)
 
 - Diffed every open P0–P3 line against DECISIONS (DEC-0222 to DEC-0226), CHANGELOG and BOOT. Seven lines fixed: P0.7 header (nothing open), phase 5's audit-16 note, phase 2 (v2.1.0 and v2.1.1), P1.9 (gate deployed, Go source diffed; section now watch-only), P3's #473 line and INTERFACES line (DEC-0224's `windGust10`). Banner and guardrail written; next check S192. Docs only, no code.
