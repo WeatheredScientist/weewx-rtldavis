@@ -1578,6 +1578,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             channels['iss'], channels['anemometer'], channels['leaf_soil'],
             channels['temp_hum_1'], channels['temp_hum_2'])
         loginf('using transmitters %d' % self.transmitters)
+        loginf('rtldavis: %s band, ISS channel %s, rain bucket %s, cmd %s'
+               % (self.frequency, channels['iss'], bucket_type, self.cmd))
         loginf('log_humidity_raw %s' % self._log_humidity_raw)
         # (The old RTLDAVIS_DRIVER_MARKER canary lived here. It proved which
         # rtldavis.py was actually imported during the DEC-0031 hunt. The version

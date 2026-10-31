@@ -44,8 +44,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install pytest
-        run: python -m pip install --upgrade pip pytest
+      - name: Install pytest and configobj
+        run: python -m pip install --upgrade pip pytest configobj
 
       - name: Run tests
         run: python -m pytest -q

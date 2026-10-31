@@ -169,3 +169,16 @@ def test_init_allows_multiple_channels_unset_at_zero():
         driver = RtldavisDriver(None, _config_dict(iss=1))
     assert driver.channels['anemometer'] == 0
     assert driver.channels['leaf_soil'] == 0
+
+
+def test_init_logs_one_startup_summary_line():
+    """DEC-0225: one line says what the driver is about to use, so a new user reads the
+    band, channel, bucket and command in one place instead of piecing five lines together."""
+    from unittest.mock import patch
+    with patch('rtldavis.ProcManager.startup', return_value=None), \
+            patch('rtldavis.loginf') as loginf:
+        RtldavisDriver(None, _config_dict(iss=2))
+    lines = [c.args[0] for c in loginf.call_args_list]
+    summary = [ln for ln in lines if ln.startswith('rtldavis: ')]
+    assert len(summary) == 1
+    assert 'band, ISS channel 2, rain bucket' in summary[0]
