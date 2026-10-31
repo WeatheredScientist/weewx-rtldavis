@@ -20,14 +20,13 @@ RESET_MAX_TRIES resets and exactly one escalation.
 weewx_monitor.py writes a pidfile at import; `--test-alert` in argv bypasses
 that guard (same pattern as test_monitor_incremental_read).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_watchdog_escalation.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
-import os
 import sys
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
+from conftest import reset_wd  # noqa: E402
 
 
 class _Harness:
@@ -41,8 +40,7 @@ class _Harness:
         self._orig = {}
 
     def __enter__(self):
-        wm.WD.update({'last_reset': 0.0, 'tries': 0,
-                      'check_at': 0.0, 'escalated': False})
+        reset_wd()
         self._orig = {'reset_dongle': wm.reset_dongle,
                       'send_email': wm.send_email,
                       'log': wm.log,
@@ -277,8 +275,3 @@ def test_recreate_cmd_returns_none_when_inspect_fails():
         assert wm.build_recreate_cmd('c') is None
     finally:
         subprocess.run = orig
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))

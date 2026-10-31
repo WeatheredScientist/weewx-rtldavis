@@ -12,12 +12,10 @@ reverse-sorted run. Two causes, both fixed here.
    replaces it. Instead this file imports the two modules that several files share
    (rtldavis, dewpoint_service) against one superset fake, so a file's own `import`
    finds the cached module. A new test for either module needs no stub of its own.
-   The per-file stubs stay. They are inert for those two modules but still serve
-   standalone `python tests/test_x.py` runs. The local workarounds in
-   test_temp_twos_complement, test_dewpoint_units_224 and test_issue_226_cli_fixes are
-   redundant now and can go with them. The stubs stay live for influx, owm,
-   loop_json_writer and pressure_service, which are each imported by a single file and
-   never had the problem.
+   The rtldavis and dewpoint_service tests carry no stub of their own any more (S178);
+   the suite is pytest-only, so a file run as `python tests/test_x.py` is unsupported.
+   The stubs stay live for influx, owm, windy, loop_json_writer and pressure_service,
+   which are each imported by a single file and never had the problem.
    A new `import weewx.x` in rtldavis.py or dewpoint_service.py needs its name added
    to the superset below; a missing one fails when this file loads.
 
@@ -34,7 +32,7 @@ import types
 
 import pytest
 
-# Repo root and ops/, once. The per-file sys.path.insert shims are redundant now.
+# Repo root and ops/, once. The per-file sys.path.insert shims are gone (S178).
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _path in (os.path.join(ROOT, "ops"), ROOT):
     if _path not in sys.path:
@@ -106,6 +104,40 @@ def _install_weewx_superset():
 _install_weewx_superset()
 for _name in ("rtldavis", "dewpoint_service"):
     importlib.import_module(_name)
+
+
+def make_driver(active_tr_ids=(0,)):
+    """A bare RtldavisDriver with only the stats state populated (audit 37). __init__ is
+    skipped because it spawns a subprocess. ACTIVE_TR_IDS fills activeTrIds slots in order;
+    the default is one active transmitter, ID 0. A test that needs per-transmitter
+    pct_good storage sets `_save_pct_good_per_transmitter` itself."""
+    from rtldavis import RtldavisDriver
+    d = RtldavisDriver.__new__(RtldavisDriver)
+    RtldavisDriver._init_stats(d)
+    for i, tr_id in enumerate(active_tr_ids):
+        d.stats["activeTrIds"][i] = tr_id
+    d._save_pct_good_per_transmitter = False
+    return d
+
+
+# The channel map a bare driver stand-in carries: ISS on 1, wind on 1, every other sensor
+# absent. Use `dict(DEFAULT_CHANNELS)` so a test that edits its copy cannot leak (audit 37).
+DEFAULT_CHANNELS = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
+                    'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
+
+
+def make_cacher():
+    """A DewpointCacher with no engine and an empty config (audit 37)."""
+    import dewpoint_service
+    return dewpoint_service.DewpointCacher(engine=None, config_dict={})
+
+
+def reset_wd():
+    """Put the watchdog state dict back to its quiet start (audit 37). The autouse fixture
+    below restores the dicts after each test; this is for a test that needs the quiet
+    start before its first step."""
+    sys.modules["weewx_monitor"].WD.update(
+        {'last_reset': 0.0, 'tries': 0, 'check_at': 0.0, 'escalated': False})
 
 
 @pytest.fixture(autouse=True)

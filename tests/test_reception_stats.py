@@ -15,68 +15,16 @@ on the pre-fix code (pct_good_all stays None) and pass after.
 weewx is not installed in the test/CI environment, so we stub it (same pattern
 as test_rain_filter / test_parse_raw_channel).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_reception_stats.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
-import os
-import sys
 import time
 import types
 
-# --- stub the weewx deps so rtldavis.py imports without weewx installed ---
-def _pkg(name):
-    m = types.ModuleType(name)
-    m.__path__ = []
-    sys.modules[name] = m
-    return m
-
-def _mod(name):
-    m = types.ModuleType(name)
-    sys.modules[name] = m
-    return m
-
-class _AbstractDevice:
-    def __init__(self, *a, **k): pass
-class _AbstractConfEditor:
-    pass
-class _StdService:
-    def __init__(self, *a, **k): pass
-
-_weewx = _pkg("weewx")
-_weewx.__version__ = "5.3.1"
-_weewx.METRICWX = 16
-_drivers = _mod("weewx.drivers")
-_drivers.AbstractDevice = _AbstractDevice
-_drivers.AbstractConfEditor = _AbstractConfEditor
-_engine = _mod("weewx.engine")
-_engine.StdService = _StdService
-_units = _mod("weewx.units")
-for _d in ("obs_group_dict", "USUnits", "MetricUnits", "MetricWXUnits",
-           "default_unit_format_dict", "default_unit_label_dict"):
-    setattr(_units, _d, {})
-_crc16 = _mod("weewx.crc16")
-_crc16.crc16 = lambda *a, **k: 0
-_weewx.drivers, _weewx.engine, _weewx.units, _weewx.crc16 = (
-    _drivers, _engine, _units, _crc16)
-
-_weeutil = _pkg("weeutil")
-_wu = _mod("weeutil.weeutil")
-_wu.tobool = lambda v: str(v).lower() in ("1", "true", "yes", "on")
-_wlog = _mod("weeutil.logger")
-_weeutil.weeutil, _weeutil.logger = _wu, _wlog
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rtldavis import RtldavisDriver  # noqa: E402
+from conftest import make_driver  # noqa: E402
 
 
-def _make_driver():
-    """Bare object carrying just the state the stats methods touch. __init__ is
-    skipped (it spawns a subprocess); we call _init_stats to populate stats and
-    mark one active transmitter (ID 0 -> loop_times[0])."""
-    d = RtldavisDriver.__new__(RtldavisDriver)
-    RtldavisDriver._init_stats(d)
-    d.stats['activeTrIds'][0] = 0          # one active transmitter, ID 0
-    d._save_pct_good_per_transmitter = False
-    return d
+_make_driver = make_driver
 
 
 def _run_period(d, curr_cnt0, period_s=60):
@@ -127,18 +75,3 @@ def test_new_archive_record_stores_rxCheckPercent():
     assert 'rxCheckPercent' in event.record, \
         "rxCheckPercent was not written -> driver reception metric still dead"
     assert event.record['rxCheckPercent'] is not None
-
-
-if __name__ == '__main__':
-    fails = 0
-    for name, fn in sorted(globals().items()):
-        if name.startswith('test_') and callable(fn):
-            try:
-                fn()
-                print("  [PASS] %s" % name)
-            except Exception as e:
-                fails += 1
-                print("  [FAIL] %s -> %r" % (name, e))
-    total = sum(1 for n in globals() if n.startswith('test_'))
-    print("\n%d/%d passed" % (total - fails, total))
-    sys.exit(1 if fails else 0)

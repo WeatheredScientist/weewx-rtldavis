@@ -13,14 +13,12 @@ publish lines recorded live on 2026-07-05, so the deployed file is under test.
 weewx_monitor.py writes a pidfile at import; `--test-alert` in argv bypasses
 that guard (its intended non-invasive path), letting the module import cleanly.
 
-Run:  python3 -m pytest tests/    OR    python3 tests/test_reception_dedup.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
-import os
 import sys
 
 # Bypass the module's PID guard so importing it doesn't touch a running monitor.
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from weewx_monitor import wu_record_key  # noqa: E402
 
 
@@ -88,19 +86,3 @@ ALL_TESTS = [
     test_unparseable_falls_back_to_whole_line,
     test_only_trailing_parens_group_used,
 ]
-
-
-if __name__ == "__main__":
-    passed = 0
-    raw, unique = len(LIVE_SAMPLE), len({wu_record_key(ln) for ln in LIVE_SAMPLE})
-    print(f"live sample: {raw} raw publish lines -> {unique} unique records "
-          f"({raw / unique:.2f}x over-read before the fix)\n")
-    for t in ALL_TESTS:
-        try:
-            t()
-            passed += 1
-            print(f"  [PASS] {t.__name__}")
-        except AssertionError as e:
-            print(f"  [FAIL] {t.__name__}: {e}")
-    print(f"\n{passed}/{len(ALL_TESTS)} passed")
-    sys.exit(0 if passed == len(ALL_TESTS) else 1)

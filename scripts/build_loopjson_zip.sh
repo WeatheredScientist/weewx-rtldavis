@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Build dist/weewx-loopjson-X.Y.Z.zip (DEC-0211). One root directory, as
 # `weectl extension install` requires. Fails if the version in
 # loop_json_writer.py, extensions/loopjson/install.py and (when given) the

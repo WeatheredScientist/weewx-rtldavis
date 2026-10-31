@@ -21,7 +21,6 @@ import pytest
 
 # Bypass the module's PID guard so importing it doesn't touch a running monitor.
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
 # Keyed on the environment, not on the module's value, so a regressed default
@@ -60,7 +59,3 @@ def test_alert_threshold_now_means_real_loss():
     # floor sits well under the physical rate (a >~35% loss).
     floor = wm.WU_RF_MIN_PCT / 100 * wm.WU_RF_EXPECTED
     assert floor < wm.WU_RF_EXPECTED * 0.65
-
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))

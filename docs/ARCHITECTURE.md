@@ -74,7 +74,8 @@ wins in prod per file, current mount source paths, and the "decoy" files whose r
 their real source.
 
 **Baked into the image (changing these requires an image REBUILD):**
-`rtldavis.py` (the driver), `dewpoint_service.py`, `owm.py`, `pressure_service.py`, `wcloud.py`,
+`rtldavis.py` (the driver), `dewpoint_service.py`, `owm.py`, `rest_site.py` (the base `owm.py` and
+`windy.py` share), `pressure_service.py`, `wcloud.py`,
 `windy.py`, `entrypoint.sh`.
 
 Plus bind mounts for config/DB/skins and logs — see `CONSTANTS.md` for current host paths.

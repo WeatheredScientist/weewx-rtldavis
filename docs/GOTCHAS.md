@@ -221,6 +221,11 @@ alone did not catch.
 - **Deleting a squash-merged local branch:** `git branch -d` refuses (the commits are not ancestors of
   `dev`). Compare `gh pr view N --json headRefOid` with `git rev-parse <branch>` first; when they
   match, every commit is inside the merged PR and `-D` is safe.
+- **One merge makes every other open PR unmergeable (S180).** The repo requires a PR branch current
+  with `dev`, so after the first merge `gh pr merge` on the next says "not up to date", even on
+  disjoint files. Sequence them: `gh pr update-branch N`, `gh pr checks N --watch`, confirm
+  `mergeStateStatus` is `CLEAN`, merge, verify with `gh pr view N --json state,mergedAt`, repeat.
+  `--auto` would wait on a branch that goes stale again the moment a sibling merges.
 
 ## §3 NAS and campaign operations
 

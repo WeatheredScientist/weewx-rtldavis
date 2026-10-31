@@ -12568,3 +12568,190 @@ archive's `windGust` from the highest loop `windSpeed` of each record.
 map carries `windGust10` and never `windGust`, the unit group is registered, an impossible gust is
 nulled, the spec limit passes, and a condemned frame takes the gust with it. Before the change six
 of eight failed on the missing key, not on a stub error.
+
+
+---
+
+## DEC-0225 — The install path for v2.2.0: the image seeds its own config, first-run station values come from the environment, and a host script plus a two-page quick start replace the six manual steps (S182)
+
+Date: 2026-10-29 (S182, Fable 5.1 by the owner's call, research tier). Status: accepted as a
+proposal; the owner approved writing the DEC and the docs in chat. Build: none yet. Each item below
+is its own PR; ROADMAP P0.8 phase 6 tracks them. Research and comparison table:
+`docs/INSTALL-RESEARCH.md`; the resulting user document: `docs/QUICKSTART.md`.
+
+### Context
+
+DEC-0213 rewrote the public face for a new user, and ops#427 proved its six-step quick start on a
+disposable guest. Counted as a user types it, that path is twelve commands plus a hand edit of a
+760-line `weewx.conf`, with three failures that are silent or confusing on a fresh host: an empty
+USB bus (`not a device node`, #471), the DVB module re-claiming the dongle after a reboot when only
+`rmmod` was run, and a crash loop when the config-seeding step was skipped. Four of the commands
+exist only to work around the bind mount hiding the baked `weewx.conf`, and three run-line flags
+(`HOME=/tmp`, `BIAS_TEE=0`, `TZ`) are image concerns leaked to the user; `BACKLOG.md` already lists
+the `BIAS_TEE=1` default as a hazard.
+
+Comparable projects do not ask for any of this. felddy's WeeWX image generates `weewx.conf` into
+the mount on first run and documents compose only; the sdr-enthusiasts RTL-SDR images ship a host
+script for the kernel-module work and document the blacklist in a reboot-proof shape; Debian's
+`rtl-sdr` package installs the udev rule and blacklist itself; linuxserver images seed defaults into
+an empty config mount and never overwrite. The hardware side is already right: the baked defaults
+(US band, ISS channel 1, 0.01 in bucket) match a Davis transmitter's factory DIP setting, so a US
+user with an untouched ISS has nothing to change under `[Rtldavis]`.
+
+### Decision
+
+1. **The entrypoint seeds the config when the mount holds no `weewx.conf`.** The Dockerfile bakes
+   the pristine `/opt/weewx-data` a second time at `/opt/weewx-dist/`; on start, a missing
+   `/opt/weewx-data/weewx.conf` is copied from there and one log line says so. An existing tree is
+   never touched. The example unit's `ExecStartPre` config test becomes unnecessary and is dropped.
+2. **First-run station values come from the environment, read once.** At seed time only:
+   `WEEWX_LOCATION`, `WEEWX_LATITUDE`, `WEEWX_LONGITUDE`, `WEEWX_ALTITUDE` (`"120,foot"`) and
+   `WEEWX_UNITS` through `weectl station reconfigure --no-prompt` (documented WeeWX 5.1 flags;
+   unset values keep the defaults), and `RTLDAVIS_BAND` (`US`/`EU`/`NZ`), `RTLDAVIS_ISS_CHANNEL`
+   and `RTLDAVIS_RAIN_BUCKET` by a guarded edit of `[Rtldavis]`. Afterward `weewx.conf` is the only
+   truth; the applied values are logged, so DEC-0046's "which layer wins" has a one-line answer.
+   `WEEWX_DRIVER=simulator` at seed time runs WeeWX's Simulator with the same uploaders, writer and
+   log layout, so the stack can be tried before the radio arrives.
+3. **`scripts/host-setup.sh`, attached to each release with its sha256 in the notes.** Documented
+   as download, read, run; never `curl | sh`. Debian, Ubuntu and Raspberry Pi OS; anything else gets
+   the two manual steps in `docs/DEPLOY.md`. Idempotent, with `--dry-run`. It checks `lsusb` for an
+   RTL2832U and stops with a plain message if none; writes the blacklist in the reboot-proof shape
+   (`blacklist` plus `install … /bin/false` for `dvb_usb_rtl28xxu`, `rtl2832`, `rtl2830`,
+   `rtl2832_sdr`), unloads them and runs `update-initramfs -u` where present; writes the udev rule
+   for the invoking user's primary group (or `--user weewx` for the systemd path) and asks for a
+   re-plug; creates `weewx-data/` and `logs/` beside the compose file; offers Docker via Docker's own
+   installer after a y/n; writes `TZ`, uid and gid into `.env`.
+4. **Compose plus `.env` is the documented path.** `docker-compose.yml` keeps DEC-0213's hardened
+   shape and reads every user value from `.env` (`.env.example` tracked). `docker run`, the systemd
+   unit and Synology stay in `docs/DEPLOY.md`.
+5. **The image answers "is it working" itself.** A one-line startup summary after the driver
+   banner (band, channel, bucket, gain, config and log paths); a `HEALTHCHECK` on the age of the
+   loop file or log, informational only (restart-on-unhealthy touches the freeze blocker,
+   DEC-0068/0094, and is a separate DEC); and `docker compose run --rm weewx doctor`, which runs
+   `rtl_test -t` briefly, checks the kernel driver and the device node's permissions for the current
+   uid, prints band and channel from the config, and exits non-zero naming the matching
+   troubleshooting row. The entrypoint dispatches on its first argument (`doctor`, `weectl …`,
+   default `weewxd`).
+6. **Image defaults stop leaking into the run line:** `ENV HOME=/tmp` in the Dockerfile (DEC-0147's
+   reason applies to every non-root user); `BIAS_TEE` defaults to `0`, with a release note and a
+   startup log line; an unset `TZ` is logged as UTC with the daily-rain consequence spelled out.
+7. **Docs: `docs/QUICKSTART.md` is the install document**, under three pages and 900 words: what
+   you need, four steps, no hardware yet, a five-row troubleshooting table, what next, and one
+   paragraph for the non-Davis reader. README keeps the overview and the four-line summary (it is
+   the Docker Hub overview) and links to it. `docs/DEPLOY.md` is the service and hardening document.
+   Until items 1 to 6 ship, the quick start carries a header saying so and tags each dependent line.
+8. **Versioning (DEC-0222):** items 1, 2, 5 and 6 add behavior and change no data contract; together
+   they are the minor release v2.2.0, never a patch. Items 3, 4 and 7 are repo files and land first.
+9. **Scope line for the non-Davis reader.** The image decodes Davis only. A non-Davis WeeWX user is
+   served by the two extensions (loop JSON, InfluxDB 2) on any driver; a non-Davis radio user is
+   sent to `weewx-sdr` with `rtl_433` in one sentence. Nothing here adds a second driver to the
+   image; that would be its own decision.
+
+### Alternatives considered
+
+- **Keep `docker create` + `docker cp` seeding.** Proven, but four commands for a workaround no
+  comparable image needs, and the step whose omission crash-loops.
+- **A named Docker volume instead of a bind mount** (Docker copies image content into an empty named
+  volume once). Hides `weewx.conf` and the archive from the user and breaks the documented mount
+  layout, a major bump under DEC-0222. Rejected.
+- **Env vars applied on every start** (the linuxserver `PUID`/`TZ` model, extended to station
+  values). Two sources of truth for the same file, the drift DEC-0046 exists to prevent. Seed-time
+  only.
+- **`apt install rtl-sdr` plus `plugdev` instead of a host script.** Kept as the fallback the script
+  prints on an unsupported distro; not primary, because the package's rule grants `plugdev` and the
+  container user is not in it without `--group-add`, and because the script also does the dongle
+  check, the folders, `.env` and Docker.
+- **`curl | sh`.** Rejected on the usual grounds; the docs say download, read, run, with the release
+  URL pinned and the sha256 in the notes.
+- **A Raspberry Pi image, a Home Assistant add-on, a GHCR mirror.** Noted in
+  `docs/INSTALL-RESEARCH.md` §3.I as later work; the add-on has the highest reach and is a separate
+  repository.
+
+### Consequences
+
+- Target after items 3 and 4: four commands and no file edit before the first LOOP packet for a US
+  station on factory DIP switches, down from twelve plus an edit.
+- Acceptance: a stock 64-bit Raspberry Pi OS plus `docs/QUICKSTART.md`, timed, by someone who has
+  not read the repository. ops#439's guest proves everything but RF; the first LOOP needs the
+  owner's hardware or an adopter.
+- `entrypoint.sh` grows from 17 lines to perhaps 60, in bash, commented; no rewrite (DEC-0014).
+- Three questions stay the owner's: whether v2.2.0 ships items 1, 2, 5 and 6 together or 1 and 6
+  first; whether `host-setup.sh` belongs in this repository (recommended: yes, under `scripts/`);
+  and whether the `HEALTHCHECK` ever restarts (recommended: not in the first cut).
+
+## DEC-0226 — Upstream-derived files carry the license upstream granted: GPL-3.0-only for influx and OgoXe, NOASSERTION for wcloud (S181)
+
+Date: 2026-10-29 (S181, Sonnet 5.5). Status: accepted; the owner chose to draft both the retag and
+the upstream request. Closes audit 28 of `docs/CODE_REVIEW_S145.md`. Not legal advice.
+
+### Context
+
+PR #501 (S178) put `SPDX-License-Identifier: GPL-3.0-or-later` on every file that lacked a tag,
+including three files vendored from other projects. Audit 28 flagged those three: a downstream tag
+cannot claim a permission the licensor did not give, and "or any later version" is a separate grant
+that has to be stated.
+
+### What upstream says (read from the live repos, 2026-10-29)
+
+| File | Upstream | License evidence |
+|---|---|---|
+| `influx.py` | `david-lutz/weewx-influx2` from `matthewwall/weewx-influx` | Header: "Distributed under the terms of the GNU Public License (GPLv3)". The `license` file is the plain GPLv3 text; its two "any later version" hits are the standard appendix boilerplate, not a grant by the author. GitHub detects `GPL-3.0`. |
+| `ogoxeUploader.py` | `smeisens/weewx-wundergroundlike`, derived from Tom Keffer's WeeWX 5.2 `restx.py` | A plain GPLv3 `LICENSE.txt`; the file points to it and says nothing about later versions. |
+| `wcloud.py` | `matthewwall/weewx-wcloud` | No license file, no license wording in `wcloud.py`, `readme.txt` or `install.py`; GitHub detects none. Only "Copyright 2014 Matthew Wall" and a `$Id` line naming tkeffer. No license issue exists. |
+
+### Decision
+
+1. `influx.py` and `ogoxeUploader.py`: `GPL-3.0-only`. Each file's modification notice gets a dated
+   line saying why. `extensions/influx/README.md`'s license paragraph, which said "GPL-3.0-or-later,
+   the same as upstream", is corrected.
+2. `wcloud.py`: `NOASSERTION`, with a header note. No license is granted that we can repeat, and
+   guessing GPLv3 from the `$Id` line would be a guess. The code stays vendored and unmodified.
+3. A polite request to the author to add a license is drafted in `docs/upstream/` (gitignored) and
+   not posted without the owner's go.
+4. Files this project wrote stay `GPL-3.0-or-later`. A derived file may be distributed under GPLv3,
+   which this repo's `LICENSE` already is, so nothing here changes how the repo as a whole is licensed.
+
+### Consequences
+
+- The Hub image and the `influx` extension zip carry the same files with a changed comment only; no
+  version moves and no behavior changes.
+- If the wcloud author answers with GPLv3 (or later), the tag changes to match and the header note
+  goes. If there is no answer, the file stays as is; removing the uploader is the owner's call
+  and is not proposed.
+
+## DEC-0227 — v2.2.0 builds DEC-0225's items A, B and G with configobj, validates before it writes, and absorbs v2.1.1 (S184)
+
+Date: 2026-10-31 (S184, Sonnet 5.5). Status: accepted and shipped; the owner approved the build and
+the deploy in chat. Applies DEC-0225 (the install path), DEC-0222 (SemVer) and DEC-0014 (no rewrite).
+
+### Decision
+
+1. **First-run seeding uses `configobj`, not `weectl station reconfigure`.** `seed_config.py` edits
+   the copied starter file with `configobj`, which keeps every comment. `weectl` rewrites the whole
+   file, leaves a timestamped backup beside it and resets the mode to 0644. The seeded file is 0600.
+2. **Validate first, then write.** Latitude, longitude, altitude (`N,foot|meter`), band (US, EU, NZ),
+   ISS channel (1 to 8) and rain bucket (0 or 1) are all checked before the first byte lands, and
+   every error is reported at once. A bad value stops the start and leaves the mount empty, so the
+   next start is a clean first run. An existing config makes the whole helper a no-op.
+3. **The image ships its own starter tree** at `/opt/weewx-dist`, copied from the build, so the
+   seed never depends on what an old mount hides. `HOME=/tmp` is an image default (DEC-0147's
+   non-root rule), and `BIAS_TEE` defaults to 0, the safe state. Prod sets `BIAS_TEE` explicitly, so
+   it is unaffected.
+4. **The startup summary line lives in the driver** (`rtldavis: US band, ISS channel 5, rain bucket
+   0, cmd ...`), one line from `__init__`, because the driver is the only place that knows the values
+   it actually resolved. The entrypoint warns separately when `TZ` is unset.
+5. **One release.** v2.1.1's baked changes (#506, #507, #509) ride in v2.2.0, banner `0.20+ws.9`, so
+   there is no v2.1.1. Items C and D (the host script and compose) were already in the repository
+   (PR #519). E (`doctor`, `HEALTHCHECK`) and F (the simulator profile) are later releases, and
+   `docs/QUICKSTART.md` says so.
+
+### Consequences
+
+- Deployed to prod 2026-10-31 10:51:42 ET (image `0a790696…`, index digest equal to Hub's
+  `:v2.2.0-amd64`). The first record after the restart was 10:54:00 ET, no errors. Rollback:
+  `:v2.1.0-prod-pre-v2.2.0` on marvin, then `:v2.1.0-predeploy`.
+- CI's image build and smoke step now prove the seed path (empty mount, second start, bad band).
+- The acceptance test in DEC-0225 (a stock Pi OS and the quick start, timed, by someone who has not
+  read the repo) is still open.
+- Not checked here: other vendored files with an SPDX tag (`weewx.conf.example` is Keffer-derived).
+  Audit 28 named three files, and these are the three.

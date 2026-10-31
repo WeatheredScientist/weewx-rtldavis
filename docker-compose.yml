@@ -15,17 +15,20 @@
 services:
   weewx-rtldavis:
     container_name: weewx-rtldavis
-    image: weatheredscientist/weewx-rtldavis:v2.1.0
+    image: weatheredscientist/weewx-rtldavis:v2.2.0
     restart: unless-stopped
-    user: "1000:1000"            # your uid:gid (`id -u`, `id -g`)
+    user: "${PUID:-1000}:${PGID:-1000}"   # your uid:gid (`id -u`, `id -g`); set in .env
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     devices:
       - /dev/bus/usb:/dev/bus/usb
+    env_file:
+      - path: .env               # TZ, BIAS_TEE and the first-start values; see .env.example
+        required: false
     environment:
       - HOME=/tmp
-      - TZ=America/New_York      # your time zone, so daily rain resets at local midnight
-      - BIAS_TEE=0               # 1 only if an LNA is powered through the dongle
+      - TZ=${TZ:-UTC}            # your time zone, so daily rain resets at local midnight
+      - BIAS_TEE=${BIAS_TEE:-0}  # 1 only if an LNA is powered through the dongle
     volumes:
       - ./weewx-data:/opt/weewx-data
       - ./logs:/var/log/weewx

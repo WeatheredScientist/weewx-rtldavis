@@ -51,7 +51,6 @@ weewx_units = _mod("weewx.units")
 weewx_units.to_US = lambda pkt: pkt  # no-op: tests already pass US-unit packets
 weewx.engine, weewx.units = weewx_engine, weewx_units
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from loop_json_writer import LoopJsonWriter  # noqa: E402
 
 

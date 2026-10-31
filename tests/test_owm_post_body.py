@@ -23,12 +23,12 @@ This test asserts:
 weewx is not installed in the test/CI environment, so we stub the weewx modules
 in sys.modules before importing owm (same pattern as the other tests here).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_owm_post_body.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import json
-import os
 import sys
 import types
+import urllib.request
 
 # --- stub the weewx deps so owm.py imports without weewx installed ---
 def _pkg(name):
@@ -62,6 +62,32 @@ class _RESTThread:
     def __init__(self, queue, **kwargs):
         self.queue = queue
         self.rest_kwargs = kwargs
+
+    # process_record, get_request and get_post_body follow weewx 5.5.2's RESTThread,
+    # less the database read and the record checks, so the payload test below sees
+    # exactly what would go on the wire. post_with_retries is the HTTP call; the
+    # test replaces it.
+    def process_record(self, record, dbmanager):
+        _url = self.format_url(record)
+        _request = self.get_request(_url)
+        _payload = self.get_post_body(record)
+        if _payload:
+            _request.add_header('Content-Type', _payload[1])
+            data = _payload[0]
+        else:
+            data = None
+        self.post_with_retries(_request, data)
+
+    def get_request(self, url):
+        _request = urllib.request.Request(url)
+        _request.add_header("User-Agent", "weewx/5.5.2")
+        return _request
+
+    def get_post_body(self, record):
+        return None
+
+    def post_with_retries(self, request, data=None):
+        raise AssertionError("the test must capture the HTTP call")
 
 
 def _get_site_dict(config_dict, *args, **kwargs):
@@ -127,7 +153,6 @@ weewx_manager = _mod("weewx.manager")
 weewx_manager.get_manager_dict_from_config = lambda *a, **k: {}
 weewx.manager = weewx_manager
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import owm  # noqa: E402
 
 
@@ -235,8 +260,54 @@ def test_format_url_carries_appid():
     print("  [PASS] test_format_url_carries_appid")
 
 
-if __name__ == "__main__":
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
-    for fn in tests:
-        fn()
-    print("\n%d/%d passed" % (len(tests), len(tests)))
+# Payload identity (S180a, audit 23). The bytes each record produced before owm.py and
+# windy.py moved onto the shared rest_site base, captured from the old code and pinned
+# here. A refactor must send the same thing; a deliberate payload change must update
+# these with a reason. The records cover a US archive record (the production path, with
+# an int humidity that must stay an int), values sitting on a rounding boundary in both
+# US and METRIC, a METRICWX record, and missing fields.
+PAYLOAD_RECORDS = [
+    {"dateTime": 1783256300, "usUnits": US, "outTemp": 70.73, "outHumidity": 63,
+     "barometer": 29.921, "windSpeed": 7.333333333333333, "windGust": 15,
+     "windDir": 247.5, "dewpoint": 58.12, "heatindex": 71.6,
+     "hourRain": 0.01 + 0.01 + 0.01, "rain": 0.01, "UV": 5.5, "radiation": 512.25},
+    {"dateTime": 1783256600, "usUnits": US, "windSpeed": 0.5592340730136006,
+     "windGust": 0.0, "hourRain": 0.0, "outTemp": -40.0},
+    {"dateTime": 1783256900, "usUnits": METRIC, "windSpeed": 0.18,
+     "windGust": 36.0, "barometer": 1013.25, "hourRain": 0.254, "outHumidity": 99.5},
+    {"dateTime": 1783257200, "usUnits": METRICWX, "outTemp": 21.45, "windSpeed": 4.25,
+     "windGust": 8.95, "hourRain": 2.54, "dewpoint": None, "UV": None},
+    {"dateTime": 1783257500, "usUnits": US, "outTemp": None, "windSpeed": None,
+     "hourRain": None, "rain": 0.02},
+]
+
+
+def _sent(record):
+    """What process_record hands to the HTTP call: (url, Content-Type, body)."""
+    t = _make_thread()
+    calls = []
+    t.post_with_retries = lambda request, data=None: calls.append(
+        (request.full_url, request.get_header("Content-type"), data))
+    t.process_record(record, None)
+    assert len(calls) == 1
+    return calls[0]
+
+
+_OWM_URL = "http://api.openweathermap.org/data/3.0/measurements?appid=KEY"
+
+
+def test_payload_bytes_unchanged():
+    expected = [
+        '[{"station_id": "STN", "dt": 1783256300, "temperature": 21.5, "humidity": 63, '
+        '"pressure": 1013.2, "wind_speed": 3.3, "wind_gust": 6.7, "wind_deg": 248.0, '
+        '"dew_point": 14.5, "heat_index": 22.0, "rain_1h": 0.76}]',
+        '[{"station_id": "STN", "dt": 1783256600, "temperature": -40.0, '
+        '"wind_speed": 0.2, "wind_gust": 0.0, "rain_1h": 0.0}]',
+        '[{"station_id": "STN", "dt": 1783256900, "humidity": 100.0, '
+        '"pressure": 1013.2, "wind_speed": 0.0, "wind_gust": 10.0, "rain_1h": 2.54}]',
+        '[{"station_id": "STN", "dt": 1783257200, "temperature": 21.4, '
+        '"wind_speed": 4.2, "wind_gust": 8.9, "rain_1h": 2.54}]',
+        '[{"station_id": "STN", "dt": 1783257500}]',
+    ]
+    for record, body in zip(PAYLOAD_RECORDS, expected):
+        assert _sent(record) == (_OWM_URL, "application/json", body), record

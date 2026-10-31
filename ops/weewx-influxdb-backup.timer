@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # 03:15 daily, before restic's 03:30 read of /srv — same slot as weewx-db-dump.timer; independent
 # stores, no cross-tenant or cross-store conflict (see the .service header).
 [Unit]

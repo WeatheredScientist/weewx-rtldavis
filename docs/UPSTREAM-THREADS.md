@@ -41,10 +41,39 @@ conflate them, and don't commit the drafts.
   128, producing phantom rain. **OPEN.** Our side shipped as DEC-0021 (v2.0.3).
 - **[david-lutz/weewx-influx2#1](https://github.com/david-lutz/weewx-influx2/pull/1)** — TLS
   verification on by default (it was a **silent** verification bypass) plus four more fixes.
-  **OPEN**; that repo's first-ever PR.
+  **OPEN**; that repo's first-ever PR. The only review is CodeRabbit's (a bot, 2026-07-13), two
+  valid points: `influx.py:501` still `loginf`ed per record, and `verify_ssl` was undocumented.
+  **Both fixed and replied 2026-10-29** (S181, owner's go): commit `0c5d394` on the fork branch
+  `fix/tls-verification-and-py312-compat` (`logdbg`, plus a `verify_ssl` line in the readme's option
+  list), then the reply as a PR comment. The maintainer has not commented.
+- **[matthewwall/weewx-wcloud#6](https://github.com/matthewwall/weewx-wcloud/issues/6)** — **POSTED
+  2026-10-29** (S181, owner's go, after DEC-0226). The repo ships no license file or license wording, so
+  our vendored `wcloud.py` is tagged `NOASSERTION`; the issue asks him to add one (GPLv3 suggested).
+  **OPEN.** On an answer, change the tag to match and drop the header note. Of his 63 `weewx-*`
+  repos, 39 carry a GPLv3 license file and 24 none (checked 2026-10-29).
+- **[weewx-contrib/weewx-rtldavis#2](https://github.com/weewx-contrib/weewx-rtldavis/issues/2)** —
+  **POSTED 2026-10-29** (S180, owner's go). A one-maintainer packaging repo that bundles the 2023
+  lheijst sources in `src.tgz`; told of #22, #23 and rtldavis#7 and of the continuation. **OPEN.**
+- **[weewx-packages/weewx-rtldavis#6](https://github.com/weewx-packages/weewx-rtldavis/issues/6)** —
+  **POSTED 2026-10-29** (S180, owner's go). The continuation's driver already carries the shlex
+  split, reaping, `rxCheckPercent`, the wind decode and the unknown-station log (checked at HEAD);
+  what it lacks is the numeric weewx-version compare, offered here with a maybe on `show-packets`
+  and the fork link. The lheijst four-fixes issue was dropped as moot. **OPEN.**
+- **[weewx-rtldavis#514](https://github.com/WeatheredScientist/weewx-rtldavis/issues/514)** (this
+  repo, opened by hilman2, the continuation's author) — asks us to test their Python port of the Go
+  receiver (weewx-packages release 0.22.x, simulated transmitters only so far) and to join
+  weewx-packages as a maintainer. **Holding reply POSTED 2026-10-30** (owner's go, S184): we test in
+  early December on the second dongle beside the Go decoder, post numbers either way, and decide on
+  maintaining after the test. Asked them for Pi CPU figures and option stability. **OPEN.** Test
+  plan in `BACKLOG.md` "Open ideas"; the hardware request is eaglehunt-ops#440.
 
 ## Posted / closed
 
+- **[lheijst/rtldavis#2 comment](https://github.com/lheijst/rtldavis/pull/2#issuecomment-6499785445)**
+  — **POSTED 2026-10-29** (S180, owner's go). DEC-0223's mechanism (preamble offsets straddling a
+  512-sample block; copies 1 to 13 samples apart) and our sample-position gate, placed next to
+  LloydR's wall-time gate and hilman2's per-transmitter one; points at
+  `patch/rtldavis-burstgate.patch`. No field result claimed (the watch was 1 h 42 min).
 - **[Issue #15 comment](https://github.com/lheijst/weewx-rtldavis/issues/15#issuecomment-4960224128)**
   — **POSTED 2026-07-13** (owner-approved). The first comment on that thread since **2022-11-14**.
   Explains the duplicate-frame mechanism (DEC-0033/0035), the wraparound bug, and — the part that

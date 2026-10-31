@@ -15,20 +15,18 @@
 Same import pattern as test_episode_ledger.py ('--test-alert' bypasses the
 pidfile guard).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_reset_verdict_and_failure.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
-import os
 import subprocess
 import sys
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
+from conftest import reset_wd  # noqa: E402
 
 
 def _fresh_wd():
-    wm.WD.update({'last_reset': 0.0, 'tries': 0, 'check_at': 0.0,
-                  'escalated': False})
+    reset_wd()
 
 
 def test_void_clears_pending_verdict_and_logs(monkeypatch):
@@ -99,8 +97,3 @@ def test_reset_nonzero_exit_still_emails(monkeypatch):
 
     wm.do_reset(notify=False)
     assert any("FAILED" in subj for subj, _ in emails)
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))

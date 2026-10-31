@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Summarize one image reference for scripts/join_multiarch.sh (DEC-0215).
 
 Reads `docker buildx imagetools inspect <ref> --format '{{json .}}'` on stdin and prints JSON:

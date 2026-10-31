@@ -10,61 +10,9 @@ weewx is not installed in the test/CI environment, so we stub the weewx modules
 in sys.modules before importing the driver. The function under test is pure
 arithmetic and needs none of them.
 
-Run:  python -m pytest tests/    OR    python tests/test_rain_filter.py
+Run:  python -m pytest tests/ (pytest only)
 """
-import os
-import sys
-import types
 
-# --- stub the weewx deps so rtldavis.py imports without weewx installed ---
-# rtldavis.py imports: weewx.drivers, weewx.engine, weewx.units, weewx.crc16,
-# weeutil.weeutil, weeutil.logger. None are needed by rain_delta_tips (pure
-# arithmetic); we stub them so the module imports and we test the real function.
-def _pkg(name):
-    m = types.ModuleType(name)
-    m.__path__ = []          # mark as a package so submodule imports resolve
-    sys.modules[name] = m
-    return m
-
-def _mod(name):
-    m = types.ModuleType(name)
-    sys.modules[name] = m
-    return m
-
-# distinct base classes (RtldavisDriver subclasses AbstractDevice AND StdService)
-class _AbstractDevice:
-    def __init__(self, *a, **k): pass
-class _AbstractConfEditor:
-    pass
-class _StdService:
-    def __init__(self, *a, **k): pass
-
-_weewx = _pkg("weewx")
-_weewx.__version__ = "5.3.1"                  # rtldavis.py version-checks at import
-_weewx.METRICWX = 16                          # sentinel; unused by the function
-_drivers = _mod("weewx.drivers")
-_drivers.AbstractDevice = _AbstractDevice
-_drivers.AbstractConfEditor = _AbstractConfEditor
-_engine = _mod("weewx.engine")
-_engine.StdService = _StdService
-_units = _mod("weewx.units")
-# rtldavis.py registers a custom 'group_frequency' unit at import time by
-# mutating these dicts — provide them all as empty dicts.
-for _d in ("obs_group_dict", "USUnits", "MetricUnits", "MetricWXUnits",
-           "default_unit_format_dict", "default_unit_label_dict"):
-    setattr(_units, _d, {})
-_crc16 = _mod("weewx.crc16")
-_crc16.crc16 = lambda *a, **k: 0
-_weewx.drivers, _weewx.engine, _weewx.units, _weewx.crc16 = (
-    _drivers, _engine, _units, _crc16)
-
-_weeutil = _pkg("weeutil")
-_wu = _mod("weeutil.weeutil")
-_wu.tobool = lambda v: str(v).lower() in ("1", "true", "yes", "on")
-_wlog = _mod("weeutil.logger")
-_weeutil.weeutil, _weeutil.logger = _wu, _wlog
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rtldavis import rain_delta_tips, MAX_PLAUSIBLE_TIPS  # noqa: E402
 
 
@@ -109,16 +57,3 @@ def test_cap_value():
 def test_all_cases():
     for last, new, expected, desc in CASES:
         _check(last, new, expected, desc)
-
-
-if __name__ == "__main__":
-    passed = 0
-    print(f"MAX_PLAUSIBLE_TIPS = {MAX_PLAUSIBLE_TIPS}\n")
-    for last, new, expected, desc in CASES:
-        got = rain_delta_tips(last, new)
-        ok = (got == expected)
-        passed += ok
-        rain_in = "None" if got is None else f"{got * 0.01:.2f}in"
-        print(f"  [{'PASS' if ok else 'FAIL'}] ({str(last):>4},{new:>3}) -> {str(got):>4} ({rain_in:>6})  {desc}")
-    print(f"\n{passed}/{len(CASES)} passed")
-    sys.exit(0 if passed == len(CASES) else 1)

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Baseline-measure the process-freeze rate, instead of eyeballing it (DEC-0083).
 
 WHY THIS EXISTS
@@ -79,13 +80,13 @@ shape -- no connection secrets, nothing from this PUBLIC repo (DEC-0012).
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stall_baseline as sb  # noqa: E402
+from marvinctl_util import resolve_image  # noqa: E402
 
 # Same exec-ro constants as ops/campaign_analyze.py (ops#250's port): ARCHIVE_DB
 # is exec-ro's own host-side mount path for the tenant root, not the live
@@ -118,21 +119,13 @@ for dt, iv in db.execute(q):
 """
 
 
-def _resolve_image(container: str) -> str:
-    """The live container's own image -- read off the running container
-    rather than hardcoded, same reason as ops/campaign_analyze.py's own
-    `_resolve_image`: a fixed tag goes stale every release."""
-    info = json.loads(sb._marvinctl("inspect", container))
-    return info[0]["Config"]["Image"]
-
-
 def fetch_archive(query_lo: datetime) -> list[tuple[datetime, str]]:
     """dateTime + interval for every archive row on or after query_lo, via
     `marvinctl exec-ro` (ops#286) -- same transport and stdin-query shape as
     ops/campaign_analyze.py's `fetch()` (DEC-0124: real Python cannot survive
     exec-ro's argv path, only stdin). Read-only (`mode=ro`).
     """
-    image = _resolve_image(CONTAINER)
+    image = resolve_image(CONTAINER, prog="freeze_baseline")
     query = DB_QUERY.format(db=ARCHIVE_DB, lo=int(query_lo.timestamp()))
     out = sb._marvinctl("exec-ro", image, "--", VENV_PY, "-",
                         input=query, timeout=180)

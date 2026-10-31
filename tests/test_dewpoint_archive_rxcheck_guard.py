@@ -14,57 +14,14 @@ weewx is not installed in the test/CI environment, so we stub the weewx modules
 in sys.modules before importing dewpoint_service (same pattern as the other
 dewpoint_service tests).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_dewpoint_archive_rxcheck_guard.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
-import os
-import sys
-import types
 
 
-# --- stub the weewx deps so dewpoint_service.py imports without weewx installed ---
-def _pkg(name):
-    m = types.ModuleType(name)
-    m.__path__ = []
-    sys.modules[name] = m
-    return m
-
-
-def _mod(name):
-    m = types.ModuleType(name)
-    sys.modules[name] = m
-    return m
-
-
-weewx = _pkg("weewx")
-weewx.NEW_LOOP_PACKET = "NEW_LOOP_PACKET"
-weewx.NEW_ARCHIVE_RECORD = "NEW_ARCHIVE_RECORD"
-weewx.US = 1
-weewx.METRIC = 16
-weewx.METRICWX = 17
-
-weewx_engine = _mod("weewx.engine")
-
-
-class _StdService:
-    def __init__(self, engine, config_dict):
-        pass
-
-    def bind(self, *a, **k):
-        pass
-
-
-weewx_engine.StdService = _StdService
-weewx.engine = weewx_engine
-
-weewx_wxformulas = _mod("weewx.wxformulas")
-weewx_wxformulas.dewpointF = lambda t, h: 0.0
-weewx_wxformulas.heatindexF = lambda t, h: 0.0
-weewx_wxformulas.dewpointC = lambda t, h: 0.0
-weewx_wxformulas.heatindexC = lambda t, h: 0.0
-weewx.wxformulas = weewx_wxformulas
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import dewpoint_service  # noqa: E402
+from conftest import make_cacher  # noqa: E402
+
+weewx = dewpoint_service.weewx  # conftest.py installs the shared fake
 
 
 class _Event:
@@ -72,8 +29,7 @@ class _Event:
         self.record = record
 
 
-def _cacher():
-    return dewpoint_service.DewpointCacher(engine=None, config_dict={})
+_cacher = make_cacher
 
 
 def _record(**overrides):
@@ -216,10 +172,3 @@ def test_metricwx_calm_wind_not_nulled():
     c.new_archive_record(_Event(rec))
     assert rec['windGust'] == 0.894
     print("  [PASS] test_metricwx_calm_wind_not_nulled")
-
-
-if __name__ == "__main__":
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
-    for fn in tests:
-        fn()
-    print("\n%d/%d passed" % (len(tests), len(tests)))

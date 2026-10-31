@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# REFERENCE COPY, LAGGING (S178). The deployed unit lives in heartofgold
+# (host/etc/systemd/system/weewx-influxdb-backup.service) and adds OnFailure= and the
+# MemoryMax/TasksMax root-work caps (MARVIN-DEC-0210). Do not install this copy.
 # Pre-backup consistent dump of the InfluxDB store (docs/INFLUXDB-MIGRATION.md §5 item 2 / DEC-0141
 # — restic snapshots /srv at 03:30, and a file-level copy of a live TSM/bolt tree is not a backup,
 # COMPUTE-NODE.md §3; the cutover itself only got away with a raw tree copy because it copied from a

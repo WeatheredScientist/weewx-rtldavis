@@ -14,7 +14,7 @@ tests here, extended so the RESTThread stub actually implements
 post_interval/lastpost/skip_this_post -- this test is specifically about that
 interaction, so the stub can't be a no-op like test_owm_post_body.py's).
 
-Run:  python3 -m pytest tests/   OR   python3 tests/test_influx_lease_yield.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import json
 import os
@@ -121,7 +121,6 @@ weeutil_weeutil.accumulateLeaves = lambda d: d
 weeutil_pkg = _pkg("weeutil")
 weeutil_pkg.weeutil = weeutil_weeutil
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import influx  # noqa: E402
 
 TENANT = influx.TENANT
@@ -254,10 +253,3 @@ def test_skip_this_post_still_honors_base_interval_when_not_held():
     assert t.skip_this_post(1030) is True   # 30s < 60s post_interval -> skip
     assert t.skip_this_post(1070) is False  # 70s >= 60s -> posts
     print("  [PASS] test_skip_this_post_still_honors_base_interval_when_not_held")
-
-
-if __name__ == "__main__":
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
-    for fn in tests:
-        fn()
-    print("\n%d/%d passed" % (len(tests), len(tests)))

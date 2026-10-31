@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # usb_forensics.sh — read-only USB/handle capture around a watchdog reset (S68).
 #
 # WHY IT EXISTS: the USB resets FIRE but do not WORK (BOOT blocker 4, DEC-0074).

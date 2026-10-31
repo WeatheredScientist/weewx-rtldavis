@@ -16,12 +16,11 @@ is neither.
 weewx_monitor.py writes a pidfile at import; `--test-alert` bypasses that
 guard (same pattern as test_watchdog_escalation.py).
 """
-import os
 import sys
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
+from conftest import reset_wd  # noqa: E402
 
 
 class _Harness:
@@ -35,8 +34,7 @@ class _Harness:
         self._orig = {}
 
     def __enter__(self):
-        wm.WD.update({'last_reset': 0.0, 'tries': 0,
-                      'check_at': 0.0, 'escalated': False})
+        reset_wd()
         self._orig = {'send_email': wm.send_email, 'log': wm.log,
                       'episode_open': wm.episode_open,
                       'episode_note_avg': wm.episode_note_avg,
@@ -166,8 +164,3 @@ def test_recovery_email_unaffected_by_full_outage_wording():
         assert len(h.emails) == 2
         subject, _ = h.emails[-1]
         assert subject.endswith('RF reception RECOVERED')
-
-
-if __name__ == '__main__':
-    import pytest
-    raise SystemExit(pytest.main([__file__, '-v']))

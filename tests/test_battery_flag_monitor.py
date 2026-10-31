@@ -18,7 +18,7 @@ weak battery (the flag on minute after minute of healthy reception) gets through
 weewx_monitor.py writes a pidfile at import; `--test-alert` in argv bypasses that
 guard, letting the module import cleanly without touching a running monitor.
 
-Run:  python3 -m pytest tests/    OR    python3 tests/test_battery_flag_monitor.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import os
 import sys
@@ -27,7 +27,6 @@ import tempfile
 
 # Bypass the module's PID guard so importing it doesn't touch a running monitor.
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
 # log() appends to a host-only path in prod; redirect it to a temp file.
@@ -152,8 +151,3 @@ def test_db_battery_summary_missing_db_or_column_returns_none():
         assert wm.db_battery_summary(T0, T0 + 60, db_path=path) is None
     finally:
         os.unlink(path)
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))

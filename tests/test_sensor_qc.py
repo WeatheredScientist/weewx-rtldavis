@@ -12,58 +12,13 @@ weewx is not installed in the test/CI environment, so we stub the weewx
 modules in sys.modules before importing the driver (same pattern as
 test_rain_filter.py).
 
-Run:  python -m pytest tests/    OR    python tests/test_sensor_qc.py
+Run:  python -m pytest tests/ (pytest only)
 """
-import os
-import sys
-import types
 
-# --- stub the weewx deps so rtldavis.py imports without weewx installed ---
-def _pkg(name):
-    m = types.ModuleType(name)
-    m.__path__ = []
-    sys.modules[name] = m
-    return m
-
-def _mod(name):
-    m = types.ModuleType(name)
-    sys.modules[name] = m
-    return m
-
-class _AbstractDevice:
-    def __init__(self, *a, **k): pass
-class _AbstractConfEditor:
-    pass
-class _StdService:
-    def __init__(self, *a, **k): pass
-
-_weewx = _pkg("weewx")
-_weewx.__version__ = "5.3.1"
-_weewx.METRICWX = 16
-_drivers = _mod("weewx.drivers")
-_drivers.AbstractDevice = _AbstractDevice
-_drivers.AbstractConfEditor = _AbstractConfEditor
-_engine = _mod("weewx.engine")
-_engine.StdService = _StdService
-_units = _mod("weewx.units")
-for _d in ("obs_group_dict", "USUnits", "MetricUnits", "MetricWXUnits",
-           "default_unit_format_dict", "default_unit_label_dict"):
-    setattr(_units, _d, {})
-_crc16 = _mod("weewx.crc16")
-_crc16.crc16 = lambda *a, **k: 0
-_weewx.drivers, _weewx.engine, _weewx.units, _weewx.crc16 = (
-    _drivers, _engine, _units, _crc16)
-
-_weeutil = _pkg("weeutil")
-_wu = _mod("weeutil.weeutil")
-_wu.tobool = lambda v: str(v).lower() in ("1", "true", "yes", "on")
-_wlog = _mod("weeutil.logger")
-_weeutil.weeutil, _weeutil.logger = _wu, _wlog
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rtldavis import (  # noqa: E402
     SensorQC, QC_RESEED_SECONDS, RtldavisDriver, FRAME_WEATHER_KEYS,
     FRAME_BATTERY_KEYS, IMPOSSIBLE_MSG_TYPE_KEY)
+from conftest import DEFAULT_CHANNELS  # noqa: E402
 
 T0 = 1_000_000.0  # arbitrary epoch for the fake clock
 
@@ -309,8 +264,7 @@ def test_frame_battery_keys_cover_every_battery_field():
 class _ParseDriver:
     """Minimal stand-in for parse_raw, as in test_battery_status_dispatch.py:
     parse_raw is @staticmethod but takes `self` explicitly."""
-    channels = {'iss': 1, 'anemometer': 0, 'leaf_soil': 0,
-                'temp_hum_1': 0, 'temp_hum_2': 0, 'wind_channel': 1}
+    channels = dict(DEFAULT_CHANNELS)
     rain_per_tip = 0.2
     last_hum = None
     _log_humidity_raw = False
@@ -367,12 +321,3 @@ def test_impossible_type_ignored_when_qc_disabled():
                                IMPOSSIBLE_MSG_TYPE_KEY: 0x1})
     assert pkt['windSpeed'] == 4.9 and pkt['txBatteryStatus'] == 1
     assert IMPOSSIBLE_MSG_TYPE_KEY not in pkt
-
-
-if __name__ == "__main__":
-    fns = [(n, f) for n, f in sorted(globals().items())
-           if n.startswith("test_") and callable(f)]
-    for n, f in fns:
-        f()
-        print("  [PASS] %s" % n)
-    print("%d tests passed" % len(fns))

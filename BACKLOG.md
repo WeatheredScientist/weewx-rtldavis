@@ -335,6 +335,21 @@ failed resets currently produce no further action.
 
 ## Open ideas
 
+- **Second dongle: RTL-SDR Blog V4 (USB-A), owner-bought 2026-10-30 (S183); arrives in weeks, usable
+  from about early December.** Not a plan yet, only the places it earns its keep, to be agreed
+  before any hardware moves:
+  1. **Test bed for the Python port** (`weewx-packages/weewx-rtldavis`, tester request in #514):
+     the port's own README says a second dongle lets it run beside the current stack, so prod's
+     receiver stays untouched. This is the cleanest use.
+  2. **A/B reception** against the v3 at the same site (DEC-0059's bar and metric), now that the
+     current dongle can stay live.
+  3. **Compatibility check first:** the V4 uses a different tuner front end (R828D plus an input
+     switch) and needs a librtlsdr that knows it. The image bundles librtlsdr from `src.tgz`
+     (`Dockerfile`), so confirm V4 support in that tree before any run, and the Go decoder's
+     `-d` device selection before the second dongle is plugged into the prod host, or prod could
+     enumerate the wrong stick.
+  Ops and heartofgold were told the same day (inventory entry, USB port plan).
+
 - **Public-maturity push (S112 audit) — three planned sessions, owner-requested.** Goal: as the fork
   approaches true maturity, make it maximally accessible — clean code/comments, accurate docs,
   proper git accoutrement, minimal and clear public surface. Four parallel S112 audit reviews

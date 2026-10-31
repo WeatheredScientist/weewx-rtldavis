@@ -1,5 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 #--------------------------------------------
-# weewx-rtldavis v2.1.0
+# weewx-rtldavis v2.2.0
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
@@ -145,6 +146,7 @@ RUN sed -i 's|^\([[:space:]]*\)report_services = weewx.engine.StdPrint, weewx.en
 #--------------------------------------------
 COPY dewpoint_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/dewpoint_service.py
 COPY pressure_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/pressure_service.py
+COPY rest_site.py /opt/weewx-venv/lib/python3.14/site-packages/user/rest_site.py
 COPY owm.py /opt/weewx-venv/lib/python3.14/site-packages/user/owm.py
 COPY windy.py /opt/weewx-venv/lib/python3.14/site-packages/user/windy.py
 COPY wcloud.py /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
@@ -171,6 +173,11 @@ RUN touch /opt/weewx-venv/lib/python3.14/site-packages/user/__init__.py && \
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+# The pristine starter tree, kept a second time: an empty data mount hides /opt/weewx-data, and
+# seed_config.py copies this into it on the first start (DEC-0225). Taken last, after every edit
+# to the baked config above, so the two are identical.
+COPY seed_config.py /opt/seed_config.py
+RUN cp -a /opt/weewx-data /opt/weewx-dist
 
 #--------------------------------------------
 # Minimal runtime image
@@ -179,9 +186,14 @@ RUN chmod +x /entrypoint.sh
 FROM ubuntu:26.04 AS minimal
 
 ENV DEBIAN_FRONTEND=noninteractive
+# A non-root user has no home directory to write to; DEC-0147 set this on prod's unit, and it is
+# the image's default now so a run line does not need it (DEC-0225).
+ENV HOME=/tmp
 
 COPY --from=base /opt/weewx-venv /opt/weewx-venv
 COPY --from=base /opt/weewx-data /opt/weewx-data
+COPY --from=base /opt/weewx-dist /opt/weewx-dist
+COPY --from=base /opt/seed_config.py /opt/seed_config.py
 COPY --from=base /usr/local /usr/local
 COPY --from=base /entrypoint.sh /entrypoint.sh
 COPY --from=base /etc/modprobe.d /etc/modprobe.d

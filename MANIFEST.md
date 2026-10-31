@@ -16,6 +16,7 @@ A file in no class gets its own row. Check size with `boot-cap-check.sh`.
 | `docs/GOTCHAS.md` (§-indexed) | before trusting a tool's zero/green (§1); a PR/merge or handoff write (§2); a NAS/marvin/campaign task (§3); judging live or shipped (§4). New traps land here, not in `BOOT.md` |
 | `docs/PRINCIPLES.md`, `ASSESSMENT.md`, `CODE_REVIEW_S145.md` | weighing a decision; picking the next cleanup |
 | `docs/UPSTREAM-THREADS.md` | replying upstream, or checking whether a thread moved |
+| `docs/INSTALL-RESEARCH.md` — install-path research and the ranked v2.2.0 proposal (DEC-0225) | building any P0.8 phase 6 item; changing what a new user types |
 
 ## Technical
 
@@ -23,14 +24,14 @@ A file in no class gets its own row. Check size with `boot-cap-check.sh`.
 |---|---|
 | `docs/ARCHITECTURE.md` · `docs/INTERFACES.md` (loop-JSON + InfluxDB contract: the real deliverable) · `docs/DATA_ERRATA.md` (`ERR-####`) | touching the ISS→driver→WeeWX→sinks chain; changing anything a consumer reads; a suspect historical reading |
 | `CHANGES-FROM-UPSTREAM.md` — one section per forked or own module (DEC-0034) | changing a forked file, checking for an upstream, preparing an upstream PR |
-| Root runtime modules: driver `rtldavis.py`; uploaders `influx.py`, `ogoxeUploader.py`, `wcloud.py`, `windy.py`, `owm.py`; services `pressure_service.py`, `dewpoint_service.py`, `loop_json_writer.py` | changing any behavior. `CONSTANTS.md`'s deploy-layers table says which layer wins in prod |
+| Root runtime modules: driver `rtldavis.py`; uploaders `influx.py`, `ogoxeUploader.py`, `wcloud.py`, `windy.py` and `owm.py` (these two share the base `rest_site.py`); services `pressure_service.py`, `dewpoint_service.py`, `loop_json_writer.py` | changing any behavior. `CONSTANTS.md`'s deploy-layers table says which layer wins in prod |
 | `weewx_monitor.py` (root) — host-side watchdog, alerter, reception tracker | any "what handles X at runtime?" question; read before concluding a capability is missing (DEC-0074) |
 | `ops/*`, `scripts/*`, `usb_reset.sh`, `entrypoint.sh`, `docs/CAMPAIGN-B-RUNBOOK.md`, `docs/INFLUXDB-MIGRATION.md` | any ops task, swap night, InfluxDB cutover. A script's header is its manual; `ops/campaign_analyze.py` is the only campaign readout (DEC-0069) |
 | `extensions/influx/` + `scripts/build_influx_zip.sh`, `prove_influx.sh`, `.github/workflows/influx.yml` (DEC-0219) | changing `influx.py`'s version, the installer, or the image's uploader install; cutting an `influx-v*` release |
 | `extensions/loopjson/` + `scripts/build_loopjson_zip.sh`, `prove_loopjson.sh`, `.github/workflows/loopjson.yml` (DEC-0211) | changing the writer's version, paths or install; cutting a `loopjson-v*` release |
 | Go decoder: `patch/rtldavis-*.patch` (dup time-gate DEC-0135, CRC counters DEC-0216, burst gate DEC-0223), `tests/go/` | any change to the Go decoder |
 | Image and release: `Dockerfile`, `.github/workflows/image*.yml`, `scripts/join_multiarch.sh` and its helpers (DEC-0214/0215) | cutting a release, changing the Dockerfile, anything a Pi user pulls |
-| Public face: `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `LICENSE`, `docs/DEPLOY.md`, `examples/`, `docker-compose.yml` | changing anything user-visible, an adopter install, or handling a report. Written to the dashboard's scrub rules: no host, tenant or unit names |
+| Public face: `README.md`, `docs/QUICKSTART.md` (the install document, DEC-0225), `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `LICENSE`, `docs/DEPLOY.md`, `examples/`, `docker-compose.yml` | changing anything user-visible, an adopter install, or handling a report. Written to the dashboard's scrub rules: no host, tenant or unit names |
 
 ## Not in a clone, never in the load path
 

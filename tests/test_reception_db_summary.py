@@ -22,7 +22,7 @@ from weewx_monitor.py, so the deployed behaviour is under test:
 weewx_monitor.py writes a pidfile at import; `--test-alert` in argv bypasses that
 guard, letting the module import cleanly without touching a running monitor.
 
-Run:  python3 -m pytest tests/    OR    python3 tests/test_reception_db_summary.py
+Run:  python3 -m pytest tests/ (pytest only)
 """
 import os
 import sys
@@ -33,7 +33,6 @@ from datetime import datetime
 
 # Bypass the module's PID guard so importing it doesn't touch a running monitor.
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
 
 # log() appends to a NAS-only path in prod; redirect it to a temp file so the
@@ -200,16 +199,3 @@ ALL_TESTS = [
     test_period_floor_aligns_to_local_blocks,
     test_period_block_advances_after_interval,
 ]
-
-
-if __name__ == "__main__":
-    passed = 0
-    for t in ALL_TESTS:
-        try:
-            t()
-            passed += 1
-            print(f"  [PASS] {t.__name__}")
-        except AssertionError as e:
-            print(f"  [FAIL] {t.__name__}: {e}")
-    print(f"\n{passed}/{len(ALL_TESTS)} passed")
-    sys.exit(0 if passed == len(ALL_TESTS) else 1)

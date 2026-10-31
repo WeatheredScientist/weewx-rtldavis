@@ -27,8 +27,8 @@ import sys
 import tempfile
 
 sys.argv = ["weewx_monitor.py", "--test-alert"]
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import weewx_monitor as wm  # noqa: E402
+from conftest import reset_wd  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FORENSICS = os.path.join(REPO, "ops", "usb_forensics.sh")
@@ -318,8 +318,7 @@ def test_watchdog_poll_captures_on_both_verdicts():
     calls = []
     orig = wm.usb_forensics
     wm.usb_forensics = calls.append
-    wm.WD.update({'last_reset': 0.0, 'tries': 0, 'check_at': 0.0,
-                  'escalated': False})
+    reset_wd()
     orig_log, wm.log = wm.log, lambda m: None
     try:
         wm.WD['check_at'] = 100.0
@@ -329,8 +328,3 @@ def test_watchdog_poll_captures_on_both_verdicts():
     finally:
         wm.usb_forensics, wm.log = orig, orig_log
     assert calls == ['verify-effective', 'verify-ineffective']
-
-
-if __name__ == "__main__":
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))

@@ -10,6 +10,7 @@
 !logging.additions
 !dewpoint_service.py
 !pressure_service.py
+!rest_site.py
 !owm.py
 !windy.py
 !wcloud.py
@@ -17,3 +18,4 @@
 !extensions/influx/install.py
 !rtldavis.py
 !entrypoint.sh
+!seed_config.py

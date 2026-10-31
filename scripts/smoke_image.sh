@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Smoke-test a built weewx-rtldavis image on the architecture it was built for (DEC-0214).
 #
 #   scripts/smoke_image.sh <image> <expected `uname -m`> <requirements.txt>
@@ -34,3 +35,31 @@ docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
 echo "== the uploader the baked config names imports (weewxd cannot start without it)"
 docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
   "import user.influx as i; print('influx', i.VERSION)"
+
+echo "== the OWM and Windy uploaders import, with their shared base from the user package"
+docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
+  "import user.owm as o, user.windy as w; b = o.OWMThread.__mro__[1].__module__; print('owm', b, 'windy', w.WindyThread.__mro__[1].__module__); assert b == 'user.rest_site'"
+
+echo "== an empty data mount is seeded once, and a second start leaves it alone (DEC-0225)"
+seed_dir="$(mktemp -d)"
+trap 'rm -rf "$seed_dir"' EXIT
+run_seed() {
+  docker run --rm --user "$(id -u):$(id -g)" -v "$seed_dir:/opt/weewx-data" \
+    -e WEEWX_LATITUDE=40.7 -e WEEWX_LONGITUDE=-74.0 -e RTLDAVIS_BAND=EU \
+    "$image" /opt/weewx-venv/bin/python3 /opt/seed_config.py
+}
+run_seed
+[ -s "$seed_dir/weewx.conf" ] || { echo "the first start wrote no weewx.conf" >&2; exit 1; }
+grep -Eq '^[[:space:]]*transceiver_frequency = EU$' "$seed_dir/weewx.conf" || { echo "RTLDAVIS_BAND did not land in weewx.conf" >&2; exit 1; }
+grep -Eq '^[[:space:]]*latitude = 40.7$' "$seed_dir/weewx.conf" || { echo "WEEWX_LATITUDE did not land in weewx.conf" >&2; exit 1; }
+test -d "$seed_dir/bin/user" || { echo "the starter tree is incomplete" >&2; exit 1; }
+before="$(sha256sum "$seed_dir/weewx.conf")"
+run_seed
+[ "$before" = "$(sha256sum "$seed_dir/weewx.conf")" ] || { echo "a second start changed weewx.conf" >&2; exit 1; }
+bad_dir="$(mktemp -d)"
+if docker run --rm --user "$(id -u):$(id -g)" -v "$bad_dir:/opt/weewx-data" -e RTLDAVIS_BAND=AU \
+    "$image" /opt/weewx-venv/bin/python3 /opt/seed_config.py; then
+  echo "a bad RTLDAVIS_BAND did not stop the start" >&2; exit 1
+fi
+[ -z "$(ls -A "$bad_dir")" ] || { echo "a bad value left files behind" >&2; exit 1; }
+rm -rf "$bad_dir"

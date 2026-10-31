@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Freeze-aware reception analysis for the RX campaigns (DEC-0069).
 
 WHY THIS EXISTS
@@ -91,13 +92,13 @@ to manage (DEC-0012).
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import statistics
-import subprocess
 import sys
 import time
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
+
+from marvinctl_util import marvinctl, resolve_image
 
 # Arm legends. Labels are reused between campaigns with DIFFERENT meanings, so a
 # bare "arm B" number is ambiguous across campaigns; printing the legend in the
@@ -333,25 +334,11 @@ _LEADING_TS_RE = re.compile("^" + _TS)
 
 def _marvinctl(*args: str, input: Optional[str] = None,
               timeout: int = 60) -> str:
-    """One `marvinctl --tenant weewx` call. Read-only throughout."""
-    proc = subprocess.run(
-        ["marvinctl", "--tenant", "weewx", *args],
-        input=input, capture_output=True, text=True, timeout=timeout)
-    if proc.returncode != 0:
-        sys.exit(f"marvinctl {args[0]} failed (rc={proc.returncode}): "
-                 f"{proc.stderr.strip()[:400]}")
-    return proc.stdout
+    return marvinctl(*args, input=input, timeout=timeout)
 
 
 def _resolve_image(container: str) -> str:
-    """The live container's own image, e.g. weatheredscientist/weewx-rtldavis:v2.0.16.
-
-    `exec-ro` takes an image, not a container name, and a hardcoded tag goes
-    stale every release (`CONSTANTS.md`'s release table changes it most
-    sessions) -- read it off the running container instead, every time.
-    """
-    info = json.loads(_marvinctl("inspect", container))
-    return info[0]["Config"]["Image"]
+    return resolve_image(container)
 
 
 def fetch(log_path: str, lo: int) -> Tuple[List[str], List[Rec]]:
