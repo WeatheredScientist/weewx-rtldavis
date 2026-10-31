@@ -448,13 +448,15 @@ items inside a phase don't depend on each other.
       lagging heartofgold's units, a stale `sortedcontainers` comment, README monitor wording vs
       code, driver comments that misstate the code. 16 was fixed by DEC-0213's README rewrite.
 
-- [ ] **Phase 6 — the install path (DEC-0225, S182).** Twelve commands plus a hand edit become
-      four commands and no edit. Docs first: `docs/QUICKSTART.md` (landed with the DEC, tagged per
-      dependent line), `scripts/host-setup.sh`, compose plus `.env`. Then v2.2.0 (minor, DEC-0222):
-      the entrypoint seeds `weewx.conf` into an empty mount, first-run env vars read once,
-      `WEEWX_DRIVER=simulator`, startup summary line, informational `HEALTHCHECK`, `doctor`,
-      `HOME=/tmp` and `BIAS_TEE=0` as image defaults. Acceptance: a stock 64-bit Pi OS plus the
-      quick start, timed, by someone who has not read the repo. Research: `docs/INSTALL-RESEARCH.md`.
+- [~] **Phase 6 — the install path (DEC-0225, S182; built DEC-0227, S184).** Twelve commands plus a
+      hand edit become four commands and no edit. **Shipped S184 as v2.2.0 (in prod 2026-10-31
+      10:51 ET):** `docs/QUICKSTART.md`, `scripts/host-setup.sh`, compose plus `.env` (PR #519), and
+      the image half (PR #520): the entrypoint seeds the config into an empty mount, first-run env
+      vars read once, startup summary line, `HOME=/tmp` and `BIAS_TEE=0` as image defaults; the
+      README quick start is the short one (PR #521). **Left:** the acceptance test (a stock 64-bit
+      Pi OS plus the quick start, timed, by someone who has not read the repo), and proposals E
+      (`doctor`, informational `HEALTHCHECK`) and F (`WEEWX_DRIVER=simulator`) in later releases.
+      Research: `docs/INSTALL-RESEARCH.md`.
 Errors in the Go decoder itself are their own track, P1.9 below; its image changes ride phase 2's
 release or the one after.
 

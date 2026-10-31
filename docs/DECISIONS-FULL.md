@@ -12718,5 +12718,40 @@ that has to be stated.
 - If the wcloud author answers with GPLv3 (or later), the tag changes to match and the header note
   goes. If there is no answer, the file stays as is; removing the uploader is the owner's call
   and is not proposed.
+
+## DEC-0227 — v2.2.0 builds DEC-0225's items A, B and G with configobj, validates before it writes, and absorbs v2.1.1 (S184)
+
+Date: 2026-10-31 (S184, Sonnet 5.5). Status: accepted and shipped; the owner approved the build and
+the deploy in chat. Applies DEC-0225 (the install path), DEC-0222 (SemVer) and DEC-0014 (no rewrite).
+
+### Decision
+
+1. **First-run seeding uses `configobj`, not `weectl station reconfigure`.** `seed_config.py` edits
+   the copied starter file with `configobj`, which keeps every comment. `weectl` rewrites the whole
+   file, leaves a timestamped backup beside it and resets the mode to 0644. The seeded file is 0600.
+2. **Validate first, then write.** Latitude, longitude, altitude (`N,foot|meter`), band (US, EU, NZ),
+   ISS channel (1 to 8) and rain bucket (0 or 1) are all checked before the first byte lands, and
+   every error is reported at once. A bad value stops the start and leaves the mount empty, so the
+   next start is a clean first run. An existing config makes the whole helper a no-op.
+3. **The image ships its own starter tree** at `/opt/weewx-dist`, copied from the build, so the
+   seed never depends on what an old mount hides. `HOME=/tmp` is an image default (DEC-0147's
+   non-root rule), and `BIAS_TEE` defaults to 0, the safe state. Prod sets `BIAS_TEE` explicitly, so
+   it is unaffected.
+4. **The startup summary line lives in the driver** (`rtldavis: US band, ISS channel 5, rain bucket
+   0, cmd ...`), one line from `__init__`, because the driver is the only place that knows the values
+   it actually resolved. The entrypoint warns separately when `TZ` is unset.
+5. **One release.** v2.1.1's baked changes (#506, #507, #509) ride in v2.2.0, banner `0.20+ws.9`, so
+   there is no v2.1.1. Items C and D (the host script and compose) were already in the repository
+   (PR #519). E (`doctor`, `HEALTHCHECK`) and F (the simulator profile) are later releases, and
+   `docs/QUICKSTART.md` says so.
+
+### Consequences
+
+- Deployed to prod 2026-10-31 10:51:42 ET (image `0a790696…`, index digest equal to Hub's
+  `:v2.2.0-amd64`). The first record after the restart was 10:54:00 ET, no errors. Rollback:
+  `:v2.1.0-prod-pre-v2.2.0` on marvin, then `:v2.1.0-predeploy`.
+- CI's image build and smoke step now prove the seed path (empty mount, second start, bad band).
+- The acceptance test in DEC-0225 (a stock Pi OS and the quick start, timed, by someone who has not
+  read the repo) is still open.
 - Not checked here: other vendored files with an SPDX tag (`weewx.conf.example` is Keffer-derived).
   Audit 28 named three files, and these are the three.
