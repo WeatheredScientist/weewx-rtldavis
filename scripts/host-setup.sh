@@ -147,9 +147,9 @@ if getent group docker >/dev/null 2>&1 && ! id -nG "$target_user" | tr ' ' '\n' 
 fi
 
 # ---- 6. compose file and .env ------------------------------------------------
-fetch() {  # fetch NAME DEST
+fetch() {  # fetch NAME DEST [ASSET]; GitHub renames a dotfile release asset, so .env.example ships as env.example
   if [ -n "$from_dir" ]; then run cp "$from_dir/$1" "$2"
-  else run curl --fail --silent --show-error --location "$BASE_URL/$1" --output "$2"; fi
+  else run curl --fail --silent --show-error --location "$BASE_URL/${3:-$1}" --output "$2"; fi
 }
 if [ -f "$dir/docker-compose.yml" ]; then
   say "ok: $dir/docker-compose.yml exists, leaving it alone"
@@ -163,7 +163,7 @@ else
   say "writing $dir/.env"
   tz="$(timedatectl show -p Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo UTC)"
   tmpl="$(mktemp)"
-  fetch .env.example "$tmpl"
+  fetch .env.example "$tmpl" env.example
   if [ "$dry" = 1 ]; then
     say "  would fill in TZ=$tz PUID=$uid PGID=$gid"
   else

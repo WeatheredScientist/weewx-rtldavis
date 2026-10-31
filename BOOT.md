@@ -33,10 +33,6 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
 
 ### ▶▶ S185 JOB LIST
 
-0. **Finish the v2.2.0 release (S184 left it mid-flight):** `:v2.2.0-amd64` is on Hub (= prod's
-   index digest). The tag, arm64 build, `join_multiarch.sh --apply`, `:latest` and the GitHub
-   release ride the promotion; the owner asked that `:latest` move to `:v2.2.0`. Check state first
-   (`git tag -l 'v2.2*'`, Hub tag list).
 
 1. **11-02 morning, cheap:** count archive rows for 2026-11-01 05:00–07:00 UTC (expect 120, no gap,
    no duplicate) and post the number on eaglehunt-ops#435.
@@ -74,8 +70,8 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
 | Prod | marvin, `v2.2.0` as `:marvin-live` since 2026-10-31 10:51:42 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `5cd09917…`, `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
-| `main`/`dev` | `main` = v2.1.0's promotion (`prod-baseline-20261028`) until the v2.2.0 promotion lands; `dev` = everything shipped in v2.2.0 (phase 6 PRs #519/#520/#521, S178 to S180 work) |
-| Docker Hub | `:v2.2.0-amd64` pushed (= prod's index digest); `:v2.2.0` multi-arch join and `:latest` pending (job 0); `:v2.1.0` multi-arch |
+| `main`/`dev` | `main` = the v2.2.0 promotion (`prod-baseline-20261031`, `8ed61a0`); `dev` = main plus the host-setup asset-name fix |
+| Docker Hub | `:v2.2.0` and `:latest` are the multi-arch index `3f580af7…` (published S184); `:v2.1.0` multi-arch |
 | Trackers | repo: #475 parked, #380 info · ops: #435 (11-02 count), #439 (virtual-USB guest), #433 (this file), #357, #344 · upstream: weewx-contrib#2, weewx-packages#6, lheijst/rtldavis#2 comment (all 10-29), weewx-influx2#1 (reply posted 10-29), matthewwall/weewx-wcloud#6 (license request, 10-29) |
 
 ## Blockers
