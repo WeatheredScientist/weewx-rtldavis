@@ -20,6 +20,7 @@ import seed_config  # noqa: E402
 DIST_CONF = """\
 # starter config
 [Station]
+    station_type = Rtldavis
     location = "YOUR_STATION_NAME"
     latitude = YOUR_LATITUDE
     longitude = YOUR_LONGITUDE
@@ -29,6 +30,9 @@ DIST_CONF = """\
     transceiver_frequency = US
     iss_channel = 1
     rain_bucket_type = 0
+[Simulator]
+    loop_interval = 2.5
+    driver = weewx.drivers.simulator
 """
 
 
@@ -133,6 +137,7 @@ def test_empty_variables_count_as_unset(dirs):
     {"RTLDAVIS_ISS_CHANNEL": "x"},
     {"RTLDAVIS_RAIN_BUCKET": "2"},
     {"WEEWX_LOCATION": "two\nlines"},
+    {"WEEWX_DRIVER": "davis"},
 ])
 def test_a_bad_value_stops_the_start_and_writes_nothing(dirs, env):
     code, lines = run(dirs, env)
@@ -159,6 +164,33 @@ def test_a_key_the_config_lacks_removes_the_half_seeded_config(dirs):
     assert code == 1
     assert not os.path.exists(os.path.join(dirs[0], "weewx.conf"))
     assert any("half-seeded" in ln for ln in lines)
+
+
+@pytest.mark.parametrize("value", ["simulator", "Simulator", " SIMULATOR "])
+def test_simulator_driver_lands_case_insensitively(dirs, value):
+    code, lines = run(dirs, {"WEEWX_DRIVER": value})
+    assert code == 0
+    conf = configobj.ConfigObj(os.path.join(dirs[0], "weewx.conf"))
+    assert conf["Station"]["station_type"] == "Simulator"
+    assert any("WeeWX Simulator" in ln for ln in lines)
+
+
+@pytest.mark.parametrize("value", ["rtldavis", "RtlDavis"])
+def test_rtldavis_driver_is_a_no_op(dirs, value):
+    code, lines = run(dirs, {"WEEWX_DRIVER": value})
+    assert code == 0
+    conf = configobj.ConfigObj(os.path.join(dirs[0], "weewx.conf"))
+    assert conf["Station"]["station_type"] == "Rtldavis"
+    assert not any("Simulator" in ln for ln in lines)
+
+
+def test_a_dist_config_without_a_simulator_stanza_is_rejected(dirs):
+    with open(os.path.join(dirs[1], "weewx.conf"), "w") as f:
+        f.write("[Station]\n    station_type = Rtldavis\n")
+    code, lines = run(dirs, {"WEEWX_DRIVER": "simulator"})
+    assert code == 1
+    assert not os.path.exists(os.path.join(dirs[0], "weewx.conf"))
+    assert any("[Simulator] driver" in ln for ln in lines)
 
 
 @pytest.mark.skipif(os.getuid() == 0, reason="root can write anywhere")
