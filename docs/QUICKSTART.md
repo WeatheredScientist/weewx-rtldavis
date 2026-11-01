@@ -1,13 +1,6 @@
 # Quick start
 
-Written as it reads once DEC-0225's image items ship in v2.2.0 (proposals A to D and G in
-`docs/INSTALL-RESEARCH.md`). Lines marked `[A]`, `[B]`, `[C]`, `[D]`, `[G]` depend on that item; until
-then the README's current six steps apply. v2.2.0 builds A, B and G; C and D are in the repository.
-The `healthy` state and `doctor` (proposal E, DEC-0228) ship in the next release, v2.3.0.
-`WEEWX_DRIVER=simulator` (proposal F, DEC-0225 option 1) is written ahead of a later release.
-Do not rely on any of the three until the changelog says it shipped.
-
----
+Needs image v2.3.0 or newer (DEC-0225/0227/0228).
 
 Get a Davis Vantage weather station into WeeWX with a $35 USB radio instead of the console. Ten
 minutes on a Raspberry Pi; the console, if you have one, keeps working.
@@ -23,12 +16,12 @@ minutes on a Raspberry Pi; the console, if you have one, keeps working.
   OS, a mini PC, a home server, or a NAS that runs Docker. amd64 and arm64 both work. Windows and
   macOS do not: USB through a virtual machine adds timing jitter the radio cannot follow.
 
-## 1. Prepare the computer `[C]`
+## 1. Prepare the computer
 
 Download the setup script from the release page, read it, then run it:
 
 ```bash
-curl -fsSLO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/v2.2.0/host-setup.sh
+curl -fsSLO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/v2.3.0/host-setup.sh
 ```
 
 ```bash
@@ -45,7 +38,7 @@ folder with a `docker-compose.yml` and a `.env` file inside. Unplug and re-plug 
 says so. Debian, Ubuntu and Raspberry Pi OS are supported; on anything else do the two manual
 steps in [docs/DEPLOY.md](DEPLOY.md#host-preparation).
 
-## 2. Tell it where you are `[B] [D]`
+## 2. Tell it where you are
 
 Edit `weewx/.env`. Five lines matter:
 
@@ -61,7 +54,7 @@ Outside the US, also set `RTLDAVIS_BAND=EU` (or `NZ`) and `RTLDAVIS_RAIN_BUCKET=
 bucket. If you moved the ISS off transmitter ID 1, set `RTLDAVIS_ISS_CHANNEL`. These are read once,
 on the first start, and written into `weewx-data/weewx.conf`; edit that file for anything later.
 
-## 3. Start it `[A] [D]`
+## 3. Start it
 
 ```bash
 cd weewx && docker compose up -d
@@ -79,36 +72,36 @@ docker compose logs --tail 30
 You should see the driver line, `driver version is 0.20+ws.9 (fork of 0.20, patched by
 WeatheredScientist -- not stock upstream)`, then `rtldavis: US band, ISS channel 1 …`, and within
 about three minutes the first `LOOP` line with real readings. `docker compose ps` shows `healthy`
-while WeeWX keeps writing its log (it logs every archive record) and `unhealthy` after ten quiet
-minutes; nothing restarts on it. The full log is `weewx/logs/weewx.log`.
+while WeeWX keeps writing its log and `unhealthy` after ten quiet minutes; nothing restarts on it.
+The full log is `weewx/logs/weewx.log`.
 
-That is the install. WeeWX now records to `weewx-data/archive/weewx.sdb` every five minutes.
+That is the install. WeeWX records to `weewx-data/archive/weewx.sdb` every five minutes.
 
 ## No hardware yet?
 
-Set `WEEWX_DRIVER=simulator` in `.env` before the first start for made-up weather, so you can wire
-up uploads or a dashboard now. With no USB device on the computer at all, also comment out the
-`devices:` lines in `docker-compose.yml`. When the radio arrives, delete `weewx-data/weewx.conf`,
-remove the line, and start again.
+Set `WEEWX_DRIVER=simulator` in `.env` before the first start: made-up weather, so you can wire up
+uploads or a dashboard now. With no USB device at all, also comment out the `devices:` lines in
+`docker-compose.yml`. When the radio arrives, delete `weewx-data/weewx.conf`, remove the line, and
+start again.
 
 ## Something wrong?
 
 | You see | Do |
 |---|---|
 | `not a device node` and the container restarts | The container sees no RTL2832U. Plug the dongle in; with `docker run`, pass `--device /dev/bus/usb`; a VM needs a USB controller with the dongle attached |
-| `usb_claim_interface error -6` or `Device or resource busy` | The kernel TV driver has the dongle. Re-run the setup script, then reboot. If `doctor` says another program holds it, stop the running station first |
+| `usb_claim_interface error -6` or `Device or resource busy` | The kernel TV driver has the dongle. Re-run the setup script, then reboot. If `doctor` says another program holds it, stop that program |
 | `Permission denied` opening the dongle | The udev rule did not apply. Re-run the setup script, unplug and re-plug; check `PUID`/`PGID` in `.env` match `id -u` and `id -g` |
 | Driver line appears, no `LOOP` after ten minutes | Radio, not software. Check the USB cable and re-plug; antenna vertical and away from the computer; band and channel match the ISS; try `-gain 0` (auto) in `[Rtldavis]` |
 | `weewx.conf` not found | Rare now: the first start writes it, and `doctor` says `not seeded yet` until then |
 
-Stop the station (`docker compose stop`, since only one program can hold the dongle), then run:
+Stop the station first (`docker compose stop`; one program can hold the dongle), then run:
 
 ```bash
 docker compose run --rm weewx-rtldavis doctor
 ```
 
-It checks the dongle, the kernel driver, the device's permissions and the radio, prints the band,
-channel and gain from `weewx.conf`, and on a failure names the row above that applies.
+It checks the dongle, the kernel driver, permissions and the radio, prints band, channel and gain
+from `weewx.conf`, and on a failure names the row above that applies.
 
 ## What next
 

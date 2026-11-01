@@ -23,7 +23,7 @@
 # --skip-dongle-check   carry on without a dongle (for WEEWX_DRIVER=simulator)
 set -euo pipefail
 
-RELEASE="v2.2.0"
+RELEASE="v2.3.0"
 BASE_URL="https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/${RELEASE}"
 BLACKLIST=/etc/modprobe.d/blacklist-rtl-sdr.conf
 UDEV_RULE=/etc/udev/rules.d/60-rtl-sdr.rules
