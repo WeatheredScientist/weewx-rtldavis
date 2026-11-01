@@ -86,9 +86,10 @@ That is the install. WeeWX now records to `weewx-data/archive/weewx.sdb` every f
 
 ## No hardware yet?
 
-Set `WEEWX_DRIVER=simulator` in `.env` before the first start. The same stack runs on made-up
-weather, so you can wire up uploads or a dashboard now. When the radio arrives, delete
-`weewx-data/weewx.conf`, remove the line, and start again.
+Set `WEEWX_DRIVER=simulator` in `.env` before the first start for made-up weather, so you can wire
+up uploads or a dashboard now. With no USB device on the computer at all, also comment out the
+`devices:` lines in `docker-compose.yml`. When the radio arrives, delete `weewx-data/weewx.conf`,
+remove the line, and start again.
 
 ## Something wrong?
 
