@@ -3,9 +3,9 @@
 Written as it reads once DEC-0225's image items ship in v2.2.0 (proposals A to D and G in
 `docs/INSTALL-RESEARCH.md`). Lines marked `[A]`, `[B]`, `[C]`, `[D]`, `[G]` depend on that item; until
 then the README's current six steps apply. v2.2.0 builds A, B and G; C and D are in the repository.
-Three things below are written ahead of a later release: the `healthy` state, `doctor`, and
-`WEEWX_DRIVER=simulator` (proposals E and F, DEC-0225 option 1). Do not rely on them until the
-changelog says they shipped.
+The `healthy` state and `doctor` (proposal E, DEC-0228) ship in the next release, v2.3.0.
+`WEEWX_DRIVER=simulator` (proposal F, DEC-0225 option 1) is written ahead of a later release.
+Do not rely on any of the three until the changelog says it shipped.
 
 ---
 
@@ -79,7 +79,8 @@ docker compose logs --tail 30
 You should see the driver line, `driver version is 0.20+ws.9 (fork of 0.20, patched by
 WeatheredScientist -- not stock upstream)`, then `rtldavis: US band, ISS channel 1 …`, and within
 about three minutes the first `LOOP` line with real readings. `docker compose ps` shows `healthy`
-once readings are flowing. The full log is `weewx/logs/weewx.log`.
+while WeeWX keeps writing its log (it logs every archive record) and `unhealthy` after ten quiet
+minutes; nothing restarts on it. The full log is `weewx/logs/weewx.log`.
 
 That is the install. WeeWX now records to `weewx-data/archive/weewx.sdb` every five minutes.
 
@@ -93,14 +94,20 @@ weather, so you can wire up uploads or a dashboard now. When the radio arrives, 
 
 | You see | Do |
 |---|---|
-| `not a device node` and the container restarts | No USB device on the host at all. Plug the dongle in; a VM needs a USB controller with it attached |
-| `usb_claim_interface error -6` or `Device or resource busy` | The TV driver has the dongle. Re-run the setup script, then reboot |
-| `Permission denied` opening the dongle | The udev rule did not apply. Unplug and re-plug; check `PUID`/`PGID` in `.env` match `id -u` and `id -g` |
-| Driver line appears, no `LOOP` after ten minutes | Radio, not software. Antenna vertical and away from the computer; band and channel match the ISS; try `-gain 0` (auto) in `[Rtldavis]` |
-| `weewx.conf` not found | Rare now; `docker compose run --rm weewx doctor` reports what is missing |
+| `not a device node` and the container restarts | The container sees no RTL2832U. Plug the dongle in; with `docker run`, pass `--device /dev/bus/usb`; a VM needs a USB controller with the dongle attached |
+| `usb_claim_interface error -6` or `Device or resource busy` | The kernel TV driver has the dongle. Re-run the setup script, then reboot. If `doctor` says another program holds it, stop the running station first |
+| `Permission denied` opening the dongle | The udev rule did not apply. Re-run the setup script, unplug and re-plug; check `PUID`/`PGID` in `.env` match `id -u` and `id -g` |
+| Driver line appears, no `LOOP` after ten minutes | Radio, not software. Check the USB cable and re-plug; antenna vertical and away from the computer; band and channel match the ISS; try `-gain 0` (auto) in `[Rtldavis]` |
+| `weewx.conf` not found | Rare now: the first start writes it, and `doctor` says `not seeded yet` until then |
 
-`docker compose run --rm weewx doctor` checks the dongle, the kernel driver and permissions in one
-go and names the row above that applies.
+Stop the station (`docker compose stop`, since only one program can hold the dongle), then run:
+
+```bash
+docker compose run --rm weewx-rtldavis doctor
+```
+
+It checks the dongle, the kernel driver, the device's permissions and the radio, prints the band,
+channel and gain from `weewx.conf`, and on a failure names the row above that applies.
 
 ## What next
 

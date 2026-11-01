@@ -12755,3 +12755,84 @@ the deploy in chat. Applies DEC-0225 (the install path), DEC-0222 (SemVer) and D
   read the repo) is still open.
 - Not checked here: other vendored files with an SPDX tag (`weewx.conf.example` is Keffer-derived).
   Audit 28 named three files, and these are the three.
+
+## DEC-0228 — `doctor`, an informational `HEALTHCHECK` on `weewx.log`, and an entrypoint that dispatches its first argument (S185a)
+
+Date: 2026-10-31 (S185a, Opus 5.5, a child session of S185). Status: accepted; the owner approved
+the design in chat with the S185 coordinator. Builds DEC-0225 item 5 (proposal E in
+`docs/INSTALL-RESEARCH.md`), except the startup summary line, which DEC-0227 already put in the
+driver. Applies DEC-0014 (no rewrite) and DEC-0222 (a minor release, v2.3.0). Ships in the next
+release; nothing here is deployed.
+
+### Context
+
+DEC-0225 promised three answers to "is it working": the summary line (built in v2.2.0), a
+`doctor` command and a health check. `docs/QUICKSTART.md` was written ahead with both. Until now
+the image had `CMD ["/entrypoint.sh"]` and no `ENTRYPOINT`, so any argument replaced the station
+outright, which `scripts/smoke_image.sh` relies on (`docker run <image> uname -m`). Prod runs the
+image under systemd with `--user 996:986 --cap-drop ALL` and no command argument.
+
+### Decision
+
+1. `ENTRYPOINT ["/entrypoint.sh"]` with `CMD ["weewxd"]`, and the entrypoint dispatches on its
+   first argument (the felddy pattern): no argument or `weewxd` runs the existing start path,
+   unchanged (seed, TZ warning, bias tee, `exec weewxd`); `doctor` execs `/opt/doctor.py` with the
+   venv python; `weectl …` execs the venv's `weectl` with the rest of the arguments; anything else
+   is `exec "$@"`. The passthrough keeps every existing `docker run <image> <command>` working,
+   including the smoke script's, and `weewx_monitor.py`'s recreate line (built from the container's
+   `Cmd`) still reproduces the station: `weewxd` for a new image, and `/entrypoint.sh` passes
+   through to a second, argument-less run of the default path.
+2. `HEALTHCHECK` on `/var/log/weewx/weewx.log` modified in the last 600 s (two archive
+   intervals; weewxd logs every archive record), every 60 s, 10 s timeout, 300 s start period,
+   3 retries. A missing log is unhealthy. The log, not `loop-data.txt`: the baked config installs no
+   loop writer, so a fresh install has no feed file. The check is one `os.stat` in the venv python,
+   which needs no capability and runs as the container's user. Informational only: Docker never
+   acts on the status, and nothing in this repository restarts on it. Restarting a stale station is
+   the cheapest stall remedy the project has never had in-container, but it touches the freeze
+   blocker (DEC-0068/0094) and stays a later DEC (DEC-0225's open question 3, answered
+   "informational first").
+3. `doctor` is a Python script in the venv (`doctor.py`, COPY'd to `/opt/doctor.py`), not shell,
+   so every probe takes its root (`/sys`, `/dev`) or its runner as an argument and
+   `tests/test_doctor.py` drives each failure from a temporary tree and a fake `rtl_test`. It runs as
+   the current uid and stops at the first failure.
+4. The exit-code contract, each with a one-line verdict naming the row of the QUICKSTART
+   troubleshooting table (a test keeps the names in the table):
+
+   | Exit | Meaning | Row |
+   |---|---|---|
+   | 0 | dongle, driver, node and tuner fine; prints band, channel, bucket, gain and the config path (or "not seeded yet") | none |
+   | 10 | no RTL2832U (`0bda:2838`/`2832`) in `/sys/bus/usb/devices`, or its `/dev/bus/usb/BBB/DDD` node is not in the container | `not a device node` |
+   | 11 | interface 0's driver is a DVB/`rtl28` kernel driver | `usb_claim_interface error -6` |
+   | 12 | the node is not readable and writable by the current uid (prints uid, owner, mode, the udev hint) | `Permission denied` |
+   | 13 | `timeout 3 rtl_test -t` printed no `Found … tuner` line; a claim error is reported as another program holding the dongle | no `LOOP` after ten minutes |
+   | 14 | `weewx.conf` exists but cannot be read or parsed | none (the verdict gives the `chown`) |
+
+   `rtl_test -t` exits on its own for an R820T (`No E4000 tuner found, aborting`), so its exit code
+   is ignored and the tuner line decides. sysfs is not namespaced, so a dongle on the host but no
+   `--device` shows up as a missing node and gets exit 10 with the `--device` hint, not a
+   permission error.
+
+### Alternatives considered
+
+- Keep `CMD ["/entrypoint.sh"]` and add the dispatch there. Any argument would still replace
+  the entrypoint, so `docker run <image> doctor` would try to exec a binary called `doctor`.
+- A dispatch that only knows `doctor`, `weectl` and `weewxd`, rejecting the rest. Breaks the
+  smoke script and every operator habit of `docker run <image> <command>`.
+- Health on `loop-data.txt`. Prod has it, a fresh install does not; the check would mark every
+  new install unhealthy forever.
+- A 300 s window (DEC-0225's first figure). One archive interval: a single late record (S144
+  saw one land four minutes late during a freeze) would flap the status.
+- `doctor` in bash. Shorter, but the probes could not be tested without a dongle.
+
+### Consequences
+
+- The default start path is byte-for-byte the previous `entrypoint.sh` below the new `case` block,
+  and prod's unit passes no argument, so the station starts exactly as before. Prod gains a health
+  status in `docker ps` on the next deploy, and a 60-second `os.stat` process; nothing acts on it.
+- `scripts/smoke_image.sh` proves the dispatch on amd64 and arm64: `doctor` without a dongle exits
+  10 and names the row, `uname -m` passes through, `weectl --version` dispatches, and the image
+  carries a health check that names `weewx.log`.
+- `doctor` cannot run beside a live station: the dongle has one owner, so it reports exit 13 with
+  "another program holds it". The quick start says to stop the station first.
+- Not decided here: restart-on-unhealthy, and whether `weewx_monitor.py` should read the health
+  status.

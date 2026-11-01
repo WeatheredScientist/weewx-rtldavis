@@ -155,6 +155,10 @@ page.
 
 ## Troubleshooting
 
+From v2.3.0, `docker compose run --rm weewx-rtldavis doctor` checks the dongle, the kernel
+driver, permissions and the radio, and names the row of the
+[quick start's troubleshooting table](docs/QUICKSTART.md#something-wrong) that applies.
+
 - **No data.** Check that `dvb_usb_rtl28xxu` isn't loaded (`lsmod`), the antenna is vertical, and
   the dongle sits on a 1–3 m USB extension, away from the computer. Gain is the `-gain` value on
   the `cmd` line in `[Rtldavis]`, in tenths of a dB.
