@@ -32,10 +32,8 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
 
 ### ▶▶ S186 JOB LIST
 
-1. **v2.3.0 is released** (PR #530, tags, GitHub release with three assets, Hub multi-arch index
-   `03f3c891…`). One thing left, the owner's: move `:latest` from `:v2.2.0` to `:v2.3.0` (the
-   `docker buildx imagetools create` line in `CONSTANTS.md`'s Docker Hub row; the app's auto-mode
-   classifier refuses every Hub write from a session, S185). Confirm it moved, then delete this line.
+1. **v2.3.0 is fully released** (PR #530, tags, GitHub release with three assets, Hub `:v2.3.0` and
+   `:latest` = index `03f3c891…`). Nothing left on the release; this line goes next session.
 2. **Watch the five upstream posts for replies** (weewx-contrib#2, weewx-packages#6, the
    lheijst/rtldavis#2 comment, weewx-influx2#1, matthewwall/weewx-wcloud#6; if he adds a license,
    retag `wcloud.py`) and keep `docs/UPSTREAM-THREADS.md` current.
@@ -73,7 +71,7 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `5cd09917…`, `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
 | `main`/`dev` | `main` = the v2.3.0 promotion (`fe3761a`, PR #530, `prod-baseline-20261101`); `dev` = main plus this release closeout |
-| Docker Hub | `:v2.3.0` is the multi-arch index `03f3c891…` (amd64 `71c201b6…` = prod, arm64 `c0d54664…`); `:latest` still `:v2.2.0` (`3f580af7…`) until the owner moves it (job 1) |
+| Docker Hub | `:v2.3.0` and `:latest` are the multi-arch index `03f3c891…` (amd64 `71c201b6…` = prod, arm64 `c0d54664…`), `:latest` moved by the owner 2026-11-01 12:25 ET |
 | Trackers | repo: #475 parked, #380 info, #514 (December A/B) · ops: #439 (virtual-USB guest, waiting on HoG), #433 (this file), #357, #344 · upstream: weewx-contrib#2, weewx-packages#6, lheijst/rtldavis#2 comment (all 10-29), weewx-influx2#1 (reply 10-29), matthewwall/weewx-wcloud#6 (license request, 10-29). ops#435 answered (120 rows), ops#441 closed |
 
 ## Blockers
