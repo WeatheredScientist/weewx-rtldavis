@@ -56,7 +56,7 @@ kernel's TV driver from claiming it, lets your user open it, installs Docker if 
 creates `~/weewx` with a `docker-compose.yml` and a `.env`.
 
 ```bash
-curl -fsSLO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/v2.2.0/host-setup.sh
+curl -fsSLO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/v2.3.0/host-setup.sh
 ```
 
 ```bash
@@ -136,7 +136,7 @@ Four numbers move independently:
 
 | What | Looks like | Moves when |
 |---|---|---|
-| Image tag | `v2.2.0` | every release, by the rule below |
+| Image tag | `v2.3.0` | every release, by the rule below |
 | Driver | `0.20+ws.9` | upstream's 0.20 plus this project's patch level; rises with every driver behavior change. The startup line says which one is running |
 | Data contract | `loop_json_writer/1.0.0` | the shape or meaning of `loop-data.txt` and `current.json` changes (the `writer` key in both files) |
 | Extensions | `loopjson-v1.0.0`, `influx-v0.20+ws.2` | each extension releases on its own tag |

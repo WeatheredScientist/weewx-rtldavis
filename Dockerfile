@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #--------------------------------------------
-# weewx-rtldavis v2.2.0
+# weewx-rtldavis v2.3.0
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
