@@ -18,7 +18,7 @@ import re
 import shutil
 import sys
 
-ENV_VARS = ('WEEWX_LOCATION', 'WEEWX_LATITUDE', 'WEEWX_LONGITUDE', 'WEEWX_ALTITUDE',
+ENV_VARS = ('WEEWX_DRIVER', 'WEEWX_LOCATION', 'WEEWX_LATITUDE', 'WEEWX_LONGITUDE', 'WEEWX_ALTITUDE',
             'RTLDAVIS_BAND', 'RTLDAVIS_ISS_CHANNEL', 'RTLDAVIS_RAIN_BUCKET')
 
 _ALTITUDE = re.compile(r'^\s*(-?\d+(?:\.\d+)?)\s*,\s*(foot|meter)\s*$')
@@ -35,6 +35,13 @@ def parse_env(env):
     def get(name):
         raw = env.get(name, '').strip()
         return raw or None
+
+    driver = get('WEEWX_DRIVER')
+    if driver is not None:
+        if driver.lower() not in ('simulator', 'rtldavis'):
+            errors.append('WEEWX_DRIVER must be simulator or rtldavis: %r' % driver)
+        elif driver.lower() == 'simulator':
+            values[('Station', 'station_type')] = 'Simulator'
 
     loc = get('WEEWX_LOCATION')
     if loc is not None:
@@ -111,6 +118,9 @@ def apply_values(conf_path, values):
         if section not in conf or key not in conf[section]:
             raise KeyError('[%s] %s is not in the seeded weewx.conf' % (section, key))
         conf[section][key] = value
+    if values.get(('Station', 'station_type')) == 'Simulator' \
+            and 'driver' not in conf.get('Simulator', {}):
+        raise KeyError('[Simulator] driver is not in the seeded weewx.conf')
     conf.write()
     return sorted('[%s] %s' % sk for sk in values)
 
@@ -148,6 +158,9 @@ def seed(data_dir, dist_dir, env, out=print):
             return 1
         out('seed: applied from the environment, once: %s' % ', '.join(applied))
         out('seed: from now on weewx.conf is the only truth; edit it, not the environment')
+        if values.get(('Station', 'station_type')) == 'Simulator':
+            out('seed: driver is the WeeWX Simulator (made-up weather); delete weewx.conf and '
+                'unset WEEWX_DRIVER to switch to the radio')
     if not any(k[1] in ('latitude', 'longitude') for k in values):
         out('seed: WARNING: no WEEWX_LATITUDE/WEEWX_LONGITUDE given; set [Station] in weewx.conf '
             'before trusting sunrise, solar or ET figures')
