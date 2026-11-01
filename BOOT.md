@@ -32,13 +32,10 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
 
 ### ▶▶ S186 JOB LIST
 
-1. **Finish the v2.3.0 release if S185 could not** (check `CONSTANTS.md`'s Docker Hub row and
-   `git tag -l 'v2.3.0' 'prod-baseline-20261101'` first): `dev` → `main` promotion PR, `git tag -a
-   v2.3.0` + `prod-baseline-20261101`, `gh release create v2.3.0` with `host-setup.sh`,
-   `docker-compose.yml` and `env.example` (GitHub renames dotfile assets, S184), CI's arm64 on the
-   tag, `marvinctl push …:v2.3.0-amd64` (refused twice by the auto-mode classifier at S185; a
-   default-mode click or a fresh session may pass), `scripts/join_multiarch.sh v2.3.0 --apply
-   --expect-amd64 sha256:71c201b6…`, then `:latest` by the owner's word.
+1. **v2.3.0 is released** (PR #530, tags, GitHub release with three assets, Hub multi-arch index
+   `03f3c891…`). One thing left, the owner's: move `:latest` from `:v2.2.0` to `:v2.3.0` (the
+   `docker buildx imagetools create` line in `CONSTANTS.md`'s Docker Hub row; the app's auto-mode
+   classifier refuses every Hub write from a session, S185). Confirm it moved, then delete this line.
 2. **Watch the five upstream posts for replies** (weewx-contrib#2, weewx-packages#6, the
    lheijst/rtldavis#2 comment, weewx-influx2#1, matthewwall/weewx-wcloud#6; if he adds a license,
    retag `wcloud.py`) and keep `docs/UPSTREAM-THREADS.md` current.
@@ -75,8 +72,8 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
 | Prod | marvin, `v2.3.0` as `:marvin-live` since 2026-11-01 11:31:49 ET, weewx 5.5.2, gain 372, `healthy`. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `5cd09917…`, `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric) |
-| `main`/`dev` | `dev` = v2.3.0 (`6f6002a` plus this closeout); `main` = the v2.2.0 promotion (`prod-baseline-20261031`) until job 1's promotion lands |
-| Docker Hub | `:v2.3.0` not pushed yet (job 1); `:v2.2.0` and `:latest` are the multi-arch index `3f580af7…` |
+| `main`/`dev` | `main` = the v2.3.0 promotion (`fe3761a`, PR #530, `prod-baseline-20261101`); `dev` = main plus this release closeout |
+| Docker Hub | `:v2.3.0` is the multi-arch index `03f3c891…` (amd64 `71c201b6…` = prod, arm64 `c0d54664…`); `:latest` still `:v2.2.0` (`3f580af7…`) until the owner moves it (job 1) |
 | Trackers | repo: #475 parked, #380 info, #514 (December A/B) · ops: #439 (virtual-USB guest, waiting on HoG), #433 (this file), #357, #344 · upstream: weewx-contrib#2, weewx-packages#6, lheijst/rtldavis#2 comment (all 10-29), weewx-influx2#1 (reply 10-29), matthewwall/weewx-wcloud#6 (license request, 10-29). ops#435 answered (120 rows), ops#441 closed |
 
 ## Blockers
