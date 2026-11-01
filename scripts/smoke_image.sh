@@ -63,3 +63,41 @@ if docker run --rm --user "$(id -u):$(id -g)" -v "$bad_dir:/opt/weewx-data" -e R
 fi
 [ -z "$(ls -A "$bad_dir")" ] || { echo "a bad value left files behind" >&2; exit 1; }
 rm -rf "$bad_dir"
+
+echo "== the entrypoint dispatches: doctor, passthrough, weectl, and an informational health check (DEC-0228)"
+set +e
+doctor_out="$(docker run --rm "$image" doctor 2>&1)"; doctor_rc=$?
+set -e
+echo "$doctor_out"
+[ "$doctor_rc" -eq 10 ] || { echo "doctor without a dongle exited $doctor_rc, want 10" >&2; exit 1; }
+grep -qF 'not a device node' <<<"$doctor_out" || { echo "doctor did not name the no-device row" >&2; exit 1; }
+[ "$(docker run --rm "$image" uname -m)" = "$want_arch" ] || { echo "passthrough of uname -m broke" >&2; exit 1; }
+weectl_out="$(docker run --rm "$image" weectl --version)"
+echo "$weectl_out"
+grep -qF "$want_weewx" <<<"$weectl_out" || { echo "the weectl dispatch is not $want_weewx" >&2; exit 1; }
+health="$(docker inspect --format '{{json .Config.Healthcheck}}' "$image")"
+echo "$health"
+if [ "$health" = "null" ] || ! grep -qF 'weewx.log' <<<"$health"; then
+  echo "no HEALTHCHECK on weewx.log" >&2; exit 1
+fi
+
+echo "== WEEWX_DRIVER=simulator seeds a config that runs weewxd with no radio (DEC-0225)"
+sim_dir="$(mktemp -d)"
+sim_log="$(mktemp -d)"
+trap 'rm -rf "$seed_dir" "$sim_dir" "$sim_log"' EXIT
+docker run --rm --user "$(id -u):$(id -g)" -v "$sim_dir:/opt/weewx-data" \
+  -e WEEWX_DRIVER=simulator -e TZ=UTC \
+  "$image" /opt/weewx-venv/bin/python3 /opt/seed_config.py
+grep -Eq '^[[:space:]]*station_type = Simulator$' "$sim_dir/weewx.conf" || { echo "WEEWX_DRIVER=simulator did not land in weewx.conf" >&2; exit 1; }
+docker run -d --name "smoke-sim-$$" --user "$(id -u):$(id -g)" -v "$sim_dir:/opt/weewx-data" \
+  -v "$sim_log:/var/log/weewx" -e TZ=UTC \
+  "$image" /opt/weewx-venv/bin/weewxd /opt/weewx-data/weewx.conf >/dev/null
+sleep 40
+docker kill "smoke-sim-$$" >/dev/null 2>&1 || true
+docker rm -f "smoke-sim-$$" >/dev/null 2>&1 || true
+[ -s "$sim_log/weewx.log" ] || { echo "weewxd wrote no weewx.log" >&2; exit 1; }
+grep -qi 'simulator' "$sim_log/weewx.log" || { echo "the Simulator driver did not load" >&2; tail -n 40 "$sim_log/weewx.log" >&2; exit 1; }
+if grep -q 'Traceback' "$sim_log/weewx.log"; then
+  echo "traceback in weewx.log under the Simulator" >&2; tail -n 60 "$sim_log/weewx.log" >&2; exit 1
+fi
+[ -s "$sim_dir/archive/weewx.sdb" ] || { echo "the Simulator run created no archive/weewx.sdb" >&2; exit 1; }

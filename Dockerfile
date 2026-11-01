@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #--------------------------------------------
-# weewx-rtldavis v2.2.0
+# weewx-rtldavis v2.3.0
 # Ubuntu 26.04 LTS / Python 3.14 / weewx 5.x
 # Multistage build for minimal runtime image
 #
@@ -177,6 +177,7 @@ RUN chmod +x /entrypoint.sh
 # seed_config.py copies this into it on the first start (DEC-0225). Taken last, after every edit
 # to the baked config above, so the two are identical.
 COPY seed_config.py /opt/seed_config.py
+COPY doctor.py /opt/doctor.py
 RUN cp -a /opt/weewx-data /opt/weewx-dist
 
 #--------------------------------------------
@@ -194,6 +195,7 @@ COPY --from=base /opt/weewx-venv /opt/weewx-venv
 COPY --from=base /opt/weewx-data /opt/weewx-data
 COPY --from=base /opt/weewx-dist /opt/weewx-dist
 COPY --from=base /opt/seed_config.py /opt/seed_config.py
+COPY --from=base /opt/doctor.py /opt/doctor.py
 COPY --from=base /usr/local /usr/local
 COPY --from=base /entrypoint.sh /entrypoint.sh
 COPY --from=base /etc/modprobe.d /etc/modprobe.d
@@ -209,4 +211,17 @@ RUN apt-get update && apt-get install -y \
     && ln -sf /usr/bin/python3 /opt/weewx-venv/bin/python3 \
     && chmod +x /entrypoint.sh
 
-CMD ["/entrypoint.sh"]
+# The entrypoint dispatches on its first argument (DEC-0228): no argument or `weewxd` starts the
+# station exactly as before, `doctor` checks the dongle, `weectl ...` runs WeeWX's tool, and
+# anything else runs as given, so `docker run <image> uname -m` keeps working.
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["weewxd"]
+
+# Healthy means weewx.log changed in the last 600 s, two archive intervals: weewxd logs every
+# archive record. The log, not loop-data.txt, because the baked config installs no loop writer.
+# A missing log is unhealthy. Runs as the container's own user and needs no capability.
+# Informational only (DEC-0225, DEC-0228): `docker ps` shows healthy or unhealthy. Docker itself
+# never acts on the status, and nothing in this repository restarts on it; restarting a stale
+# station touches the freeze blocker (DEC-0068/0094) and is its own decision.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=300s --retries=3 \
+    CMD ["/opt/weewx-venv/bin/python3", "-c", "import os, sys, time; sys.exit(0 if time.time() - os.stat('/var/log/weewx/weewx.log').st_mtime < 600 else 1)"]

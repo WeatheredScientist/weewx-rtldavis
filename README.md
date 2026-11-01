@@ -56,7 +56,7 @@ kernel's TV driver from claiming it, lets your user open it, installs Docker if 
 creates `~/weewx` with a `docker-compose.yml` and a `.env`.
 
 ```bash
-curl -fsSLO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/v2.2.0/host-setup.sh
+curl -fsSLO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/v2.3.0/host-setup.sh
 ```
 
 ```bash
@@ -136,7 +136,7 @@ Four numbers move independently:
 
 | What | Looks like | Moves when |
 |---|---|---|
-| Image tag | `v2.2.0` | every release, by the rule below |
+| Image tag | `v2.3.0` | every release, by the rule below |
 | Driver | `0.20+ws.9` | upstream's 0.20 plus this project's patch level; rises with every driver behavior change. The startup line says which one is running |
 | Data contract | `loop_json_writer/1.0.0` | the shape or meaning of `loop-data.txt` and `current.json` changes (the `writer` key in both files) |
 | Extensions | `loopjson-v1.0.0`, `influx-v0.20+ws.2` | each extension releases on its own tag |
@@ -154,6 +154,10 @@ Release notes are on the [Releases](https://github.com/WeatheredScientist/weewx-
 page.
 
 ## Troubleshooting
+
+From v2.3.0, `docker compose run --rm weewx-rtldavis doctor` checks the dongle, the kernel
+driver, permissions and the radio, and names the row of the
+[quick start's troubleshooting table](docs/QUICKSTART.md#something-wrong) that applies.
 
 - **No data.** Check that `dvb_usb_rtl28xxu` isn't loaded (`lsmod`), the antenna is vertical, and
   the dongle sits on a 1–3 m USB extension, away from the computer. Gain is the `-gain` value on

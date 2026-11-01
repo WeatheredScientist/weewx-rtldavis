@@ -3,7 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-10-30 (S183 — **scheduled full reconciliation, one session late**: the
+**Last updated:** 2026-11-01 (S185 — targeted line update per DEC-0057, not a full pass: P0.8
+phase 6's proposals E and F shipped as v2.3.0 (DEC-0228); only the acceptance test is left there.
+Tripwire still S192.)
+Prior: 2026-10-30 (S183 — **scheduled full reconciliation, one session late**: the
 tripwire said S182, and S181/S182 each touched only their own lines. Seven lines moved, detail in
 the guardrail section. Next check: S192.)
 Prior: 2026-10-29 (S181 — targeted line update per DEC-0057, not a full pass: P0.8 phase 4
@@ -448,15 +451,17 @@ items inside a phase don't depend on each other.
       lagging heartofgold's units, a stale `sortedcontainers` comment, README monitor wording vs
       code, driver comments that misstate the code. 16 was fixed by DEC-0213's README rewrite.
 
-- [~] **Phase 6 — the install path (DEC-0225, S182; built DEC-0227, S184).** Twelve commands plus a
-      hand edit become four commands and no edit. **Shipped S184 as v2.2.0 (in prod 2026-10-31
-      10:51 ET):** `docs/QUICKSTART.md`, `scripts/host-setup.sh`, compose plus `.env` (PR #519), and
-      the image half (PR #520): the entrypoint seeds the config into an empty mount, first-run env
-      vars read once, startup summary line, `HOME=/tmp` and `BIAS_TEE=0` as image defaults; the
-      README quick start is the short one (PR #521). **Left:** the acceptance test (a stock 64-bit
-      Pi OS plus the quick start, timed, by someone who has not read the repo), and proposals E
-      (`doctor`, informational `HEALTHCHECK`) and F (`WEEWX_DRIVER=simulator`) in later releases.
-      Research: `docs/INSTALL-RESEARCH.md`.
+- [~] **Phase 6 — the install path (DEC-0225, S182; built DEC-0227, S184, and DEC-0228, S185).**
+      Twelve commands plus a hand edit become four commands and no edit. **Shipped S184 as v2.2.0
+      (in prod 2026-10-31 10:51 ET):** `docs/QUICKSTART.md`, `scripts/host-setup.sh`, compose plus
+      `.env` (PR #519), and the image half (PR #520): the entrypoint seeds the config into an empty
+      mount, first-run env vars read once, startup summary line, `HOME=/tmp` and `BIAS_TEE=0` as
+      image defaults; the README quick start is the short one (PR #521). **Shipped S185 as v2.3.0
+      (in prod 2026-11-01 11:31 ET):** proposal E, `doctor`, an informational `HEALTHCHECK` on
+      `weewx.log` and an entrypoint that dispatches its first argument (PR #527, DEC-0228), and
+      proposal F, `WEEWX_DRIVER=simulator` at seed time (PR #526); release prep PR #528. **Left:**
+      the acceptance test (a stock 64-bit Pi OS plus the quick start, timed, by someone who has not
+      read the repo). Research: `docs/INSTALL-RESEARCH.md`.
 Errors in the Go decoder itself are their own track, P1.9 below; its image changes ride phase 2's
 release or the one after.
 
