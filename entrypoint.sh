@@ -1,5 +1,23 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
+# The first argument picks what runs (DEC-0228, the felddy pattern). No argument, or `weewxd`, is
+# the station itself: the path below this block, unchanged, and what prod's unit runs.
+case "${1:-weewxd}" in
+    weewxd)
+        ;;
+    doctor)
+        # Checks the dongle, the kernel driver, the device node and the radio, then prints the
+        # config's radio values. A non-zero exit names the troubleshooting row that applies.
+        exec /opt/weewx-venv/bin/python3 /opt/doctor.py
+        ;;
+    weectl)
+        exec /opt/weewx-venv/bin/weectl "${@:2}"
+        ;;
+    *)
+        # Anything else runs as given, so `docker run <image> uname -m` keeps working.
+        exec "$@"
+        ;;
+esac
 mkdir -p /var/log/weewx
 echo "Starting weewx..."
 # An empty data mount gets a starter weewx.conf and the first-run values from the environment
