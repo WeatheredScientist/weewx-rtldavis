@@ -72,9 +72,12 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$sim_dir:/opt/weewx-data" \
   -e WEEWX_DRIVER=simulator -e TZ=UTC \
   "$image" /opt/weewx-venv/bin/python3 /opt/seed_config.py
 grep -Eq '^[[:space:]]*station_type = Simulator$' "$sim_dir/weewx.conf" || { echo "WEEWX_DRIVER=simulator did not land in weewx.conf" >&2; exit 1; }
-timeout 40 docker run --rm --user "$(id -u):$(id -g)" -v "$sim_dir:/opt/weewx-data" \
+docker run -d --name "smoke-sim-$$" --user "$(id -u):$(id -g)" -v "$sim_dir:/opt/weewx-data" \
   -v "$sim_log:/var/log/weewx" -e TZ=UTC \
-  "$image" /opt/weewx-venv/bin/weewxd /opt/weewx-data/weewx.conf || true
+  "$image" /opt/weewx-venv/bin/weewxd /opt/weewx-data/weewx.conf >/dev/null
+sleep 40
+docker kill "smoke-sim-$$" >/dev/null 2>&1 || true
+docker rm -f "smoke-sim-$$" >/dev/null 2>&1 || true
 [ -s "$sim_log/weewx.log" ] || { echo "weewxd wrote no weewx.log" >&2; exit 1; }
 grep -qi 'simulator' "$sim_log/weewx.log" || { echo "the Simulator driver did not load" >&2; tail -n 40 "$sim_log/weewx.log" >&2; exit 1; }
 if grep -q 'Traceback' "$sim_log/weewx.log"; then
