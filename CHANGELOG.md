@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S186] — 2026-11-01 — ROADMAP: two stale P0.8 lines fixed (targeted, DEC-0057)
+
+- Session-start roadmap spotlight. Phase 2 still listed a v2.1.1 and moving `:latest` off `:v2.0.20` (v2.1.1's baked changes shipped as v2.2.0; `:latest` = `:v2.3.0`); phase 1 said ops#439 waited on marvin (heartofgold built `--usb-host` passthrough 11-01, MARVIN-DEC-0219; it now waits on the owner's flash drive). PR #533. ops#435 needs nothing more from weewx. Rolled S183 to S177 to the archive.
+
 ## [S185] — 2026-11-01 — v2.3.0: `doctor`, informational `HEALTHCHECK`, entrypoint dispatch, simulator seed (DEC-0228); phase 6 built out
 
 - Coordinator session (Sonnet, then Fable 5.1 by the owner's call) ran two child sessions in their own worktrees. PR #527 (S185a, Opus 5.5): `ENTRYPOINT ["/entrypoint.sh"]` with `CMD ["weewxd"]`, the entrypoint dispatches `doctor` / `weectl` / passthrough with the default start path unchanged; `doctor.py` (exit codes 10 to 14, each naming a QUICKSTART troubleshooting row, 29 tests); `HEALTHCHECK` on `weewx.log` mtime, 600 s, informational only; DEC-0228. PR #526 (S185b, Sonnet): `WEEWX_DRIVER=simulator` at seed time with a 40 s Simulator run in the CI smoke. Merged #526, resolved the two shared-file conflicts in #527 (both appended smoke blocks kept), merged #527. Release prep PR #528: image tag v2.3.0 everywhere, QUICKSTART's written-ahead header and proposal tags dropped (897 words). No driver change: banner stays `0.20+ws.9`.
@@ -16,35 +20,3 @@ under [Pre-S16].
 
 - Built `:v2.2.0` on marvin from `dev`@`9e678fd`, deployed to prod 10:51:42 ET (index `0a790696…`, rollback `:v2.1.0-prod-pre-v2.2.0`), first record after the restart 10:54:00. Promoted via PR #523 (`main` = `8ed61a0`), tagged `v2.2.0` and `prod-baseline-20261031`, arm64 built by CI, `:v2.2.0` and `:latest` published as the multi-arch index `3f580af7…`, GitHub release created with `host-setup.sh`, `docker-compose.yml` and `env.example`. GitHub renames a dotfile asset, so `.env.example` shipped as `default.env.example` and the script 404ed on it; fixed by fetching `env.example` (branch `s184-hostsetup-envexample-asset`, release assets replaced). Also this session: the #514 holding reply posted, hilman2's answer recorded, a reminder set for 2026-12-05.
 - Release prep (PRs #519 to #521): version strings to v2.2.0 and driver banner `0.20+ws.9` (Dockerfile, compose, systemd example, README, CHANGES-FROM-UPSTREAM, image-publish input). README quick start replaced by the four-step version over `docs/QUICKSTART.md` and `scripts/host-setup.sh`. Phase 6's image half (PR #520) and docs half (PR #519) are the content; v2.1.1's baked changes (#506, #507, #509) ride along, so there is no separate v2.1.1. Build, multi-arch join, tag and GitHub release follow on the promotion.
-
-## [S183] — 2026-10-30 — ROADMAP full reconciliation (one session late)
-
-- Diffed every open P0–P3 line against DECISIONS (DEC-0222 to DEC-0226), CHANGELOG and BOOT. Seven lines fixed: P0.7 header (nothing open), phase 5's audit-16 note, phase 2 (v2.1.0 and v2.1.1), P1.9 (gate deployed, Go source diffed; section now watch-only), P3's #473 line and INTERFACES line (DEC-0224's `windGust10`). Banner and guardrail written; next check S192. Docs only, no code.
-
-## [S182] — 2026-10-29 — DEC-0225: the v2.2.0 install path; `docs/QUICKSTART.md`
-
-- Research session (Fable 5.1, owner's call), parallel to S181. Surveyed felddy/weewx-docker, the sdr-enthusiasts RTL-SDR images, Debian's `rtl-sdr` package and linuxserver conventions against the README's six steps (twelve commands plus a hand edit, three silent failures). DEC-0225: the entrypoint seeds `weewx.conf` into an empty mount, first-run env vars read once, `host-setup.sh`, compose plus `.env`, a startup summary, an informational `HEALTHCHECK` and `doctor`, `HOME=/tmp` and `BIAS_TEE=0` as image defaults; together a minor release, v2.2.0. Landed: the DEC, `docs/INSTALL-RESEARCH.md`, `docs/QUICKSTART.md` (859 words, tagged per dependent line), ROADMAP P0.8 phase 6, MANIFEST rows. Nothing built; the image is unchanged. Scope line: Davis-only image; non-Davis readers get the extensions or a pointer to weewx-sdr.
-
-## [S181] — 2026-10-29 — P0.8 phases 4 and 5 closed: the weewx-influx2#1 reply, audit 28 (DEC-0226)
-
-- Audit 28 closed (DEC-0226): `influx.py` and `ogoxeUploader.py` are now `GPL-3.0-only`, matching the plain GPLv3 text their upstreams ship; `wcloud.py` is `NOASSERTION` because `matthewwall/weewx-wcloud` states no license at all. Comment-only changes, no version moves. A license request for wcloud is drafted, not posted.
-- Posted the wcloud license request as matthewwall/weewx-wcloud#6 (owner's go), softening one draft sentence after counting his repos: 39 of 63 have a GPLv3 license file, 24 none. PRs #511, #513 merged; the closeout found the ROADMAP full reconciliation overdue (S182 passed), now job 0 in `BOOT.md`.
-- Two edits on the fork branch (commit `0c5d394`: `influx.py:501` `loginf` → `logdbg`; a `verify_ssl` line in the readme's option list), pushed on the owner's go, then the held reply posted on david-lutz/weewx-influx2#1. ROADMAP phase 4 checked, `docs/UPSTREAM-THREADS.md` and `BOOT.md` updated. A parallel session (S182) is researching an install path; its two untracked drafts are not part of this change.
-
-## [S180] — 2026-10-29 — P0.8 phase 5 done but audit 28 (four parallel sessions); phase 4 posted; S179's closeout
-
-- Coordinator session (Fable 5.1, owner's call) ran four child sessions in their own worktrees: PR #507 (S180a, Opus): `owm.py`/`windy.py` share a new baked `rest_site.py` base, payloads pinned byte-identical, Dockerfile/`.dockerignore`/smoke-step plumbing (audit 23). PR #509 (S180b, Opus): driver QC block out to `_apply_sensor_qc`, `genLoopPackets` 183 → 135 lines, dead `windBatteryStatus` line removed, a 600-pass characterization test with an unchanged digest (audit 24); hot-swap code flagged, kept. PR #508 (S180c, Sonnet): 673 lines of tests for `wcloud.py` and `ogoxeUploader.py` (audit 39). PR #506 (S180d, Sonnet): dupgate patch hunk headers fixed, all three patches apply at offset 0 / fuzz 0 with Apple patch (audit 30). Merged in that order after `gh pr update-branch` each (the repo requires current branches). Gates on the result: ruff clean, 808 passed / 21 skipped, mypy clean (98 files).
-- Phase 4, posted on the owner's go after a re-evaluation: weewx-contrib#2 (the bundled 2023 sources have open fixes; the continuation exists), weewx-packages#6 (the string version compare; the other three fixes are already there, so the lheijst four-fixes issue was dropped), and the DEC-0223 mechanism as a comment on lheijst/rtldavis#2. The weewx-influx2#1 reply is held until its two-edit commit. Filed eaglehunt-ops#439 (virtual-USB guest for phase 1's last line).
-- S179 (PRs #504/#505: audit 21, 22 and 37's helpers) ended without a closeout; its pointer is repaired here. ROADMAP: P1.9's #459 line said "not deployed" though v2.1.0 shipped it 10-28; fixed, and the "Offer upstream" step is done.
-
-## [S178] — 2026-10-29 — P0.8 phase 5, first slice: comments, SPDX, test boilerplate; the Go decoder diff
-
-- **Bundled Go decoder == upstream.** The `src.tgz` pinned in the Dockerfile (commit `bfa9e3d9`, sha256 verified) was diffed against `lheijst/rtldavis` master (`b95d5d7`, "Version 0.15", 2020-06-05): every Go source file is byte-identical. The bundle only adds `go.mod`/`go.sum` and vendored dependencies. Closes P1.9's "which upstream version" question.
-- PR #501: SPDX `GPL-3.0-or-later` on 40 files that lacked it, modification notice on `weewx.conf.example`, reference-copy banners on the lagging `ops/*.service` copies, `campaign.inhibit` and `sortedcontainers` wording fixed, three misleading `rtldavis.py` comments corrected, its encoding line now `utf-8`, CI pins `mypy==2.3.0` (audit 13, 14, 18, 25, 26, 27, 31). Comments only: the baked driver's bytes differ from prod's until the next image.
-- PR #502: tests are pytest-only (audit 37). Per-file `sys.path` shims and `__main__` runners gone, redundant `weewx` stubs gone from 22 rtldavis/dewpoint_service tests (1,604 lines deleted). 757 passed, 21 skipped before and after; passes reversed and with each file alone.
-- v2.1.0 watch, 15:40 ET restart to 17:22 ET: largest duplicate gap 8 samples, 0 burst copies, no `dropped` line, no WARNING or ERROR. `rxCheckPercent` not checked.
-- Branch cleanup: 13 + 48 local and 71 origin branches deleted after each was checked against its merged PR; five stale worktrees removed. Only `dev` and `main` remain.
-
-## [S177] — 2026-10-28 — #481 follow-through: `windGust10` in the live feed; shipped issues closed
-
-- `extra_fields = windGust10` was already in the mounted config (edited 12:20 ET, live with the 15:40 restart); `current.json` carries `windGust10_mph`. Added the same line to the tenant-root `weewx.conf.rx-baseline` (a restore would have dropped it). Told dash#936. Closed #481, #459 and #468 with comments. First 14 minutes of v2.1.0: duplicate gaps single-digit or none, no gate drops, no warnings.

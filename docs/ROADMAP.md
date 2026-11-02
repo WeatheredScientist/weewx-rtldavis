@@ -3,7 +3,11 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-11-01 (S185 — targeted line update per DEC-0057, not a full pass: P0.8
+**Last updated:** 2026-11-01 (S186 — targeted fix of two P0.8 lines S184/S185 left behind, not a
+full pass: phase 2 still listed v2.1.1 and moving `:latest` off `:v2.0.20` (v2.1.1's changes shipped
+as v2.2.0, and `:latest` is `:v2.3.0`), and phase 1 still said ops#439 was waiting on marvin (it
+now waits on the owner's flash drive). Tripwire still S192.)
+Prior: 2026-11-01 (S185 — targeted line update per DEC-0057, not a full pass: P0.8
 phase 6's proposals E and F shipped as v2.3.0 (DEC-0228); only the acceptance test is left there.
 Tripwire still S192.)
 Prior: 2026-10-30 (S183 — **scheduled full reconciliation, one session late**: the
@@ -413,13 +417,16 @@ items inside a phase don't depend on each other.
         **Host steps proven 10-23** in marvin's disposable Debian 13 guest (ops#427, closed 10-27);
         its one finding, `--device /dev/bus/usb` failing on an empty USB bus, is fixed as docs
         (#471, PR #489). Left: `docs/DEPLOY.md`'s three systemd-unit checks, which need a guest
-        with a virtual USB device: asked as eaglehunt-ops#439 (S180, 10-29), waiting on marvin.
+        with a virtual USB device: asked as eaglehunt-ops#439 (S180, 10-29). heartofgold built real
+        USB passthrough for it on 2026-11-01 (`marvin-vm create --usb-host`, MARVIN-DEC-0219);
+        the run waits on the owner's spare flash drive.
 - [~] **Phase 2 — the image, one release (v2.0.21). Released S169**: in prod since 2026-10-26
       18:16 ET, multi-arch `:v2.0.21` on Hub, tag and GitHub release on `a7bf7ec`, `main` =
       `prod-baseline-20261026`. Since then v2.1.0 (S176, DEC-0222's first SemVer minor: the burst
-      gate and `windGust10`) is in prod, and `dev` carries the baked-layer changes for v2.1.1
-      (S180's `rest_site.py` and driver QC refactor, `BOOT.md` job 3). Left: the first arm64 run against a live radio (README says
-      smoke-tested until then) and the owner moving `:latest` off `:v2.0.20`. History: merged
+      gate and `windGust10`), v2.2.0 (S184, which also carried S180's baked `rest_site.py` and
+      driver QC changes, once planned as a v2.1.1) and v2.3.0 (S185) shipped; prod runs v2.3.0, and
+      `:latest` = `:v2.3.0` since 2026-11-01 12:25 ET. Left: the first arm64 run against a live
+      radio (README says smoke-tested until then). History: merged
       S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
       and joins it into Docker Hub's multi-arch tag, DEC-0215; `:latest` and `:v2.0.20` multi-arch
