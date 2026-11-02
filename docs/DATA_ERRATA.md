@@ -634,6 +634,31 @@ gap), not from the archive file; `marvinctl exec-ro` could not carry the SQL que
 
 ---
 
+## ERR-0012 — 2026-10-31 phantom 30 mph wind gust (2 mph breeze), recorded, not corrected
+
+| Field | Value |
+|---|---|
+| **Observed (bad)** | `windGust = 30 mph` at `windGustDir` 149.6° in the archive record at **2026-10-31 10:04:00 EDT** (epoch `1793455440`). The same sample contaminates the minute's `windSpeed` (3.1 mph mean), `windDir` (76.6°, the vector mean pulled off 355°) and `windrun`. Minutes on both sides: 1–2 mph from 355°. |
+| **Corrected** | Nothing. The owner's call (S187): record it, leave the data. |
+| **Actual weather** | A 1–2 mph north breeze. The ISS's own 10-minute gust (`windGust10`, message 9, computed on the sensor and not reachable by a radio error) read **4 mph** from 09:56 through 10:05 EDT. |
+| **Root cause** | One corrupted frame that passed the CRC by chance (the class in `CHANGES-FROM-UPSTREAM.md`'s "1-in-65536" note). The minute's mean fits one 30 mph sample among about 23 at 2 mph, and the sample's direction (150°) disagrees with every neighbor (355°). The decoder logged **288 CRC failures** that minute (`near an accepted frame: 31`) against about 24 accepted frames, so chance passes are expected every few days. Unlike `ERR-0004`/`ERR-0006` there was no reception collapse: `rxCheckPercent` read 100 for the minute, and no outage followed. Not provable from the log: prod runs `debug_rtld = 1`, and per-frame data lines need 2. |
+| **Why the filter didn't catch it** | 30 mph is inside the 6410's spec (bounds pass), and the jump from about 2 mph is 12.5 m/s, under the driver's 20 m/s `wind_speed` delta (DEC-0029). The message type was a valid one (DEC-0203's proof passed), and no other field in the frame failed. This is the `ERR-0004` residual risk again, and `ERR-0006`'s proposed reception-quality guard would not have caught it either, since reception was perfect. |
+
+**Provenance:** found by the dashboard (S430, dash#1132, DEC-0427), which now spike-guards every
+archive gust it shows. Confirmed in S187 from InfluxDB (the archive point beside `windGust10_mph`)
+and `weewx.log.2026-10-31`. Across 2026-10-28 17:00Z to 2026-11-02, it is the only minute where the
+per-minute peak beat the ISS's own gust by more than 8 mph.
+
+**Propagation & correction status:**
+
+- **local-archive:** ⛔ not corrected, by decision. Day-max `windGust` for 2026-10-31 likely reads
+  30 mph.
+- **influxdb:** ⛔ not corrected, by decision. No `*_qc` flag written. The dashboard's read-time guard
+  (DEC-0427, a delta over 25 mph dropped) hides it on its charts.
+- **external:** ⛔ immutable. Published to every configured sink within the minute.
+
+---
+
 ## DISC-0001 — `rxCheckPercent` steps ~73% → ~99% at the DEC-0135 deploy (not an error)
 
 **Not an `ERR-####`.** No observation is wrong, before or after. This is a **metric-definition
