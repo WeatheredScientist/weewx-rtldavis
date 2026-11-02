@@ -43,8 +43,8 @@ The bundled Go decoder is byte-identical to `lheijst/rtldavis` master (S178). Te
 
 0. **#536 (new, tier:frontier, the owner's concern):** CRC-valid garbage frames. ~400,000 CRC
    failures a day means a few chance passes a day; ERR-0012 got through the payload checks, and on
-   10-30 13:10 ET a rejected 187 mph frame was followed by a 2 min 49 s reception loss (matches the
-   P0 freeze lead). The issue proposes a payload-independent timing check; **measure first** (arrival
+   10-30 13:10 ET a rejected 187 mph frame was the last line before a silent 2 min 49 s gap (the P0
+   freeze lead's shape, third instance; weewxd freeze vs lost station not separable from the log). The issue proposes a payload-independent timing check; **measure first** (arrival
    offset vs the expected slot), no build before a DEC. Judgment work: Opus 5.5.
 1. **Watch the five upstream posts for replies** (weewx-contrib#2, weewx-packages#6, the
    lheijst/rtldavis#2 comment, weewx-influx2#1, matthewwall/weewx-wcloud#6; if he adds a license,
