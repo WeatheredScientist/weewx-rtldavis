@@ -4,8 +4,10 @@ Two ways to run it as a service. **systemd on a Linux host is the recommended on
 maintainer's station runs, and the container stays unprivileged. A Synology NAS also works; the
 station ran on one from May to August 2026, and those instructions are kept below.
 
-Do the README's [Quick start](../README.md#quick-start) steps 1–4 first (the dongle, the udev rule,
-the starter config, `weewx.conf`). Only the run step differs.
+Do step 1 of the README's [Quick start](../README.md#quick-start) first: `host-setup.sh` checks the
+dongle, keeps the kernel's TV driver off it and offers to install Docker (the `~/weewx` folder it
+creates isn't used here). The steps below replace Quick start steps 2–4: the location goes in when
+the config is seeded, and systemd starts the container instead of Compose.
 
 ## systemd (recommended)
 
@@ -19,16 +21,26 @@ sudo useradd --system --no-create-home --shell /usr/sbin/nologin weewx
 sudo mkdir -p /srv/weewx/weewx-data /srv/weewx/logs
 ```
 
-Put the starter config from Quick start step 3 into `/srv/weewx/weewx-data/`, then:
-
 ```bash
 sudo chown -R weewx:weewx /srv/weewx
 ```
 
-**2. Give that user the dongle.** Same rule as Quick start step 2, with `GROUP="weewx"`:
+Seed the starter config with the image's own seeder, putting your location in (the same four values
+as Quick start step 2). The unit refuses to start without a `weewx.conf`, so this runs once, by
+hand, before it:
 
 ```bash
-echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="2838", GROUP="weewx", MODE="0660"' | sudo tee /etc/udev/rules.d/60-rtl-sdr.rules
+sudo docker run --rm --user "$(id -u weewx):$(id -g weewx)" -e WEEWX_LOCATION="My Back Yard" -e WEEWX_LATITUDE=40.7 -e WEEWX_LONGITUDE=-74.0 -e WEEWX_ALTITUDE=120,foot -v /srv/weewx/weewx-data:/opt/weewx-data weatheredscientist/weewx-rtldavis:v2.3.0 /opt/weewx-venv/bin/python3 /opt/seed_config.py
+```
+
+It prints `seed: … wrote a starter weewx.conf` and does nothing if a `weewx.conf` is already there.
+Outside the US, add `-e RTLDAVIS_BAND=EU` (or `NZ`).
+
+**2. Give that user the dongle.** `host-setup.sh` wrote this rule for your own group; point it at
+`weewx` instead:
+
+```bash
+printf 'SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="%s", GROUP="weewx", MODE="0660"\n' 2838 2832 | sudo tee /etc/udev/rules.d/60-rtl-sdr.rules
 ```
 
 ```bash
@@ -60,9 +72,10 @@ USB controller with one device attached). Creating the directory by hand does no
 
 ## Synology NAS (alternative)
 
-Install Container Manager from Package Center, then run the README's `docker run` command over SSH,
-with the paths under `/volume1/docker/weewx-rtldavis/`. DSM ships no TV-tuner driver, so Quick start
-step 1's blacklist isn't needed. The station's Synology setup ran the container as root with
+Install Container Manager from Package Center, seed the config as in systemd step 1, then run the
+unit's `docker run` line (its `ExecStart`) over SSH, with the paths under
+`/volume1/docker/weewx-rtldavis/`. DSM ships no TV-tuner driver, so `host-setup.sh`'s blacklist
+isn't needed. The station's Synology setup ran the container as root with
 `--privileged`; the non-root setup above (`--user` plus a udev rule) is untested on DSM. If the
 dongle won't open, drop `--user` and `--cap-drop ALL` and add `--privileged`.
 
