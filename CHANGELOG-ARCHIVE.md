@@ -7,6 +7,11 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S184] — 2026-10-31 — v2.2.0 built and deployed; phase 6 shipped (DEC-0227)
+
+- Built `:v2.2.0` on marvin from `dev`@`9e678fd`, deployed to prod 10:51:42 ET (index `0a790696…`, rollback `:v2.1.0-prod-pre-v2.2.0`), first record after the restart 10:54:00. Promoted via PR #523 (`main` = `8ed61a0`), tagged `v2.2.0` and `prod-baseline-20261031`, arm64 built by CI, `:v2.2.0` and `:latest` published as the multi-arch index `3f580af7…`, GitHub release created with `host-setup.sh`, `docker-compose.yml` and `env.example`. GitHub renames a dotfile asset, so `.env.example` shipped as `default.env.example` and the script 404ed on it; fixed by fetching `env.example` (branch `s184-hostsetup-envexample-asset`, release assets replaced). Also this session: the #514 holding reply posted, hilman2's answer recorded, a reminder set for 2026-12-05.
+- Release prep (PRs #519 to #521): version strings to v2.2.0 and driver banner `0.20+ws.9` (Dockerfile, compose, systemd example, README, CHANGES-FROM-UPSTREAM, image-publish input). README quick start replaced by the four-step version over `docs/QUICKSTART.md` and `scripts/host-setup.sh`. Phase 6's image half (PR #520) and docs half (PR #519) are the content; v2.1.1's baked changes (#506, #507, #509) ride along, so there is no separate v2.1.1. Build, multi-arch join, tag and GitHub release follow on the promotion.
+
 ## [S183] — 2026-10-30 — ROADMAP full reconciliation (one session late)
 
 - Diffed every open P0–P3 line against DECISIONS (DEC-0222 to DEC-0226), CHANGELOG and BOOT. Seven lines fixed: P0.7 header (nothing open), phase 5's audit-16 note, phase 2 (v2.1.0 and v2.1.1), P1.9 (gate deployed, Go source diffed; section now watch-only), P3's #473 line and INTERFACES line (DEC-0224's `windGust10`). Banner and guardrail written; next check S192. Docs only, no code.
