@@ -6,6 +6,11 @@ under [Pre-S16].
 
 ---
 
+## [S189] — 2026-11-03 — DEC-0229 accepted and built: the arrival-time gate, unreleased
+
+- PR #542: `patch/rtldavis-timegate.patch`, the fourth Go patch, after the burst gate (Opus 5.5). Once synced, a CRC-valid frame more than `-tolerance` ms (default 100, 0 is off) from the nearest slot of its transmitter's schedule is dropped before anything is booked; `offschedule packet:` logged, `offsched=N` in `crc_stats`, the slot label reset on re-init. The driver sums the count, adds `off-schedule frames this period:`, and logs each drop as `Go time gate dropped a frame:`. Dockerfile guard, static audit, Go unit tests, a replay through the real `Demodulate` and `Parse` with a gate-off positive control. CI's amd64 and arm64 image builds pass. Not run on a live radio, not released.
+- DEC-0229 Build notes: the offset folds to the nearest slot rather than `chNextVisits` (two transmitters would otherwise lose real frames), the off switch, `offsched` under one a day rather than a few, and the failure modes the gate adds. ROADMAP P1.9 step 4 updated. Rolled S186 to the archive.
+
 ## [S188] — 2026-11-03 — #536 measured: a noise decode re-anchors the hop clock; DEC-0229 proposed
 
 - #536 measured from 30 days of prod logs, no prod change (Fable 5.1, the picker left raised; BOOT asked Opus 5.5). Upstream `main.go` accepts any CRC-valid frame from an active ID, sets its last-visit time to the arrival time, resets the missed counter and hops at once; no arrival-time check. A noise decode at a random moment therefore costs 51 blind hops (143 s) and a re-init park of up to 149 s. 12 of the 15 garbage frames the driver rejected (10-04 to 11-02) were followed within seconds by that 2 to 5 min loss (40 archive records); 4 more gaps of the same shape had no driver line; the 3 rejected frames that lost nothing, and ERR-0012, were on-schedule bit-error frames. weewxd was never frozen. Posted on #536 (counts corrected once in place: 23 gap events over 29 rows, 6 restarts). Side finding: the crcstats slot label is stale during the re-init park. New instance recorded: 10-31 02:32:03 ET, message type 0xB then 4 min 14 s of silence.
@@ -21,7 +26,3 @@ under [Pre-S16].
 - ERR-0012 (PR #535): the 2026-10-31 10:04 EDT 30 mph gust at 150° in a 2 mph north breeze, one CRC-valid garbage frame (12.5 m/s jump, under the 20 m/s wind delta; reception 100%). Recorded, data left as is by the owner's call. The ISS gust read 4 mph.
 - #536 filed (tier:frontier): ~400,000 CRC failures a day, so a few chance passes a day; on 10-30 13:10 EDT a rejected 187 mph frame was the last line before a silent 2 min 49 s gap (the S144 freeze-lead shape; the log can't tell a weewxd freeze from a lost station). Proposes measuring arrival offset against the expected slot before any timing check.
 - Same day, targeted ROADMAP update (DEC-0057): P0.8 phase 1 closed; the P0 freeze line gained the 10-30 instance and #536. Corrected S187's first reading of 10-30: its 998 CRC failures span about 3 minutes (a normal rate, not 3.5 times), and "nothing was received" was unsupported; only "nothing reached WeeWX" is known.
-
-## [S186] — 2026-11-01 — ROADMAP: two stale P0.8 lines fixed (targeted, DEC-0057)
-
-- Session-start roadmap spotlight. Phase 2 still listed a v2.1.1 and moving `:latest` off `:v2.0.20` (v2.1.1's baked changes shipped as v2.2.0; `:latest` = `:v2.3.0`); phase 1 said ops#439 waited on marvin (heartofgold built `--usb-host` passthrough 11-01, MARVIN-DEC-0219; it now waits on the owner's flash drive). PR #533. ops#435 needs nothing more from weewx. Rolled S183 to S177 to the archive.

@@ -7,6 +7,10 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S186] — 2026-11-01 — ROADMAP: two stale P0.8 lines fixed (targeted, DEC-0057)
+
+- Session-start roadmap spotlight. Phase 2 still listed a v2.1.1 and moving `:latest` off `:v2.0.20` (v2.1.1's baked changes shipped as v2.2.0; `:latest` = `:v2.3.0`); phase 1 said ops#439 waited on marvin (heartofgold built `--usb-host` passthrough 11-01, MARVIN-DEC-0219; it now waits on the owner's flash drive). PR #533. ops#435 needs nothing more from weewx. Rolled S183 to S177 to the archive.
+
 ## [S185] — 2026-11-01 — v2.3.0: `doctor`, informational `HEALTHCHECK`, entrypoint dispatch, simulator seed (DEC-0228); phase 6 built out
 
 - Coordinator session (Sonnet, then Fable 5.1 by the owner's call) ran two child sessions in their own worktrees. PR #527 (S185a, Opus 5.5): `ENTRYPOINT ["/entrypoint.sh"]` with `CMD ["weewxd"]`, the entrypoint dispatches `doctor` / `weectl` / passthrough with the default start path unchanged; `doctor.py` (exit codes 10 to 14, each naming a QUICKSTART troubleshooting row, 29 tests); `HEALTHCHECK` on `weewx.log` mtime, 600 s, informational only; DEC-0228. PR #526 (S185b, Sonnet): `WEEWX_DRIVER=simulator` at seed time with a 40 s Simulator run in the CI smoke. Merged #526, resolved the two shared-file conflicts in #527 (both appended smoke blocks kept), merged #527. Release prep PR #528: image tag v2.3.0 everywhere, QUICKSTART's written-ahead header and proposal tags dropped (897 words). No driver change: banner stays `0.20+ws.9`.
