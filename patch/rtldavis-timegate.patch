@@ -1,0 +1,185 @@
+From: weewx-rtldavis (WeatheredScientist fork)
+Subject: rtldavis: drop a frame that is off its transmitter's schedule (time gate)
+
+ROADMAP P1.9 step 4 / #536, DEC-0229.  The decoder accepts any CRC-valid frame
+from an active transmitter ID and hops on it at once, with no check of when it
+arrived.  A noise decode that passes the CRC by chance (about 1 in 65,536 of some
+250 failures a minute) therefore re-anchors the hop clock to a random phase: the
+decoder hops blind for 51 misses (143 s) and then parks for up to 149 s, a 2 to 5
+minute loss of the station.  Over 30 days of one station's logs, 12 of the 15
+garbage frames the driver rejected were followed within seconds by that loss.
+
+A transmitter sends one frame per loop period, and consecutive accepted frames
+sit within 0.95 ms (standard deviation) of it.  Once a transmitter is synced, a
+frame more than -tolerance ms (default 100; 0 turns the gate off) from the nearest
+slot of its schedule is dropped, after the burst gate and before anything is
+booked: no re-anchor, no hop, the missed counter stays, nothing reaches the driver.
+`offschedule packet: <hex> (<offset> ms)` is logged, and the crc_stats line gains
+`offsched=N`.  Init, re-init and undefined IDs have no schedule and are unchanged.
+
+The re-init branch also resets the slot label crc_stats books failures under
+(nextHopChan), which used to keep the last blind-hop slot through the park.
+
+tests/test_timegate_patch.py audits every line this patch adds to or removes from
+main.go and crcstat.go, runs the gate's Go tests, and replays synthetic frames
+through the real Demodulate and Parse.
+
+Applies AFTER rtldavis-dupgate.patch, rtldavis-crcstats.patch and
+rtldavis-burstgate.patch, to the rtldavis source bundled in src.tgz.
+
+--- a/timegate/timegate.go
++++ b/timegate/timegate.go
+@@ -0,0 +1,43 @@
++package timegate
++
++// Modified by the weewx-rtldavis project (WeatheredScientist): the arrival-time
++// gate, ROADMAP P1.9 step 4 / #536, DEC-0229.
++//
++// A transmitter sends on a fixed schedule: one frame every loop period. The
++// decoder accepts any CRC-valid frame from an active ID and hops on it at once, so
++// a noise decode that passes the CRC by chance puts the hop clock on a random
++// phase, and the station is lost for 2 to 5 minutes. A station cannot transmit off
++// its schedule, so a frame that is off it is not a transmission.
++//
++// The gate decides nothing on its own: main.go asks Off and drops the frame, once
++// the transmitter is synced. Nothing here moves the schedule.
++
++// Offset returns the signed distance in ns from arrival to the nearest slot of the
++// schedule through last with this period. It folds to the nearest slot rather than
++// comparing with the next expected visit because, with more than one transmitter,
++// that visit can already have rolled forward a period; on one transmitter the two
++// agree. With no anchor (last == 0) there is no schedule and the offset is 0.
++func Offset(arrival, last, period int64) int64 {
++	if last == 0 {
++		return 0
++	}
++	d := (arrival - last) % period
++	if d > period/2 {
++		d -= period
++	} else if d < -period/2 {
++		d += period
++	}
++	return d
++}
++
++// Off reports whether offset lies outside tolerance (ns). A tolerance of 0 or less
++// turns the gate off.
++func Off(offset, tolerance int64) bool {
++	if tolerance <= 0 {
++		return false
++	}
++	if offset < 0 {
++		offset = -offset
++	}
++	return offset > tolerance
++}
+--- a/crcstat/crcstat.go
++++ b/crcstat/crcstat.go
+@@ -26,6 +26,7 @@
+ 	every      int64 // ns between summary lines
+ 	fails      int
+ 	near       int
++	offsched   int // frames the time gate dropped this interval (#536, DEC-0229)
+ 	perSlot    [crcSlots]int
+ 	lastAccept int64   // ns of the last accepted frame; 0 = none yet
+ 	pending    []int64 // failures not yet near an accepted frame, oldest first
+@@ -72,6 +73,11 @@
+ 	t.lastAccept = now
+ }
+ 
++// OffSched records one frame the time gate dropped (#536, DEC-0229).
++func (t *Tracker) OffSched() {
++	t.offsched++
++}
++
+ // Report returns the summary line once per `every` and resets the interval
+ // counters. The first call only starts the clock.
+ func (t *Tracker) Report(now int64) (string, bool) {
+@@ -88,11 +94,11 @@
+ 			slots = append(slots, fmt.Sprintf("%d:%d", i, n))
+ 		}
+ 	}
+-	line := fmt.Sprintf("crc_stats: crc_fail=%d near=%d slots=%s", t.fails, t.near, strings.Join(slots, ","))
++	line := fmt.Sprintf("crc_stats: crc_fail=%d near=%d offsched=%d slots=%s", t.fails, t.near, t.offsched, strings.Join(slots, ","))
+ 	if len(slots) == 0 {
+-		line = fmt.Sprintf("crc_stats: crc_fail=%d near=%d slots=-", t.fails, t.near)
++		line = fmt.Sprintf("crc_stats: crc_fail=%d near=%d offsched=%d slots=-", t.fails, t.near, t.offsched)
+ 	}
+-	t.fails, t.near, t.perSlot = 0, 0, [crcSlots]int{}
++	t.fails, t.near, t.offsched, t.perSlot = 0, 0, 0, [crcSlots]int{}
+ 	t.lastReport = now
+ 	return line, true
+ }
+--- a/main.go
++++ b/main.go
+@@ -46,6 +46,7 @@
+     "github.com/lheijst/rtldavis/protocol"
+     "lheijst/rtldavis/crcstat"
+     "lheijst/rtldavis/burstgate"
++    "lheijst/rtldavis/timegate"
+     "github.com/jpoirier/gortlsdr"
+ )
+ 
+@@ -55,6 +56,8 @@
+ // patch/rtldavis-dupgate.patch (weewx-rtldavis repo) for the full diff.
+ // Modified again 2026-10-27: a burst gate drops a second decode of one RF
+ // burst (#459, DEC-0223, patch/rtldavis-burstgate.patch).
++// Modified again 2026-11-03: an arrival-time gate drops a frame that is off its
++// transmitter's schedule (#536, DEC-0229, patch/rtldavis-timegate.patch).
+ 
+ const maxTr = 8
+ 
+@@ -62,6 +65,7 @@
+     // program settings
+     ex                int            // -ex = extra loopTime in msex
+     dupWindow         int            // -dupwindow = ms below which an identical packet is a same-burst re-decode
++    tolerance         int            // -tolerance = ms a frame may sit off its transmitter's schedule once synced; 0 = off
+     fc                int            // -fc = frequency correction for all channels
+     ppm               int            // -ppm = frequency correction of rtl dongle in ppm
+     gain              int            // -gain = tuner gain in tenths of a Db
+@@ -150,6 +154,7 @@
+     flag.IntVar(&tr, "tr", 1, "transmitters to listen for: tr1=1, tr2=2, tr3=4, tr4=8, tr5=16 tr6=32, tr7=64, tr8=128")
+     flag.IntVar(&ex, "ex", 0, "extra loopPeriod time in msec")
+     flag.IntVar(&dupWindow, "dupwindow", 500, "msec below which an identical packet is treated as a same-burst re-decode and dropped")
++    flag.IntVar(&tolerance, "tolerance", 100, "msec a frame may sit off its transmitter's schedule once synced before it is dropped; 0 turns the gate off")
+     flag.IntVar(&fc, "fc", 0, "frequency correction in Hz for all channels")
+     flag.IntVar(&ppm, "ppm", 0, "frequency correction of rtl dongle in ppm")
+     flag.IntVar(&gain, "gain", 0, "tuner gain in tenths of Db")
+@@ -181,6 +186,7 @@
+     }
+     log.Printf("tr=%d fc=%d ppm=%d gain=%d maxmissed=%d ex=%d receiveWindow=%d dupWindow=%d actChan=%d maxChan=%d", tr, fc, ppm, gain, maxmissed, ex, receiveWindow, dupWindow, actChan[0:maxChan], maxChan)
+     log.Printf("undefined=%v verbose=%v disableAfc=%v deviceString=%s", *undefined, *verbose, *disableAfc, *deviceString)  
++    log.Printf("tolerance=%d ms", tolerance)
+ 
+     // Preset loopperiods per id
+     idLoopPeriods[0] = 2562500 * time.Microsecond
+@@ -385,6 +391,7 @@
+                     }
+                     visitCount = 0
+                     totInit++
++                    nextHopChan = 0  // #536 (DEC-0229): the park is on slot 0; crc_stats books its failures by this label
+                     loopPeriod = time.Duration(maxFreq + 2) * idLoopPeriods[actChan[maxChan-1]]
+                     loopTimer = time.After(loopPeriod)
+                     log.Printf("Init channels: wait max %d seconds for a message of each transmitter", loopPeriod/1000000000)
+@@ -471,6 +478,21 @@
+                 if burstG.Copy(burstPos[i]) {
+                     log.Printf("burst copy: %02X (+%d smp)", msg.Data, burstG.Gap(burstPos[i]))
+                     continue  // read next message
++                }
++                // #536 (DEC-0229): the time gate. Once a transmitter is synced, a frame
++                // more than tolerance off its schedule is noise that passed the CRC by
++                // chance, not a transmission. Accepting it would re-anchor the hop
++                // clock to a random phase and lose the station for 2 to 5 minutes, so
++                // it is dropped before anything below sees it: no hop, the schedule
++                // and the missed counter stay, and the driver never gets it. Init and
++                // undefined IDs have no schedule and are unchanged.
++                if ch := msgIdToChan[int(msg.ID)]; !initTransmitrs && ch != 9 {
++                    offset := timegate.Offset(curTime, chLastVisits[ch], int64(idLoopPeriods[actChan[ch]]))
++                    if timegate.Off(offset, int64(tolerance) * int64(time.Millisecond)) {
++                        crcT.OffSched()
++                        log.Printf("offschedule packet: %02X (%+.1f ms)", msg.Data, float64(offset) / float64(time.Millisecond))
++                        continue  // read next message
++                    }
+                 }
+                 if seen == lastRecMsg {
+                     log.Printf("repeat packet: %02X (%.3f s)", msg.Data, float64(curTime - lastRecTime) / float64(time.Second))

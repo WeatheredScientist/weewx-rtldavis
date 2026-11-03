@@ -29,7 +29,7 @@ since S165, DEC-0219; the pin is the `ARG` lines in the base stage):
 
 | Component | Chain |
 |-----------|-------|
-| Go decoder | [bemasher/rtldavis](https://github.com/bemasher/rtldavis) → [lheijst/rtldavis](https://github.com/lheijst/rtldavis) → bundled in `weewx-contrib` `src.tgz` → **patched by us** ([`patch/rtldavis-dupgate.patch`](patch/rtldavis-dupgate.patch), [DEC-0135](docs/DECISIONS.md); [`rtldavis-crcstats.patch`](patch/rtldavis-crcstats.patch), DEC-0216; [`rtldavis-burstgate.patch`](patch/rtldavis-burstgate.patch), DEC-0223) |
+| Go decoder | [bemasher/rtldavis](https://github.com/bemasher/rtldavis) → [lheijst/rtldavis](https://github.com/lheijst/rtldavis) → bundled in `weewx-contrib` `src.tgz` → **patched by us** ([`patch/rtldavis-dupgate.patch`](patch/rtldavis-dupgate.patch), [DEC-0135](docs/DECISIONS.md); [`rtldavis-crcstats.patch`](patch/rtldavis-crcstats.patch), DEC-0216; [`rtldavis-burstgate.patch`](patch/rtldavis-burstgate.patch), DEC-0223; [`rtldavis-timegate.patch`](patch/rtldavis-timegate.patch), DEC-0229) |
 | Driver | [matthewwall/weewx-sdr](https://github.com/matthewwall/weewx-sdr) + [weewx-meteostick](https://github.com/matthewwall/weewx-meteostick) → merged by **Luc Heijst** into [weewx-rtldavis](https://github.com/lheijst/weewx-rtldavis) v0.20 → repackaged by **Vince Skahan** ([weewx-contrib/weewx-rtldavis](https://github.com/weewx-contrib/weewx-rtldavis)) → **patched by us** |
 | InfluxDB uploader | [matthewwall/weewx-influx](https://github.com/matthewwall/weewx-influx) → [david-lutz/weewx-influx2](https://github.com/david-lutz/weewx-influx2) (InfluxDB 2.x port) → **patched by us** |
 | WeatherCloud uploader | [matthewwall/weewx-wcloud](https://github.com/matthewwall/weewx-wcloud) → us (unmodified except an SPDX tag) |
@@ -206,6 +206,15 @@ accepted frame is dropped without a hop, and two distinct CRC-valid frames insid
 block are both dropped. Its own package (`burstgate/`), applied after crcstats, asserted like the
 others. Prior art: [lheijst/rtldavis#2](https://github.com/lheijst/rtldavis/pull/2), a 2 s
 wall-clock gate keyed on the frame's transmitter id. Not yet offered upstream (owner's go).
+
+**A fourth patch, `patch/rtldavis-timegate.patch` (DEC-0229, #536, 2026-11-03):** drops a frame that
+is off its transmitter's schedule. Upstream hops on any CRC-valid frame from an active ID, so a noise
+decode that passes the CRC by chance puts the hop clock on a random phase and loses the station for
+2 to 5 minutes. Once synced, a frame more than `-tolerance` ms (default 100; 0 turns it off) from the
+nearest slot of its transmitter's schedule is dropped before anything is booked, logged as
+`offschedule packet:`, and counted as `offsched=N` in the `crc_stats` line. Init, re-init and
+undefined IDs are unchanged. It also resets the `crc_stats` slot label on re-init. Its own package
+(`timegate/`), applied after the burst gate, asserted like the others. Not offered upstream.
 
 ## `influx.py`
 

@@ -3,7 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-11-03 (S188 — targeted update per DEC-0057, not a full pass: P1.9 reopened
+**Last updated:** 2026-11-03 (S189 — targeted update per DEC-0057, not the full reconciliation; DEC-0229
+accepted and built, P1.9 step 4 awaits its release. Tripwire still S192.)
+Prior: 2026-11-03 (S188 — targeted update per DEC-0057, not a full pass: P1.9 reopened
 with a fourth step (DEC-0229, the arrival-time gate, proposed), and the P0 freeze line gained the
 S188 measurement that turns DEC-0203's lead into a mechanism for the short gaps. Tripwire still S192.)
 Prior: 2026-11-02 (S187 — targeted update per DEC-0057, not a full pass: P0.8 phase 1
@@ -559,7 +561,7 @@ NAS dependency observed, zero stall through the restore.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–) — 🔶 REOPENED S188: steps 1–3 done, step 4 proposed (DEC-0229)
+## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–) — 🔶 REOPENED S188: steps 1–3 done, step 4 built S189, unreleased (DEC-0229)
 P1 closed every corruption class with filters in the Python driver; the source is in the Go decoder
 and is still there. What the Go side has shown, and where each stands:
 
@@ -578,7 +580,8 @@ and is still there. What the Go side has shown, and where each stands:
 - **A noise decode re-anchors the hop clock** (DEC-0229, S188): upstream hops on any CRC-valid
   frame from an active ID with no arrival-time check, so a chance CRC pass at a random moment costs
   51 blind hops and a re-init, 2 to 5 min with no station. Measured: 12 of 15 driver-rejected
-  garbage frames in 30 days were followed by exactly that loss (40 archive records, #536). Open.
+  garbage frames in 30 days were followed by exactly that loss (40 archive records, #536). Built
+  S189, not released.
 
 Steps, in order:
 
@@ -594,7 +597,8 @@ Steps, in order:
 - [x] **Offer upstream** *(S180, 2026-10-29, owner's go: the mechanism posted as a comment on
       lheijst/rtldavis#2, pointing at `patch/rtldavis-burstgate.patch`; no PR, the repo is quiet
       since 2023 and the continuation has its own gate)*.
-- [ ] #536 **Time gate.** *(measured and designed S188, DEC-0229 proposed; nothing built)* Once
+- [ ] #536 **Time gate.** *(measured and designed S188; DEC-0229 accepted and built S189, on `dev`
+      once merged, in no image yet)* Once
       synced, drop a CRC-valid frame more than 100 ms off the expected slot before it can re-anchor
       the hop clock, hop, or reach the driver; log it and count it as `offsched=N` in the minute
       line; reset the crcstats slot label on re-init. `patch/rtldavis-timegate.patch` after the
