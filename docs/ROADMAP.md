@@ -3,7 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-11-02 (S187 — targeted update per DEC-0057, not a full pass: P0.8 phase 1
+**Last updated:** 2026-11-03 (S188 — targeted update per DEC-0057, not a full pass: P1.9 reopened
+with a fourth step (DEC-0229, the arrival-time gate, proposed), and the P0 freeze line gained the
+S188 measurement that turns DEC-0203's lead into a mechanism for the short gaps. Tripwire still S192.)
+Prior: 2026-11-02 (S187 — targeted update per DEC-0057, not a full pass: P0.8 phase 1
 closed (ops#439's three systemd checks passed), and the P0 freeze line gained a third
 corrupt-frame-then-silence instance and #536. Tripwire still S192.)
 Prior: 2026-11-01 (S186 — targeted fix of two P0.8 lines S184/S185 left behind, not a
@@ -556,7 +559,7 @@ NAS dependency observed, zero stall through the restore.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–S180) — ✅ DONE, watch-only
+## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–) — 🔶 REOPENED S188: steps 1–3 done, step 4 proposed (DEC-0229)
 P1 closed every corruption class with filters in the Python driver; the source is in the Go decoder
 and is still there. What the Go side has shown, and where each stands:
 
@@ -572,6 +575,10 @@ and is still there. What the Go side has shown, and where each stands:
   CRC-valid phantom a week. Done.
 - **Which upstream version the bundled source is** (`BACKLOG.md`, open since S21): #450 pins it;
   S178 diffed it against `lheijst/rtldavis` master: every Go source file is byte-identical. Done.
+- **A noise decode re-anchors the hop clock** (DEC-0229, S188): upstream hops on any CRC-valid
+  frame from an active ID with no arrival-time check, so a chance CRC pass at a random moment costs
+  51 blind hops and a re-init, 2 to 5 min with no station. Measured: 12 of 15 driver-rejected
+  garbage frames in 30 days were followed by exactly that loss (40 archive records, #536). Open.
 
 Steps, in order:
 
@@ -587,6 +594,13 @@ Steps, in order:
 - [x] **Offer upstream** *(S180, 2026-10-29, owner's go: the mechanism posted as a comment on
       lheijst/rtldavis#2, pointing at `patch/rtldavis-burstgate.patch`; no PR, the repo is quiet
       since 2023 and the continuation has its own gate)*.
+- [ ] #536 **Time gate.** *(measured and designed S188, DEC-0229 proposed; nothing built)* Once
+      synced, drop a CRC-valid frame more than 100 ms off the expected slot before it can re-anchor
+      the hop clock, hop, or reach the driver; log it and count it as `offsched=N` in the minute
+      line; reset the crcstats slot label on re-init. `patch/rtldavis-timegate.patch` after the
+      burst gate, a `tests/go/` replay, then a release and a 30-day re-run of the S188 correlation.
+      Does not touch on-schedule bit-error frames (ERR-0012's class; a `windGust10` cross-check is
+      the separate candidate for those).
 
 Not here on purpose: the RF-dead episodes (`BOOT.md` blocker 2, DEC-0081), where the Go child goes
 silent and recovers with time. Nothing has shown a decoder bug behind them yet; if #458's counters
@@ -947,6 +961,14 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       hop packets and `DATA DROUGHT` needs 300 s. The CRC failure rate stayed normal (998 over the
       ~3 minutes). **#536** proposes measuring frame arrival against the expected slot, which would
       also show whether an off-slot garbage frame moves the hop timing.
+      **S188 measured it (DEC-0229): for the short gaps this is a mechanism, not a lead.** Upstream
+      `main.go` re-anchors the hop clock to any accepted frame and hops at once, with no arrival-time
+      check; a noise decode at a random moment costs 51 blind hops (143 s) plus a re-init park of up
+      to 149 s. Over 30 days of prod logs, 12 of the 15 garbage frames the driver rejected were
+      followed within seconds by a 2 to 5 min station loss (40 archive records); 4 more gaps of the
+      same shape had no driver line. weewxd was not frozen in any of them: it resumed by itself when
+      the decoder re-acquired. DEC-0083's median of 240 s sits inside the 150 to 290 s this predicts.
+      Not explained by it: the 10-22 62 min outage and DEC-0083's long tail. Fix is P1.9 step 4.
 - [x] ~~**P0 — make the campaign metric freeze-aware**~~ — **CLOSED by DEC-0069 (S66).** Two parts,
       and the larger one was a *resolution* problem, not a freeze problem: `harvest()` read the
       monitor's **5-minute** `RECEPTION:` aggregate, where one frozen minute drags a whole bucket
