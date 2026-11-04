@@ -12839,9 +12839,10 @@ image under systemd with `--user 996:986 --cap-drop ALL` and no command argument
 
 ## DEC-0229 — An arrival-time gate in the Go decoder: a CRC-valid frame more than 100 ms off the transmitter's schedule is noise and does not move the hop clock (S188)
 
-Date: 2026-11-03 (S188, Fable 5.1). Status: proposed; the owner asked for the draft after reading
-the S188 measurement on #536. Nothing built. Would be `patch/rtldavis-timegate.patch` after the
-burst gate (DEC-0223), a fourth incremental patch under DEC-0014. Reopens ROADMAP P1.9 with a
+Date: 2026-11-03 (S188, Fable 5.1). Status: accepted by the owner and built S189 (see "Build
+notes"); not released. The owner asked for the draft after reading the S188 measurement on #536.
+`patch/rtldavis-timegate.patch` after the burst gate (DEC-0223), a fourth incremental patch under
+DEC-0014. Reopens ROADMAP P1.9 with a
 fourth step; moves the P0 freeze lead (DEC-0203's "corrupt frame, then silence") from lead to
 measured mechanism for the short gaps.
 
@@ -12930,4 +12931,34 @@ That does not make every freeze this; the 10-22 outage and the longer DEC-0083 t
 - Build: `tests/go/` replay, the existing differential `Parse` probe unchanged.
 - Prod, after a release: run the S188 correlation (archive-record gaps against driver rejections,
   to be committed as `ops/garbage_gap_corr.py`) over the following 30 days; expect zero
-  garbage-then-gap events and the `offsched` counter to show a few a day.
+  garbage-then-gap events and the `offsched` counter to show a few a day. *(S189: under one a day
+  is the right figure; see Build notes.)*
+
+### Build notes (S189, Opus 5.5)
+
+Built as decided, with these details the draft did not settle:
+
+- **The offset folds to the nearest slot of the schedule through `chLastVisits[ch]`, not
+  `arrival - chNextVisits[ch]`.** `chNextVisits` is recomputed for every transmitter at each hop as
+  the first slot after `curTime`, so with two or more transmitters a frame can arrive just after
+  another transmitter's hop rolled its slot a period ahead, and the draft's formula would read it a
+  full period off and drop a real frame. On one transmitter the two agree: the pass rate stays 200
+  of 2812 ms.
+- **`-tolerance 0` turns the gate off,** a `cmd` edit in `weewx.conf` plus a restart, so a bad
+  interaction on some install needs no image rollback.
+- **`offsched=N` sits before `slots=`** in the `crc_stats` line. The driver's regex takes it as
+  optional (a binary without the gate reads as 0), adds `off-schedule frames this period: N` to the
+  summary, and logs each drop as `Go time gate dropped a frame:` with its bytes.
+- **Expected `offsched` rate: under one a day, not "a few."** The 15 rejected frames and 4 silent
+  gaps in S188's 30 days are about 0.6 a day, and undefined IDs are outside the gate.
+- **Failure modes the gate adds, all ending in the re-init it exists to avoid, none worse than
+  today's loss:** a wall-clock step over 100 ms on the host (arrival is `time.Now()`, so all real
+  frames read off until 51 misses re-init; chrony slews, so this needs a manual clock set); a noise
+  decode that anchors during init, where a real frame used to re-anchor and rescue it in the rare
+  case the channels line up; a host so loaded that frames are handled over 100 ms late, which costs
+  those frames only. A sample-position schedule (the burst gate's clock) would remove the first and
+  third; it was not used because the 0.95 ms measurement is on the wall clock and the sample stream
+  has not been measured across a dongle overrun.
+- `tests/go/timegate_replay_test.go` replays through the real `Demodulate` and `Parse`, with the
+  gate-off run as its positive control. Sample positions stand in for time there, so the replay
+  proves the logic, not the prod spread.

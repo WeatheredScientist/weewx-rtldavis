@@ -71,3 +71,32 @@ def test_the_real_line_scan_counts_and_logs_each_drop(monkeypatch):
     assert (d.stats['burst_copy'], d.stats['burst_conflict']) == (1, 1)
     drops = [m for m in logged if m.startswith("Go burst gate dropped a frame:")]
     assert len(drops) == 2 and "E401BD56010ED10F" in drops[0] and "1122334455667788" in drops[1]
+
+
+def test_the_real_line_scan_logs_a_time_gate_drop_and_counts_it_from_crc_stats(monkeypatch):
+    """#536 (DEC-0229): the count comes from the minute line, so the drop's own line
+    must not add to it; the drop is logged with its bytes and offset."""
+    logged = []
+    monkeypatch.setattr(rtldavis, 'loginf', lambda msg: logged.append(msg))
+    d, _ = run_loop(monkeypatch, [
+        ["2026/11/03 09:00:00 offschedule packet: E4FE210077550000 (+1116.1 ms)\n",
+         "2026/11/03 09:00:30 crc_stats: crc_fail=250 near=4 offsched=1 slots=17:250\n",
+         "DATA 21.5 100\n"],
+    ])
+    assert d.stats['offsched'] == 1
+    drops = [m for m in logged if m.startswith("Go time gate dropped a frame:")]
+    assert len(drops) == 1 and "E4FE210077550000 (+1116.1 ms)" in drops[0]
+
+
+def test_the_off_schedule_summary_is_logged_every_period_and_resets(monkeypatch):
+    d = _make_driver()
+    logged = []
+    monkeypatch.setattr(rtldavis, 'loginf', lambda msg: logged.append(msg))
+    RtldavisDriver._update_summaries(d)
+    assert "off-schedule frames this period: 0" in logged
+    d.stats['offsched'] = 2
+    logged.clear()
+    RtldavisDriver._update_summaries(d)
+    assert "off-schedule frames this period: 2" in logged
+    RtldavisDriver._reset_stats(d)
+    assert d.stats['offsched'] == 0
