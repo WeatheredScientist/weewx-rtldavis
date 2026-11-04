@@ -30,7 +30,7 @@ as Quick start step 2). The unit refuses to start without a `weewx.conf`, so thi
 hand, before it:
 
 ```bash
-sudo docker run --rm --user "$(id -u weewx):$(id -g weewx)" -e WEEWX_LOCATION="My Back Yard" -e WEEWX_LATITUDE=40.7 -e WEEWX_LONGITUDE=-74.0 -e WEEWX_ALTITUDE=120,foot -v /srv/weewx/weewx-data:/opt/weewx-data weatheredscientist/weewx-rtldavis:v2.3.0 /opt/weewx-venv/bin/python3 /opt/seed_config.py
+sudo docker run --rm --user "$(id -u weewx):$(id -g weewx)" -e WEEWX_LOCATION="My Back Yard" -e WEEWX_LATITUDE=40.7 -e WEEWX_LONGITUDE=-74.0 -e WEEWX_ALTITUDE=120,foot -v /srv/weewx/weewx-data:/opt/weewx-data weatheredscientist/weewx-rtldavis:v2.4.0 /opt/weewx-venv/bin/python3 /opt/seed_config.py
 ```
 
 It prints `seed: … wrote a starter weewx.conf` and does nothing if a `weewx.conf` is already there.

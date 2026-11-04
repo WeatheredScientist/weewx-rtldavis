@@ -126,6 +126,7 @@
 #   2026-10-31  ws.8 -> ws.9 for the v2.2.0 release: the startup summary line (DEC-0225). The
 #               other changes since v2.1.0 are log or QC refactors with no new behavior.
 #   2026-11-03  #536: counts and logs the frames Go's time gate drops (DEC-0229). Log only.
+#   2026-11-04  ws.9 -> ws.10 for the v2.4.0 release.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -229,7 +230,7 @@ DRIVER_NAME = 'Rtldavis'
 # up with every behavior change to this file (README rule 1, #406). Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.9'
+DRIVER_VERSION = '0.20+ws.10'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
