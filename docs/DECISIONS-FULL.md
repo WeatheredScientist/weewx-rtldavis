@@ -12839,8 +12839,8 @@ image under systemd with `--user 996:986 --cap-drop ALL` and no command argument
 
 ## DEC-0229 — An arrival-time gate in the Go decoder: a CRC-valid frame more than 100 ms off the transmitter's schedule is noise and does not move the hop clock (S188)
 
-Date: 2026-11-03 (S188, Fable 5.1). Status: accepted by the owner and built S189 (see "Build
-notes"); not released. The owner asked for the draft after reading the S188 measurement on #536.
+Date: 2026-11-03 (S188, Fable 5.1). Status: accepted by the owner, built S189 (see "Build
+notes"), deployed 2026-11-04 18:36:38 ET as v2.4.0 (S190). The owner asked for the draft after reading the S188 measurement on #536.
 `patch/rtldavis-timegate.patch` after the burst gate (DEC-0223), a fourth incremental patch under
 DEC-0014. Reopens ROADMAP P1.9 with a
 fourth step; moves the P0 freeze lead (DEC-0203's "corrupt frame, then silence") from lead to
@@ -12962,3 +12962,20 @@ Built as decided, with these details the draft did not settle:
 - `tests/go/timegate_replay_test.go` replays through the real `Demodulate` and `Parse`, with the
   gate-off run as its positive control. Sample positions stand in for time there, so the replay
   proves the logic, not the prod spread.
+
+### Deployment notes (S190, Opus 5.5)
+
+v2.4.0, banner `0.20+ws.10`, image `82220200…` from `dev`@`694938f`, restarted 2026-11-04
+18:36:38 ET; the first record after it was 18:39:00, 2 records lost to the hop re-acquire. What
+proves the gate is armed on prod: the image ID, the binary's `-h` showing `-tolerance` default 100,
+and a live `cmd` with no `-tolerance`. Two checks the S189 handoff named cannot pass at prod's
+`debug_rtld = 1`: Go's `tolerance=100 ms` startup line is not logged, and the raw `crc_stats` line
+never reaches the log. The summary line `off-schedule frames this period: N` does, but a binary
+without the gate would also print 0 there, so it proves the driver, not the gate. A
+`Go time gate dropped a frame` line is the proof of a drop. The last garbage event before the gate
+went in: 11-04 12:53:00 ET, message type 0xF, 3 records.
+
+First live drop: 11-05 05:06:39 ET, `2C74540E5A7A3009`, +725.6 ms, `off-schedule frames this
+period: 1`. No archive record was lost and the driver logged no rejection. In the 27 hours to 11-05
+22:01 ET that is the only drop, the only archive gap is the deploy's own, and the driver rejected
+nothing. One drop is a first result, not the 30-day re-run.
