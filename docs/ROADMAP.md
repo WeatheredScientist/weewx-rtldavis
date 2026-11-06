@@ -3,8 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-11-03 (S189 — targeted update per DEC-0057, not the full reconciliation; DEC-0229
-accepted and built, P1.9 step 4 awaits its release. Tripwire still S192.)
+**Last updated:** 2026-11-04 (S190 — targeted update per DEC-0057, not the full reconciliation; DEC-0229
+deployed as v2.4.0, P1.9 step 4 awaits its 30-day re-run. Tripwire still S192.)
+Prior: 2026-11-03 (S189 — targeted: DEC-0229 accepted and built.)
 Prior: 2026-11-03 (S188 — targeted update per DEC-0057, not a full pass: P1.9 reopened
 with a fourth step (DEC-0229, the arrival-time gate, proposed), and the P0 freeze line gained the
 S188 measurement that turns DEC-0203's lead into a mechanism for the short gaps. Tripwire still S192.)
@@ -561,7 +562,7 @@ NAS dependency observed, zero stall through the restore.
 
 # MEDIUM TERM (P2–P3) — after v2.0.11
 
-## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–) — 🔶 REOPENED S188: steps 1–3 done, step 4 built S189, unreleased (DEC-0229)
+## P1.9 — Fix corruption at the decoder (Go), not only downstream (S156–) — 🔶 REOPENED S188: steps 1–3 done, step 4 in prod since S190 (v2.4.0, DEC-0229), its 30-day re-run due about 2026-12-04
 P1 closed every corruption class with filters in the Python driver; the source is in the Go decoder
 and is still there. What the Go side has shown, and where each stands:
 
@@ -597,8 +598,9 @@ Steps, in order:
 - [x] **Offer upstream** *(S180, 2026-10-29, owner's go: the mechanism posted as a comment on
       lheijst/rtldavis#2, pointing at `patch/rtldavis-burstgate.patch`; no PR, the repo is quiet
       since 2023 and the continuation has its own gate)*.
-- [ ] #536 **Time gate.** *(measured and designed S188; DEC-0229 accepted and built S189, on `dev`
-      once merged, in no image yet)* Once
+- [ ] #536 **Time gate.** *(measured and designed S188; DEC-0229 accepted and built S189; in prod
+      since 2026-11-04 18:36:38 ET as v2.4.0, S190; first live drop 11-05 05:06:39 ET, no gap;
+      closes on the 30-day re-run)* Once
       synced, drop a CRC-valid frame more than 100 ms off the expected slot before it can re-anchor
       the hop clock, hop, or reach the driver; log it and count it as `offsched=N` in the minute
       line; reset the crcstats slot label on re-init. `patch/rtldavis-timegate.patch` after the

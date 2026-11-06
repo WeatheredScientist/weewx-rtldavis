@@ -6,6 +6,13 @@ under [Pre-S16].
 
 ---
 
+## [S190] — 2026-11-04 — v2.4.0: the arrival-time gate in prod (DEC-0229)
+
+- PR #542 merged 11-03; PR #543: image tag v2.4.0 everywhere, banner `0.20+ws.10` (Opus 5.5). Built on marvin from `dev`@`694938f` (image `82220200…`, baked driver `7b6fb60a…` = `dev`'s), restarted 2026-11-04 18:36:38 ET, first record 18:39:00, 2 records lost. Rollback `:v2.3.0-prod-pre-v2.4.0`; `-tolerance 0` is the off switch.
+- `tolerance=` and `crc_stats` are not in the log at `debug_rtld = 1`, so S189's two verification strings could not pass; DEC-0229's deployment notes say what proves the gate instead.
+- The watch fired before the deploy: 11-04 12:53:00 ET, message type 0xF, 3 records lost, station back 12:57. That makes 13 of 16 garbage frames with a gap. Upstream threads and #514 unmoved since 10-30.
+- First live drop 11-05 05:06:39 ET, +725.6 ms, no archive gap; through 11-05 22:01 ET the only gap is the deploy's own.
+
 ## [S189] — 2026-11-03 — DEC-0229 accepted and built: the arrival-time gate, unreleased
 
 - PR #542: `patch/rtldavis-timegate.patch`, the fourth Go patch, after the burst gate (Opus 5.5). Once synced, a CRC-valid frame more than `-tolerance` ms (default 100, 0 is off) from the nearest slot of its transmitter's schedule is dropped before anything is booked; `offschedule packet:` logged, `offsched=N` in `crc_stats`, the slot label reset on re-init. The driver sums the count, adds `off-schedule frames this period:`, and logs each drop as `Go time gate dropped a frame:`. Dockerfile guard, static audit, Go unit tests, a replay through the real `Demodulate` and `Parse` with a gate-off positive control. CI's amd64 and arm64 image builds pass. Not run on a live radio, not released.
@@ -17,12 +24,3 @@ under [Pre-S16].
 - PR #541: DEC-0229 proposed (an arrival-time gate in Go, 100 ms, drop not accept-without-anchor, a fourth patch after the burst gate), index row, ROADMAP P1.9 reopened with step 4 and the P0 freeze line updated; `ops/garbage_gap_corr.py` (the correlation, re-runnable from `marvinctl grep` extracts). Nothing built.
 - PR #540 (merged): `docs/UPSTREAM-THREADS.md` records weewx-contrib#2 closed by vinceskahan as not interested and weewx-packages#6 closed by hilman2 as fixed in 0.22.0 (crediting DEC-0203's message-type proof and the EU offsets), plus hilman2's 10-21 comments on lheijst/rtldavis#7 and lheijst/weewx-rtldavis#22.
 - Watches clear through 11-03 04:27 ET; prod healthy. The crcstats line is lowercase, so `grep CRC` on the prod log is a false zero (`grep crc`).
-
-## [S187] — 2026-11-02 — ops#439 passed, ops#442 already done, ERR-0012, #536 filed
-
-- ops#439: HoG ran `weewx-439.sh` in a guest with a real USB stick (`154b:1006`) passed through; all three `docs/DEPLOY.md` checks pass (the unit starts unprivileged, the container sees and opens the bus node, `usb_reset.sh` refuses non-RTL ids and resets by id). Verdict posted; the owner closed it. S186's `NRestarts` prediction for check 1b was wrong (a manual restart resets the counter), not the unit.
-- PR #534: DEPLOY.md pointed at Quick start steps that no longer exist. It now starts from `host-setup.sh`, adds a by-hand `seed_config.py` run with the location (the unit's `test -e` means the image never seeds under systemd; the command ops#439 proved), widens the udev rule to `0bda:2832`, and points the Synology section at the unit's `docker run` line.
-- ops#442: `windGust10_mph` has been in every InfluxDB archive point since 2026-10-28 12:30 ET (the driver has no hardware archive, so the record comes from the accumulator, `last` extractor, and `influx.py` uploads every field); only SQLite lacks it. 926 of 1,440 minutes carry it (no message 9 = no field, never 0). No build; documented in `docs/INTERFACES.md` §2 (PR #537); the dashboard confirmed its Flux query; closed.
-- ERR-0012 (PR #535): the 2026-10-31 10:04 EDT 30 mph gust at 150° in a 2 mph north breeze, one CRC-valid garbage frame (12.5 m/s jump, under the 20 m/s wind delta; reception 100%). Recorded, data left as is by the owner's call. The ISS gust read 4 mph.
-- #536 filed (tier:frontier): ~400,000 CRC failures a day, so a few chance passes a day; on 10-30 13:10 EDT a rejected 187 mph frame was the last line before a silent 2 min 49 s gap (the S144 freeze-lead shape; the log can't tell a weewxd freeze from a lost station). Proposes measuring arrival offset against the expected slot before any timing check.
-- Same day, targeted ROADMAP update (DEC-0057): P0.8 phase 1 closed; the P0 freeze line gained the 10-30 instance and #536. Corrected S187's first reading of 10-30: its 998 CRC failures span about 3 minutes (a normal rate, not 3.5 times), and "nothing was received" was unsupported; only "nothing reached WeeWX" is known.
