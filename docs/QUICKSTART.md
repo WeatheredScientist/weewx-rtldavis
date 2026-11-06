@@ -21,7 +21,7 @@ minutes on a Raspberry Pi; the console, if you have one, keeps working.
 Download the setup script from the release page, read it, then run it:
 
 ```bash
-curl -fsSLO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/v2.3.0/host-setup.sh
+curl -fsSLO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/v2.4.0/host-setup.sh
 ```
 
 ```bash
@@ -69,7 +69,7 @@ start after that uses the file as it is.
 docker compose logs --tail 30
 ```
 
-You should see the driver line, `driver version is 0.20+ws.9 (fork of 0.20, patched by
+You should see the driver line, `driver version is 0.20+ws.10 (fork of 0.20, patched by
 WeatheredScientist -- not stock upstream)`, then `rtldavis: US band, ISS channel 1 …`, and within
 about three minutes the first `LOOP` line with real readings. `docker compose ps` shows `healthy`
 while WeeWX keeps writing its log and `unhealthy` after ten quiet minutes; nothing restarts on it.

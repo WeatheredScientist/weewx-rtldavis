@@ -14,11 +14,17 @@ from test_duplicate_frame_counter import _make_driver  # noqa: E402  (shared wee
 
 def test_parses_the_line_go_emits():
     line = "2026/10/18 19:40:00 crc_stats: crc_fail=5 near=2 slots=17:3,22:2"
-    assert parse_crc_stats(line) == (5, 2, {17: 3, 22: 2})
+    assert parse_crc_stats(line) == (5, 2, 0, {17: 3, 22: 2})
 
 
 def test_zero_period_line_parses():
-    assert parse_crc_stats("crc_stats: crc_fail=0 near=0 slots=-") == (0, 0, {})
+    assert parse_crc_stats("crc_stats: crc_fail=0 near=0 slots=-") == (0, 0, 0, {})
+
+
+def test_parses_the_time_gate_count():
+    line = "2026/11/03 19:40:00 crc_stats: crc_fail=5 near=2 offsched=1 slots=17:3,22:2"
+    assert parse_crc_stats(line) == (5, 2, 1, {17: 3, 22: 2})
+    assert parse_crc_stats("crc_stats: crc_fail=0 near=0 offsched=0 slots=-") == (0, 0, 0, {})
 
 
 @pytest.mark.parametrize("line", [
@@ -31,6 +37,8 @@ def test_zero_period_line_parses():
     "crc_stats: crc_fail=5 near=9 slots=-",                # near > fail is impossible
     "crc_stats: crc_fail=-1 near=0 slots=-",               # negative
     "crc_stats: crc_fail=5 near=2 slots=17:3 garbage",     # trailing junk
+    "crc_stats: crc_fail=5 near=2 offsched=x slots=-",     # non-numeric offsched
+    "crc_stats: crc_fail=5 near=2 offsched= slots=-",      # empty offsched
 ])
 def test_malformed_or_foreign_lines_are_ignored(line):
     assert parse_crc_stats(line) is None
@@ -58,7 +66,7 @@ def test_summary_reports_accumulated_counts(monkeypatch):
     logged = []
     monkeypatch.setattr(rtldavis, 'loginf', lambda msg: logged.append(msg))
     for line in ("crc_stats: crc_fail=3 near=1 slots=4:2,9:1", "crc_stats: crc_fail=2 near=2 slots=4:2"):
-        fail, near, slots = parse_crc_stats(line)
+        fail, near, _offsched, slots = parse_crc_stats(line)
         d.stats['crc_fail'] += fail
         d.stats['crc_near'] += near
         for s, n in slots.items():

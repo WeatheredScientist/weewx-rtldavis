@@ -125,6 +125,8 @@
 #               the largest duplicate gap in samples per period (DEC-0223). Log only.
 #   2026-10-31  ws.8 -> ws.9 for the v2.2.0 release: the startup summary line (DEC-0225). The
 #               other changes since v2.1.0 are log or QC refactors with no new behavior.
+#   2026-11-03  #536: counts and logs the frames Go's time gate drops (DEC-0229). Log only.
+#   2026-11-04  ws.9 -> ws.10 for the v2.4.0 release.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -228,7 +230,7 @@ DRIVER_NAME = 'Rtldavis'
 # up with every behavior change to this file (README rule 1, #406). Never
 # report a bare '0.20' from this file -- it is not stock upstream and must not
 # claim to be (see the modification notice above and CHANGES-FROM-UPSTREAM.md).
-DRIVER_VERSION = '0.20+ws.9'
+DRIVER_VERSION = '0.20+ws.10'
 DRIVER_UPSTREAM = 'lheijst 0.20'
 
 weewx.units.obs_group_dict['frequency'] = 'group_frequency'
@@ -392,15 +394,18 @@ def rain_tips_with_anchor(anchor, last_count, new_count, max_tips=MAX_PLAUSIBLE_
     return rain_delta_tips(last_count, new_count, max_tips), False
 
 
-_CRC_STATS = re.compile(r"crc_stats: crc_fail=(\d+) near=(\d+) slots=(-|\d+:\d+(?:,\d+:\d+)*)\s*$")
+_CRC_STATS = re.compile(
+    r"crc_stats: crc_fail=(\d+) near=(\d+)(?: offsched=(\d+))? slots=(-|\d+:\d+(?:,\d+:\d+)*)\s*$")
 
 
 def parse_crc_stats(line):
-    """Parse Go's `crc_stats: crc_fail=N near=M slots=S:N,...` summary (#458).
+    """Parse Go's `crc_stats: crc_fail=N near=M offsched=K slots=S:N,...` summary (#458).
 
-    Returns (crc_fail, near, {slot: n}) or None for any other line. Strict on
-    purpose: a malformed or foreign line is ignored, never half-counted, and
+    Returns (crc_fail, near, offsched, {slot: n}) or None for any other line. Strict
+    on purpose: a malformed or foreign line is ignored, never half-counted, and
     near > crc_fail (impossible from a correct Go) is refused rather than logged.
+    `offsched` is the frames the time gate dropped (DEC-0229); a binary without the
+    gate omits it, which reads as 0.
     Pure function (no I/O) so it is unit-testable -- tests/test_crc_stats.py.
     """
     m = _CRC_STATS.search(line)
@@ -410,11 +415,11 @@ def parse_crc_stats(line):
     if near > fail:
         return None
     slots = {}
-    if m.group(3) != "-":
-        for part in m.group(3).split(","):
+    if m.group(4) != "-":
+        for part in m.group(4).split(","):
             slot, n = part.split(":")
             slots[int(slot)] = int(n)
-    return fail, near, slots
+    return fail, near, int(m.group(3) or 0), slots
 
 
 _BURST_LINE = re.compile(
@@ -1790,6 +1795,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             'crc_slots': {},           # #458: failures per receiver hop slot this period
             'burst_copy': 0,           # #459: frames Go's burst gate dropped as a copy of an accepted one
             'burst_conflict': 0,       # #459: frames dropped as one of two distinct decodes in a block
+            'offsched': 0,             # #536: frames Go's time gate dropped as off the transmitter's schedule
             'dup_gap_max': None}       # #459: largest duplicate-to-original gap this period, in samples
 
     def _reset_stats(self):
@@ -1805,6 +1811,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self.stats['crc_slots'] = {}
         self.stats['burst_copy'] = 0
         self.stats['burst_conflict'] = 0
+        self.stats['offsched'] = 0
         self.stats['dup_gap_max'] = None
 
     def _update_stats(self, curr_cnt0, curr_cnt1, curr_cnt2, curr_cnt3):
@@ -1859,6 +1866,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         loginf("burst copies this period: %d (conflicts: %d) largest duplicate gap: %s smp" % (
             self.stats['burst_copy'], self.stats['burst_conflict'],
             "-" if self.stats['dup_gap_max'] is None else self.stats['dup_gap_max']))
+        # #536 (DEC-0229): frames the time gate dropped, each a noise decode that
+        # would otherwise have cost 2 to 5 minutes of the station.
+        loginf("off-schedule frames this period: %d" % self.stats['offsched'])
         # if not the first time since startup
         if self.stats['last_ts'] > 0:
             total_count = 0
@@ -2085,7 +2095,8 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             # into this archive period.
             self.stats['crc_fail'] += _crc[0]
             self.stats['crc_near'] += _crc[1]
-            for _slot, _n in _crc[2].items():
+            self.stats['offsched'] += _crc[2]
+            for _slot, _n in _crc[3].items():
                 self.stats['crc_slots'][_slot] = self.stats['crc_slots'].get(_slot, 0) + _n
         _burst = parse_burst_line(_line)
         if _burst is not None:
@@ -2098,6 +2109,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             else:
                 self.stats['burst_' + _burst[0]] += 1
                 loginf("Go burst gate dropped a frame: %s" % _line.strip())
+        if "offschedule packet:" in _line:
+            # #536 (DEC-0229): rare, under one a day, so each is logged with its
+            # bytes and offset. The count comes from the crc_stats line above.
+            loginf("Go time gate dropped a frame: %s" % _line.strip())
         if "repeat packet:" in _line:
             # DEC-0135 (S116): Go accepted an identical payload that
             # arrived a full loop period later -- a real transmission

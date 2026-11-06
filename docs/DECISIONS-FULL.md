@@ -12836,3 +12836,146 @@ image under systemd with `--user 996:986 --cap-drop ALL` and no command argument
   "another program holds it". The quick start says to stop the station first.
 - Not decided here: restart-on-unhealthy, and whether `weewx_monitor.py` should read the health
   status.
+
+## DEC-0229 — An arrival-time gate in the Go decoder: a CRC-valid frame more than 100 ms off the transmitter's schedule is noise and does not move the hop clock (S188)
+
+Date: 2026-11-03 (S188, Fable 5.1). Status: accepted by the owner, built S189 (see "Build
+notes"), deployed 2026-11-04 18:36:38 ET as v2.4.0 (S190). The owner asked for the draft after reading the S188 measurement on #536.
+`patch/rtldavis-timegate.patch` after the burst gate (DEC-0223), a fourth incremental patch under
+DEC-0014. Reopens ROADMAP P1.9 with a
+fourth step; moves the P0 freeze lead (DEC-0203's "corrupt frame, then silence") from lead to
+measured mechanism for the short gaps.
+
+### Context
+
+Upstream `main.go` accepts any frame that passes the CRC, is not a duplicate (DEC-0135) or a burst
+copy (DEC-0223), and carries an active transmitter ID. Acceptance sets that transmitter's last-visit
+time to the frame's arrival time, resets its missed counter, and hops at once. There is no
+arrival-time check. The driver's bounds, delta and message-type proofs (DEC-0029, DEC-0054,
+DEC-0203) run afterward in Python, and nothing flows back to the decoder. On a miss the decoder
+assumes the packet was on schedule and advances one period (2.8125 s for ID 4). After 51
+consecutive misses (`-maxmissed`, 143 s) it re-initializes: parks on one channel and waits up to 53
+periods (149 s) for the station to come around.
+
+So a noise decode that passes the CRC by chance (about 1 in 65,536 of some 250 failures a minute)
+re-anchors the hop clock to a random phase. The decoder hops blind for 143 s, then parks for 0 to
+149 s. Expected loss about 3.5 min, range 2.5 to 5.
+
+S188 measured this from 30 days of prod logs (2026-10-04 to 11-02), no prod change:
+
+- The driver logged 15 distinct garbage frames (7 wind-delta rejects, 3 wind-bounds rejects, 5
+  message-type proofs). 12 were followed within seconds by a 2 to 5 min loss of the station:
+  archive records missing, the driver's minute counters silent, `weewx_monitor` at 0/21 windows.
+  The 3 that were not (36 mph, a rain counter 92 to 28, 20.6 mph) had their next frame arrive on
+  schedule 3 to 20 s later: real transmissions with a bit error, not noise decodes. ERR-0012 (an
+  accepted 30 mph frame) also lost nothing.
+- 23 archive-gap events of one minute or more in the window: 6 restarts, 1 outage (10-22, 62 min),
+  the 12 above (40 records missing), and 4 with no driver line at all (10 records missing),
+  consistent with a noise decode whose payload passed the filters. Non-restart gaps cover about 60
+  of 43,200 minutes, so 12 of 15 by coincidence is excluded.
+- The 10-31 02:32:03 case is the cleanest: a message-type reject (0xB), then 4 min 14 s of silence.
+- Timing precision: the S115 standalone capture (15 min, ID 4, before any patch) has 139
+  consecutive accepted pairs spaced 2.81126 to 2.81346 s, standard deviation 0.95 ms, at log-call
+  time. The decoder's receive window is 300 ms.
+- Side finding: the crcstats slot label (DEC-0216) is the hop-sequence index, and the re-init branch
+  never resets it, so the park interval is booked under the last blind-hop slot (slot 14 for 348
+  failures at 10-31 02:36). Only program starts show as slot 0.
+
+DEC-0083's freeze population (median 240 s, min 180 s) sits inside this mechanism's duration band.
+That does not make every freeze this; the 10-22 outage and the longer DEC-0083 tail are not.
+
+### Decision
+
+1. In the decoder's frame loop, once a transmitter is synced (`initTransmitrs` false), compute
+   `offset = arrival - chNextVisits[ch]`. If `|offset|` exceeds the tolerance, drop the frame: no
+   re-anchor, no hop, no reset of the missed counter, not written to stdout, so the driver never
+   sees it. Log `offschedule packet: <hex> (<offset> ms)` and count it in the `crc_stats` line as
+   `offsched=N`, so the minute counters and the driver's summary line carry it for free.
+2. Tolerance 100 ms, flag `-tolerance` (ms). A random-phase frame passes a 100 ms gate 7% of the
+   time (200 of 2812 ms); the driver's payload filters stay as the second net for those. The gate
+   is 100 sigma wide against the measured 0.95 ms spread and a third of the receive window, so a
+   real frame that the decoder can hear at all is inside it.
+3. Drop, rather than accept without anchoring: the station cannot transmit off schedule, so an
+   off-schedule frame is not a transmission, whatever its payload says.
+4. Init and re-init unchanged: the first accepted frame anchors, as today. The re-init branch also
+   resets the crcstats slot label (the side finding), one line.
+5. Lives in Go, beside the burst gate, because the schedule is the decoder's and the driver has no
+   timestamps to work from. `tests/go/` gets a replay with a synthetic off-schedule frame.
+
+### Alternatives considered
+
+- Tighten the driver's payload filters: trades the few garbage frames that pass for rejecting real
+  squall onsets, and does nothing for the station loss, which happens in the decoder before the
+  driver sees the frame (the issue's own point).
+- Accept the frame but do not let it move the hop clock: keeps a known-noise frame flowing to the
+  driver for the payload filters to catch, for no gain; rejected by item 3.
+- A `windGust10` cross-check in the driver: catches ERR-0012's class (on-schedule bit errors), which
+  this gate cannot, and misses the station loss, which this gate fixes. Complementary, a separate
+  item, not folded in here.
+- Raise `-maxmissed` or shorten the re-init wait: shortens the loss without preventing it.
+
+### Consequences
+
+- About 40 archive records a month recovered, plus some of the 10 in the silent gaps; the
+  corrupt-frame-then-silence shape should stop appearing. The driver's `rejecting implausible` and
+  message-type lines should drop to the on-schedule bit-error cases only.
+- No effect on acquisition or re-acquisition: the gate is inactive until synced.
+- The Parse-side frequency-correction write happens before this gate and will still take a noise
+  decode's `freqError` for that channel. Left as is; the correction list is averaged and the next
+  real frame on that channel overwrites it. Noted, not fixed here.
+- A fourth patch to carry against the pinned upstream tarball (DEC-0014's cost); the continuation
+  (weewx-packages, now a Python receiver) has a different guard and would need its own version.
+
+### Verification (planned)
+
+- Build: `tests/go/` replay, the existing differential `Parse` probe unchanged.
+- Prod, after a release: run the S188 correlation (archive-record gaps against driver rejections,
+  to be committed as `ops/garbage_gap_corr.py`) over the following 30 days; expect zero
+  garbage-then-gap events and the `offsched` counter to show a few a day. *(S189: under one a day
+  is the right figure; see Build notes.)*
+
+### Build notes (S189, Opus 5.5)
+
+Built as decided, with these details the draft did not settle:
+
+- **The offset folds to the nearest slot of the schedule through `chLastVisits[ch]`, not
+  `arrival - chNextVisits[ch]`.** `chNextVisits` is recomputed for every transmitter at each hop as
+  the first slot after `curTime`, so with two or more transmitters a frame can arrive just after
+  another transmitter's hop rolled its slot a period ahead, and the draft's formula would read it a
+  full period off and drop a real frame. On one transmitter the two agree: the pass rate stays 200
+  of 2812 ms.
+- **`-tolerance 0` turns the gate off,** a `cmd` edit in `weewx.conf` plus a restart, so a bad
+  interaction on some install needs no image rollback.
+- **`offsched=N` sits before `slots=`** in the `crc_stats` line. The driver's regex takes it as
+  optional (a binary without the gate reads as 0), adds `off-schedule frames this period: N` to the
+  summary, and logs each drop as `Go time gate dropped a frame:` with its bytes.
+- **Expected `offsched` rate: under one a day, not "a few."** The 15 rejected frames and 4 silent
+  gaps in S188's 30 days are about 0.6 a day, and undefined IDs are outside the gate.
+- **Failure modes the gate adds, all ending in the re-init it exists to avoid, none worse than
+  today's loss:** a wall-clock step over 100 ms on the host (arrival is `time.Now()`, so all real
+  frames read off until 51 misses re-init; chrony slews, so this needs a manual clock set); a noise
+  decode that anchors during init, where a real frame used to re-anchor and rescue it in the rare
+  case the channels line up; a host so loaded that frames are handled over 100 ms late, which costs
+  those frames only. A sample-position schedule (the burst gate's clock) would remove the first and
+  third; it was not used because the 0.95 ms measurement is on the wall clock and the sample stream
+  has not been measured across a dongle overrun.
+- `tests/go/timegate_replay_test.go` replays through the real `Demodulate` and `Parse`, with the
+  gate-off run as its positive control. Sample positions stand in for time there, so the replay
+  proves the logic, not the prod spread.
+
+### Deployment notes (S190, Opus 5.5)
+
+v2.4.0, banner `0.20+ws.10`, image `82220200…` from `dev`@`694938f`, restarted 2026-11-04
+18:36:38 ET; the first record after it was 18:39:00, 2 records lost to the hop re-acquire. What
+proves the gate is armed on prod: the image ID, the binary's `-h` showing `-tolerance` default 100,
+and a live `cmd` with no `-tolerance`. Two checks the S189 handoff named cannot pass at prod's
+`debug_rtld = 1`: Go's `tolerance=100 ms` startup line is not logged, and the raw `crc_stats` line
+never reaches the log. The summary line `off-schedule frames this period: N` does, but a binary
+without the gate would also print 0 there, so it proves the driver, not the gate. A
+`Go time gate dropped a frame` line is the proof of a drop. The last garbage event before the gate
+went in: 11-04 12:53:00 ET, message type 0xF, 3 records.
+
+First live drop: 11-05 05:06:39 ET, `2C74540E5A7A3009`, +725.6 ms, `off-schedule frames this
+period: 1`. No archive record was lost and the driver logged no rejection. In the 27 hours to 11-05
+22:01 ET that is the only drop, the only archive gap is the deploy's own, and the driver rejected
+nothing. One drop is a first result, not the 30-day re-run.

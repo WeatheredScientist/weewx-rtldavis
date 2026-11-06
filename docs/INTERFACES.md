@@ -225,6 +225,16 @@ fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.
   suffixed names — renaming a field is a breaking change.
 - `ops/backfill_influx.py` / `backfill_container.py` write **missing** archive rows to InfluxDB from
   the WeeWX SQLite archive using this same schema — use them to repair gaps, never to duplicate.
+- **A point carries the in-memory archive record, not the SQLite row.** This driver has no hardware
+  archive, so WeeWX builds each record from the interval's accumulator, which holds every loop type,
+  and the uploader sends every field (`obs_to_upload = most`). So InfluxDB has fields the SQLite
+  schema has no column for. **`windGust10_mph`** (DEC-0224, ops#442) is the one consumers read: the
+  ISS's own 10-minute gust, written since 2026-10-28 12:30 ET. It is the last value in the interval
+  (WeeWX's stock `last` extractor), it inherits the driver's QC on the loop packet, and a minute
+  without a message-9 packet has no field at all, never a 0 (about a third of minutes). Unlike
+  `windGust_mph` (the per-minute peak of loop samples), a single bad frame cannot move it
+  (ERR-0012). A backfilled point has no `windGust10_mph`, because the SQLite archive it comes from
+  has none.
 - **Series key:** `record,binding=archive` (measurement `record`, one tag `binding`). A correction or
   backfill MUST reuse this exact series key, or it forks a parallel series instead of overwriting.
 - **QC flag fields (`<field>_qc`) — sparse, added S36 (DEC-0032).** A retrospectively corrected point
