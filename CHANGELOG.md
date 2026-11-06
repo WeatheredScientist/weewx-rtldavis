@@ -11,6 +11,7 @@ under [Pre-S16].
 - PR #542 merged 11-03; PR #543: image tag v2.4.0 everywhere, banner `0.20+ws.10` (Opus 5.5). Built on marvin from `dev`@`694938f` (image `82220200…`, baked driver `7b6fb60a…` = `dev`'s), restarted 2026-11-04 18:36:38 ET, first record 18:39:00, 2 records lost. Rollback `:v2.3.0-prod-pre-v2.4.0`; `-tolerance 0` is the off switch.
 - `tolerance=` and `crc_stats` are not in the log at `debug_rtld = 1`, so S189's two verification strings could not pass; DEC-0229's deployment notes say what proves the gate instead.
 - The watch fired before the deploy: 11-04 12:53:00 ET, message type 0xF, 3 records lost, station back 12:57. That makes 13 of 16 garbage frames with a gap. Upstream threads and #514 unmoved since 10-30.
+- Released: `v2.4.0` and `prod-baseline-20261104` on `c376037` (PR #545), the GitHub release, and Hub's multi-arch `:v2.4.0` (`2b146586…`). `:latest` moved to it by the owner, 2026-11-06 01:52 ET. A dropped session between the go and the closeout commit delayed this by a day; nothing had landed, and prod was unaffected.
 - First live drop 11-05 05:06:39 ET, +725.6 ms, no archive gap; through 11-05 22:01 ET the only gap is the deploy's own.
 
 ## [S189] — 2026-11-03 — DEC-0229 accepted and built: the arrival-time gate, unreleased
