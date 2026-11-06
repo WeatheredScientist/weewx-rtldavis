@@ -86,8 +86,8 @@ only (S185). On marvin, `doctor` exits 13 (the dongle is held by prod); that is 
 | Prod | marvin, `v2.4.0` as `:marvin-live` since 2026-11-04 18:36:38 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor process from 10-22 (sha `5cd09917…`; on disk `2f8a1eda…` = `dev`), `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric); about 255 CRC failures a minute |
-| `main`/`dev` | `main` = the v2.4.0 promotion (`prod-baseline-20261104`); `dev` = main |
-| Docker Hub | `:v2.3.0` and `:latest` are the multi-arch index `03f3c891…` (amd64 `71c201b6…` = prod, arm64 `c0d54664…`), `:latest` moved by the owner 2026-11-01 12:25 ET |
+| `main`/`dev` | `main` = the v2.4.0 promotion (`c376037`, PR #545, `prod-baseline-20261104`); `dev` = main plus this doc-only record of the Hub state |
+| Docker Hub | `:v2.4.0` is the multi-arch index `2b146586…` (amd64 `82220200…` = prod, arm64 `e986aae1…`), joined 2026-11-06 01:48 ET. `:latest` = `:v2.4.0` since 2026-11-06 01:52 ET, moved by the owner |
 | Trackers | repo: #536 (v2.4.0 in prod, open until the 30-day re-run), #475 parked, #380 info, #514 (December A/B) · ops: #440 (second dongle, December), #110 (gated, Jan-Feb), #344 · upstream open: lheijst/rtldavis#2 comment, weewx-influx2#1 (reply 10-29), matthewwall/weewx-wcloud#6 (license request); closed 10-29: weewx-contrib#2 (not interested), weewx-packages#6 (fixed in 0.22.0) |
 
 ## Blockers
