@@ -7,6 +7,11 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S189] — 2026-11-03 — DEC-0229 accepted and built: the arrival-time gate, unreleased
+
+- PR #542: `patch/rtldavis-timegate.patch`, the fourth Go patch, after the burst gate (Opus 5.5). Once synced, a CRC-valid frame more than `-tolerance` ms (default 100, 0 is off) from the nearest slot of its transmitter's schedule is dropped before anything is booked; `offschedule packet:` logged, `offsched=N` in `crc_stats`, the slot label reset on re-init. The driver sums the count, adds `off-schedule frames this period:`, and logs each drop as `Go time gate dropped a frame:`. Dockerfile guard, static audit, Go unit tests, a replay through the real `Demodulate` and `Parse` with a gate-off positive control. CI's amd64 and arm64 image builds pass. Not run on a live radio, not released.
+- DEC-0229 Build notes: the offset folds to the nearest slot rather than `chNextVisits` (two transmitters would otherwise lose real frames), the off switch, `offsched` under one a day rather than a few, and the failure modes the gate adds. ROADMAP P1.9 step 4 updated. Rolled S186 to the archive.
+
 ## [S188] — 2026-11-03 — #536 measured: a noise decode re-anchors the hop clock; DEC-0229 proposed
 
 - #536 measured from 30 days of prod logs, no prod change (Fable 5.1, the picker left raised; BOOT asked Opus 5.5). Upstream `main.go` accepts any CRC-valid frame from an active ID, sets its last-visit time to the arrival time, resets the missed counter and hops at once; no arrival-time check. A noise decode at a random moment therefore costs 51 blind hops (143 s) and a re-init park of up to 149 s. 12 of the 15 garbage frames the driver rejected (10-04 to 11-02) were followed within seconds by that 2 to 5 min loss (40 archive records); 4 more gaps of the same shape had no driver line; the 3 rejected frames that lost nothing, and ERR-0012, were on-schedule bit-error frames. weewxd was never frozen. Posted on #536 (counts corrected once in place: 23 gap events over 29 rows, 6 restarts). Side finding: the crcstats slot label is stale during the re-init park. New instance recorded: 10-31 02:32:03 ET, message type 0xB then 4 min 14 s of silence.
