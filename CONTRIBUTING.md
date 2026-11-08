@@ -23,15 +23,12 @@ requests are welcome.
 The test suite is **offline** — it stubs the `weewx` modules, so you don't need weewx (or the
 hardware) installed to run it:
 
-```bash
-# run every test file
-for f in tests/test_*.py; do python3 "$f"; done
-# or, if you have pytest:  python3 -m pytest tests/
-```
+The checks to run before you open a pull request (ruff, pytest, mypy and the exact arguments they
+need) are listed once, in [docs/CONVENTIONS.md](docs/CONVENTIONS.md#python--validation-dec-0015),
+and CI runs the same ones. Use that list as written; copies elsewhere drift.
 
 Please add a regression test for any bug fix or behavior change (see the existing
-`tests/test_*.py` for the stubbing pattern). Lint/format is `ruff` (a `lint` CI job runs
-`ruff check` + `ruff format --check`; `mypy` runs advisory-only).
+`tests/test_*.py` for the stubbing pattern).
 
 ## Hardware-facing changes
 

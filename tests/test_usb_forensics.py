@@ -71,7 +71,7 @@ def test_forensics_dumps_no_environment():
 
 
 def test_forensics_does_not_use_proc_dir_mtime_as_start_time():
-    """Measured on the NAS 2026-08-09: `stat -c %y /proc/<pid>` reported 17
+    """Measured in the NAS era, 2026-08-09: `stat -c %y /proc/<pid>` reported 17
     seconds for an rtldavis that had been up 2.88 days by /proc/<pid>/stat field
     22, on a container up 3 days with unbroken output. That directory's mtime
     tracks ACCESS, and this script reads several files under it moments before.
@@ -207,7 +207,7 @@ def test_reset_refuses_a_helper_it_does_not_own():
     dedicated-user setup exists to prevent (README "Security Note").
 
     Only the REFUSING direction is testable here: this test cannot create a
-    root-owned file. The permissive direction is exercised on the NAS, where
+    root-owned file. The permissive direction is exercised on the host where
     usb_forensics.sh is deployed root-owned beside usb_reset.sh.
     """
     with tempfile.TemporaryDirectory() as d:

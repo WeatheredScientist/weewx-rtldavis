@@ -1,5 +1,7 @@
 # Upstream — open contribution threads
 
+**Last updated:** 2026-10-30 (S184 — the newest entry: the holding reply on the weewx-packages thread)
+
 **Tier 2 — pull by name from `MANIFEST.md`.** Live state for our contributions back to the projects
 this fork descends from. `BOOT.md` carries only the one-line "four open threads" reminder; the
 detail lives here so it doesn't cost a session start.

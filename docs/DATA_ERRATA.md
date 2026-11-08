@@ -1,7 +1,7 @@
 # Data Errata — weewx-rtldavis
 
 **Status:** Source of truth for *known-bad observations* · Append-only · Governed by
-[DEC-0025](DECISIONS.md#dec-0025--known-bad-data-preserve-and-flag-never-delete)
+[DEC-0025](DECISIONS-FULL.md#dec-0025--known-bad-data-preserve-and-flag-never-delete)
 
 This log records observations we *know* are wrong (sensor/RF glitches, decode faults) — what the
 value was, why it's wrong, what the corrected value is, and how far the bad value propagated. We
@@ -50,7 +50,7 @@ is not about picking a winner — it's about **preserving the mapping** so each 
 | **Observed (bad)** | `rain = 0.64"` at 07:04 UTC **and** 07:05 UTC (03:04 + 03:05 EDT) — a **+1.28" phantom** at ~3 AM. July 4's recorded day total was **1.84"** (= 1.28" phantom + 0.56" genuine evening rain). |
 | **Corrected** | `rain = 0.0` for the two 3 AM records. Corrected July-4 day total = **0.56"** (the genuine rain is untouched). *(Amended S36: was `NULL` from 2026-07-05 to 2026-07-12. Now `0.0` per DEC-0032 — the records are bracketed by zeros, so "no rain" is a **known fact**, not a guess, and `NULL` understated our knowledge. Day total is identical either way.)* |
 | **Actual weather** | No rain at 3 AM (the two records are bracketed by zeros). The day's **real** rain — **0.56"**, distributed in ≤0.05" increments over ~20:31–22:39 EDT — is genuine and preserved. |
-| **Root cause** | [DEC-0021](DECISIONS.md#dec-0021--rain-counter-glitch-filter-the-false-rain-fix) rain-counter RF glitch. The driver logged `rain counter wraparound detected rain_count=-64`; the **old** wraparound handler unconditionally added 128 → +64 tips → +0.64" per record, recorded across two archive intervals. |
+| **Root cause** | [DEC-0021](DECISIONS-FULL.md#dec-0021--rain-counter-glitch-filter-the-false-rain-fix) rain-counter RF glitch. The driver logged `rain counter wraparound detected rain_count=-64`; the **old** wraparound handler unconditionally added 128 → +64 tips → +0.64" per record, recorded across two archive intervals. |
 | **Why the filter didn't catch it** | This event is what **inspired** the DEC-0021 fix — the fix was written and deployed *after* 2026-07-04. The buggy handler was live at 03:04. The filter now nulls any such delta going forward (verified live; 0 further glitches to date). |
 
 **Propagation & correction status:**

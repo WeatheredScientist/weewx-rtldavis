@@ -35,7 +35,7 @@ Separating the two populations is the whole job:
                    cadence, genuine, harmless.
   * gap ~ms     -> the RECEIVER manufactured the second frame. The mechanism.
 
-STATUS (S178): the text above describes the Go binary before v2.0.15. Since DEC-0135
+HISTORICAL NOTE (S178): the text above describes the Go binary before v2.0.15. Since DEC-0135
 the Go side time-gates repeats (`-dupwindow`), so a genuine transmitter repeat no
 longer prints `duplicate packet:` and the "transmitter repeats" count below reads 0
 on current logs; only the millisecond-gap population is still meaningful. Since
@@ -48,7 +48,8 @@ weewx.conf -- the line is emitted via dbg_rtld(1) -> log.debug. That is noisy;
 do not leave it on indefinitely. The standing fix is an always-on counter in the
 driver (one summary line per archive period at INFO) -- see DEC-0035.
 
-Usage:  python3 find_duplicate_frames.py /var/log/weewx/weewx.log [...]
+Usage:  python3 find_duplicate_frames.py weewx.log [...]
+        (a local copy, e.g. `marvinctl --tenant weewx cat /srv/docker/weewx/logs/weewx.log > weewx.log`)
 """
 
 import re

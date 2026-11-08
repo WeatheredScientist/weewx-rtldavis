@@ -71,15 +71,13 @@ def test_rain_rate_matches_the_stdqc_backstop_upper_bound():
 
 # ── Item 5: pct_good storage, equality not substring containment ──────────
 
-_make_driver = make_driver
-
 
 def test_pct_good_storage_uses_equality_not_substring_containment():
     """The regression this pins: an empty sensor_map value (a plausible
     user config typo) is a substring of every 'pct_good_N' string, so
     under `in` it would match and get overwritten on every transmitter
     iteration instead of never matching at all."""
-    d = _make_driver(active_tr_ids=[0, 1])
+    d = make_driver(active_tr_ids=[0, 1])
     d._save_pct_good_per_transmitter = True
     d.tr_count = 2
     d.sensor_map = {"bogusField": ""}  # never a real "pct_good_N" value
@@ -111,7 +109,7 @@ def test_pct_good_storage_uses_equality_not_substring_containment():
 def test_pct_good_storage_still_stores_a_real_exact_match():
     """The fix must not just stop storing everything -- a genuine exact
     'pct_good_N' mapping still has to work."""
-    d = _make_driver(active_tr_ids=[0, 1])
+    d = make_driver(active_tr_ids=[0, 1])
     d._save_pct_good_per_transmitter = True
     d.tr_count = 2
     d.sensor_map = {"extraTemp2": "pct_good_1"}  # a real DEFAULT_SENSOR_MAP entry

@@ -161,9 +161,8 @@ COPY influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py
 
 #--------------------------------------------
 # Copy the patched rtldavis.py — the driver weewx actually imports (user.* resolves
-# to venv site-packages/user). Carries: windDir fix (v2.0.2), rain spike filter,
-# the S24 H1/H2/M3 fixes (H2 revives rxCheckPercent), and the SensorQC
-# decode-layer plausibility filter (DEC-0029). v2.0.4.
+# to venv site-packages/user). The change ledger is in the file's own header and its
+# live version is DRIVER_VERSION; this comment deliberately carries neither.
 #--------------------------------------------
 COPY rtldavis.py /opt/weewx-venv/lib/python3.14/site-packages/user/rtldavis.py
 

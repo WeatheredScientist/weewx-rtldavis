@@ -9,8 +9,8 @@ production near-miss), validity being flock-OR-unexpired rather than
 either alone, and a stale break only ever firing when BOTH conditions
 hold.
 
-flock() is real POSIX and works the same on macOS as on the NAS's
-Linux/btrfs, so these tests exercise the real locking primitive against a
+flock() is real POSIX and works the same on macOS as on the Linux
+host the lease lived on (btrfs, in the NAS era), so these tests exercise the real locking primitive against a
 tmp_path lease dir rather than mocking it.
 
 Run:  python3 -m pytest tests/test_nas_build.py

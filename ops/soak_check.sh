@@ -18,7 +18,7 @@
 #   ops/soak_check.sh              # check since the container started
 #   ops/soak_check.sh 3600         # check only the last N seconds
 #
-# EXPECT_IMAGE names the VERSIONED tag that should be running (e.g. v2.0.17). It is
+# EXPECT_IMAGE names the VERSIONED tag that should be running (e.g. vX.Y.Z). It is
 # compared by IMAGE ID, never by string. This tenant deploys by retagging the
 # floating own-tag `marvin-live` to the built version tag, then restarting
 # (DEC-0204). It does not use `marvinctl set-image`, so `Config.Image` never reads
@@ -27,7 +27,7 @@
 #
 # The default is the release stamp in the Dockerfile beside this script, its
 # "# weewx-rtldavis vX.Y.Z" header, so a deploy needs no hand bump here. The hand
-# bump was missed at v2.0.17 and flagged a healthy station red (#407). The stamp is
+# bump was missed at one release (v2.0.17) and flagged a healthy station red (#407). The stamp is
 # what the checkout is on, so a checkout out of step with prod reports the gap:
 # WARN if its image is not built yet, FAIL if it is built but not live. Without a
 # Dockerfile or a stamp the literal fallback below applies, and the output says so.
@@ -49,7 +49,8 @@ LOGDIR=/srv/docker/weewx/logs
 ARCHIVE_DB=/srv/docker/weewx/weewx-data/archive/weewx.sdb
 VENV_PY=/opt/weewx-venv/bin/python3
 # Anchored at line start so version numbers in the Dockerfile's prose cannot match.
-# The v2.0.20 literal is only the fallback for a script copied out of its checkout.
+# The v2.0.20 literal is only the last-resort fallback for a script copied out of its checkout
+# (it lags by design; the status line then says "built-in fallback", so set EXPECT_IMAGE).
 _stamp="$(grep -m1 -oE '^# weewx-rtldavis v[0-9]+(\.[0-9]+)+' "$(dirname "$0")/../Dockerfile" 2>/dev/null | sed 's/.* //')"
 if [ -n "${EXPECT_IMAGE:-}" ]; then EXPECT_SRC="EXPECT_IMAGE"
 elif [ -n "$_stamp" ]; then EXPECT_SRC="Dockerfile stamp"
@@ -59,7 +60,7 @@ EXPECT_IMAGE="${EXPECT_IMAGE:-weatheredscientist/weewx-rtldavis:${_stamp:-v2.0.2
 # The DEC-0031 canary. Unlike EXPECT_IMAGE it reads no stamp: this is what prod is
 # running NOW, not what the repo is on, so a deploy that changes the driver banner
 # (DRIVER_VERSION in rtldavis.py) must bump it.
-EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.7}"
+EXPECT_DRIVER="${EXPECT_DRIVER:-0.20+ws.10}"
 
 pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${2:-}"; pass=$((pass+1)); }

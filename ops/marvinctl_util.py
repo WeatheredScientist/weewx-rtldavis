@@ -25,7 +25,7 @@ def marvinctl(*args: str, input: str | None = None, timeout: int = 60,
 
 
 def resolve_image(container: str, prog: str = "") -> str:
-    """The live container's own image, e.g. weatheredscientist/weewx-rtldavis:v2.0.16.
+    """The live container's own image, e.g. weatheredscientist/weewx-rtldavis:vX.Y.Z.
 
     `exec-ro` takes an image, not a container name, and a hardcoded tag goes stale every
     release, so read it off the running container every time.

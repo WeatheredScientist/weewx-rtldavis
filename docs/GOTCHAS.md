@@ -7,8 +7,8 @@ expires at a session close, and carrying ~1,700 tokens of it in the always-load 
 
 Every entry was earned by something going wrong. They live here rather than in the canonical docs
 because each is a *trap in using a tool or reading a signal*, not a fact about how the system is
-built — `ARCHITECTURE.md`, `CONVENTIONS.md`, `CONSTANTS.md` and `CAMPAIGN-B-RUNBOOK.md` describe what
-things are; this file describes how they mislead.
+built — `ARCHITECTURE.md`, `CONVENTIONS.md` and `CONSTANTS.md` describe what things are; this
+file describes how they mislead.
 
 **Nothing here is a second copy.** Anything already stated in a canonical doc — the gate commands and
 the only interpreter that has them (`CONVENTIONS.md`), the baked-vs-mounted deploy table
@@ -226,11 +226,14 @@ alone did not catch.
   disjoint files. Sequence them: `gh pr update-branch N`, `gh pr checks N --watch`, confirm
   `mergeStateStatus` is `CLEAN`, merge, verify with `gh pr view N --json state,mergedAt`, repeat.
   `--auto` would wait on a branch that goes stale again the moment a sibling merges.
+- **The app reuses a stale `.claude/worktrees/` directory for a new child (S192; again S193).** A
+  directory named for an old session can hold a new child's branch. Run `git worktree list` and read
+  the branch column before pruning or trusting a directory name.
 
 ## §3 NAS and campaign operations
 
-- **`nasctl` is read-only** — NAS mutations need the Class C mint path (mint and re-run as TWO
-  separate calls, never chained with `&&`).
+*NAS-era entries (the `nasctl` and `rx_experiment.sh` traps) live at the end of this section, under "NAS era (retired 2026-09-05)".*
+
 - **A guard block can be a MISFIRE — check before going near the mint path** (S85, ops#176). Rung 0:
   re-spell it (`Write`/`Edit` instead of a shell heredoc). **The `ssh nas` alias is genuinely
   read-only at the KEY level** (forced command, ops#82) — a refusal there is server-side, not a
@@ -245,24 +248,6 @@ alone did not catch.
 - **Campaign clocks are LOCAL (EDT); most tool output is UTC — convert before comparing.** Check the
   actual process/log evidence, don't compute (S83, S91/DEC-0068, S92/DEC-0098, re-confirmed S94 on an
   arm-D swap).
-- **`rx_experiment.sh` has no `ssh` calls of its own — it reads hardcoded NAS-only paths**
-  (`/volume1/docker/weewx-rtldavis/...`) and is meant to run scp'd onto the NAS itself. Run its
-  `status` (or any) subcommand from a local checkout and it silently reports empty defaults instead
-  of erroring — `arm: NONE` since the Unix epoch, `installed: no`, `samples: 0` — because those paths
-  just don't exist locally. Reads exactly like "campaign never installed" when it's actually live.
-  Verify real state with `nasctl cat <project root>/rx_experiment.state` instead (S100).
-- **`rx_experiment.sh` the SCRIPT lives flat at the NAS project root, its LOG output does not**:
-  `.state`/`.STOP`/`.PAUSE`/`.lock` flat at the root; `.log`/`_data.log` under `logs/`. **So does
-  `weewx.log`** — `logs/weewx.log`, not `weewx-data/weewx.log`.
-- **`rx_experiment.lock` exists only during a pass's critical section** — absence at rest is correct;
-  a holder older than 1800 s is broken automatically and loudly.
-- **`due_arm()` never returns `NONE` once the pilot block has run** — check `current_arm()`/state +
-  STOP/PAUSE directly, not log silence. *(An EMPTY schedule does return `NONE` — the DEC-0096
-  stand-down state; `install` refuses it before it can matter.)*
-- **A schedule PR carries dated rows, and a merge does not re-check them** (S148). PR #427 sat
-  unmerged past its own `BASELINE` row; merged as written, the first pass would have gone
-  `NONE -> BASELINE` and skipped the test arm (and CI's staleness test would have gone red).
-  Re-date the rows when a schedule PR is merged later than planned.
 - **`marvin-<tenant>` SSH aliases have no shell or `git clone` verb** (S129, ops#257/DEC-0150) — the
   forced command (`marvinctl-remote`) dispatches only to `sftp-server`, `rsync --server`, or its own
   fixed verb list (`ps`, `logs`, `pull`, `restart`, …). `ssh marvin-weewx 'bash -s' < script` fails
@@ -369,6 +354,33 @@ alone did not catch.
     bare form in the check-gated checkout is advisory.
   - `soak_check.sh` with `EXPECT_IMAGE=v2.0.20` WARNs "not present as a local image": it wants the
     full local tag (`weatheredscientist/weewx-rtldavis:v2.0.20`), not the bare version (S152).
+
+### NAS era (retired 2026-09-05)
+
+The NAS (Foundation) stopped hosting weewx on 2026-09-05 (MARVIN-DEC-0134), and `ops/rx_experiment.sh` is a retired
+apparatus (DEC-0118). These entries are moved here verbatim from the top of §3 (S193, #555) as a record of the
+method; none reaches a live system. The live marvin entries are above.
+
+- **`nasctl` is read-only** — NAS mutations need the Class C mint path (mint and re-run as TWO
+  separate calls, never chained with `&&`).
+- **`rx_experiment.sh` has no `ssh` calls of its own — it reads hardcoded NAS-only paths**
+  (`/volume1/docker/weewx-rtldavis/...`) and is meant to run scp'd onto the NAS itself. Run its
+  `status` (or any) subcommand from a local checkout and it silently reports empty defaults instead
+  of erroring — `arm: NONE` since the Unix epoch, `installed: no`, `samples: 0` — because those paths
+  just don't exist locally. Reads exactly like "campaign never installed" when it's actually live.
+  Verify real state with `nasctl cat <project root>/rx_experiment.state` instead (S100).
+- **`rx_experiment.sh` the SCRIPT lives flat at the NAS project root, its LOG output does not**:
+  `.state`/`.STOP`/`.PAUSE`/`.lock` flat at the root; `.log`/`_data.log` under `logs/`. **So does
+  `weewx.log`** — `logs/weewx.log`, not `weewx-data/weewx.log`.
+- **`rx_experiment.lock` exists only during a pass's critical section** — absence at rest is correct;
+  a holder older than 1800 s is broken automatically and loudly.
+- **`due_arm()` never returns `NONE` once the pilot block has run** — check `current_arm()`/state +
+  STOP/PAUSE directly, not log silence. *(An EMPTY schedule does return `NONE` — the DEC-0096
+  stand-down state; `install` refuses it before it can matter.)*
+- **A schedule PR carries dated rows, and a merge does not re-check them** (S148). PR #427 sat
+  unmerged past its own `BASELINE` row; merged as written, the first pass would have gone
+  `NONE -> BASELINE` and skipped the test arm (and CI's staleness test would have gone red).
+  Re-date the rows when a schedule PR is merged later than planned.
 
 ## §4 Liveness and deployment — proving a thing is actually running
 

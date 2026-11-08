@@ -22,9 +22,6 @@ from rtldavis import RtldavisDriver  # noqa: E402
 from conftest import make_driver  # noqa: E402
 
 
-_make_driver = make_driver
-
-
 class _BatchMgr:
     """A ProcManager stand-in: get_stderr() hands genLoopPackets one batch of Go
     stderr lines per loop pass, then running() turns false."""
@@ -60,7 +57,7 @@ def run_loop(monkeypatch, batches):
     the loop packets it yielded). Only the decode, the stats bookkeeping and the
     packet conversion are stubbed; the line scan and the dedup guard are the
     driver's own (#456, audit item 35)."""
-    d = _make_driver()
+    d = make_driver()
     d._mgr = _BatchMgr(batches)
     d.tr_count = 1
     d._stderr_sample_count = 0
@@ -82,7 +79,7 @@ def run_loop(monkeypatch, batches):
 
 
 def test_init_stats_starts_dup_count_at_zero():
-    d = _make_driver()
+    d = make_driver()
     assert d.stats['dup_count'] == 0
 
 
@@ -91,7 +88,7 @@ def test_counter_survives_into_the_period_summary_log(monkeypatch):
     real code: `if "duplicate packet:" in _line: self.stats['dup_count'] += 1`).
     This test simulates that increment, then confirms _update_summaries logs
     it at INFO unconditionally -- not gated behind any debug flag."""
-    d = _make_driver()
+    d = make_driver()
     logged = []
     monkeypatch.setattr(rtldavis, 'loginf', lambda msg: logged.append(msg))
 
@@ -106,7 +103,7 @@ def test_zero_duplicates_still_logs_a_line():
     """DEC-0035: "log one summary line per archive period" -- a quiet period
     (0 duplicates) must still produce a line, so the instrument's silence is
     distinguishable from it not running at all."""
-    d = _make_driver()
+    d = make_driver()
     logged = []
     import rtldavis as _r
     orig = _r.loginf
@@ -119,7 +116,7 @@ def test_zero_duplicates_still_logs_a_line():
 
 
 def test_reset_stats_zeroes_dup_count_for_next_period():
-    d = _make_driver()
+    d = make_driver()
     d.stats['dup_count'] = 7
     RtldavisDriver._reset_stats(d)
     assert d.stats['dup_count'] == 0

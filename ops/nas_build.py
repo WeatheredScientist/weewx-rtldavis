@@ -13,10 +13,10 @@ expected duration, per Section 5's non-renewing-holder rule.
 
 Usage:
     python3 ops/nas_build.py --job nas-image-build -- \\
-        docker build -t weatheredscientist/weewx-rtldavis:v2.0.14 .
+        docker build -t weatheredscientist/weewx-rtldavis:vX.Y.Z .
 
 RENEWAL_FLOOR_S/TTL_S are RE-PINNED (DEC-0114) against the real ~08-23
-v2.0.14 build's measured duration: a clean run under this wrapper took
+build's measured duration (a v2.0.14 build, so a historical figure): a clean run under this wrapper took
 ~360s (11:48:18-11:54 EDT). RENEWAL_FLOOR_S carries ~15% margin over that;
 TTL_S stays generous on purpose -- this same session also hit a build that
 hung for over an hour on a stuck weectl/network step before being killed

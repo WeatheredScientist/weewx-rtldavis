@@ -1,7 +1,7 @@
 # Changes from upstream
 
 **Status:** Source of truth for what this project changed in code it did not write.
-**Last updated:** 2026-10-18 (S158)
+**Last updated:** 2026-11-08 (S193) — `rtldavis.py` line counts recounted; rows through 2026-11-03 (DEC-0229)
 
 This project is a Docker distribution of a **modified** Davis/rtldavis receiver stack. It is not
 stock upstream, and several of the files it ships are other people's work with our patches on top.
@@ -65,10 +65,11 @@ you see it, the baked driver is the one running).
 ## `rtldavis.py`
 
 Base: `weewx-contrib/weewx-rtldavis` `src.tgz` (Luc Heijst v0.20, plus Skahan's 2025-12-20
-`re.compile` deprecation patch). Delta: **+1316 / −167 lines** (1422 → 2571 lines), recounted
-2026-10-18 (S158) at `c57a964` with the recipe below. The S145 count at `7d06cbf` was +1239 / −167
-(1422 → 2494); the 77 added lines since are #402's off-by-one fix with the ws.6 bump and its header entries,
-and #458's CRC-failure counters (DEC-0216). Before that, S97 counted +815 / −149 (1422 → 2088).
+`re.compile` deprecation patch). Delta: **+1457 / −176 lines** (1422 → 2703 lines, `wc -l`), recounted
+2026-11-08 (S193) at `ec454e7` with the recipe below. The S158 count at `c57a964` was +1316 / −167
+(1422 → 2571). The S145 count at `7d06cbf` was +1239 / −167 (1422 → 2494); the 77 added lines between
+those two are #402's off-by-one fix with the ws.6 bump and its header entries, and #458's CRC-failure
+counters (DEC-0216). Before that, S97 counted +815 / −149 (1422 → 2088).
 
 The baseline is not vendored here — the Dockerfile fetches it at build time, pinned to
 `RTLDAVIS_SRC_COMMIT` (DEC-0214) — so recount it rather than trusting this number:

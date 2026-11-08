@@ -9,7 +9,7 @@ import os
 import pytest  # noqa: E402
 import rtldavis  # noqa: E402
 from rtldavis import RtldavisDriver, parse_crc_stats  # noqa: E402
-from test_duplicate_frame_counter import _make_driver  # noqa: E402  (shared weewx stubs)
+from conftest import make_driver  # noqa: E402
 
 
 def test_parses_the_line_go_emits():
@@ -45,7 +45,7 @@ def test_malformed_or_foreign_lines_are_ignored(line):
 
 
 def test_init_and_reset_zero_the_counters():
-    d = _make_driver()
+    d = make_driver()
     assert (d.stats['crc_fail'], d.stats['crc_near'], d.stats['crc_slots']) == (0, 0, {})
     d.stats['crc_fail'], d.stats['crc_near'], d.stats['crc_slots'] = 7, 3, {1: 7}
     d.stats['curr_ts'] = 1
@@ -54,7 +54,7 @@ def test_init_and_reset_zero_the_counters():
 
 
 def test_summary_logs_at_info_every_period_even_when_quiet(monkeypatch):
-    d = _make_driver()
+    d = make_driver()
     logged = []
     monkeypatch.setattr(rtldavis, 'loginf', lambda msg: logged.append(msg))
     RtldavisDriver._update_summaries(d)
@@ -62,7 +62,7 @@ def test_summary_logs_at_info_every_period_even_when_quiet(monkeypatch):
 
 
 def test_summary_reports_accumulated_counts(monkeypatch):
-    d = _make_driver()
+    d = make_driver()
     logged = []
     monkeypatch.setattr(rtldavis, 'loginf', lambda msg: logged.append(msg))
     for line in ("crc_stats: crc_fail=3 near=1 slots=4:2,9:1", "crc_stats: crc_fail=2 near=2 slots=4:2"):

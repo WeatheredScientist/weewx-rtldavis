@@ -40,8 +40,9 @@
 #
 #   GPLv3 section 5(a) modification notice. THIS IS A MODIFIED VERSION of Luc
 #   Heijst's rtldavis driver v0.20 (as repackaged in weewx-contrib/weewx-rtldavis
-#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.7'
-#   so the difference is visible in the logs. Bugs here are ours, not upstream's.
+#   src.tgz), not the original. It reports itself as DRIVER_VERSION '0.20+ws.10'
+#   (the live value of DRIVER_VERSION below) so the difference is visible in the
+#   logs. Bugs here are ours, not upstream's.
 #
 #   Changes, with the date each was recorded in git. Entries dated 2026-07-04
 #   include work done earlier (May-June 2026) and first committed on that date.
@@ -123,6 +124,9 @@
 #   2026-10-22  ws.6 -> ws.7 for the v2.0.21 release.
 #   2026-10-27  #459: counts and logs the frames Go's burst gate drops, and reports
 #               the largest duplicate gap in samples per period (DEC-0223). Log only.
+#   2026-10-28  #481: ws.7 -> ws.8. Message 9's 10-minute gust is stored as wind_gust_10
+#               (m/s), mapped to windGust10 (never windGust), bounds-checked and
+#               nulled with a condemned frame (DEC-0224).
 #   2026-10-31  ws.8 -> ws.9 for the v2.2.0 release: the startup summary line (DEC-0225). The
 #               other changes since v2.1.0 are log or QC refactors with no new behavior.
 #   2026-11-03  #536: counts and logs the frames Go's time gate drops (DEC-0229). Log only.

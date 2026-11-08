@@ -7,12 +7,10 @@ Run:  python3 -m pytest tests/ (pytest only)
 """
 import os
 import stat
-import sys
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
 
 configobj = pytest.importorskip("configobj")
 import seed_config  # noqa: E402
