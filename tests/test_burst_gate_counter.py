@@ -10,7 +10,8 @@ which frames are accepted.
 import pytest  # noqa: E402
 import rtldavis  # noqa: E402
 from rtldavis import RtldavisDriver, parse_burst_line  # noqa: E402
-from test_duplicate_frame_counter import _make_driver, run_loop  # noqa: E402  (shared weewx stubs)
+from conftest import make_driver  # noqa: E402
+from test_duplicate_frame_counter import run_loop  # noqa: E402  (shared weewx stubs)
 
 
 @pytest.mark.parametrize("line,want", [
@@ -39,7 +40,7 @@ def test_any_other_line_is_ignored(line):
 
 
 def test_summary_line_is_logged_every_period_and_resets(monkeypatch):
-    d = _make_driver()
+    d = make_driver()
     logged = []
     monkeypatch.setattr(rtldavis, 'loginf', lambda msg: logged.append(msg))
     RtldavisDriver._update_summaries(d)
@@ -89,7 +90,7 @@ def test_the_real_line_scan_logs_a_time_gate_drop_and_counts_it_from_crc_stats(m
 
 
 def test_the_off_schedule_summary_is_logged_every_period_and_resets(monkeypatch):
-    d = _make_driver()
+    d = make_driver()
     logged = []
     monkeypatch.setattr(rtldavis, 'loginf', lambda msg: logged.append(msg))
     RtldavisDriver._update_summaries(d)

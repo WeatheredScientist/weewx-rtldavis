@@ -121,8 +121,28 @@ version = 5.5.2
     #qc_humid_2_max_delta = 10.0
     # solar_radiation and rain_rate have bounds but no delta, so no key.
 
+    # Optional keys, all off by default. Shown commented out with the driver's real default.
+    # Log the raw humidity decode at debug level (default False).
+    #log_humidity_raw = False
+    # Hot-swap control file (DEC-0117): a watched file that changes -gain/-ex without a
+    # restart. Unset (the default) = the feature is off. The acknowledgment file defaults
+    # to the control file's path plus a '.ack' suffix.
+    #hotswap_control_file = /path/to/rtldavis-control
+    #hotswap_ack_file = /path/to/rtldavis-control.ack
+    # Prepend to PATH / set LD_LIBRARY_PATH for the rtldavis child process (default: neither).
+    #path = /usr/local/bin
+    #ld_library_path = /usr/local/lib
+
     # The driver to use:
     driver = user.rtldavis
+
+    # Optional: override which driver observation feeds which WeeWX field (default: the
+    # driver's built-in map, DEFAULT_SENSOR_MAP in rtldavis.py). A subsection, so it must
+    # come after every key above. Uncomment only the lines you change. By default
+    # extraTemp1-3 and leafTemp2 carry per-channel reception percentages (pct_good_N), so
+    # the example below trades the first of those for an extra temperature sensor.
+    #[[sensor_map]]
+    #    extraTemp1 = temp_1
 
 ##############################################################################
 
@@ -255,11 +275,11 @@ version = 5.5.2
         password = YOUR_PASSWORD
 
         # The current uploader relies on WeeWX's builtin Weather Underground uploader,
-        # thus, optional parameters supported by weewx-5.2.0 'should' work.
-        # Please consult the weewx documentation for details.
+        # thus, optional parameters supported by WeeWX's Weather Underground uploader
+        # 'should' work. Please consult the WeeWX documentation for details.
 
-        # To enable this uploader, set enable = True below and specify your
-        # appropriate values for station, password.
+        # Set enable = false above to turn this uploader off, and specify your
+        # appropriate values for station and password.
         # The server url is preset and cannot be modified.
 
 

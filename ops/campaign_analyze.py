@@ -129,9 +129,10 @@ CONTAINER = "weewx-rtldavis-v2"
 ARCHIVE_DB = "/srv/docker/weewx/weewx-data/archive/weewx.sdb"
 VENV_PY = "/opt/weewx-venv/bin/python3"
 
-# The apparatus writes these; both carry a leading local timestamp. `nasctl grep`
-# prefixes a line number, so tolerate an optional "NNN:" -- a tool that only
-# worked against one of the two ways we read the log would be a trap.
+# The apparatus writes these; both carry a leading local timestamp. A grep-style
+# read (the retired `nasctl grep`) prefixes a line number and `marvinctl cat` does not, so
+# tolerate an optional "NNN:" -- a tool that only worked against one of the two ways we
+# read the log would be a trap.
 _TS = r"(?:\d+:)?(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
 SWAP_RE = re.compile(_TS + r" tick: swapping \S+ -> (\S+)")
 STOP_RE = re.compile(_TS + r" (?:ABORT|CAMPAIGN COMPLETE)")

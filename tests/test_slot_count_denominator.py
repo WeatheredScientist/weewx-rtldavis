@@ -42,9 +42,7 @@ from conftest import make_driver  # noqa: E402
 LOOP_TIME = 2.8125  # loop_times[4] -- our own receiver's transmitter (DIP ID 5, S119/#313)
 
 
-def _make_driver():
-    """One active transmitter at slot 0, ID 4 (this station's real transmitter)."""
-    return make_driver((4,))
+STATION_TR_IDS = (4,)  # one active transmitter at slot 0, ID 4 (this station's real transmitter)
 
 
 @contextlib.contextmanager
@@ -76,7 +74,7 @@ def _close_period(d, count, span_s, t0):
 def _established_driver(t0):
     """A driver past the first-period guard, with transmitter 0's baseline
     seeded at t0 and no packets counted yet."""
-    d = _make_driver()
+    d = make_driver(STATION_TR_IDS)
     d.stats['curr_cnt'][0] = 1  # marks the transmitter active (curr_cnt > 0)
     d.stats['last_cnt'][0] = 1
     d.stats['last_ts'] = int(t0)
@@ -159,7 +157,7 @@ def test_count_never_exceeds_max_count_across_jittered_periods():
     the seeding inline, bug included, and passed only because seed 317 drops
     a packet in the first period; 68 of seeds 0-199 did not."""
     rng = random.Random(317)  # deterministic
-    d = _make_driver()
+    d = make_driver(STATION_TR_IDS)
     t = 1_000_000.0
     d.stats['curr_cnt'][0] = 0
     d.stats['last_cnt'][0] = 0
@@ -222,7 +220,7 @@ def _run(lines, boundaries):
     """Cold-start a driver and feed it `lines` and archive `boundaries` in
     time order. Returns (pct_good, count, max_count) per boundary, or None
     where the period produced no value, so no rxCheckPercent is written."""
-    d = _make_driver()
+    d = make_driver(STATION_TR_IDS)
     events = sorted([(t, False, c) for t, c in lines] +
                     [(b, True, 0) for b in boundaries])
     out = []

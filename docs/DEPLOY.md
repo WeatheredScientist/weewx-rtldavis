@@ -9,6 +9,36 @@ dongle, keeps the kernel's TV driver off it and offers to install Docker (the `~
 creates isn't used here). The steps below replace Quick start steps 2–4: the location goes in when
 the config is seeded, and systemd starts the container instead of Compose.
 
+## Host preparation
+
+`host-setup.sh` does these two things on Debian, Ubuntu and Raspberry Pi OS. On any other
+distribution, do them by hand. Use the group your container user belongs to for `GROUP` in the
+rule (the systemd steps below create `weewx`).
+
+**1. Keep the kernel's TV driver off the dongle.** The kernel claims an RTL-SDR as a TV tuner
+unless told not to. Put this in `/etc/modprobe.d/blacklist-rtl-sdr.conf`, then unload the modules
+or reboot:
+
+```
+blacklist dvb_usb_rtl28xxu
+install dvb_usb_rtl28xxu /bin/false
+blacklist rtl2832
+install rtl2832 /bin/false
+blacklist rtl2830
+install rtl2830 /bin/false
+blacklist rtl2832_sdr
+install rtl2832_sdr /bin/false
+```
+
+**2. Let a non-root user open the dongle.** Put this in `/etc/udev/rules.d/60-rtl-sdr.rules`
+(`0bda:2838` and `0bda:2832` are the two IDs RTL-SDR dongles use), then run
+`sudo udevadm control --reload-rules` and `sudo udevadm trigger`, and re-plug the dongle:
+
+```
+SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="2838", GROUP="weewx", MODE="0660"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="2832", GROUP="weewx", MODE="0660"
+```
+
 ## systemd (recommended)
 
 **1. A dedicated user and directory.**

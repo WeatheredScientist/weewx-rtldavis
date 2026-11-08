@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
+# RETIRED (NAS era, DEC-0118): kept as a record of the method. Its paths and nasctl calls no longer reach a live system.
 """Sample weewxd's kernel scheduler counters across a window (BOOT job 6, DEC-0068).
 
 WHY THIS EXISTS

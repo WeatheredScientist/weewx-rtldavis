@@ -159,7 +159,8 @@ EPISODES_LOG = os.environ.get('EPISODES_LOG', f'{BASE_DIR}/logs/episodes.log')
 # email never got its RECOVERY pair. The mirror is rewritten on every episode
 # mutation and removed at close; startup restores it (episode_load).
 EPISODE_STATE = os.environ.get('EPISODE_STATE', f'{BASE_DIR}/logs/monitor_episode.state')
-# PATH first; Synology's docker is /usr/local/bin/docker, off the default PATH (DEC-0217).
+# PATH first; the last-resort /usr/local/bin/docker is where some hosts (Synology DSM) keep it,
+# off the default PATH (DEC-0217).
 DOCKER_BIN = os.environ.get('DOCKER_BIN') or shutil.which('docker') or '/usr/local/bin/docker'
 
 # Env names whose VALUES must never reach an email or a log (DEC-0062). The
@@ -627,8 +628,8 @@ WD = {
 def build_recreate_cmd(container=None):
     """Build the container-recreate command from the LIVE container's config.
 
-    Deliberately derived from `docker inspect` and never from the NAS
-    docker-compose.yml, which is stale and decorative (CONSTANTS.md). Returns
+    Deliberately derived from `docker inspect` and never from a docker-compose.yml,
+    which can be stale and decorative (CONSTANTS.md). Returns
     None if anything is uncertain -- a half-right recreate line is worse than
     none, because `rm` is not reversible.
 
@@ -701,8 +702,8 @@ def send_unrecoverable_alert(reason, detail=''):
                  f"{cmd}\n")
     else:
         body += ("Could not build the recreate command (`docker inspect` failed).\n"
-                 "Derive it by hand from the live container -- do NOT use the NAS\n"
-                 "docker-compose.yml, it is stale and decorative.\n")
+                 "Derive it by hand from the live container -- do NOT use a\n"
+                 "docker-compose.yml, it can be stale and decorative.\n")
     log(f"ESCALATION: {reason} (after {WD['tries']} ineffective resets)")
     send_email(f"{STATION_NAME}: RTL-SDR UNRECOVERABLE - manual intervention needed", body)
 
@@ -1432,7 +1433,7 @@ def main():
     log(f"Remedy armed: {remedy_action()}")
     if 'REMEDY_MODE' not in os.environ:
         log("REMEDY_MODE is not set, so it is none. Before DEC-0217 the default was "
-            "usb_reset; set REMEDY_MODE=usb_reset to keep the USB reset on Synology")
+            "usb_reset; set REMEDY_MODE=usb_reset to keep that behavior")
     send_email(f"{STATION_NAME}: monitor started", f"Started at {datetime.now()}")
 
     last_offset = get_log_size()

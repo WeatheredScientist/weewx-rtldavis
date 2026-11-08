@@ -21,7 +21,8 @@ Run:  python3 -m pytest tests/ (pytest only)
 """
 import os
 
-from test_duplicate_frame_counter import _make_driver, run_loop  # noqa: E402  (shared weewx stubs)
+from conftest import make_driver  # noqa: E402
+from test_duplicate_frame_counter import run_loop  # noqa: E402  (shared weewx stubs)
 from rtldavis import dedup_key as _dedup_key  # noqa: E402  -- the REAL function
 
 PATCH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -83,11 +84,11 @@ def test_the_driver_counts_go_repeat_lines(monkeypatch):
 # --- the repeat counter --------------------------------------------------
 
 def test_init_stats_starts_repeat_count_at_zero():
-    assert _make_driver().stats['repeat_count'] == 0
+    assert make_driver().stats['repeat_count'] == 0
 
 
 def test_reset_stats_zeroes_repeat_count_for_next_period():
-    d = _make_driver()
+    d = make_driver()
     d.stats['repeat_count'] = 9
     type(d)._reset_stats(d)
     assert d.stats['repeat_count'] == 0
@@ -101,7 +102,7 @@ def test_both_frame_classes_are_reported_each_period(monkeypatch=None):
     orig = rtldavis.loginf
     rtldavis.loginf = lambda m: logged.append(m)
     try:
-        d = _make_driver()
+        d = make_driver()
         d.stats['dup_count'] = 4
         d.stats['repeat_count'] = 80
         type(d)._update_summaries(d)

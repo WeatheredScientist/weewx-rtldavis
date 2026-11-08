@@ -1,5 +1,11 @@
 # Install experience research (S182, 2026-10-29)
 
+**Status:** **Answered.** The proposals below shipped in v2.2.0 (DEC-0227: first-run seeding, the
+startup line) and v2.3.0 (DEC-0228: `doctor`, the health check, simulator mode); `docs/QUICKSTART.md`
+now describes the shipped path. Read this for the reasoning and the options not taken, not as open
+work. The body is left as written, so the framing ("as it would read once the proposals ship", the
+open questions in §6) is that of 2026-10-29.
+
 Research for P0.8 (public readiness), the basis of DEC-0225: how to make installing this image as easy
 and automatic as it can be for an end user, and what a 2-3 page quick start should look like. No
 code changed. Companion document: `docs/QUICKSTART.md`, written as it would read once the proposals

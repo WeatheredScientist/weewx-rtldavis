@@ -1,7 +1,7 @@
 # Architecture — weewx-rtldavis
 
 **Status:** Source of truth
-**Last updated:** 2026-10-10 (S152) — §1 and §2 corrected: `LoopJsonWriter` runs last in
+**Last updated:** 2026-11-08 (S193) — §5 restart wording for marvin. Before that, 2026-10-10 (S152) — §1 and §2 corrected: `LoopJsonWriter` runs last in
 `process_services` (eaglehunt-ops#395). Before that, 2026-09-19 (S139) — re-verified against live marvin state after sitting untouched
 since S17; the deploy-layers table below is now a pointer to `CONSTANTS.md` rather than a second
 copy, per STANDARD rule 5 (a second copy is a defect — this one drifted to a stale NAS path across
@@ -116,7 +116,7 @@ prints as `<REDACTED>` (#443).
 
 | Change | Requires |
 |--------|----------|
-| gain / ppm / fc / a mounted `.py` / weewx.conf | container restart (`docker kill` + `docker start`) — no rebuild |
+| gain / ppm / fc / a mounted `.py` / weewx.conf | container restart (`marvinctl restart weewx.service` on marvin; elsewhere `docker kill` + `docker start`, never `docker stop`) — no rebuild |
 | a baked `.py` / `entrypoint.sh` / Dockerfile / the Go binary | **image rebuild** + retag + redeploy |
 
 ## 6. Image/build provenance

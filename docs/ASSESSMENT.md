@@ -1,6 +1,10 @@
 # Assessment — Cross-Project Governance Alignment (S23)
 
-**Status:** Strategic anchor (cross-repo governance audit + alignment model + roadmap)
+**Status:** **Historical snapshot (2026-07-05, S23); not kept current.** The tables and hard truths
+below describe the repos as they stood then (a `STATUS.md`-era layout, the handoff in Claude-private
+memory). The handoff now lives in `BOOT.md`, `STATUS.md` is retired, and `LICENSE` exists. Read it for
+the alignment reasoning, not for current state.
+**Original status line:** Strategic anchor (cross-repo governance audit + alignment model + roadmap)
 **Last updated:** 2026-07-05 (S23, Claude Opus 4.8)
 **Scope:** the three-repo Eagle Hunt family — `weewx-rtldavis` (this), `eaglehunt-weather-dashboard`,
 `hyperlocal-forecast`. This repo is the **pilot** for a shared governance standard (see §2, §5).

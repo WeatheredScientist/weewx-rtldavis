@@ -24,9 +24,6 @@ from rtldavis import RtldavisDriver  # noqa: E402
 from conftest import make_driver  # noqa: E402
 
 
-_make_driver = make_driver
-
-
 def _run_period(d, curr_cnt0, period_s=60):
     """Simulate one archive period that received curr_cnt0 messages since
     startup, spanning period_s seconds, and close it via _update_summaries.
@@ -48,7 +45,7 @@ def _run_period(d, curr_cnt0, period_s=60):
 
 
 def test_pct_good_all_is_computed_after_a_valid_period():
-    d = _make_driver()
+    d = make_driver()
     # Period 1: first data since startup -> establishes the baseline count.
     _run_period(d, curr_cnt0=20)
     RtldavisDriver._reset_stats(d)          # normal end-of-period reset
@@ -60,7 +57,7 @@ def test_pct_good_all_is_computed_after_a_valid_period():
 
 
 def test_new_archive_record_stores_rxCheckPercent():
-    d = _make_driver()
+    d = make_driver()
     _run_period(d, curr_cnt0=20)
     RtldavisDriver._reset_stats(d)
     # Second period arrives as a NEW_ARCHIVE_RECORD event.

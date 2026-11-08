@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S192 → S193)
+## ▶ Resume here (S193 → S194)
 
 ### What's settled (do not re-derive)
 
@@ -33,10 +33,10 @@ records.** `ops/garbage_gap_corr.py` reproduces the correlation from `marvinctl 
 `grep database` extracts. **The crcstats line is lowercase (`crc failures this period`), so `grep CRC`
 is a false zero.** Read-only Flux works through the dashboard's public proxy, no token.
 
-**S192 cruft audit (PR #565): `docs/CODE_REVIEW_S192.md`, 18 items, 15 filed as #550 to #564**
-(3 high, 8 medium, 4 low), each main-thread verified; its "Deliberately kept" list is settled, do
-not re-audit those. Done already: #551 (local `main` reset onto `origin/main`) and the local half of
-#563 (16 merged branches, the `s189-timegate` worktree).
+**S192 cruft audit (PR #565): `docs/CODE_REVIEW_S192.md`, #550 to #564**; its "Deliberately kept"
+list is settled. Done: #551, #563's local half, and **S193's job 0(a)** (#554 to #557, #560 to
+#562, #564; CHANGELOG [S193] says what was left on purpose). The audit was wrong once: the four
+`docs/handoffs/` files are cited by path, so they stay.
 
 Standing facts: images are multi-arch (DEC-0214/0215); versions follow DEC-0222's SemVer rule; the
 loop writer and `influx.py` ship as extensions, prod mounts both; `t-weewx` (996:986) runs under
@@ -47,15 +47,17 @@ only (S185). On marvin, `doctor` exits 13 (the dongle is held by prod); that is 
 
 ### ▶▶ S193 JOB LIST
 
-0. **Audit triage, in this order.** (a) Sonnet, one or two sessions, chores: the doc-staleness
-   cluster #554 to #557, #560 to #562, #564; verify each item's evidence in the report first; move
-   text, never delete it; secret gate on anything rehomed. (b) Opus 5.5, design first:
+0. **Audit triage.** (a) **Done S193** once its PR merges; then close #555, #556, #557, #560,
+   #562, #564 with a comment each. Keep open: #554 (MANIFEST 4,506 chars, still past OPS-DEC-0102's
+   1,094-token carry; fold into #550), #561 (the dead `else` branches at `rtldavis.py` ~:1294/:1320,
+   a baked-file behavior change, design first). (b) Opus 5.5, design first:
    #550 (CONSTANTS diet, a DEC-0063 addendum row), #552 (a Go test job in CI), #553 (campaign
    apparatus: truthful headers now, retirement needs a DEC under DEC-0014). (c) **Owner decision
    before anything:** #558 (NAS-LEASE no-op in the public `influx` extension and the mounted prod
    file; a DEC and an `influx-v*` release). (d) Owner-authorized pushes: #563's 30 merged `origin/`
    branches and the `backfill-v2.0.20` tag.
-1. **Read the gate's results since 11-08 10:52 ET:** any `Go time gate dropped a frame` line (keep its
+1. **Read the gate's results since 11-08 12:01 ET** (clear 10:52 to 12:01; an uploader-wide
+   failure 11:54 to 11:56 ET was an internet blip, recovered): any `Go time gate dropped a frame` line (keep its
    bytes and offset; expect under one a day; `marvinctl grep` takes one token, so grep `gate`) and any
    gap with no such line. Around 2026-12-04, re-run `ops/garbage_gap_corr.py` over the 30 days after
    the deploy: expect no garbage-then-gap events. #536 stays open until then.
@@ -88,7 +90,7 @@ only (S185). On marvin, `doctor` exits 13 (the dongle is held by prod); that is 
    **The V4 needs librtlsdr newer than Debian bookworm's 0.6.0, so build the test container on
    trixie**; check which base our image uses. Any decoder swap needs a DEC (DEC-0014).
 
-## Current state (S192)
+## Current state (S193)
 
 | Thing | State |
 |---|---|
@@ -97,7 +99,7 @@ only (S185). On marvin, `doctor` exits 13 (the dongle is held by prod); that is 
 | Reception | 99.9% mean at USB port `5-1` (archive metric); 240 to 260 CRC failures a minute; 0 archive gaps 11-05 00:00 to 11-08 10:52 ET |
 | `main`/`dev` | `main` = the v2.4.0 promotion (`c376037`, PR #545, `prod-baseline-20261104`); `dev` = main plus doc-only records: the Hub state, S192's ROADMAP reconciliation and audit report |
 | Docker Hub | `:v2.4.0` is the multi-arch index `2b146586…` (amd64 `82220200…` = prod, arm64 `e986aae1…`), joined 2026-11-06 01:48 ET. `:latest` = `:v2.4.0` since 2026-11-06 01:52 ET, moved by the owner |
-| Trackers | repo: #550 to #564 (S192 cruft audit; #551 done locally, #563 half done), #536 (v2.4.0 in prod, open until the 30-day re-run), #475 parked, #380 info, #514 (December A/B) · ops: #440 (second dongle, December), #110 (gated, Jan-Feb), #344 · upstream open: lheijst/rtldavis#2 comment, weewx-influx2#1 (reply 10-29), matthewwall/weewx-wcloud#6 (license request) |
+| Trackers | repo: #550 to #564 (S192 cruft audit; #551 done, #563 half done, S193 did 0(a): six to close on merge, #554 and #561 stay), #536 (v2.4.0 in prod, open until the 30-day re-run), #475 parked, #380 info, #514 (December A/B) · ops: #440 (second dongle, December), #110 (gated, Jan-Feb), #344 · upstream open: lheijst/rtldavis#2 comment, weewx-influx2#1 (reply 10-29), matthewwall/weewx-wcloud#6 (license request) |
 
 ## Blockers
 
@@ -107,23 +109,19 @@ it**, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email watch. N
 
 ## Model tier
 
-S192 ran on Fable 5.1 by the owner's choice, coordinating two children: S192a the audit (Fable) and
-S192b the reconciliation and gate read (Sonnet). The desktop picker persists: switch it back to
-Sonnet by hand. S193: Sonnet for job 0(a) and the watches; Opus 5.5 for job 0(b).
+S193 ran Sonnet 5.5 for three Sonnet children, then the owner switched to Opus 5.5 (a bare `/model`,
+which persists) as the review gate. Switch the picker back to Sonnet by hand. S194: Opus 5.5 for job
+0(b), design first; Sonnet for the watches.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
 **Read it when:** trusting any tool's zero/empty/green (§1) · any PR/merge or handoff write (§2) ·
 any NAS, marvin or campaign task (§3) · judging a component live, dead, or shipped (§4).
-S180 adds to §2: this repo requires PR branches current with `dev`, so after one merge every other
-open PR needs `gh pr update-branch` and a CI rerun before its own merge — sequence them. S185 adds:
-two children that append to the same file conflict anyway; resolve by keeping both blocks. S192
-adds: the app reuses a stale `.claude/worktrees/` directory for a new child; `git worktree list`
-before pruning one.
+§2 holds the PR-sequencing, append-conflict and stale-worktree traps (S180, S185, S192).
 
 ## Files needed at session start
 
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-11-08 (S192: coordinator; ROADMAP reconciled, cruft audit filed as #550 to #564, gate clean, local git hygiene)._
+_Last updated: 2026-11-08 (S193: audit chores 0(a) by three children, Opus review gate, gate clean)._

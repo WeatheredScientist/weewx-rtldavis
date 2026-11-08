@@ -134,7 +134,7 @@ not this repo's.
   it relays that value as-is. Unlike `rain`/`rainRate`, **no `_qc` flag marks this** (§2's mechanism
   covers only those two fields today), so a consumer cannot tell from the packet alone that
   `barometer_inHg`'s correction happened entirely upstream, unlike every RF-derived field beside it.
-- **`barometer_fetch_epoch` — the relay's own freshness (S82b, #172; lands in prod with v2.0.14).**
+- **`barometer_fetch_epoch` — the relay's own freshness (S82b, #172; shipped in v2.0.14).**
   The Unix epoch of the last WeatherLink fetch that actually *succeeded* (a failed or empty poll
   does not advance it). It bypasses the TTL machinery on purpose — its job is to *reveal*
   staleness, so it is published verbatim however old it is, and omitted only when no fetch has

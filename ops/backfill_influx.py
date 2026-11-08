@@ -6,7 +6,7 @@ Reads WeeWX SQLite archive and writes missing records to InfluxDB 2.x
 via direct HTTP line protocol POST.
 
 Usage:
-    python3 backfill_influx.py --token YOUR_TOKEN [--start 2026-05-19] [--end 2026-06-19T15:28:00] [--dry-run]
+    INFLUX_TOKEN=... python3 backfill_influx.py [--start 2026-05-19] [--end 2026-06-19T15:28:00] [--dry-run]
 
 Fields are mapped from WeeWX US units to the suffixed names already in InfluxDB
 (e.g. outTemp -> outTemp_F, windSpeed -> windSpeed_mph, etc.)

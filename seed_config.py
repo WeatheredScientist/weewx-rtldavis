@@ -18,9 +18,6 @@ import re
 import shutil
 import sys
 
-ENV_VARS = ('WEEWX_DRIVER', 'WEEWX_LOCATION', 'WEEWX_LATITUDE', 'WEEWX_LONGITUDE', 'WEEWX_ALTITUDE',
-            'RTLDAVIS_BAND', 'RTLDAVIS_ISS_CHANNEL', 'RTLDAVIS_RAIN_BUCKET')
-
 _ALTITUDE = re.compile(r'^\s*(-?\d+(?:\.\d+)?)\s*,\s*(foot|meter)\s*$')
 
 
