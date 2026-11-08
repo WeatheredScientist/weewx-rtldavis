@@ -72,8 +72,9 @@ only (S185). On marvin, `doctor` exits 13 (the dongle is held by prod); that is 
    `.claude/worktrees/s180c-audit39-uploader-tests-0d3322` leftover in this checkout (detached, prune
    it), the 10-27 00:00 to 09:17 period at double the CRC-failure rate (ended with the loopjson
    restart; noted, not chased), `rtldavis.py` line 43's stale `0.20+ws.7` in the header notice,
-   weewx-monitor still running the 10-22 process while the on-disk file carries S179's refactor
-   (restart it deliberately, CONSTANTS deploy layers).
+   `WEEWX_CONTAINER` unset for the monitor since S159's default changed (it feeds only the
+   escalation email's recreate command, which `t-weewx` likely cannot build anyway; a one-line
+   unit edit in heartofgold if that email ever matters).
 7. **Second dongle, early December (reminder set for Sat 2026-12-05 09:00 ET):** the #514 A/B of
    hilman2's Python port (weewx-packages 0.22.0, which credits two changes from this fork) beside
    our Go decoder, and a v3-vs-V4 A/B. hilman2 answered: option names stable through 0.22.x, Pi 4
@@ -89,7 +90,7 @@ only (S185). On marvin, `doctor` exits 13 (the dongle is held by prod); that is 
 | Thing | State |
 |---|---|
 | Prod | marvin, `v2.4.0` as `:marvin-live` since 2026-11-04 18:36:38 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
-| InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor process from 10-22 (sha `5cd09917…`; on disk `2f8a1eda…` = `dev`), `REMEDY_MODE=none` |
+| InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `2f8a1eda…` = `dev`, restarted 2026-11-07 13:43:18 ET, `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB port `5-1` (archive metric); about 255 CRC failures a minute; 0 archive gaps 11-05 00:00 to 11-07 12:01 ET |
 | `main`/`dev` | `main` = the v2.4.0 promotion (`c376037`, PR #545, `prod-baseline-20261104`); `dev` = main plus this doc-only record of the Hub state |
 | Docker Hub | `:v2.4.0` is the multi-arch index `2b146586…` (amd64 `82220200…` = prod, arm64 `e986aae1…`), joined 2026-11-06 01:48 ET. `:latest` = `:v2.4.0` since 2026-11-06 01:52 ET, moved by the owner |
@@ -120,4 +121,4 @@ two children that append to the same file conflict anyway; resolve by keeping bo
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-11-07 (S191: watch session, second live drop, no gaps, no prod change)._
+_Last updated: 2026-11-07 (S191: watch session, second live drop, no gaps; after its close, weewx-monitor restarted)._
