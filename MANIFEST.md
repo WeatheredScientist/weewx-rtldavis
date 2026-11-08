@@ -14,7 +14,7 @@ A file in no class gets its own row. Check size with `boot-cap-check.sh`.
 | `BACKLOG.md` — ideas, RF findings, standing watches | RF work, horizon-scale work, or whether a watch fired |
 | `docs/CONVENTIONS.md` — git workflow, secrets, exact gates | before any gate or commit |
 | `docs/GOTCHAS.md` (§-indexed) | before trusting a tool's zero/green (§1); a PR/merge or handoff write (§2); a NAS/marvin/campaign task (§3); judging live or shipped (§4). New traps land here, not in `BOOT.md` |
-| `docs/PRINCIPLES.md`, `ASSESSMENT.md`, `CODE_REVIEW_S145.md` | weighing a decision; picking the next cleanup |
+| `docs/PRINCIPLES.md`, `ASSESSMENT.md`, `CODE_REVIEW_S145.md`, `CODE_REVIEW_S192.md` (cruft audit) | weighing a decision; picking the next cleanup |
 | `docs/UPSTREAM-THREADS.md` | replying upstream, or checking whether a thread moved |
 | `docs/INSTALL-RESEARCH.md` — install-path research and the ranked v2.2.0 proposal (DEC-0225) | building any P0.8 phase 6 item; changing what a new user types |
 
