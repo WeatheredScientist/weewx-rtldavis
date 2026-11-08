@@ -3,7 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-11-04 (S190 — targeted update per DEC-0057, not the full reconciliation; DEC-0229
+**Last updated:** 2026-11-08 (S192 — **scheduled full reconciliation, on time**: six lines moved,
+detail in the guardrail section. Next check: S202.)
+Prior: 2026-11-04 (S190 — targeted update per DEC-0057, not the full reconciliation; DEC-0229
 deployed as v2.4.0, P1.9 step 4 awaits its 30-day re-run. Tripwire still S192.)
 Prior: 2026-11-03 (S189 — targeted: DEC-0229 accepted and built.)
 Prior: 2026-11-03 (S188 — targeted update per DEC-0057, not a full pass: P1.9 reopened
@@ -159,11 +161,26 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S192** (~10 sessions out). If the session counter is
-  at or past S192 and this line still says S192, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146, S156, S172 and S183 did (diff every
+- **Next scheduled reconciliation check: by S202** (~10 sessions out). If the session counter is
+  at or past S202 and this line still says S202, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146, S156, S172, S183 and S192 did (diff every
   open/pending item here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S183, 2026-10-30** — **one session late** (due S182; S181 and S182
+- Last full reconciliation: **S192, 2026-11-08** — **on time** (due S192; S184 to S191 each updated
+  only their own lines, as the banner shows). **Six lines were behind and are fixed.** P0.8 phase
+  2 still said prod runs v2.3.0 and `:latest` = `:v2.3.0` (v2.4.0 has been in prod since 2026-11-04
+  18:36:38 ET and `:latest` = `:v2.4.0` since 2026-11-06 01:52 ET). P0.8 phase 4 pointed at
+  `BOOT.md` job 2 for the upstream watch, which is now job 1. P1.9's step-4 bullet still said
+  "Built S189, not released" (in prod S190). The #536 item stopped at the first live drop; the
+  second (11-07 09:04:56 ET, +1036.2 ms, no gap) and the clear window since are now on it. The P0
+  freeze row's "Fix is P1.9 step 4" now says it is in prod. P3's INTERFACES line lacked S187's
+  InfluxDB-surface paragraph on `windGust10_mph` (`git log -- docs/INTERFACES.md`, `fdac04b`).
+  Classed, no line: DEC-0227 and DEC-0228 (already phase 6's), DEC-0229 (already P1.9's); no DEC
+  after DEC-0229 exists. PRs #535 (ERR-0012 in `DATA_ERRATA.md`), #540 (`UPSTREAM-THREADS.md`),
+  #546 (the Hub record) and #548 (the monitor restart) are docs or tooling, no line. Not added:
+  #475 (parked), #514 and the second-dongle A/B (`BOOT.md` job 7, `BACKLOG.md`, ops#440; owner
+  decision, any decoder swap needs a DEC). Verified current: the P0 freeze and DB-lock rows
+  (`BOOT.md`'s blockers unchanged since S145), P0.7, P1's arc, P1.8, P2's header, phases 1, 3, 5, 6.
+- Prior full reconciliation: **S183, 2026-10-30** — **one session late** (due S182; S181 and S182
   each updated only their own lines). **Seven lines were behind and are fixed.** P0.7's header
   still said 29 items open: every audit item is now closed (`docs/CODE_REVIEW_S145.md`'s status
   line says "Nothing open"; 16 was fixed by DEC-0213's README rewrite, so phase 5's "may be moot,
@@ -436,8 +453,9 @@ items inside a phase don't depend on each other.
       18:16 ET, multi-arch `:v2.0.21` on Hub, tag and GitHub release on `a7bf7ec`, `main` =
       `prod-baseline-20261026`. Since then v2.1.0 (S176, DEC-0222's first SemVer minor: the burst
       gate and `windGust10`), v2.2.0 (S184, which also carried S180's baked `rest_site.py` and
-      driver QC changes, once planned as a v2.1.1) and v2.3.0 (S185) shipped; prod runs v2.3.0, and
-      `:latest` = `:v2.3.0` since 2026-11-01 12:25 ET. Left: the first arm64 run against a live
+      driver QC changes, once planned as a v2.1.1), v2.3.0 (S185) and v2.4.0 (S190, DEC-0229's time
+      gate) shipped; prod runs v2.4.0 since 2026-11-04 18:36:38 ET, and `:latest` = `:v2.4.0` since
+      2026-11-06 01:52 ET. **Corrected S192:** this line said prod ran v2.3.0 and `:latest` = `:v2.3.0`. Left: the first arm64 run against a live
       radio (README says smoke-tested until then). History: merged
       S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
@@ -459,7 +477,7 @@ items inside a phase don't depend on each other.
       comment on lheijst/rtldavis#2. S181, same day: the david-lutz/weewx-influx2#1 reply — CodeRabbit's
       two valid points (`influx.py:501` logged per record; `verify_ssl` undocumented) fixed in
       commit `0c5d394` on the fork branch, then replied. Nothing left but watching for answers,
-      `BOOT.md` job 2.)*
+      `BOOT.md` job 1 (**corrected S192:** this said job 2, since renumbered).)*
       `weewx-packages/weewx-rtldavis` is the live continuation (created 2026-10-21, absorbed
       lheijst#22, #23 and lheijst/rtldavis#7 with credit); the lheijst repos have been quiet since
       2023 and keep only the record.
@@ -582,7 +600,7 @@ and is still there. What the Go side has shown, and where each stands:
   frame from an active ID with no arrival-time check, so a chance CRC pass at a random moment costs
   51 blind hops and a re-init, 2 to 5 min with no station. Measured: 12 of 15 driver-rejected
   garbage frames in 30 days were followed by exactly that loss (40 archive records, #536). Built
-  S189, not released.
+  S189, in prod since S190 (v2.4.0). **Corrected S192:** this said "not released".
 
 Steps, in order:
 
@@ -599,8 +617,9 @@ Steps, in order:
       lheijst/rtldavis#2, pointing at `patch/rtldavis-burstgate.patch`; no PR, the repo is quiet
       since 2023 and the continuation has its own gate)*.
 - [ ] #536 **Time gate.** *(measured and designed S188; DEC-0229 accepted and built S189; in prod
-      since 2026-11-04 18:36:38 ET as v2.4.0, S190; first live drop 11-05 05:06:39 ET, no gap;
-      closes on the 30-day re-run)* Once
+      since 2026-11-04 18:36:38 ET as v2.4.0, S190; two live drops, 11-05 05:06:39 ET (+725.6 ms)
+      and 11-07 09:04:56 ET (+1036.2 ms), neither with a gap; no gate line and no gap from
+      11-07 12:01 to 11-08 10:52 ET, S192; closes on the 30-day re-run)* Once
       synced, drop a CRC-valid frame more than 100 ms off the expected slot before it can re-anchor
       the hop clock, hop, or reach the driver; log it and count it as `offsched=N` in the minute
       line; reset the crcstats slot label on re-init. `patch/rtldavis-timegate.patch` after the
@@ -974,7 +993,8 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       followed within seconds by a 2 to 5 min station loss (40 archive records); 4 more gaps of the
       same shape had no driver line. weewxd was not frozen in any of them: it resumed by itself when
       the decoder re-acquired. DEC-0083's median of 240 s sits inside the 150 to 290 s this predicts.
-      Not explained by it: the 10-22 62 min outage and DEC-0083's long tail. Fix is P1.9 step 4.
+      Not explained by it: the 10-22 62 min outage and DEC-0083's long tail. Fix is P1.9 step 4,
+      in prod since 2026-11-04 (v2.4.0; **updated S192**).
 - [x] ~~**P0 — make the campaign metric freeze-aware**~~ — **CLOSED by DEC-0069 (S66).** Two parts,
       and the larger one was a *resolution* problem, not a freeze problem: `harvest()` read the
       monitor's **5-minute** `RECEPTION:` aggregate, where one frozen minute drags a whole bucket
@@ -1049,7 +1069,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       **S170 (DEC-0220/DEC-0221)** added the opt-in `extra_fields` class table and the
       cadence-aware liveness rule, `max(30, 3 × loop_interval_s)` s (dash DEC-0404). **S174
       (DEC-0224)** added the `windGust10` → `windGust10_mph` row (the ISS's 10-minute gust; not
-      `windGust_mph`, which stays absent on a Davis).
+      `windGust_mph`, which stays absent on a Davis). **S187 (ops#442, no DEC; found behind at
+      S192 by `git log -- docs/INTERFACES.md`)** added the InfluxDB-surface paragraph: a point
+      carries the in-memory archive record, so `windGust10_mph` exists there and in no SQLite column.
       **Corrected S97:** this line
       previously also claimed DEC-0053's station-identity finding was documented — it was not; only
       DEC-0053's cache-bounding finding (Finding 1) had actually made it into the doc. §2 now carries
