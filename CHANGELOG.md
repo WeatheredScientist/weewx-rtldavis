@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S194b] — 2026-11-08 — #550: CONSTANTS.md diet, 36,010 → 9,830 chars (DEC-0231)
+
+- No prod change (Opus 5.5, a child of S194). Each `CONSTANTS.md` row now holds its current value plus one "before it"; the rewritten sections moved verbatim to `CHANGELOG-ARCHIVE.md` [S194b]. Deploy layers, live-config deviations and the rollback chain stay always-load; DEC-0231 accepts a ~2,500-token carry against the 1,000 member cap. #554 (MANIFEST) left open.
+
 ## [S193] — 2026-11-08 — Audit chores, job 0(a): the doc and comment cruft from #554 to #564
 
 - No prod change. Coordinator on Sonnet 5.5, then Opus 5.5 as the review gate (owner's switch); three Sonnet children in their own worktrees, combined on one branch. S193a: #554 (MANIFEST rows collapsed to classes, 4,972 to 4,506 chars, the private-script sentence dropped; the handoffs row made true: S36, S37, S38 and S71 are cited by path from DECISIONS-FULL and CHANGELOG-ARCHIVE, so the audit's "three orphans" was wrong and they stay), #555 (GOTCHAS §3's NAS-only entries moved verbatim to a "NAS era" subsection; the S126 ACL trap is marvin-era and stays), #556 (BACKLOG 935 to 382 lines; resolved and demoted bodies moved verbatim to the end of CHANGELOG-ARCHIVE, one-line conclusions left). S193b: #557 (README writer 1.1.0 and base-system line, CONTRIBUTING's drifted gate copy replaced by a CONVENTIONS pointer, a "Host preparation" section in DEPLOY matching `scripts/host-setup.sh`, two DATA_ERRATA anchors, INTERFACES tense), #560 (status lines on INSTALL-RESEARCH, ASSESSMENT; CHANGES-FROM-UPSTREAM recount, 1422 to 2703 lines; UPSTREAM-THREADS and ARCHITECTURE stamps; MANIFEST rows by the coordinator). S193c: #561 (driver header notice and the missing ws.8 ledger row, comments only in a baked file; `ENV_VARS` removed; Dockerfile comment; `weewx.conf.example` optional `[Rtldavis]` keys and the Ogoxe comment; monitor NAS wording), #562 (ops literals and banners), #564 (alias and `sys.path` boilerplate onto conftest).
