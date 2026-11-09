@@ -10,6 +10,7 @@ under [Pre-S16].
 
 - No prod change. Opus 5.5. #552 (DEC-0230): the audit's premise was wrong, since CI already ran the Go gate tests (24 skips = 4 weewx + 17 campaign + 3 librtlsdr builds), but only because the runner ships go. Now `skip_or_fail` in `tests/test_crcstats_patch.py` fails instead of skipping under `REQUIRE_GO_TESTS=1`; `ci.yml` installs `librtlsdr-dev`, sets the flag and runs `pytest -rs`. Positive control: go hidden plus the flag gives 10 failed. #550 (CONSTANTS diet) runs in child session S194b.
 - Gate read 11-08 12:01 to 18:13 ET: no drop line, 1093 of 1093 records for the day, no job-5 watch line fired. One WOW HTTP 429 at 13:04 ET (its own rate limit).
+- PR #569 (S194b) merged 2026-11-08 20:10 ET; #568 rebased over it and carries this closeout. Rolled S191 to the archive.
 
 ## [S194b] — 2026-11-08 — #550: CONSTANTS.md diet, 36,010 → 9,830 chars (DEC-0231)
 
@@ -26,9 +27,3 @@ under [Pre-S16].
 - No prod change. Fable 5.1 as coordinator by the owner's choice, two children in their own worktrees. PR #549 (S192b, Sonnet): ROADMAP full reconciliation, on time, six lines fixed (P0.8 phases 2 and 4, P1.9 step 4, #536, the P0 freeze row, P3's INTERFACES line), next check S202. PR #565 (S192a, Fable): `docs/CODE_REVIEW_S192.md`, a cruft audit over runtime code and tests, `ops/` and `scripts/`, docs and the tier files, and git; 18 items, 15 filed as #550 to #564 (3 high: CONSTANTS at nine times its cap, local `main` on pre-rewrite history, Go tests run nowhere in CI; 8 medium; 4 low), six enumerator claims dropped after verification, a deliberately-kept list; MANIFEST row added.
 - Gate read 11-07 12:01 to 11-08 10:52 ET: no drop line, 1372 of 1372 records, no job-5 watch line fired. Latest minute 0 off-schedule frames, 242 CRC failures.
 - Local hygiene in the main checkout (#551, #563's local half): `main` reset from the pre-rewrite `8d4fd05` (ahead 328) onto `origin/main` `c376037`; 16 merged local branches deleted; the `s189-timegate` worktree removed; garbage 0. Origin's 30 merged branches and the `backfill-v2.0.20` tag remain, owner-authorized pushes. Rolled S189 to the archive.
-
-## [S191] — 2026-11-07 — Watch session: the gate's second drop, no gaps
-
-- No prod change (Opus 5.5, the picker left raised from S190). Second live drop 11-07 09:04:56 ET, frame `DC5774E5D9795EF5`, +1036.2 ms, no archive gap, recorded on #536. `ops/garbage_gap_corr.py` over 11-05 00:00 to 11-07 12:01 ET: 3,602 records, 0 driver rejections, 0 gaps. All other watches clear; the 9 ERROR lines are uploader failures.
-- Upstream threads unmoved. #514: cdavis289 started a 72-hour Go vs Python run on real hardware, results expected about 11-09; BOOT's job 7 carries it.
-- After S191's close: weewx-monitor restarted 2026-11-07 13:43:18 ET onto the on-disk file (`2f8a1eda…`, S179's refactor; the process had run since 10-22). `Remedy armed: no automatic remedy`, startup email sent, polling resumed. Its windows of about 80% are unchanged by v2.4.0 (79.3% on 11-04, 79.5% on 11-06), so the gate shows no cost in real frames.
