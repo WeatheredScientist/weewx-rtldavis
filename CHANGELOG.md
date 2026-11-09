@@ -6,6 +6,11 @@ under [Pre-S16].
 
 ---
 
+## [S194] — 2026-11-08 — #552: CI fails the Go gate tests instead of skipping them; #550 in a child session
+
+- No prod change. Opus 5.5. #552 (DEC-0230): the audit's premise was wrong, since CI already ran the Go gate tests (24 skips = 4 weewx + 17 campaign + 3 librtlsdr builds), but only because the runner ships go. Now `skip_or_fail` in `tests/test_crcstats_patch.py` fails instead of skipping under `REQUIRE_GO_TESTS=1`; `ci.yml` installs `librtlsdr-dev`, sets the flag and runs `pytest -rs`. Positive control: go hidden plus the flag gives 10 failed. #550 (CONSTANTS diet) runs in child session S194b.
+- Gate read 11-08 12:01 to 18:13 ET: no drop line, 1093 of 1093 records for the day, no job-5 watch line fired. One WOW HTTP 429 at 13:04 ET (its own rate limit).
+
 ## [S194b] — 2026-11-08 — #550: CONSTANTS.md diet, 36,010 → 9,830 chars (DEC-0231)
 
 - No prod change (Opus 5.5, a child of S194). Each `CONSTANTS.md` row now holds its current value plus one "before it"; the rewritten sections moved verbatim to `CHANGELOG-ARCHIVE.md` [S194b]. Deploy layers, live-config deviations and the rollback chain stay always-load; DEC-0231 accepts a ~2,500-token carry against the 1,000 member cap. #554 (MANIFEST) left open.

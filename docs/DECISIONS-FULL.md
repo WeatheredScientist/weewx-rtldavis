@@ -12980,6 +12980,50 @@ period: 1`. No archive record was lost and the driver logged no rejection. In th
 22:01 ET that is the only drop, the only archive gap is the deploy's own, and the driver rejected
 nothing. One drop is a first result, not the 30-day re-run.
 
+## DEC-0230 — CI fails the Go gate tests instead of skipping them (S194)
+
+Date: 2026-11-08 (S194, Opus 5.5). Status: accepted by the owner in chat ("Yes, build it"), built
+S194. Closes #552, item 3 of the S192 cruft audit (`docs/CODE_REVIEW_S192.md`).
+
+### Context
+
+The four Go gates (DEC-0135 dup gate, DEC-0216 CRC counters, DEC-0223 burst gate, DEC-0229 time
+gate) are tested by the seven files in `tests/go/`, which `tests/test_crcstats_patch.py`,
+`test_burstgate_patch.py` and `test_timegate_patch.py` copy into the pinned, patched upstream tree
+and run with `go test`. Their shared helper `_pinned_tree` skips when go or patch is missing or the
+pinned source cannot be fetched; the three whole-program builds skip without librtlsdr headers.
+
+#552 read CI's 24 skips as these tests never running in CI. They do run. CI's skips, counted:
+4 tests that need a real weewx, 17 campaign tests (DEC-0096 stand-down) and the 3 librtlsdr
+builds, 24 in all, matching CI run 42507297563 exactly; a missing go would add the 10 dynamic tests
+and give 34 or more. The real gap is narrower: they run only because the GitHub runner image ships
+go and patch. If a future image drops go, or the source fetch fails, all four gates' tests skip and
+the check stays green, the false-zero shape `docs/GOTCHAS.md` §1 collects.
+
+### Decision
+
+- `skip_or_fail(reason)` in `tests/test_crcstats_patch.py`, used at all five skip sites: it skips
+  locally and fails when `REQUIRE_GO_TESTS=1`.
+- `ci.yml`'s tests job installs `librtlsdr-dev`, prints `go version`, sets `REQUIRE_GO_TESTS=1`,
+  and runs `pytest -q -rs`, so every remaining skip prints with its reason.
+
+Expected CI result: 21 skips (4 + 17), all named; the 3 whole-program builds now run.
+
+### Alternatives
+
+- A Dockerfile test stage running `go test` in the patched tree: rejected. The image workflow
+  already compiles the patched decoder on every PR for both arches, the Python harness carries the
+  static audits a Go-only stage would lose, and a test stage would slow every prod build on marvin.
+- `actions/setup-go` with a pinned version: not needed for the failure this guards (absence), and
+  the image builds with Debian's `golang` package, so a pin would test a different compiler anyway.
+
+### Verification (S194, local)
+
+Positive control: with go hidden from `PATH` and `REQUIRE_GO_TESTS=1`, the three files give
+10 failed, 10 passed, each failure naming its cause ("go/patch not installed", "librtlsdr
+development files not installed"). Without the flag: 10 passed, 10 skipped, as before. With go
+present and the flag: 20 passed, 0 skipped.
+
 ## DEC-0231 — `CONSTANTS.md` holds current values; per-release history leaves the tier file (S194b)
 
 **Status:** Accepted · **Date:** 2026-11-08 (S194b, Opus 5.5) · **Amends:** DEC-0063 (what the
