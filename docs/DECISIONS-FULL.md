@@ -12979,3 +12979,50 @@ First live drop: 11-05 05:06:39 ET, `2C74540E5A7A3009`, +725.6 ms, `off-schedule
 period: 1`. No archive record was lost and the driver logged no rejection. In the 27 hours to 11-05
 22:01 ET that is the only drop, the only archive gap is the deploy's own, and the driver rejected
 nothing. One drop is a first result, not the 30-day re-run.
+
+## DEC-0231 — `CONSTANTS.md` holds current values; per-release history leaves the tier file (S194b)
+
+**Status:** Accepted · **Date:** 2026-11-08 (S194b, Opus 5.5) · **Amends:** DEC-0063 (what the
+`CONSTANTS.md` tier file holds) · **Follows:** DEC-0072, DEC-0105 · **Closes:** #550 (S192 cruft
+audit, `docs/CODE_REVIEW_S192.md` item 1)
+
+**Context.** `CONSTANTS.md` is loaded at every session start. The hub's `boot-cap-check.sh` read it
+at 36,010 chars (~9,000 tok). OPS-DEC-0237 gives member repos STANDARD §1's ~1,000-token cap, and
+the file failed even the hub's own 2,500. Nothing here caught it: `tier-sweep.sh` measures only
+`BOOT.md` and `MANIFEST.md`, and no weewx DEC accepted a carry for this file. By section, Release /
+rollback held 15,578 chars, Deploy layers 11,463 and Infra 4,751. Two rows, "Prod image" and "Docker
+Hub", held about 9.3 KB between them: each release since v2.0.15 had prepended its digests, build
+host, cutover and first-record times to the row, and the DEC bodies and `CHANGELOG.md` already held
+that history.
+
+**Decision.**
+
+1. A row holds its current value and at most one "before it". A release closeout replaces the value;
+   it does not prepend to it. This is the structural fix: like `STATUS.md` before DEC-0063, the file
+   grew by ritual, a few hundred bytes per release.
+2. Older text lives in the DEC bodies and `CHANGELOG-ARCHIVE.md`. The sections S194b rewrote (the
+   header, Infra, Deploy layers with the live-config deviations, Release / rollback, Hardware / site)
+   moved there verbatim, under `[S194b]`, headings demoted two levels and nothing else changed. A
+   script checked that every non-blank line of the old file is in the new file or in that section.
+3. Kept always-load on purpose: the deploy-layer table, the live-config deviations and the rollback
+   chain. Each is a fact whose absence turns a change into a silent no-op in prod (DEC-0031,
+   DEC-0046, DEC-0070), and an on-demand load would rely on a session recognizing in advance that it
+   is doing a recreate or a config edit. Rows about retired NAS-era setup (SSH/SCP, the Docker
+   binary, the compat path, missing tools, the NAS row itself) moved out whole. Every reference
+   another file makes into `CONSTANTS.md` still resolves: the hardware timeline (`ARCHITECTURE.md`),
+   the Release mechanics row, the Docker Hub row's index-digest rule (`join_multiarch.sh`) and the
+   `BUILD-EXIT` marker (`ops/nas_build.py`).
+4. The file stays self-sufficient for a public reader (DEC-0063's addendum): nothing in it points at
+   the private ops repo as a prerequisite.
+
+**Result.** 36,010 → 9,830 chars (~2,460 tok), under the hub's 2,500.
+
+**Carry accepted.** ~2,500 tok against the 1,000-token member cap. Reaching 1,000 would mean moving
+the deploy layers or the deviations out of the always-load tier, and those are what the file is for.
+The owner chose this over splitting the deviations table into its own on-demand doc, which would
+have landed near 8,500 chars (~2,100 tok), still twice the member cap, at the price of a new file
+and a `MANIFEST.md` row while MANIFEST is itself past its carry (#554, left open). If the file
+creeps back over 10,000 chars, that split is the next step; dropping the table is not.
+
+**Not done.** `MANIFEST.md`'s own diet (#554) and a tier-sweep check that measures `CONSTANTS.md`
+(a hub tool, not this repo's).
