@@ -20,11 +20,9 @@ import shutil
 import subprocess
 import tempfile
 
-import pytest
-
 from rtldavis import parse_crc_stats
 from test_burstgate_patch import PATCH as BURSTGATE
-from test_crcstats_patch import _pinned_tree, DUPGATE, PATCH as CRCSTATS
+from test_crcstats_patch import _pinned_tree, skip_or_fail, DUPGATE, PATCH as CRCSTATS
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PATCH = os.path.join(ROOT, "patch", "rtldavis-timegate.patch")
@@ -172,7 +170,7 @@ def test_patch_applies_after_the_others_and_gate_tests_pass():
 def test_whole_program_builds_where_librtlsdr_is_available():
     if shutil.which("pkg-config") is None or subprocess.run(
             ["pkg-config", "--exists", "librtlsdr"]).returncode != 0:
-        pytest.skip("librtlsdr development files not installed (the Docker build covers this)")
+        skip_or_fail("librtlsdr development files not installed (the Docker build covers this)")
     with tempfile.TemporaryDirectory() as tmp:
         d = _patched(tmp)
         r = subprocess.run(["go", "build", "-mod=vendor", "-o", os.devnull, "."], cwd=d,

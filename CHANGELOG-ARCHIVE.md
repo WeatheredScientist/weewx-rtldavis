@@ -157,6 +157,12 @@ shows.
 
 Station coordinates: gitignored local-infra doc. Attribution: **WeatheredScientist**.
 
+## [S191] — 2026-11-07 — Watch session: the gate's second drop, no gaps
+
+- No prod change (Opus 5.5, the picker left raised from S190). Second live drop 11-07 09:04:56 ET, frame `DC5774E5D9795EF5`, +1036.2 ms, no archive gap, recorded on #536. `ops/garbage_gap_corr.py` over 11-05 00:00 to 11-07 12:01 ET: 3,602 records, 0 driver rejections, 0 gaps. All other watches clear; the 9 ERROR lines are uploader failures.
+- Upstream threads unmoved. #514: cdavis289 started a 72-hour Go vs Python run on real hardware, results expected about 11-09; BOOT's job 7 carries it.
+- After S191's close: weewx-monitor restarted 2026-11-07 13:43:18 ET onto the on-disk file (`2f8a1eda…`, S179's refactor; the process had run since 10-22). `Remedy armed: no automatic remedy`, startup email sent, polling resumed. Its windows of about 80% are unchanged by v2.4.0 (79.3% on 11-04, 79.5% on 11-06), so the gate shows no cost in real frames.
+
 ## [S190] — 2026-11-04 — v2.4.0: the arrival-time gate in prod (DEC-0229)
 
 - PR #542 merged 11-03; PR #543: image tag v2.4.0 everywhere, banner `0.20+ws.10` (Opus 5.5). Built on marvin from `dev`@`694938f` (image `82220200…`, baked driver `7b6fb60a…` = `dev`'s), restarted 2026-11-04 18:36:38 ET, first record 18:39:00, 2 records lost. Rollback `:v2.3.0-prod-pre-v2.4.0`; `-tolerance 0` is the off switch.

@@ -30,6 +30,18 @@ SRC_URL = ("https://github.com/weewx-contrib/weewx-rtldavis/raw/"
            "bfa9e3d9e1a9fc198fcf81124b709d63d8c30a1f/src.tgz")
 SRC_SHA = "7c1a7de1923d2c96844adfba51ec0497f5e8f0a629cc3a6ba64a86d62f26e368"
 
+# DEC-0230 (#552): CI sets REQUIRE_GO_TESTS=1, so a missing Go toolchain, a failed
+# source fetch or missing librtlsdr headers fail the run there instead of skipping
+# it. Locally these stay skips.
+REQUIRE_GO = os.environ.get("REQUIRE_GO_TESTS") == "1"
+
+
+def skip_or_fail(reason):
+    """Skip locally; fail where REQUIRE_GO_TESTS=1 (CI), so the Go gates can't go quiet."""
+    if REQUIRE_GO:
+        pytest.fail("REQUIRE_GO_TESTS=1 but " + reason)
+    pytest.skip(reason)
+
 REMOVED_OK = ["            for _, msg := range p.Parse(p.Demodulate(block)) {"]
 # Lines the patch may ADD to existing files (comments and blanks are always fine).
 ADDED_OK = [
@@ -99,13 +111,13 @@ def test_accept_and_drop_lines_of_the_data_path_are_untouched():
 
 def _pinned_tree(tmp):
     if shutil.which("go") is None or shutil.which("patch") is None:
-        pytest.skip("go/patch not installed")
+        skip_or_fail("go/patch not installed")
     cache = os.path.join(tempfile.gettempdir(), "rtldavis-src-%s.tgz" % SRC_SHA[:12])
     if not os.path.exists(cache):
         try:
             data = urllib.request.urlopen(SRC_URL, timeout=60).read()
         except Exception as exc:  # offline
-            pytest.skip("cannot fetch pinned source: %s" % exc)
+            skip_or_fail("cannot fetch pinned source: %s" % exc)
         assert hashlib.sha256(data).hexdigest() == SRC_SHA, "pinned source changed"
         open(cache, "wb").write(data)
     subprocess.run(["tar", "zxf", cache, "-C", tmp], check=True)
@@ -135,7 +147,7 @@ def test_patch_applies_after_dupgate_and_tracker_tests_pass():
 def test_whole_program_still_builds_where_librtlsdr_is_available():
     if shutil.which("pkg-config") is None or subprocess.run(
             ["pkg-config", "--exists", "librtlsdr"]).returncode != 0:
-        pytest.skip("librtlsdr development files not installed (the Docker build covers this)")
+        skip_or_fail("librtlsdr development files not installed (the Docker build covers this)")
     with tempfile.TemporaryDirectory() as tmp:
         d = _patched(tmp)
         r = subprocess.run(["go", "build", "-mod=vendor", "-o", os.devnull, "."], cwd=d,

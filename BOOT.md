@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S193 → S194)
+## ▶ Resume here (S194 → S195)
 
 ### What's settled (do not re-derive)
 
@@ -28,15 +28,18 @@ over 100 ms off its transmitter's schedule. On-schedule bit-error frames (ERR-00
 reach. **At `debug_rtld = 1` neither `tolerance=` nor `crc_stats` reaches the log, and `off-schedule
 frames this period: 0` proves the driver only;** a `Go time gate dropped a frame` line is the proof
 of a drop. **Two so far, neither with an archive gap: 11-05 05:06:39 ET, +725.6 ms, and 11-07
-09:04:56 ET, +1036.2 ms (#536). Clear from 11-07 12:01 to 11-08 10:52 ET: no drop, 1372 of 1372
-records.** `ops/garbage_gap_corr.py` reproduces the correlation from `marvinctl grep ERROR` and
+09:04:56 ET, +1036.2 ms (#536). Clear from 11-07 12:01 to 11-08 18:13 ET: no drop, no gap (1093
+of 1093 records on 11-08).** `ops/garbage_gap_corr.py` reproduces the correlation from `marvinctl grep ERROR` and
 `grep database` extracts. **The crcstats line is lowercase (`crc failures this period`), so `grep CRC`
 is a false zero.** Read-only Flux works through the dashboard's public proxy, no token.
 
 **S192 cruft audit (PR #565): `docs/CODE_REVIEW_S192.md`, #550 to #564**; its "Deliberately kept"
-list is settled. Done: #551, #563's local half, and **S193's job 0(a)** (#554 to #557, #560 to
-#562, #564; CHANGELOG [S193] says what was left on purpose). The audit was wrong once: the four
-`docs/handoffs/` files are cited by path, so they stay.
+list is settled. Done: #551, #563's local half, S193's job 0(a) (six issues closed), and S194's
+**#550** (PR #569, DEC-0231: `CONSTANTS.md` 36,010 to ~9,900 chars, history moved verbatim to
+`CHANGELOG-ARCHIVE.md` [S194b]) and **#552** (PR #568, DEC-0230). The audit was wrong twice: the
+`docs/handoffs/` files are cited by path, and #552's "Go tests never run in CI" (they did; the gap
+was that they could skip silently). **CI's tests job now fails, not skips, the Go gate tests
+(`REQUIRE_GO_TESTS=1`) and prints skips with `-rs`: expect 21, all named (4 real-weewx, 17 campaign).**
 
 Standing facts: images are multi-arch (DEC-0214/0215); versions follow DEC-0222's SemVer rule; the
 loop writer and `influx.py` ship as extensions, prod mounts both; `t-weewx` (996:986) runs under
@@ -45,19 +48,19 @@ rotated daily to `weewx.log.YYYY-MM-DD`, 30 days kept. The bundled Go decoder is
 `lheijst/rtldavis` master (S178). Tests are pytest-only (#502). `marvinctl inspect` takes containers
 only (S185). On marvin, `doctor` exits 13 (the dongle is held by prod); that is the correct verdict.
 
-### ▶▶ S193 JOB LIST
+### ▶▶ S195 JOB LIST
 
-0. **Audit triage.** (a) **Done S193** once its PR merges; then close #555, #556, #557, #560,
-   #562, #564 with a comment each. Keep open: #554 (MANIFEST 4,506 chars, still past OPS-DEC-0102's
-   1,094-token carry; fold into #550), #561 (the dead `else` branches at `rtldavis.py` ~:1294/:1320,
-   a baked-file behavior change, design first). (b) Opus 5.5, design first:
-   #550 (CONSTANTS diet, a DEC-0063 addendum row), #552 (a Go test job in CI), #553 (campaign
-   apparatus: truthful headers now, retirement needs a DEC under DEC-0014). (c) **Owner decision
-   before anything:** #558 (NAS-LEASE no-op in the public `influx` extension and the mounted prod
-   file; a DEC and an `influx-v*` release). (d) Owner-authorized pushes: #563's 30 merged `origin/`
+0. **Audit triage, what is left.** (a) If still open, close #550 and #552 with a comment each (both
+   merged to `dev` S194, so GitHub did not auto-close them; the owner names closures). (b) Cheap:
+   #554 (MANIFEST 4,506 chars, still past OPS-DEC-0102's 1,094-token carry; the CONSTANTS half
+   is done), #559 (`ops/wxcheck.*` headers). Design first: #561 (the dead `else` branches at
+   `rtldavis.py` ~:1294/:1320, a baked-file behavior change), #553 (campaign apparatus: truthful
+   headers now, retirement needs a DEC under DEC-0014; Opus 5.5). (c) **Owner decision before
+   anything:** #558 (NAS-LEASE no-op in the public `influx` extension and the mounted prod file; a
+   DEC and an `influx-v*` release). (d) Owner-authorized pushes: #563's 30 merged `origin/`
    branches and the `backfill-v2.0.20` tag.
-1. **Read the gate's results since 11-08 12:01 ET** (clear 10:52 to 12:01; an uploader-wide
-   failure 11:54 to 11:56 ET was an internet blip, recovered): any `Go time gate dropped a frame` line (keep its
+1. **Read the gate's results since 11-08 18:13 ET** (a lone WOW HTTP 429 at 13:04 ET was its own
+   rate limit): any `Go time gate dropped a frame` line (keep its
    bytes and offset; expect under one a day; `marvinctl grep` takes one token, so grep `gate`) and any
    gap with no such line. Around 2026-12-04, re-run `ops/garbage_gap_corr.py` over the 30 days after
    the deploy: expect no garbage-then-gap events. #536 stays open until then.
@@ -76,7 +79,7 @@ only (S185). On marvin, `doctor` exits 13 (the dongle is held by prod); that is 
    (keep its bytes) · the first `unhealthy` on prod (a Docker state that may never reach
    `weewx.log`) · any `rejecting implausible` or `unknown message type`
    line: run the correlation on that day's extracts; a gap behind one means a noise decode inside the
-   100 ms window, so add it to #536. Clear through 2026-11-08 10:52 ET except the 11-04 12:53 row.
+   100 ms window, so add it to #536. Clear through 2026-11-08 18:13 ET except the 11-04 12:53 row.
 6. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry, the reset-from-112-or-above phantom, whether to tell the
    `weewx-packages` maintainer about DEC-0218 option B, `git worktree prune` in heartofgold (stale
@@ -90,16 +93,16 @@ only (S185). On marvin, `doctor` exits 13 (the dongle is held by prod); that is 
    **The V4 needs librtlsdr newer than Debian bookworm's 0.6.0, so build the test container on
    trixie**; check which base our image uses. Any decoder swap needs a DEC (DEC-0014).
 
-## Current state (S193)
+## Current state (S194)
 
 | Thing | State |
 |---|---|
 | Prod | marvin, `v2.4.0` as `:marvin-live` since 2026-11-04 18:36:38 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `2f8a1eda…` = `dev`, restarted 2026-11-07 13:43:18 ET, `REMEDY_MODE=none` |
-| Reception | 99.9% mean at USB port `5-1` (archive metric); 240 to 260 CRC failures a minute; 0 archive gaps 11-05 00:00 to 11-08 10:52 ET |
-| `main`/`dev` | `main` = the v2.4.0 promotion (`c376037`, PR #545, `prod-baseline-20261104`); `dev` = main plus doc-only records: the Hub state, S192's ROADMAP reconciliation and audit report |
+| Reception | 99.9% mean at USB port `5-1` (archive metric); 240 to 260 CRC failures a minute; 0 archive gaps 11-05 00:00 to 11-08 18:12 ET |
+| `main`/`dev` | `main` = the v2.4.0 promotion (`c376037`, PR #545, `prod-baseline-20261104`); `dev` = main plus doc, test and CI changes only (Hub state, S192/S193 audit work, S194's CONSTANTS diet and Go-test CI gate); nothing baked differs |
 | Docker Hub | `:v2.4.0` is the multi-arch index `2b146586…` (amd64 `82220200…` = prod, arm64 `e986aae1…`), joined 2026-11-06 01:48 ET. `:latest` = `:v2.4.0` since 2026-11-06 01:52 ET, moved by the owner |
-| Trackers | repo: #550 to #564 (S192 cruft audit; #551 done, #563 half done, S193 did 0(a): six to close on merge, #554 and #561 stay), #536 (v2.4.0 in prod, open until the 30-day re-run), #475 parked, #380 info, #514 (December A/B) · ops: #440 (second dongle, December), #110 (gated, Jan-Feb), #344 · upstream open: lheijst/rtldavis#2 comment, weewx-influx2#1 (reply 10-29), matthewwall/weewx-wcloud#6 (license request) |
+| Trackers | repo: S192 cruft audit open: #550 and #552 (merged S194, to close), #551, #553, #554, #558, #559, #561, #563 (half done), #536 (v2.4.0 in prod, open until the 30-day re-run), #475 parked, #380 info, #514 (December A/B) · ops: #440 (second dongle, December), #110 (gated, Jan-Feb), #344 · upstream open: lheijst/rtldavis#2 comment, weewx-influx2#1 (reply 10-29), matthewwall/weewx-wcloud#6 (license request) |
 
 ## Blockers
 
@@ -109,9 +112,9 @@ it**, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email watch. N
 
 ## Model tier
 
-S193 ran Sonnet 5.5 for three Sonnet children, then the owner switched to Opus 5.5 (a bare `/model`,
-which persists) as the review gate. Switch the picker back to Sonnet by hand. S194: Opus 5.5 for job
-0(b), design first; Sonnet for the watches.
+S194 ran Opus 5.5 throughout (the picker was still raised from S193's bare `/model`, which
+persists), with one Opus child (S194b) in its own worktree. **Switch the picker back to Sonnet by
+hand.** S195: Sonnet for the watches and the cheap items; Opus 5.5 only for #553/#561 design.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -124,4 +127,4 @@ any NAS, marvin or campaign task (§3) · judging a component live, dead, or shi
 This file + `CONSTANTS.md` + `MANIFEST.md` — nothing else (CLAUDE.md's Documentation map, DEC-0063).
 Git workflow, secrets handling and the exact gate commands: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-11-08 (S193: audit chores 0(a) by three children, Opus review gate, gate clean)._
+_Last updated: 2026-11-08 (S194: #552 CI Go-test gate, #550 CONSTANTS diet via child S194b, gate clean)._
