@@ -23,7 +23,7 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 |---|---|
 | `docs/ARCHITECTURE.md` · `docs/INTERFACES.md` (the loop-JSON + InfluxDB contract) · `docs/DATA_ERRATA.md` | the ISS→driver→WeeWX→sinks chain; what a consumer reads; a suspect reading |
 | `CHANGES-FROM-UPSTREAM.md` (DEC-0034) | changing a forked file; an upstream PR |
-| Root runtime modules: driver `rtldavis.py`, uploaders, services (`*.py` at the root) | any behavior change; `CONSTANTS.md`'s deploy layers say which copy wins |
+| Root runtime modules: driver `rtldavis.py`; uploaders `influx.py`, `owm.py`, `windy.py`, `wcloud.py`, `ogoxeUploader.py` and their base `rest_site.py`; services `pressure_service.py`, `dewpoint_service.py`, `loop_json_writer.py` | any behavior change; `CONSTANTS.md`'s deploy layers say which copy wins |
 | `weewx_monitor.py`: host-side watchdog, alerter, reception tracker | "what handles X at runtime?" (DEC-0074) |
 | `ops/*`, `scripts/*`, `usb_reset.sh`; executed records `docs/CAMPAIGN-B-RUNBOOK.md`, `docs/INFLUXDB-MIGRATION.md` | any ops task. A script's header is its manual; `ops/campaign_analyze.py` is the only campaign readout (DEC-0069) |
 | `extensions/<name>/` + its `scripts/*_<name>*.sh` and `.github/workflows/<name>.yml` | that module's version or installer; a `<name>-v*` release |
