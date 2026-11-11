@@ -90,6 +90,13 @@ def _install_weewx_superset():
         "obs_group_dict", "USUnits", "MetricUnits", "MetricWXUnits",
         "default_unit_format_dict", "default_unit_label_dict")})
     weewx.crc16 = _module("weewx.crc16", crc16=lambda *a, **k: 0)
+    # rtldavis builds its archive schema from wview_extended's lists at import (DEC-0232).
+    weewx.schemas = _module("weewx.schemas", package=True)
+    weewx.schemas.wview_extended = _module(
+        "weewx.schemas.wview_extended",
+        table=[('dateTime', 'INTEGER NOT NULL PRIMARY KEY'), ('usUnits', 'INTEGER NOT NULL'),
+               ('interval', 'INTEGER NOT NULL'), ('windGust', 'REAL')],
+        day_summaries=[('windGust', 'scalar'), ('wind', 'VECTOR')])
     weewx.wxformulas = _module(
         "weewx.wxformulas",
         dewpointF=lambda t, h: 0.0, heatindexF=lambda t, h: 0.0,

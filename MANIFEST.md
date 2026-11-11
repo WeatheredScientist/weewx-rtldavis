@@ -25,7 +25,7 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 | `CHANGES-FROM-UPSTREAM.md` (DEC-0034) | changing a forked file; an upstream PR |
 | Root runtime modules: driver `rtldavis.py`; uploaders `influx.py`, `owm.py`, `windy.py`, `wcloud.py`, `ogoxeUploader.py` and their base `rest_site.py`; services `pressure_service.py`, `dewpoint_service.py`, `loop_json_writer.py` | any behavior change; `CONSTANTS.md`'s deploy layers say which copy wins |
 | `weewx_monitor.py`: host-side watchdog, alerter, reception tracker | "what handles X at runtime?" (DEC-0074) |
-| `ops/*`, `scripts/*`, `usb_reset.sh`; executed records `docs/CAMPAIGN-B-RUNBOOK.md`, `docs/INFLUXDB-MIGRATION.md` | any ops task. A script's header is its manual; `ops/campaign_analyze.py` is the only campaign readout (DEC-0069) |
+| `ops/*`, `scripts/*`, `usb_reset.sh`; runbooks `docs/CAMPAIGN-B-RUNBOOK.md`, `docs/INFLUXDB-MIGRATION.md`, `docs/WINDGUST10-MIGRATION.md` (DEC-0232, not run) | any ops task. A script's header is its manual; `ops/campaign_analyze.py` is the only campaign readout (DEC-0069) |
 | `extensions/<name>/` + its `scripts/*_<name>*.sh` and `.github/workflows/<name>.yml` | that module's version or installer; a `<name>-v*` release |
 | Go decoder: `patch/rtldavis-*.patch`, `tests/go/` | the Go decoder and its gates |
 | First start: `entrypoint.sh` (DEC-0228), `seed_config.py` (DEC-0225), `doctor.py` | what a new install gets; first-run env vars; `doctor` |

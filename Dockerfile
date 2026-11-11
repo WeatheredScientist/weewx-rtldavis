@@ -146,6 +146,17 @@ RUN sed -i 's|^\([[:space:]]*\)report_services = weewx.engine.StdPrint, weewx.en
     (echo "FATAL: StdPrint removal did not apply — the baked config would ship the freeze hazard" && exit 1)
 
 #--------------------------------------------
+# Archive schema: wview_extended plus windGust10 (DEC-0232)
+#--------------------------------------------
+# A new install's archive gets a column for the ISS's own 10-minute gust, the one wind value
+# a corrupted frame cannot move (ERR-0012). WeeWX reads `schema` only when it creates the
+# database, so an existing archive is untouched; it takes the column with
+# `weectl database add-column windGust10`. The schema lives in the driver module.
+RUN sed -i 's|^\([[:space:]]*\)schema = weewx\.schemas\.wview_extended\.schema$|\1schema = user.rtldavis.schema|' /opt/weewx-data/weewx.conf && \
+    grep -q '^[[:space:]]*schema = user\.rtldavis\.schema$' /opt/weewx-data/weewx.conf || \
+    (echo "FATAL: the archive schema line did not change — new installs would have no windGust10 column" && exit 1)
+
+#--------------------------------------------
 # Copy custom service files
 #--------------------------------------------
 COPY dewpoint_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/dewpoint_service.py

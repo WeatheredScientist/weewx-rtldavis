@@ -42,6 +42,7 @@ FIELD_MAP = {
     "barometer":    "barometer_inHg",
     "windSpeed":    "windSpeed_mph",
     "windGust":     "windGust_mph",
+    "windGust10":   "windGust10_mph",   # the ISS 10-minute gust; NULL before DEC-0232
     "windDir":      "windDir",
     "windGustDir":  "windGustDir",
     "rainRate":     "rainRate_inch_per_hour",

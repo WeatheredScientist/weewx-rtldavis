@@ -131,6 +131,9 @@
 #               other changes since v2.1.0 are log or QC refactors with no new behavior.
 #   2026-11-03  #536: counts and logs the frames Go's time gate drops (DEC-0229). Log only.
 #   2026-11-04  ws.9 -> ws.10 for the v2.4.0 release.
+#   2026-11-10  `schema`: wview_extended plus a windGust10 column and its daily summary,
+#               for the archive a new install of the image creates (DEC-0232). The driver
+#               itself does nothing new; the image's starter config points at it.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -210,6 +213,7 @@ except ImportError:
 import weewx.drivers
 import weewx.engine
 import weewx.units
+import weewx.schemas.wview_extended
 from weewx.crc16 import crc16
 from weewx.units import obs_group_dict
 from weeutil.weeutil import tobool
@@ -241,6 +245,17 @@ weewx.units.obs_group_dict['frequency'] = 'group_frequency'
 # WeeWX ships windGust10 (accumulator extractor "last") with no unit group. Without
 # one, to_US() leaves the m/s value alone and weewx-influx2 names it bare (#481, DEC-0224).
 weewx.units.obs_group_dict['windGust10'] = 'group_speed'
+
+# The archive schema the image's starter config names (`[DataBindings]` `schema =
+# user.rtldavis.schema`, DEC-0232): WeeWX's wview_extended plus a column for the ISS's own
+# 10-minute gust, so the archive keeps the one wind value a corrupted frame cannot move
+# (ERR-0012). WeeWX reads it only when it creates the database. An existing archive takes
+# the column with `weectl database add-column windGust10`, which adds the same column and
+# daily summary.
+schema = {
+    'table': weewx.schemas.wview_extended.table + [('windGust10', 'REAL')],
+    'day_summaries': weewx.schemas.wview_extended.day_summaries + [('windGust10', 'scalar')],
+}
 weewx.units.USUnits['group_frequency'] = 'hertz'
 weewx.units.MetricUnits['group_frequency'] = 'hertz'
 weewx.units.MetricWXUnits['group_frequency'] = 'hertz'
