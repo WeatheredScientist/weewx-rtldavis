@@ -1081,7 +1081,16 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       is about closing what remains, not starting from zero.
       **Audited S197:** `docs/INTERFACES-AUDIT-S197.md` lists what remains (16 findings) and
       proposes an eight-part decision, not logged; it needs the owner's go. It finds the SQLite
-      archive is a third surface in practice: HLF reads nothing else.)
+      archive is a third surface in practice: HLF reads nothing else.
+      **Decided and written S199 (DEC-0233), parts 1 to 4 and 8:** INTERFACES.md is now a
+      specification with three surfaces (§3 is the SQLite archive, which also states Finding 3's
+      missing flag, superseding the scope note above), a §0 rules and meanings table, a row per
+      field with InfluxDB's three tiers, one contract version (1.1) and one owner; the history moved
+      verbatim to its Appendix A. What remains is the next line.)
+- [ ] `loopjson` 1.2.0, DEC-0233 parts 5 to 7: a contract-version loop key independent of
+      `writer` (contract 1.2), the writer omits non-finite values, and a JSON Schema, sample fixtures
+      and a checker, with a test tying the writer's output to the schema. Then one ops issue for the
+      cross-repo drift `docs/INTERFACES-AUDIT-S197.md` lists. CumulusMX stays out until someone wants it.
 - [x] Ship `loop_json_writer.py` as an installable WeeWX extension (`weewx#440`, the dashboard's
       DEC-0348 ask) — **designed S153, shipped S155 (DEC-0211)**: release `loopjson-v1.0.0` of this
       repo, proved on a clean WeeWX 5.5.2; prod writes `writer: loop_json_writer/1.0.0`. The
