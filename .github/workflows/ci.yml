@@ -64,6 +64,15 @@ jobs:
           REQUIRE_GO_TESTS: "1"
         run: python -m pytest -q -rs
 
+      # DEC-0232: the windGust10 archive schema and the add-column route must agree in real
+      # WeeWX. Its own venv, so the run above keeps the fakes it was written against; with
+      # REQUIRE_REAL_WEEWX=1 a missing weewx fails instead of skipping.
+      - name: windGust10 archive schema against real WeeWX
+        run: |
+          python -m venv /tmp/wx && /tmp/wx/bin/pip install -q weewx==5.5.2
+          WEEWX_TEST_PYTHON=/tmp/wx/bin/python REQUIRE_REAL_WEEWX=1 \
+            python -m pytest -q tests/test_windgust10_archive.py
+
   lint:
     runs-on: ubuntu-latest
     steps:

@@ -13070,3 +13070,80 @@ creeps back over 10,000 chars, that split is the next step; dropping the table i
 
 **Not done.** `MANIFEST.md`'s own diet (#554) and a tier-sweep check that measures `CONSTANTS.md`
 (a hub tool, not this repo's).
+
+## DEC-0232 — The ISS's 10-minute gust gets a SQLite archive column, `windGust10` (S198b)
+
+**Status:** Accepted · **Date:** 2026-11-10 (S198b, Opus 5.5, a child session of S198) ·
+**Extends:** DEC-0224 · **Applies:** DEC-0031, DEC-0046, DEC-0222 · **Motivated by:** ERR-0012 ·
+**Owner's calls (in chat):** new installs get the column through a schema ("Yes, via schema");
+the InfluxDB backfill ships as a script the owner runs ("Yes, ship the script").
+
+### Context
+
+DEC-0224 put message 9's 10-minute gust on the loop packet as `windGust10` (m/s, `group_speed`
+registered by the driver). It reaches the loop feed (`extra_fields`) and InfluxDB
+(`windGust10_mph`, written since 2026-10-28 12:30 ET, because a point carries the in-memory archive
+record), but no SQLite column: wview_extended has none, so the archive drops it. On 2026-11-10 S198
+told weewx-packages/weewx-rtldavis#15 that comparing each gust with the ISS's own 10-minute gust
+flags CRC-valid phantom gusts without discarding data (ERR-0012: 30 mph in a 2 mph breeze while
+`windGust10` read 4). The owner asked for a durable archive copy now, so a later cross-check has a
+backstop that does not depend on InfluxDB.
+
+### Decision
+
+1. **Schema.** One `REAL` column `windGust10` plus a scalar daily summary `archive_day_windGust10`,
+   in the archive's unit system (`group_speed`; mph in a US archive). This is exactly what `weectl
+   database add-column windGust10` creates (WeeWX 5.5.2, `DaySummaryManager._add_column`).
+2. **Accumulation.** WeeWX's stock `last` extractor, unchanged: the record value is the newest
+   10-minute gust in the interval, identical to InfluxDB's `windGust10_mph`, so a backfill is a
+   straight copy and prod gets no new live-config deviation. `max` would differ only when two
+   message-9 frames land in one interval. The day summary's `max` is the day's highest ISS gust.
+3. **New installs.** `rtldavis.py` exports `schema` (wview_extended's lists plus the column) and the
+   Dockerfile points the starter config's `[DataBindings]` `schema` at `user.rtldavis.schema`, with
+   a build-time assertion. WeeWX reads it only when it creates a database, so no existing archive
+   changes. Baked (DEC-0031): ships with the next image, a minor version under DEC-0222 (an added
+   column). `weewx.conf.example` names it too.
+4. **Prod.** No image and no config change: the running v2.4.0 driver already emits and registers
+   the value. The archive file is its own layer; the column goes in with `add-column` through
+   `docker exec` as `t-weewx`, then a restart (a running `weewxd` caches its column list at open).
+   Owner-run plan: `docs/WINDGUST10-MIGRATION.md` (back up with the existing dump unit, dry run,
+   add, restart, verify with `ops/windgust10_check.sql`, optional backfill, `rebuild-daily`).
+5. **Backfill.** `ops/backfill_windgust10.py` reads `windGust10_mph` through a read-only Flux
+   endpoint and writes SQL that sets only NULL cells at existing rows, requires `usUnits = 1`, and
+   runs in one transaction under `.bail on`. It never opens the database itself. The SQLite →
+   InfluxDB backfills (`ops/backfill_influx.py`, `backfill_container.py`) map the column to
+   `windGust10_mph`, so a future gap repair carries it.
+6. **The cross-check stays separate.** Storing the sensor's value does not depend on how a phantom
+   is later flagged (read time, a QC field, or the driver); nothing here decides that.
+
+### Consumers (read only, S198b)
+
+- Dashboard (eaglehunt-weather-dashboard DEC-0442's SQLite adapter, design accepted): it lists
+  columns with `PRAGMA table_info(archive)` and `eh-fields.js` maps `windGust10_mph` to obs
+  `windGust10`, so the column becomes directly answerable. Its proposal §3.2 plans to derive the
+  field as a rolling `MAX(windGust)` when no column exists; that derivation would re-admit
+  ERR-0012's phantom. To raise through ops once this lands; nothing posted.
+- HLF names its 16 columns: unaffected. InfluxDB: unchanged.
+
+### Consequences
+
+- The archive is not yet one of INTERFACES.md's two surfaces; the S197 audit proposes it as the
+  third, and this column joins that table when it is written. Additive, so no break.
+- Rows before the migration are NULL unless backfilled; a minute without message 9 is NULL, never 0.
+- **`user.rtldavis.schema` must stay importable** while any install's config names it: WeeWX
+  resolves the schema name each time it opens the database, so removing it would stop those
+  installs from starting.
+- A non-Davis driver that never emits `windGust10` gets an always-NULL column on a new install of
+  this image; a WeeWX install that is not this image is untouched.
+
+### Tests
+
+`tests/test_windgust10_archive.py`: the schema is wview_extended plus the column and its day
+summary; the Dockerfile edit and assertion come before the pristine copy `seed_config.py` uses; the
+backfill parses the proxy's CSV, refuses NaN, out-of-range and duplicate values, fills only NULL
+cells, inserts no row, sets nothing in a metric archive and commits nothing without the column;
+the check SQL runs read-only. Against real WeeWX 5.5.2 (a CI step with its own venv,
+`REQUIRE_REAL_WEEWX=1`): the image's schema and `add-column` on wview_extended give the same
+columns and tables, a US record stores mph with NULL kept NULL, the day row's max and count follow,
+and the stock extractor is `last`. Positive control: dropping the day-summary entry from `schema`
+fails both the stand-in test and the real-WeeWX test.

@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S198b] — 2026-11-10 — windGust10 gets a SQLite archive column (DEC-0232); prod migration plan written, not run
+
+- No prod change. Opus 5.5, a child session of S198. Design agreed in chat, then built: new installs create the column from `user.rtldavis.schema` (wview_extended plus `windGust10` `REAL` and its daily summary), which the Dockerfile writes into the starter config; ships with the next image. Prod needs no image or config, only `weectl database add-column windGust10` and a restart: owner-run plan in `docs/WINDGUST10-MIGRATION.md`, with `ops/windgust10_check.sql` to verify and `ops/backfill_windgust10.py` to copy InfluxDB's `windGust10_mph` (12,100 points since 2026-10-28 12:30 ET, read live through the proxy) into NULL cells only. The SQLite to InfluxDB backfills now carry the column. `tests/test_windgust10_archive.py`, with a real-WeeWX 5.5.2 CI step proving the image's schema and `add-column` give the same archive. Dashboard DEC-0442's adapter reads the column by `PRAGMA table_info` (helps); its planned `MAX(windGust)` fallback would re-admit ERR-0012, to raise via ops.
+
 ## [S197] — 2026-11-10 — INTERFACES generalization audit (P3); #563 finished; cdavis289's Go vs Python results read
 
 - No prod change. Sonnet 5.5 for the start and chores, then Fable 5.2 (owner-named) for the audit. PR #572: `docs/INTERFACES-AUDIT-S197.md` answers ROADMAP P3's question, whether `docs/INTERFACES.md` is enough for a non-Davis WeeWX or CumulusMX producer. 16 findings, among them: the InfluxDB section has no field table (36 live fields, 19 documented nowhere, seven of those driver internals under borrowed column names); the loop table has no required or optional column and lists two keys prod never emits; the SQLite archive is a third surface that HLF reads and the document disowns; one NaN takes the feed "offline"; `writer` names an implementation, not a contract version. An eight-part decision is proposed, not logged: it needs the owner's go. Nothing was posted to another repo. S196's "no ROADMAP line is session-actionable until December" was wrong about this line. `MANIFEST.md` 3,483 chars, coverage sweep green.

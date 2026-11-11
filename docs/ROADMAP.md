@@ -625,7 +625,7 @@ Steps, in order:
       line; reset the crcstats slot label on re-init. `patch/rtldavis-timegate.patch` after the
       burst gate, a `tests/go/` replay, then a release and a 30-day re-run of the S188 correlation.
       Does not touch on-schedule bit-error frames (ERR-0012's class; a `windGust10` cross-check is
-      the separate candidate for those).
+      the separate candidate for those; its archive backstop, the `windGust10` column, is DEC-0232).
 
 Not here on purpose: the RF-dead episodes (`BOOT.md` blocker 2, DEC-0081), where the Go child goes
 silent and recovers with time. Nothing has shown a decoder bug behind them yet; if #458's counters
@@ -1071,7 +1071,7 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       (DEC-0224)** added the `windGust10` → `windGust10_mph` row (the ISS's 10-minute gust; not
       `windGust_mph`, which stays absent on a Davis). **S187 (ops#442, no DEC; found behind at
       S192 by `git log -- docs/INTERFACES.md`)** added the InfluxDB-surface paragraph: a point
-      carries the in-memory archive record, so `windGust10_mph` exists there and in no SQLite column.
+      carries the in-memory archive record, so `windGust10_mph` exists there and in no SQLite column. **S198b (DEC-0232)** gives the archive that column (built, prod migration owner-run, `docs/WINDGUST10-MIGRATION.md`).
       **Corrected S97:** this line
       previously also claimed DEC-0053's station-identity finding was documented — it was not; only
       DEC-0053's cache-bounding finding (Finding 1) had actually made it into the doc. §2 now carries

@@ -233,8 +233,20 @@ fork with a Python-3.14 `e.read().decode()` patch, DEC-0007) using **InfluxDB 2.
   (WeeWX's stock `last` extractor), it inherits the driver's QC on the loop packet, and a minute
   without a message-9 packet has no field at all, never a 0 (about a third of minutes). Unlike
   `windGust_mph` (the per-minute peak of loop samples), a single bad frame cannot move it
-  (ERR-0012). A backfilled point has no `windGust10_mph`, because the SQLite archive it comes from
-  has none.
+  (ERR-0012). A point backfilled from an archive row before the `windGust10` column existed has no
+  `windGust10_mph`; `ops/backfill_*.py` copy the column when it is there.
+- **The SQLite archive's `windGust10` column (DEC-0232).** The same value gets an archive column,
+  so the archive keeps a copy InfluxDB does not have to supply: `REAL`, in the archive's own unit
+  system (`group_speed`; mph in a US archive such as this station's), with a scalar daily summary
+  `archive_day_windGust10` whose `max` is the day's highest ISS gust. Same extractor (`last`), same
+  QC, same NULL for a minute without message 9, never 0. A new install of the image creates it
+  (the starter config's `schema = user.rtldavis.schema`, wview_extended plus this column); an
+  existing archive takes it with `weectl database add-column windGust10`, which yields the same
+  column and day table (tested against WeeWX 5.5.2). Rows before the column was added are NULL
+  unless backfilled from InfluxDB (`ops/backfill_windgust10.py`). Additive: it renames, removes
+  or re-units nothing, and a consumer that names its columns is unaffected. The archive is not one
+  of this document's two surfaces yet; `docs/INTERFACES-AUDIT-S197.md` proposes making it the
+  third, and this column belongs in that table when it is written.
 - **Series key:** `record,binding=archive` (measurement `record`, one tag `binding`). A correction or
   backfill MUST reuse this exact series key, or it forks a parallel series instead of overwriting.
 - **QC flag fields (`<field>_qc`) — sparse, added S36 (DEC-0032).** A retrospectively corrected point

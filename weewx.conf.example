@@ -631,7 +631,9 @@ version = 5.5.2
         manager = weewx.manager.DaySummaryManager
         # The schema defines the structure of the database.
         # It is *only* used when the database is created.
-        schema = weewx.schemas.wview_extended.schema
+        # wview_extended plus a windGust10 column (DEC-0232). An existing archive takes the
+        # column with: weectl database add-column windGust10
+        schema = user.rtldavis.schema
 
 ##############################################################################
 
