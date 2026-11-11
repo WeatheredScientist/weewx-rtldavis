@@ -1,6 +1,6 @@
 # Upstream — open contribution threads
 
-**Last updated:** 2026-11-10 (S197: cdavis289's first Go vs Python results, under #514)
+**Last updated:** 2026-11-10 (S198: replied on weewx-packages#15 about CRC-valid gusts)
 
 **Tier 2 — pull by name from `MANIFEST.md`.** Live state for our contributions back to the projects
 this fork descends from. `BOOT.md` carries only the one-line "four open threads" reminder; the
@@ -75,7 +75,13 @@ conflate them, and don't commit the drafts.
   both. Each receiver had its own dongle, so receiver and dongle are confounded: their next test
   swaps the dongles and adds sync and USB diagnostics. **For our A/B:** swap dongles between
   arms; record sync losses and the worst interval, not the mean alone; check whether their Go arm
-  has an arrival-time gate like ours (DEC-0229) before comparing figures. No reply owed.
+  has an arrival-time gate like ours (DEC-0229) before comparing figures. Their diagnostics fork
+  ([cdavis289/weewx-rtldavis-py](https://github.com/cdavis289/weewx-rtldavis-py), branch
+  `feature/gust-anomaly-diagnostics`) logs frames around a gust anomaly plus sync and USB events.
+  **Replied 2026-11-10** (S198, owner's go,
+  [comment](https://github.com/weewx-packages/weewx-rtldavis/issues/15#issuecomment-6785518922)):
+  ERR-0012 as a CRC-valid phantom gust, and the message-9 `windGust10` cross-check as a flag that
+  discards nothing. No further reply owed; read the crossover results when they land.
 
 ## Posted / closed
 
