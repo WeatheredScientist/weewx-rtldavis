@@ -1078,7 +1078,10 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       the missing station-identity/series-key trap (Finding 2), closing that gap for real. Finding 3
       (the SQLite archive's own missing correction flag) stays in `DATA_ERRATA.md` on purpose —
       INTERFACES.md scopes itself to the two *published* surfaces, and SQLite is neither. This item
-      is about closing what remains, not starting from zero.)
+      is about closing what remains, not starting from zero.
+      **Audited S197:** `docs/INTERFACES-AUDIT-S197.md` lists what remains (16 findings) and
+      proposes an eight-part decision, not logged; it needs the owner's go. It finds the SQLite
+      archive is a third surface in practice: HLF reads nothing else.)
 - [x] Ship `loop_json_writer.py` as an installable WeeWX extension (`weewx#440`, the dashboard's
       DEC-0348 ask) — **designed S153, shipped S155 (DEC-0211)**: release `loopjson-v1.0.0` of this
       repo, proved on a clean WeeWX 5.5.2; prod writes `writer: loop_json_writer/1.0.0`. The

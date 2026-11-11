@@ -1,6 +1,6 @@
 # Upstream — open contribution threads
 
-**Last updated:** 2026-10-30 (S184 — the newest entry: the holding reply on the weewx-packages thread)
+**Last updated:** 2026-11-10 (S197: cdavis289's first Go vs Python results, under #514)
 
 **Tier 2 — pull by name from `MANIFEST.md`.** Live state for our contributions back to the projects
 this fork descends from. `BOOT.md` carries only the one-line "four open threads" reminder; the
@@ -65,6 +65,17 @@ conflate them, and don't commit the drafts.
   early December on the second dongle beside the Go decoder, post numbers either way, and decide on
   maintaining after the test. Asked them for Pi CPU figures and option stability. **OPEN.** Test
   plan in `BACKLOG.md` "Open ideas"; the hardware request is eaglehunt-ops#440.
+  **cdavis289's first results, 2026-11-10**
+  ([weewx-packages/weewx-rtldavis#15](https://github.com/weewx-packages/weewx-rtldavis/issues/15)):
+  Go v0.21.2 beside Python v0.22.2 on a VP2 Plus, one Ubuntu 26.04 x86_64 host, two Nooelec NESDR
+  SMArt v5 dongles, 1,186 matched five-minute intervals. Mean reception 99.558% Go, 99.851%
+  Python; intervals under 100%: 420 Go, 65 Python; no missing archive record on either. Python
+  lost sync twice (11-08 and 11-10, about 45 s to reacquire; its worst interval was 33%, Go's
+  95%). Average CPU 27.2% Go, 18.9% Python, not an identical workload. Anomalous gusts appear on
+  both. Each receiver had its own dongle, so receiver and dongle are confounded: their next test
+  swaps the dongles and adds sync and USB diagnostics. **For our A/B:** swap dongles between
+  arms; record sync losses and the worst interval, not the mean alone; check whether their Go arm
+  has an arrival-time gate like ours (DEC-0229) before comparing figures. No reply owed.
 
 ## Posted / closed
 

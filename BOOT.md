@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S196 → S197)
+## ▶ Resume here (S197 → S198)
 
 ### What's settled (do not re-derive)
 
@@ -27,8 +27,8 @@ a frame over 100 ms off its transmitter's schedule. On-schedule bit-error frames
 of its reach. **At `debug_rtld = 1` neither `tolerance=` nor `crc_stats` reaches the log, and
 `off-schedule frames this period: 0` proves the driver only;** a `Go time gate dropped a frame` line
 is the proof of a drop. **Two so far, neither with an archive gap (11-05 and 11-07; times and
-offsets in `docs/ROADMAP.md` P1.9). Clear from 11-07 12:01 to 11-09 19:08 ET: no drop, no gap (1440
-of 1440 records on 11-08).** `ops/garbage_gap_corr.py` reproduces the correlation from `marvinctl
+offsets in `docs/ROADMAP.md` P1.9). Clear from 11-07 12:01 to 11-10 19:45 ET: no drop, no gap.**
+`ops/garbage_gap_corr.py` reproduces the correlation from `marvinctl
 grep ERROR` and `grep database` extracts. **The crcstats line is lowercase (`crc failures this
 period`), so `grep CRC` is a false zero.** A day's gap check: `grep Added`, keep the `record 2026-…`
 stamps, flag steps over 90 s (each minute logs twice: archive + daily summary). A past day's log is
@@ -40,10 +40,10 @@ the repo copy through `marvinctl exec` over stdin (**unexercised: the auto-mode 
 the live read**). **CI's tests job fails, not skips, the Go gate tests (`REQUIRE_GO_TESTS=1`) and
 prints skips with `-rs`: expect 21 there, 24 locally.**
 
-**S196 evaluation: no `docs/ROADMAP.md` line is session-actionable until early December** (each
-waits on hardware, a person or the 12-04 re-run). `MANIFEST.md` names the nine root modules again
-(ops#449). **Check a MANIFEST edit with ops' `checks/manifest-coverage-sweep.sh`
-(`MANIFEST_COVERAGE_FIXTURE_DIR`) before landing it.**
+**S197 audit (PR #572): `docs/INTERFACES-AUDIT-S197.md`** answers ROADMAP P3. `docs/INTERFACES.md`
+records station history and does not yet specify a contract: 16 findings and an eight-part
+decision, **proposed, not logged** (job 0a). **Check a MANIFEST edit with ops'
+`checks/manifest-coverage-sweep.sh` (`MANIFEST_COVERAGE_FIXTURE_DIR`) before landing it.**
 
 Standing facts: images are multi-arch (DEC-0214/0215); versions follow DEC-0222's SemVer rule; the
 loop writer and `influx.py` ship as extensions, prod mounts both; `t-weewx` (996:986) runs under
@@ -53,28 +53,29 @@ rotated daily, 30 days kept. The bundled Go decoder is byte-identical to `lheijs
 `doctor` exits 13 (the dongle is held by prod); that is the correct verdict. **Running code inside
 the prod container is a classifier-gated "production read"** (S195): plan for the owner to run it.
 
-### ▶▶ S197 JOB LIST
+### ▶▶ S198 JOB LIST
 
-0. **Audit triage, what is left.** (a) #551 is done locally but still open: close it with a comment
-   once the owner names it. ops#449 closes itself when the sweep reads this PR's `MANIFEST.md` on
-   `dev`. (b) Design first: #561 (the dead `else` branches at `rtldavis.py` ~:1294/:1320, a
-   baked-file behavior change), #553 (campaign apparatus: truthful headers now, retirement needs a
-   DEC under DEC-0014; Opus 5.5). (c) **Owner decision before anything:** #558 (NAS-LEASE no-op in
-   the public `influx` extension and the mounted prod file; a DEC and an `influx-v*` release; S196
-   recommends removal). (d) Owner-authorized pushes: #563's 30 merged `origin/` branches and the
-   `backfill-v2.0.20` tag; locally, the merged `claude/s192a-…`, `claude/s192b-…` and
-   `s195-audit-chores` branches remain. (e) **ROADMAP diet, design first, owner's go:** 97 KB, 349
-   lines of reconciliation log, open items under DONE and CLOSED headings, no forward plan.
-   Archive the log and closed sections verbatim, fix the headings, add a "Next" section (the
-   December A/B, `BACKLOG.md`'s Session C, the announcement, #558, #553).
-1. **Read the gate's results since 11-09 19:08 ET:** any `Go time gate dropped a frame` line (keep
+0. **Decisions and triage.** (a) **The INTERFACES decision, owner's go first.** Its "Suggested
+   order" is the plan: a docs-only PR plus a DEC, a `loopjson` minor release, then one ops issue
+   for the cross-repo drift. Nothing is posted. (b) #551 is done locally: close it with a comment
+   once the owner names it. ops#449 closes when the sweep reads `dev`. (c) Design first: #561 (the
+   dead `else` branches at `rtldavis.py` ~:1294/:1320, a baked-file behavior change), #553
+   (campaign apparatus: truthful headers now, retirement needs a DEC under DEC-0014). (d) **Owner
+   decision before anything:** #558 (NAS-LEASE no-op in the public `influx` extension and the
+   mounted prod file; a DEC and an `influx-v*` release; S196 recommends removal). (e) Owner's go:
+   delete the seven squash-merged `origin/` branches (all but `dev` and `main`, once #572 merges)
+   and local `s196-…` and `s197-…`. (f) **ROADMAP diet, design first, owner's go** (finding:
+   CHANGELOG [S196]): archive the reconciliation log and closed sections verbatim, fix the
+   headings, add a "Next" section.
+1. **Read the gate's results since 11-10 19:45 ET:** any `Go time gate dropped a frame` line (keep
    its bytes and offset; expect under one a day; `marvinctl grep` takes one token, so grep `gate`)
    and any gap with no such line. Around 2026-12-04, re-run `ops/garbage_gap_corr.py` over the 30
    days after the deploy: expect no garbage-then-gap events. #536 stays open until then.
 2. **Watch the three upstream threads still open** (the lheijst/rtldavis#2 comment, weewx-influx2#1,
    matthewwall/weewx-wcloud#6; if he adds a license, retag `wcloud.py`) and #514: **cdavis289's
-   72-hour Go v0.21.2 vs Python v0.22.2 results were due 11-09 and not posted by 19:10 ET; read
-   them before designing our A/B, no reply owed.** Keep `docs/UPSTREAM-THREADS.md` current.
+   first Go vs Python results are in (11-10, weewx-packages/weewx-rtldavis#15; summarized in
+   `docs/UPSTREAM-THREADS.md`). A dongle-crossover run follows there: read it before designing
+   our A/B, no reply owed.** Keep that file current.
 3. **Needs the owner:** the GitHub About text and topics; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in
    the shell profile (never CI); **the hot-swap code** — keep for the gain campaign `BACKLOG.md`
    carries, or a DEC to remove it with `ops/rx_experiment.sh` converted (#553 and DEC-0014 together;
@@ -87,7 +88,7 @@ the prod container is a classifier-gated "production read"** (S195): plan for th
    11-08 19:50:07 ET, bytes in CHANGELOG [S195]; keep each one's bytes) · the first `unhealthy` on
    prod · any `rejecting implausible` or `unknown message type` line: run the correlation on that
    day's extracts; a gap behind one means a noise decode inside the 100 ms window, so add it to
-   #536. Clear through 2026-11-09 19:08 ET except the 11-04 12:53 row.
+   #536. Clear through 2026-11-10 19:45 ET except the 11-04 12:53 row.
 6. Carry forward, none due: S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry, the reset-from-112-or-above phantom, whether to tell the
    `weewx-packages` maintainer about DEC-0218 option B, `git worktree prune` in heartofgold, CI mypy
@@ -95,22 +96,22 @@ the prod container is a classifier-gated "production read"** (S195): plan for th
    (a one-line heartofgold unit edit if the escalation email ever matters), the stale
    `weewx-data/wxcheck.py` on marvin (unused since #570).
 7. **Second dongle, early December (reminder set for Sat 2026-12-05 09:00 ET):** the #514 A/B of
-   hilman2's Python port (weewx-packages 0.22.0) beside our Go decoder, and a v3-vs-V4 A/B;
-   hilman2's answers are on #514. **The V4 needs librtlsdr newer than bookworm's 0.6.0.** Our image
+   hilman2's Python port (weewx-packages 0.22.0) beside our Go decoder, and a v3-vs-V4 A/B.
+   **The V4 needs librtlsdr newer than bookworm's 0.6.0.** Our image
    is `ubuntu:26.04` but bundles librtlsdr from `src.tgz`: check that tree for V4 support.
    **Pre-register the A/B's metric and decision bar before the dongle arrives.** Any decoder swap
    needs a DEC.
 
-## Current state (S196)
+## Current state (S197)
 
 | Thing | State |
 |---|---|
 | Prod | marvin, `v2.4.0` as `:marvin-live` since 2026-11-04 18:36:38 ET, weewx 5.5.2, gain 372. Writer mounted at 1.1.0 since 2026-10-27 09:16 ET |
 | InfluxDB / monitor | marvin, `weewx-influxdb.service`; weewx-monitor sha `2f8a1eda…` = `dev`, restarted 2026-11-07 13:43:18 ET, `REMEDY_MODE=none` |
-| Reception | 99.9% mean at USB port `5-1` (archive metric); 240 to 260 CRC failures a minute; 0 archive gaps 11-05 00:00 to 11-09 19:08 ET |
+| Reception | 99.9% mean at USB port `5-1` (archive metric); 240 to 260 CRC failures a minute; 0 archive gaps 11-05 00:00 to 11-10 19:45 ET |
 | `main`/`dev` | `main` = the v2.4.0 promotion (`c376037`, PR #545, `prod-baseline-20261104`); `dev` = main plus doc, test, CI and ops-script changes only; nothing baked differs |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch, since 2026-11-06 01:52 ET, moved by the owner; digests in `CONSTANTS.md` |
-| Trackers | repo: #551 (done, to close), #553, #558, #561, #563 (half done), #536 (open until the 30-day re-run), #475 parked, #380 info, #514 (December A/B) · ops: #449 (closes on this PR), #440 (second dongle), #110 (gated, Jan-Feb), #344 · upstream open: lheijst/rtldavis#2 comment, weewx-influx2#1, matthewwall/weewx-wcloud#6 |
+| Trackers | repo: #551 (done, to close), #553, #558, #561, #536 (open until the 30-day re-run), #475 parked, #380 info, #514 (December A/B) · ops: #449 (fix on `dev`, closes on the sweep), #440 (second dongle), #110 (gated, Jan-Feb), #344 · upstream open: lheijst/rtldavis#2 comment, weewx-influx2#1, matthewwall/weewx-wcloud#6 |
 
 ## Blockers
 
@@ -120,9 +121,9 @@ it**, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email watch.
 
 ## Model tier
 
-S196 ran Fable 5.2 (owner-named). **Switch the desktop picker back to Sonnet.** S197:
-Sonnet for watches, closures and pushes; Opus 5.5 for the ROADMAP diet, the A/B pre-registration
-and #553/#561.
+S197 ran Sonnet 5.5, then Fable 5.2 for the audit (owner-named). **Switch the picker back to
+Sonnet.** S198: Sonnet for watches and closures; Opus 5.5 for the INTERFACES spec PR, the ROADMAP
+diet, the A/B pre-registration and #553/#561.
 
 ## Gotchas — they live in `docs/GOTCHAS.md`
 
@@ -133,4 +134,4 @@ any NAS, marvin or campaign task (§3) · judging a component live, dead, or shi
 
 This file + `CONSTANTS.md` + `MANIFEST.md`. Gates and git workflow: `docs/CONVENTIONS.md`.
 
-_Last updated: 2026-11-09 (S196: status and roadmap evaluation, ops#449 MANIFEST coverage; gate clean)._
+_Last updated: 2026-11-10 (S197: INTERFACES audit, PR #572; #563 closed; gate clean)._

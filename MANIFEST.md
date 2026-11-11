@@ -13,7 +13,7 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 | `BACKLOG.md`: ideas, RF findings, standing watches | RF or horizon work; whether a watch fired |
 | `docs/CONVENTIONS.md`: git workflow, secrets, exact gates | any gate or commit |
 | `docs/GOTCHAS.md` | a tool's zero/green (§1); a PR, merge or handoff write (§2); marvin or campaign work (§3); judging live or shipped (§4). New traps land here |
-| `docs/PRINCIPLES.md`; reviews `docs/CODE_REVIEW_S*.md`, `docs/ASSESSMENT.md` (S23) | weighing a decision; the next cleanup |
+| `docs/PRINCIPLES.md`; reviews `docs/CODE_REVIEW_S*.md`, `docs/ASSESSMENT.md` (S23), `docs/INTERFACES-AUDIT-S197.md` | weighing a decision; the next cleanup; generalizing the contract (P3) |
 | `docs/UPSTREAM-THREADS.md` | replying upstream; whether a thread moved |
 | `docs/INSTALL-RESEARCH.md` (behind DEC-0225) | why the install path is what it is |
 
