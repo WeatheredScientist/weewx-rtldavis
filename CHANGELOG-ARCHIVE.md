@@ -7,6 +7,12 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S195] — 2026-11-08 — Audit chores: #554 (MANIFEST under the cap) and #559 (wxcheck headers); stale S193 worktrees removed
+
+- No prod change. Opus 5.5. PR #570: `MANIFEST.md` 4,506 → 3,258 chars (~815 tok), under the 1,000-token member cap, so OPS-DEC-0102's carry is no longer needed (#554). The two `ops/wxcheck.*` files get headers; the archive half pipes the repo copy through `marvinctl exec` over stdin and opens the database read-only (#559). The auto-mode classifier declined a live run of that route, so it is unexercised.
+- The three S193 child worktrees held uncommitted edits byte-identical to `origin/dev` (PR #567 had landed them): removed with their branches, nothing lost.
+- Gate read through 11-08 21:14 ET: no time-gate drop since 11-07, 1275 of 1275 records on 11-08. One `Go burst gate dropped a frame` pair at 19:50:07 ET (`240165B703014272` / `A48167B783014272`, +6 smp), kept per the watch. Every uploader failed together for about 30 s at 11:55 ET (an outbound blip, no gap). Rolled S192 to the archive.
+
 ## [S194b] — 2026-11-08 — CONSTANTS.md before its diet: the rewritten sections, moved verbatim (#550, DEC-0231)
 
 - Everything below is the text `CONSTANTS.md` carried at `dev`@`8f01437` for the sections S194b rewrote (the header, Infra,
