@@ -142,6 +142,14 @@ History: the retired `ops/usb_watchdog.sh` (the file no longer exists) was found
 
 ## Needs a check / housekeeping (moved from STATUS.md, S60)
 
+- **Carry forward, none due (moved verbatim from `BOOT.md` job 6, S199, to keep BOOT under its cap):**
+  S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
+   the local-infra marvin entry, the reset-from-112-or-above phantom, whether to tell the
+   `weewx-packages` maintainer about DEC-0218 option B, `git worktree prune` in heartofgold, CI mypy
+   pinned `2.3.0` while the pre-commit rev lags, `WEEWX_CONTAINER` unset for the monitor since S159
+   (a one-line heartofgold unit edit if the escalation email ever matters), the stale
+   `weewx-data/wxcheck.py` on marvin (unused since #570).
+
 - **⚠️ The freeze MECHANISM is still open (DEC-0036) — but the trigger and the fuel are both gone.**
   We never proved exactly which write blocked, and the evidence is gone. Do **not** invent one. What we
   now know for certain: the **trigger** (a bare `docker logs`) is blocked by a hook in both the agent and

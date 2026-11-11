@@ -7,6 +7,12 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S196] — 2026-11-09 — Status and roadmap evaluation; MANIFEST names the nine root modules again (ops#449)
+
+- No prod change. Fable 5.2 (owner-named). Evaluation: prod healthy on v2.4.0, up 5 days; no `docs/ROADMAP.md` line is session-actionable until early December (its five open lines wait on hardware, a person, the 12-04 re-run, or have no done criterion). Found: ROADMAP is 97 KB with 349 lines of reconciliation log, open items sit under DONE and CLOSED headings, and the forward decisions (the December decoder A/B, Session C, the announcement, #558, #553) are in no roadmap line. A diet is proposed in `BOOT.md` job 0(e), not done.
+- ops#449: S195's diet replaced nine root module names with a `*.py at the root` class row, which ops' coverage sweep does not accept (it wants a filename or an ancestor directory). The row names them again; `MANIFEST.md` 3,258 → 3,402 chars (~850 tok). Checked with the sweep's fixture hook: green, and the `dev` copy reproduces the 9-file hole.
+- Gate read 11-08 21:14 to 11-09 19:08 ET: no time-gate drop, no gap (1440 of 1440 records on 11-08, 1149 of 1149 on 11-09 to 19:08), no watch line fired; uploader errors only (Windy and WOW 429s, one WU and one AWEKAS retry failure). PR #570 merged 11-09 00:13 ET; #550, #552, #554 and #559 were already closed with comments. Upstream threads unmoved since 10-29; cdavis289's #514 results not posted by 19:10 ET. Rolled S193 to the archive.
+
 ## [S195] — 2026-11-08 — Audit chores: #554 (MANIFEST under the cap) and #559 (wxcheck headers); stale S193 worktrees removed
 
 - No prod change. Opus 5.5. PR #570: `MANIFEST.md` 4,506 → 3,258 chars (~815 tok), under the 1,000-token member cap, so OPS-DEC-0102's carry is no longer needed (#554). The two `ops/wxcheck.*` files get headers; the archive half pipes the repo copy through `marvinctl exec` over stdin and opens the database read-only (#559). The auto-mode classifier declined a live run of that route, so it is unexercised.
