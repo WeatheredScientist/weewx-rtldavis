@@ -13147,3 +13147,75 @@ the check SQL runs read-only. Against real WeeWX 5.5.2 (a CI step with its own v
 columns and tables, a US record stores mph with NULL kept NULL, the day row's max and count follow,
 and the stock extractor is `last`. Positive control: dropping the day-summary entry from `schema`
 fails both the stand-in test and the real-WeeWX test.
+
+## DEC-0233 — `docs/INTERFACES.md` becomes a specification: three surfaces, one contract version, one owner (S199)
+
+**Status:** Accepted (parts 1 to 4 and 8 written S199; parts 5 to 7 are the next `loopjson` minor) ·
+**Date:** 2026-11-11 (S199, Opus 5.5) · **Answers:** ROADMAP P3 · **Built from:**
+`docs/INTERFACES-AUDIT-S197.md` · **Applies:** PRINCIPLES §1, DEC-0010, DEC-0014, DEC-0222 ·
+**Extends:** DEC-0053, DEC-0211, DEC-0220, DEC-0221, DEC-0232 · **Owner's call (in chat):** "Approve,
+start PR" on the audit's eight-part proposal.
+
+### Context
+
+The S197 audit asked whether `docs/INTERFACES.md` was enough for a different producer (a non-Davis
+WeeWX station, later CumulusMX) to feed the same consumers. It was not: the file recorded this
+station's history rather than specifying a contract. Section 2 had no field table (19 of the
+bucket's 36 fields were written and documented nowhere, 7 of them driver diagnostics under borrowed
+column names); section 1's table had no required or optional column, listed two keys the station
+never emits, and left unstated the meanings consumers depend on; the SQLite archive, the only
+surface `hyperlocal-forecast` reads, was disowned; the unit rule was wrong for a metric adopter; and
+nothing carried a contract version independent of the writer's name.
+
+### Decision
+
+1. **Three surfaces.** The SQLite archive is §3, scoped to what a consumer may rely on: the columns
+   consumers read (HLF's 16 plus `windGust10`), `archive_day_rain`, per-row `usUnits` and
+   `interval`, every row kept, `journal_mode = DELETE`, no correction flag.
+2. **Specification apart from history.** §0 to §5 hold rules and tables. This station's provenance
+   and dated corrections move verbatim to Appendix A of the same file (nine old passages plus the
+   old header and the dashboard read-path note), with a note that the appendix explains and does
+   not bind. Moved, never deleted; the old §1 and §2 headings are kept so the extension READMEs'
+   anchors still resolve.
+3. **A row per field.** Loop keys carry required or optional, unit, sensor class and meaning; only
+   `dateTime` is required. InfluxDB fields fall into three tiers: 17 contract fields (read by a
+   consumer today), 12 written-optional standard observations, and the 7 diagnostics, listed as
+   outside the contract with what each actually holds.
+4. **The implied rules, stated.** A §0 table for every surface (whole-second UTC `dateTime`, omit
+   rather than null or zero, finite numbers, one station per bucket and archive, a fixed archive
+   interval with 60 s the only tested value) and a meanings table (sea-level `barometer`, `rain` and
+   `ET` as per-record increments, `dayRain` from local midnight, calm air, `windGust` vs
+   `windGust10`, `radiation` in W/m² and never lux). §1 adds strict JSON, fixed US keys, the bounded
+   cache and the loop file's calm-air behavior (`windDir` cached until its TTL, then omitted); §2
+   says InfluxDB's suffixes follow the database's unit system unless an adopter pins one.
+5. **A contract version independent of the writer** (next `loopjson` minor). The contract is 1.1
+   today, the version `writer`'s semver has tracked since DEC-0211; a dedicated optional loop key
+   makes it 1.2. InfluxDB and SQLite are versioned by this document, with DEC-0222's image tags
+   marking when a change shipped here.
+6. **The writer omits non-finite values** (same release). Until then §1 says the 1.1.x writer can
+   still write a bare `NaN`.
+7. **A JSON Schema, sample fixtures and a small checker** for a loop file and a list of bucket field
+   names, with a test tying the writer's output to the schema (same release).
+8. **One owner.** INTERFACES.md is the contract's only statement; consumers link to it, and where
+   one disagrees, this file wins.
+
+**Not decided:** CumulusMX code, a station tag, renaming the 7 diagnostic fields (a break no
+consumer asks for), moving QC out of the driver (#475 stays parked).
+
+### Corrections to the audit, found while writing
+
+- **`ET` is a per-record increment, not a since-midnight total.** The audit's finding 4 grouped it
+  with `dayRain`; WeeWX accumulates `ET` with `sum`, the writer refuses it as a delta (DEC-0220), and
+  the dashboard sums `ET_in` per day like `rain_in` (its `DATA-MODEL.md`). The meanings table says
+  so.
+- **The loop file does not omit `windDir` the moment air is calm.** The driver reports none, but the
+  writer serves the cached direction until its 300 s TTL lapses (the #74 expiry path); finding 4's
+  "omitted" is the archive and InfluxDB behavior. §1 states both.
+
+### Consequences
+
+- Docs only: nothing baked, mounted or emitted changes, and no consumer has to act.
+- `loopjson` 1.2.0 (parts 5 to 7) is the next step, then one ops issue for the cross-repo drift the
+  audit lists (the dashboard's stale notes on `windchill_F`, `cloudbase_foot`, `windGust_mph`, calm
+  air and the barometer cadence; HLF's unchecked `usUnits`).
+- A producer that is not WeeWX can now read what it must emit, but has no checker until part 7.

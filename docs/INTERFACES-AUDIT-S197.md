@@ -1,6 +1,7 @@
 # Interfaces audit — what it takes to be generalized (S197, 2026-11-10)
 
-Status: findings and a proposed decision. No code, config or contract text was changed. Nothing was
+Status: decided as DEC-0233 (S199); parts 1 to 4 and 8 are written into `docs/INTERFACES.md`. Original
+status at S197: findings and a proposed decision. No code, config or contract text was changed. Nothing was
 posted to another repo's tracker. The decision at the end is a proposal, not a logged DEC.
 
 Question (ROADMAP P3, PRINCIPLES §1): is `docs/INTERFACES.md` enough for a different producer, a

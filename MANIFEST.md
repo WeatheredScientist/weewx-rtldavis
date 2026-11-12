@@ -21,7 +21,7 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 
 | Artifact | Load when |
 |---|---|
-| `docs/ARCHITECTURE.md` · `docs/INTERFACES.md` (the loop-JSON + InfluxDB contract) · `docs/DATA_ERRATA.md` | the ISS→driver→WeeWX→sinks chain; what a consumer reads; a suspect reading |
+| `docs/ARCHITECTURE.md` · `docs/INTERFACES.md` (the data contract: loop JSON, InfluxDB, SQLite) · `docs/DATA_ERRATA.md` | the ISS→driver→WeeWX→sinks chain; what a consumer reads; a suspect reading |
 | `CHANGES-FROM-UPSTREAM.md` (DEC-0034) | changing a forked file; an upstream PR |
 | Root runtime modules: driver `rtldavis.py`; uploaders `influx.py`, `owm.py`, `windy.py`, `wcloud.py`, `ogoxeUploader.py` and their base `rest_site.py`; services `pressure_service.py`, `dewpoint_service.py`, `loop_json_writer.py` | any behavior change; `CONSTANTS.md`'s deploy layers say which copy wins |
 | `weewx_monitor.py`: host-side watchdog, alerter, reception tracker | "what handles X at runtime?" (DEC-0074) |
