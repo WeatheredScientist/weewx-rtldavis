@@ -7,6 +7,12 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S197] — 2026-11-10 — INTERFACES generalization audit (P3); #563 finished; cdavis289's Go vs Python results read
+
+- No prod change. Sonnet 5.5 for the start and chores, then Fable 5.2 (owner-named) for the audit. PR #572: `docs/INTERFACES-AUDIT-S197.md` answers ROADMAP P3's question, whether `docs/INTERFACES.md` is enough for a non-Davis WeeWX or CumulusMX producer. 16 findings, among them: the InfluxDB section has no field table (36 live fields, 19 documented nowhere, seven of those driver internals under borrowed column names); the loop table has no required or optional column and lists two keys prod never emits; the SQLite archive is a third surface that HLF reads and the document disowns; one NaN takes the feed "offline"; `writer` names an implementation, not a contract version. An eight-part decision is proposed, not logged: it needs the owner's go. Nothing was posted to another repo. S196's "no ROADMAP line is session-actionable until December" was wrong about this line. `MANIFEST.md` 3,483 chars, coverage sweep green.
+- #563 finished and closed on the owner's word: 29 merged `origin/` branches, the `backfill-v2.0.20` tag and three merged local branches deleted. PR #571 (S196) merged 2026-11-10 19:44 ET; #572 merged `dev` and carries this closeout.
+- Gate read 11-09 19:08 to 11-10 19:45 ET: no time-gate or burst-gate drop, no gap (1186 of 1186 records on 11-10), no watch line fired; uploader errors only (AWEKAS retries, two Windy 429s). cdavis289 posted the 72-hour results on 11-10 18:48 ET as weewx-packages/weewx-rtldavis#15: mean reception Python 99.851%, Go 99.558% over 1,186 five-minute intervals, on different dongles, with two Python sync losses; a dongle crossover is next. Summary in `docs/UPSTREAM-THREADS.md`. Rolled S194 and S194b to the archive.
+
 ## [S196] — 2026-11-09 — Status and roadmap evaluation; MANIFEST names the nine root modules again (ops#449)
 
 - No prod change. Fable 5.2 (owner-named). Evaluation: prod healthy on v2.4.0, up 5 days; no `docs/ROADMAP.md` line is session-actionable until early December (its five open lines wait on hardware, a person, the 12-04 re-run, or have no done criterion). Found: ROADMAP is 97 KB with 349 lines of reconciliation log, open items sit under DONE and CLOSED headings, and the forward decisions (the December decoder A/B, Session C, the announcement, #558, #553) are in no roadmap line. A diet is proposed in `BOOT.md` job 0(e), not done.
