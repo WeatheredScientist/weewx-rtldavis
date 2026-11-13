@@ -1087,10 +1087,11 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       missing flag, superseding the scope note above), a §0 rules and meanings table, a row per
       field with InfluxDB's three tiers, one contract version (1.1) and one owner; the history moved
       verbatim to its Appendix A. What remains is the next line.)
-- [ ] `loopjson` 1.2.0, DEC-0233 parts 5 to 7: a contract-version loop key independent of
-      `writer` (contract 1.2), the writer omits non-finite values, and a JSON Schema, sample fixtures
-      and a checker, with a test tying the writer's output to the schema. Then one ops issue for the
-      cross-repo drift `docs/INTERFACES-AUDIT-S197.md` lists. CumulusMX stays out until someone wants it.
+- [x] `loopjson` 1.2.0, DEC-0233 parts 5 to 7 — **shipped S201 (DEC-0234)**: the `contract` key
+      (1.2), finite-only output, and `contract/` (JSON Schema, fixtures, `check_contract.py`) tied to
+      the writer by tests; release `loopjson-v1.2.0`, in prod since 2026-11-12 22:42 ET.
+- [ ] One ops issue for the cross-repo drift `docs/INTERFACES-AUDIT-S197.md` lists (draft in S201b's
+      notes; owner's go to post). CumulusMX stays out until someone wants it.
 - [x] Ship `loop_json_writer.py` as an installable WeeWX extension (`weewx#440`, the dashboard's
       DEC-0348 ask) — **designed S153, shipped S155 (DEC-0211)**: release `loopjson-v1.0.0` of this
       repo, proved on a clean WeeWX 5.5.2; prod writes `writer: loop_json_writer/1.0.0`. The
