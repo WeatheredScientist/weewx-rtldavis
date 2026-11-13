@@ -1,0 +1,14 @@
+outTemp_C
+dewpoint_C
+outHumidity
+windSpeed_kph
+windGust_kph
+windDir
+barometer_mbar
+rain_cm
+rainRate_cm_per_hour
+dayRain_cm
+radiation_Wpm2
+UV
+pressure_mbar
+appTemp_C

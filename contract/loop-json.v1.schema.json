@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/WeatheredScientist/weewx-rtldavis/contract/loop-json.v1.schema.json",
+  "$comment": "Loop-JSON contract 1.2, docs/INTERFACES.md section 1. One schema per major version: it validates every 1.x file.",
+  "title": "weewx-rtldavis loop-JSON file, contract 1.x",
+  "description": "Types only, not ranges. JSON Schema cannot see NaN or Infinity tokens, numbers that overflow to infinity, duplicate keys, a byte-order mark, trailing data or staleness: parse strictly, or run contract/check_contract.py. Four names are reserved for consumers' proxies and never appear in a feed: skyState, ongoingEvents, loop_cadence_s, stale_after_s.",
+  "type": "object",
+  "required": ["dateTime"],
+  "additionalProperties": false,
+  "properties": {
+    "dateTime": {"type": "integer", "minimum": 0},
+    "contract": {"type": "string", "pattern": "^1\\.(0|[1-9][0-9]*)$"},
+    "writer": {"type": "string", "pattern": "^\\S+/\\S+$"},
+    "loop_interval_s": {"type": "number", "minimum": 1, "maximum": 3600},
+    "barometer_fetch_epoch": {"type": "integer", "minimum": 0},
+    "windSpeed_mph": {"type": "number"},
+    "windGust_mph": {"type": "number"},
+    "windDir": {"type": "number"},
+    "outTemp_F": {"type": "number"},
+    "dewpoint_F": {"type": "number"},
+    "outHumidity": {"type": "number"},
+    "heatindex_F": {"type": "number"},
+    "windchill_F": {"type": "number"},
+    "barometer_inHg": {"type": "number"},
+    "rainRate_inch_per_hour": {"type": "number"},
+    "radiation_Wpm2": {"type": "number"},
+    "UV": {"type": "number"},
+    "cloudbase_foot": {"type": "number"}
+  },
+  "patternProperties": {
+    "^(?!(skyState|ongoingEvents|loop_cadence_s|stale_after_s)$)[A-Za-z][A-Za-z0-9_]{0,63}$": {"type": ["number", "string"]}
+  }
+}

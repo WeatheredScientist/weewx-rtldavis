@@ -49,6 +49,14 @@ feed = json.load(open(sys.argv[1]))
 assert 1 <= feed.get('loop_interval_s', 0) <= 3600, 'loop_interval_s missing or out of range'
 print('ok:', d['writer'], 'loop_interval_s', feed['loop_interval_s'])
 PY
+# DEC-0234: both files meet the contract, as the published checker sees them.
+checker="$(dirname "$0")/../contract/check_contract.py"
+for f in "$feed" "$st/feed/current.json"; do
+  out=$(python3 "$checker" loop "$f") || { echo "FAIL: $f fails the contract:" >&2; echo "$out" >&2; exit 1; }
+  echo "$out" | grep -q '^OK: contract 1\.2,' || { echo "FAIL: $f: $out" >&2; exit 1; }
+  echo "$out" | tail -1
+done
+
 if grep -qi 'traceback' "$work/weewxd.out"; then
   echo "FAIL: traceback in weewxd output" >&2; cat "$work/weewxd.out" >&2; exit 1
 fi

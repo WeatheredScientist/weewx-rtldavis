@@ -1,0 +1,17 @@
+{
+  "metric.txt": {
+    "summary": "OK: 12 of 17 contract fields, unit system METRIC",
+    "valid": true
+  },
+  "mixed-broken.txt": {
+    "codes": [
+      "E-MIXED-UNITS",
+      "E-NO-UNIT-LABEL"
+    ],
+    "valid": false
+  },
+  "reference-us.txt": {
+    "summary": "OK: 17 of 17 contract fields, unit system US",
+    "valid": true
+  }
+}

@@ -13219,3 +13219,109 @@ consumer asks for), moving QC out of the driver (#475 stays parked).
   audit lists (the dashboard's stale notes on `windchill_F`, `cloudbase_foot`, `windGust_mph`, calm
   air and the barometer cadence; HLF's unchecked `usUnits`).
 - A producer that is not WeeWX can now read what it must emit, but has no checker until part 7.
+
+---
+
+## DEC-0234 — `loopjson` 1.2.0: a contract-version key, finite-only output, a schema and a checker (S201b)
+
+**Status:** Accepted by the owner, 2026-11-12 ("Approve both"; Q1 `contract`, Q2 bool→0/1, Q3 SQLite
+checker mode later, Q4 the running monitor left alone). Built on `s201b-loopjson-1.2`; not released
+or deployed · **Date:** 2026-11-12 (S201b,
+Opus 5.5) · **Builds:** DEC-0233 parts 5 to 7 · **Applies:** DEC-0006, DEC-0211, DEC-0220,
+DEC-0221, DEC-0222, PRINCIPLES §1, §2, §6 · **Design:** `docs/LOOPJSON-1.2-DESIGN.md` (the full
+reasoning, alternatives, test table, rollout and rollback).
+
+### Context
+
+DEC-0233 made `docs/INTERFACES.md` a specification and queued three parts for the next `loopjson`
+minor: a contract version independent of the writer's name, a writer that cannot emit NaN, and
+something machine-checkable. Measured while designing:
+- The 1.1.0 writer writes Python's lax JSON: bare `NaN`, `true`, `"dateTime": null`. A numpy
+  integer in an extra raises `TypeError` and freezes the feed.
+- Python's own parser accepts `NaN` and silently keeps the last of two duplicate keys, so a
+  schema alone cannot enforce "finite".
+- The only feed consumer, the dashboard, answers 503 to any parse failure. Its proxy passes
+  unknown keys through, then sets four names of its own on top.
+
+### Decision
+
+1. **`"contract": "MAJOR.MINOR"`**, a string (a number fails at 1.10), two parts (the contract
+   text has no patch level), at the top level of every write of both files. It is optional for
+   consumers and mandatory for a producer that claims 1.2 or later. Consumer rules:
+   - absent: read the file as 1.1;
+   - same major: read it, and test keys by presence, not by version;
+   - another major: refuse, never guess;
+   - malformed: the file is invalid.
+
+   `writer` keeps naming the implementation. The module carries `__version__` and `CONTRACT`
+   apart, tied by tests.
+2. **§0 gains a forward-compatibility rule:** unknown keys, fields and columns are ignored. **§1
+   reserves nine names:** `contract`, `writer`, `dateTime`, `loop_interval_s`,
+   `barometer_fetch_epoch`, and the reference proxy's `skyState`, `ongoingEvents`,
+   `loop_cadence_s`, `stale_after_s`. The writer refuses an extra that maps to any of them.
+3. **Finite-only output.** A non-finite value, or a type the contract cannot carry, is treated as
+   absent, exactly like `None`: it is omitted, never written as `null`, and the cache is left
+   untouched. Each such key gets one WARNING per run. Conversions:
+   - `bool` becomes 0 or 1;
+   - numpy-like scalars are converted through `__index__` or `__float__`;
+   - a string is kept only for an extra.
+
+   A `dateTime` that is not a finite number skips that packet's writes, with an ERROR. A finite
+   fraction is truncated. Each packet is serialized once with `allow_nan=False`, and the same
+   string goes to both files. If the guard fires, nothing is written for that packet.
+4. **`contract/`:**
+   - `loop-json.v1.schema.json`: draft 2020-12, one file per major, types only (no QC ranges),
+     extras matched by `^[A-Za-z][A-Za-z0-9_]{0,63}$` as number or string, `additionalProperties:
+     false`.
+   - `check_contract.py`: one file, stdlib only, Python 3.8 or later. It embeds the schema
+     (tested equal to the file) with a small validator that raises on unknown keywords. It adds a
+     strict parse (NaN and Infinity tokens, overflow, duplicate keys, BOM, trailing data), the
+     major check and an optional `--max-age`. Subcommands: `loop` (a file, stdin or a URL) and
+     `influx-fields` (§2's catalog: unit-system mixing, non-contract spellings, diagnostics).
+     Findings carry stable codes; exit codes are 0, 1 or 2.
+   - Fixtures with `expected.json`, as a conformance suite consumers can run through their own
+     parser.
+5. **Tests tie it together, pytest only:**
+   - adversarial writer output must validate;
+   - writer keys match the schema, the schema matches INTERFACES §1, and `CONTRACT` matches the
+     header and the schema;
+   - the checker agrees with `jsonschema` (a CI-only test dependency, `REQUIRE_JSONSCHEMA=1`);
+   - the influx catalog matches §2 and real WeeWX;
+   - the 1.0.0 golden test passes with only `contract` added;
+   - positive controls.
+
+   `prove_loopjson.sh` runs the checker on real Simulator output. `loopjson.yml` runs the checker
+   under Python 3.9 and attaches it and the schema as release assets.
+6. **Versions:** contract 1.1 to 1.2 and `loopjson` 1.1.0 to 1.2.0, both minors. No image change.
+   **Prod:** read the tenant checkout's HEAD and diff the mounted files, then `marvinctl pull`
+   and `restart weewx.service`. Verify by the sha, the start time after the mtime, the
+   `1.2.0 (contract 1.2)` startup line, and the checker run on the raw file from `marvinctl cat`
+   (not the proxy). **Rollback:** restore the one file (owner-run `git checkout 694938f --
+   loop_json_writer.py`, or a revert PR, then pull), then restart.
+
+**Rejected:**
+- `contract_version`, `schema_version` and a `$schema` URL as the key;
+- a numeric version;
+- `null` for absent;
+- evicting the cache on NaN;
+- a wall-clock fallback for `dateTime`;
+- range checks in the schema (#475);
+- a checker that depends on `jsonschema`, and a second hand-maintained copy of the rules.
+
+**Not decided here:** an SQLite mode for the checker, wiring the checker into `doctor`, and
+CumulusMX.
+
+### Open questions (owner)
+
+- Q1: the key name, `contract` (recommended) or `contract_version`.
+- Q2: `bool` to 0/1 (recommended) or treated as absent.
+- Q3: an SQLite checker mode, later (recommended) or now.
+- Q4: on the pull, leave the monitor's changed bytes unloaded until its next start (recommended;
+  the change is comments and messages only, #567) or restart it with verification.
+
+### Consequences
+
+- The dashboard needs no change. Its proxy passes `contract` through, and nothing it reads
+  changes for this station. The S197 drift issue is drafted for ops, unposted.
+- A non-WeeWX producer gets a schema, a checker and fixtures, which is what DEC-0233 said it
+  lacked.

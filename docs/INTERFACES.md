@@ -1,7 +1,7 @@
 # Interfaces — weewx-rtldavis
 
 **Status:** Specification. The one owner of the data contract (DEC-0233).
-**Contract version:** 1.1 · **Last updated:** 2026-11-11 (S199)
+**Contract version:** 1.2 · **Last updated:** 2026-11-12 (S201b)
 
 This repo's product is data. Three surfaces carry it, and each is specified here: the loop-JSON
 file (§1), the InfluxDB bucket (§2) and the SQLite archive (§3). The contract is what a consumer
@@ -20,10 +20,16 @@ ships. A new optional key is a minor version. A fix that brings behavior back to
 patch.
 
 **Versioning.** The contract has one version, the one above, for all three surfaces. The loop file
-states it today through `writer` (`loop_json_writer/1.1.x` meets contract 1.1); a dedicated
-contract-version key, independent of the writer's name, is DEC-0233 part 5 and arrives with
-`loopjson` 1.2.0 (contract 1.2). InfluxDB and SQLite carry no version of their own: a consumer
-learns it here, and for this repo's image DEC-0222's SemVer tags mark when a change shipped.
+states it in band with the `contract` key (`"1.2"`, since `loopjson` 1.2.0, DEC-0234); a file
+without it is contract 1.1, which is what the 1.0 and 1.1 writers produce. `writer` names the
+implementation, not the contract: `loop_json_writer/1.2.0` writes contract 1.2, and a later writer
+release may still write 1.2. InfluxDB and SQLite carry no version of their own, because a field or
+column cannot carry one without becoming data: a consumer learns it here, and for this repo's image
+DEC-0222's SemVer tags mark when a change shipped.
+
+**Machine-checkable.** `contract/` holds the loop file's JSON Schema
+(`loop-json.v1.schema.json`), a stdlib-only checker (`check_contract.py`) and conformance fixtures;
+`contract/README.md` is the adopter's page. Tests tie all three to this file.
 
 ---
 
@@ -34,6 +40,7 @@ learns it here, and for this repo's image DEC-0222's SemVer tags mark when a cha
 | Time | `dateTime` is whole seconds of Unix epoch, UTC, non-decreasing, on a clock within about 1 s of the consumer's |
 | Absence | A value that is not known is omitted (InfluxDB: no field; SQLite: NULL), never written as 0 or as a placeholder. A missing value means "no current value," never "unchanged" |
 | Finite numbers | Every numeric value is finite. NaN and infinity are not values; a producer omits them (see §1, strict JSON) |
+| Unknown names | Unknown keys, fields and columns are ignored. A consumer reads what it knows; that is what lets a minor version add one without a consumer change |
 | One station | One station per InfluxDB bucket and per SQLite archive. There is no station tag or column |
 | Archive interval | Fixed for the life of an archive. The SQLite `interval` column states it in minutes. Consumers are tested against 60 s only; a producer with another interval says so to its consumers before they read it |
 | Meanings | The meanings table below. A value under a contract name must mean what the table says, whatever the sensor |
@@ -87,9 +94,14 @@ a healthy station; a consumer must not compute staleness from it.
 
 **Rules:**
 
-- **Strict JSON, one flat object.** Keys are strings, values are JSON numbers or strings; no
-  nesting, no arrays, no `null`, no NaN or infinity. (The 1.1.x writer can still write a bare `NaN`
-  if a driver puts one in a packet; DEC-0233 part 6 makes it omit non-finite values in 1.2.0.)
+- **Strict JSON, one flat object.** Keys are strings matching `^[A-Za-z][A-Za-z0-9_]{0,63}$`,
+  values are JSON numbers or strings; no nesting, no arrays, no booleans, no `null`, no NaN or
+  infinity, no duplicate keys. The 1.2.0 writer treats a value it cannot carry (NaN, infinity, a
+  type other than a number, or a string in one of the thirteen standard keys) as absent, like
+  WeeWX's `None`, with one WARNING per key until it recovers; a `bool` is written as 0 or 1, the
+  archive's encoding. A packet whose `dateTime` is not a finite number writes nothing, and the
+  payload is serialized with `allow_nan=False` as a hard guard (DEC-0234). The 1.1.x writer could
+  write a bare `NaN`.
 - **Fixed US units**, stated in the key names. The writer applies `to_US()` before extraction, so
   `outTemp_F` is °F whatever the station's unit system. This surface does not follow the archive's
   units (contrast §2 and §3).
@@ -113,7 +125,8 @@ a station without that class omits it.
 | Key | Required | Unit | Class | Meaning and notes |
 |---|---|---|---|---|
 | `dateTime` | **required** | epoch s, integer | core | The packet's time. Its absence makes the reference consumer answer 503, read as "station offline" |
-| `writer` | optional | string | core | `loop_json_writer/<semver>`, the implementation. See Versioning |
+| `writer` | optional | string | core | `<name>/<version>`, the implementation; ours is `loop_json_writer/<semver>`. See Versioning |
+| `contract` | optional (written by every 1.2+ producer) | string | core | `"MAJOR.MINOR"` of this document the file meets. Absent means 1.1. See the version table below |
 | `loop_interval_s` | optional | s | core | Median of the last 32 gaps between successful `loop-data.txt` writes, monotonic clock, one decimal. Omitted, never clamped, outside [1, 3600]. First appears in a run's third file. The file's cadence, not a sensor's: a driver that emits bursts reports the burst cadence |
 | `outTemp_F` | optional | °F | thermo-hygro | |
 | `outHumidity` | optional | % | thermo-hygro | |
@@ -129,6 +142,26 @@ a station without that class omits it.
 | `UV` | optional | index | UV | |
 | `cloudbase_foot` | optional | ft | derived | Only when WeeWX can derive it on a loop packet, which needs temperature and humidity in the same packet |
 | extras | optional | by rule | any | Opt-in, below |
+
+**Contract version, as a consumer reads it.**
+
+| `contract` in the file | Consumer does |
+|---|---|
+| absent | Treat the file as contract 1.1 |
+| same major, any minor, older or newer than the consumer knows | Read it. Use keys by presence, never by version ("is `windGust10_mph` here?", not "is contract ≥ 1.2?"). Ignore unknown keys |
+| a different major | Do not interpret the values. Fail closed, naming the version ("loop contract 2.0 not supported"): a major means a key changed meaning or units |
+| present but malformed (not a string of `digits.digits`) | The file is invalid; treat it like a parse failure |
+
+**Reserved names.** A producer never uses these as feed keys: `contract`, `writer`, `dateTime`,
+`loop_interval_s` and `barometer_fetch_epoch`, which the writer stamps itself, and `skyState`,
+`ongoingEvents`, `loop_cadence_s` and `stale_after_s`, which the reference consumer's proxy adds on
+the way out and would overwrite. The writer refuses an `extra_fields` entry that maps to any of
+them, and the schema refuses the proxy's four.
+
+**Validate.** `python3 contract/check_contract.py loop --max-age 30 loop-data.txt` parses strictly,
+validates against the schema and checks the version and liveness; exit 0 means the file meets
+this section. A JSON Schema validator alone cannot see NaN tokens, overflow or duplicate keys, so a
+consumer using one must also parse strictly (`contract/README.md`).
 
 **Extra observations (opt-in, `[LoopJsonWriter] extra_fields`, DEC-0220).** Each named observation
 is passed through as `<obs>_<US unit label>` by weewx-influx2's naming rule, read from the live unit
@@ -163,18 +196,19 @@ With a `[DavisPressure]` section the writer gives `barometer_inHg` a TTL of 2 ×
 `fetch_interval`; without one, `ttl_default` applies. Both are harmless on a station without the
 service.
 
-**Example** (this station, 2026-11-11):
+**Example** (this station's 2026-11-11 sample as the 1.2.0 writer writes it; the 1.1.0 file was
+the same without `contract`). It is `contract/fixtures/loop/valid/reference-1.2.json`:
 
 ```json
 {"rainRate_inch_per_hour": 0, "radiation_Wpm2": 555.507776, "barometer_inHg": 30.006,
  "windSpeed_mph": 0, "outTemp_F": 59.7, "windchill_F": 59.7, "dewpoint_F": 41.13159559953975,
  "outHumidity": 51.1, "heatindex_F": 57.2217, "UV": 2.2, "windDir": 280.70750988142294,
  "windGust10_mph": 4, "barometer_fetch_epoch": 1794409156, "dateTime": 1794409271,
- "writer": "loop_json_writer/1.1.0", "loop_interval_s": 2.8}
+ "writer": "loop_json_writer/1.2.0", "contract": "1.2", "loop_interval_s": 2.8}
 ```
 
-Keys a consumer's proxy adds on the way out (the reference dashboard adds `skyState`,
-`ongoingEvents`, `loop_cadence_s` and `stale_after_s`) are the consumer's, not this surface's.
+Keys a consumer's proxy adds on the way out are the consumer's, not this surface's (see Reserved
+names).
 
 ## 2. InfluxDB — archive/time-series surface
 

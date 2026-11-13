@@ -1,0 +1,154 @@
+{
+  "invalid/array-value.json": {
+    "code": "E-TYPE",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/bad-key-name.json": {
+    "code": "E-KEY-NAME",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/bom.json": {
+    "code": "E-BOM",
+    "level": "parse",
+    "valid": false
+  },
+  "invalid/boolean-value.json": {
+    "code": "E-TYPE",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/contract-major-2.json": {
+    "code": "E-MAJOR",
+    "level": "contract",
+    "valid": false
+  },
+  "invalid/contract-malformed.json": {
+    "code": "E-PATTERN",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/contract-number.json": {
+    "code": "E-TYPE",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/datetime-fraction.json": {
+    "code": "E-TYPE",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/datetime-string.json": {
+    "code": "E-TYPE",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/duplicate-key.json": {
+    "code": "E-DUPLICATE-KEY",
+    "level": "parse",
+    "valid": false
+  },
+  "invalid/empty.json": {
+    "code": "E-PARSE",
+    "level": "parse",
+    "valid": false
+  },
+  "invalid/infinity.json": {
+    "code": "E-PARSE-NAN",
+    "level": "parse",
+    "valid": false
+  },
+  "invalid/loop-interval-out-of-range.json": {
+    "code": "E-RANGE",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/missing-datetime.json": {
+    "code": "E-REQUIRED",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/nan.json": {
+    "code": "E-PARSE-NAN",
+    "level": "parse",
+    "valid": false
+  },
+  "invalid/neg-infinity.json": {
+    "code": "E-PARSE-NAN",
+    "level": "parse",
+    "valid": false
+  },
+  "invalid/nested-object.json": {
+    "code": "E-TYPE",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/not-an-object.json": {
+    "code": "E-NOT-OBJECT",
+    "level": "parse",
+    "valid": false
+  },
+  "invalid/null-value.json": {
+    "code": "E-NULL",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/overflow-1e400.json": {
+    "code": "E-PARSE-OVERFLOW",
+    "level": "parse",
+    "valid": false
+  },
+  "invalid/reserved-proxy-key.json": {
+    "code": "E-KEY-NAME",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/standard-key-string.json": {
+    "code": "E-TYPE",
+    "level": "schema",
+    "valid": false
+  },
+  "invalid/trailing-data.json": {
+    "code": "E-PARSE",
+    "level": "parse",
+    "valid": false
+  },
+  "invalid/truncated.json": {
+    "code": "E-PARSE",
+    "level": "parse",
+    "valid": false
+  },
+  "valid/calm.json": {
+    "valid": true,
+    "warnings": []
+  },
+  "valid/extras.json": {
+    "valid": true,
+    "warnings": []
+  },
+  "valid/future-minor.json": {
+    "valid": true,
+    "warnings": []
+  },
+  "valid/integer-float-datetime.json": {
+    "valid": true,
+    "warnings": []
+  },
+  "valid/minimal.json": {
+    "valid": true,
+    "warnings": [
+      "W-NO-CONTRACT"
+    ]
+  },
+  "valid/reference-1.1.json": {
+    "valid": true,
+    "warnings": [
+      "W-NO-CONTRACT"
+    ]
+  },
+  "valid/reference-1.2.json": {
+    "valid": true,
+    "warnings": []
+  }
+}

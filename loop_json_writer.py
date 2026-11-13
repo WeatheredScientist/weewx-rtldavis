@@ -43,9 +43,18 @@ Fields written (None → omitted, last known value used for sparse fields):
     extra_fields, written as <obs>_<unit label>; per-packet deltas are refused
   loop_interval_s (1.1.0, DEC-0221): median seconds between loop-data.txt writes
   barometer_fetch_epoch (#172 — passthrough, NOT cached/TTL'd; see new_loop)
-  writer ("loop_json_writer/<__version__>", DEC-0211; semver against the
-  contract: major = a key renamed, removed or given new units, minor = a new
-  optional key, patch = a behavior fix)
+  writer ("loop_json_writer/<__version__>", DEC-0211): the implementation.
+    Major = the contract's major changes; minor = the contract's minor changes
+    or a new config feature; patch = a fix (DEC-0234)
+  contract (1.2.0, DEC-0234): "MAJOR.MINOR" of docs/INTERFACES.md this file meets
+
+STRICT OUTPUT (1.2.0, DEC-0234): every value is cleaned as it enters the cache
+(_clean). NaN, infinity and values of a type the contract does not carry are
+treated as absent, exactly like None, with one WARNING per key until it
+recovers. A packet whose dateTime is not a finite number writes nothing. The
+payload is serialized once with allow_nan=False, the hard guard behind _clean,
+and the same string goes to both files. contract/check_contract.py checks the
+output; tests/test_loop_json_contract.py drives adversarial packets through it.
 
 NOTE: Packet is explicitly normalized to US (imperial) units before extraction
 so that output key names (outTemp_F, barometer_inHg, etc.) always reflect
@@ -64,7 +73,10 @@ served stale; consumers already must treat any field as possibly-missing
 """
 import json
 import logging
+import math
+import operator
 import os
+import re
 import statistics
 import time
 from collections import deque
@@ -74,10 +86,15 @@ from weewx.engine import StdService
 
 log = logging.getLogger(__name__)
 
-# Contract version (DEC-0211), stamped into every write as the "writer" key.
+# Implementation version (DEC-0211), stamped into every write as the "writer" key.
 # Keep it equal to extensions/loopjson/install.py's version; CI checks the pair
 # against the release tag.
-__version__ = '1.1.0'
+__version__ = '1.2.0'
+
+# Contract version (DEC-0234), stamped into every write as the "contract" key: the
+# docs/INTERFACES.md version this output meets. Tests tie it to that file's header,
+# to the schema's $comment and to contract/check_contract.py.
+CONTRACT = '1.2'
 
 # How long a cached value may stand in for a missing reading. The ISS rotates
 # its sensors across message types (one reading each ~25-60 s at this station's
@@ -150,9 +167,66 @@ _UNIT_REDUCTIONS = {
 }
 
 
-# Output keys an extra observation may not take: the writer stamps these itself.
+# Output keys an extra observation may not take (INTERFACES §1, reserved names): the
+# five the writer stamps itself, and the four the reference consumer's proxy adds on
+# the way out, which would silently overwrite a feed key of the same name.
 _RESERVED_KEYS = frozenset(
-    ['dateTime', 'writer', 'barometer_fetch_epoch', 'loop_interval_s'])
+    ['dateTime', 'writer', 'contract', 'barometer_fetch_epoch', 'loop_interval_s',
+     'skyState', 'ongoingEvents', 'loop_cadence_s', 'stale_after_s'])
+
+# A feed key must match this (contract/loop-json.v1.schema.json, patternProperties).
+_KEY_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
+
+# Stands for "no value" in _clean's result; None is never a feed value either.
+_MISSING = object()
+
+
+def _clean(value, allow_str=False):
+    """(value fit for the feed, None) or (_MISSING, why) -- DEC-0234 item 2.
+
+    Never raises: a value that cannot be handled is absent, like None. Real
+    numbers pass as int or float (a numpy integer through __index__, a numpy
+    float or Decimal through __float__); a bool becomes 0 or 1, the archive's
+    encoding; NaN and infinity are absent; a string passes only where allow_str
+    (an extra field). `why` is None for None itself, which is ordinary absence."""
+    try:
+        if value is None:
+            return _MISSING, None
+        if isinstance(value, bool):
+            return int(value), None
+        if isinstance(value, int):
+            return int(value), None
+        if isinstance(value, float):
+            if math.isfinite(value):
+                return float(value), None
+            return _MISSING, 'is not finite'
+        if isinstance(value, str):
+            if allow_str:
+                return str(value), None
+            return _MISSING, 'is a string, not a number'
+        if hasattr(value, '__index__'):
+            return operator.index(value), None
+        if hasattr(value, '__float__'):
+            number = float(value)
+            if math.isfinite(number):
+                return number, None
+            return _MISSING, 'is not finite'
+        return _MISSING, 'is a %s, not a number' % type(value).__name__
+    except Exception as e:
+        return _MISSING, 'cannot be converted (%s)' % e
+
+
+def _clean_epoch(value):
+    """An epoch for the feed, an integer >= 0 (whole seconds, INTERFACES §0), or
+    (_MISSING, why). A finite fraction is truncated; a bool is no time."""
+    if isinstance(value, bool):
+        return _MISSING, 'is a bool, not a time'
+    number, why = _clean(value)
+    if number is _MISSING:
+        return _MISSING, why
+    if number < 0:
+        return _MISSING, 'is negative'
+    return int(number), None
 
 
 # loop_interval_s (DEC-0221): the median of up to this many gaps, reported inside the
@@ -242,10 +316,13 @@ class LoopJsonWriter(StdService):
         # (issue #74): logged at DEBUG, so the matching recovery line must
         # be DEBUG too or the noise just moves down a level
         self._expired_calm = set()
+        # out_keys whose last value was refused by _clean, for one-shot logging
+        self._unclean = set()
+        self._bad_time = False  # a dateTime refusal is logged once until it recovers
         self.bind(weewx.NEW_LOOP_PACKET, self.new_loop)
-        log.info('LoopJsonWriter: writing to %s every packet and %s every %s '
-                 '(cache TTL %d s, %s %d s)'
-                 % (self.path, self.current_path,
+        log.info('LoopJsonWriter %s (contract %s): writing to %s every packet and '
+                 '%s every %s (cache TTL %d s, %s %d s)'
+                 % (__version__, CONTRACT, self.path, self.current_path,
                     ('%d s' % self.current_interval)
                     if self.current_interval > 0 else 'packet',
                     self.ttl_default, _BAROMETER_KEY,
@@ -274,8 +351,12 @@ class LoopJsonWriter(StdService):
                             'it: %s' % (obs, e))
                 continue
             if out_key in _RESERVED_KEYS:
-                log.warning('LoopJsonWriter: extra_fields %s skipped, %s is a key '
-                            'the writer stamps itself' % (obs, out_key))
+                log.warning('LoopJsonWriter: extra_fields %s skipped, %s is a '
+                            'reserved key name' % (obs, out_key))
+            elif not _KEY_RE.match(out_key):
+                log.warning('LoopJsonWriter: extra_fields %s skipped, %s is not a '
+                            'valid key name (a letter, then up to 63 letters, '
+                            'digits or _)' % (obs, out_key))
             elif out_key in existing:
                 log.info('LoopJsonWriter: extra_fields %s ignored, %s is already '
                          'written' % (obs, out_key))
@@ -376,27 +457,43 @@ class LoopJsonWriter(StdService):
         except Exception as e:
             log.warning('LoopJsonWriter: unit conversion failed, using raw packet: %s' % e)
 
+        # The packet's dateTime, as the feed will carry it: whole seconds, or
+        # _MISSING when it is not a finite number >= 0 (DEC-0234 item 2).
+        stamp, stamp_why = _clean_epoch(pkt.get('dateTime'))
+
         # Clock: the packet's own time, falling back to wall clock — the same
         # idiom dewpoint_service.py uses, so the two caches age identically.
-        now = pkt.get('dateTime') or time.time()
+        # A dateTime the feed refuses is no clock either.
+        raw_time, _why = _clean(pkt.get('dateTime'))
+        if raw_time is _MISSING or stamp is _MISSING:
+            raw_time = None
+        now = raw_time or time.time()
 
-        # Update cache with any non-None values from this packet. The opt-in
-        # extras (DEC-0220) share the cache, its TTLs and the expiry warning
-        # with the 13 standard fields; there is no second code path.
-        for pkt_key, out_key in _FIELDS + self.extras:
-            val = pkt.get(pkt_key)
-            if val is not None:
-                self._cache[out_key] = (val, now)
-                if out_key in self._expired:
-                    self._expired.discard(out_key)
-                    if out_key in self._expired_calm:
-                        # benign calm-expiry (issue #74): wind picked back up
-                        self._expired_calm.discard(out_key)
-                        log.debug('LoopJsonWriter: %s recovered, serving live '
-                                  'values again' % out_key)
-                    else:
-                        log.info('LoopJsonWriter: %s recovered, serving live '
-                                 'values again' % out_key)
+        # Update cache with every value from this packet that _clean accepts.
+        # The opt-in extras (DEC-0220) share the cache, its TTLs and the expiry
+        # warning with the 13 standard fields; there is no second code path.
+        standard = len(_FIELDS)
+        for i, (pkt_key, out_key) in enumerate(_FIELDS + self.extras):
+            raw = pkt.get(pkt_key)
+            val, why = _clean(raw, allow_str=i >= standard)
+            if val is _MISSING:
+                if why is not None and out_key not in self._unclean:
+                    self._unclean.add(out_key)
+                    log.warning('LoopJsonWriter: %s value %.60r %s, treated as '
+                                'missing' % (out_key, raw, why))
+                continue
+            self._unclean.discard(out_key)
+            self._cache[out_key] = (val, now)
+            if out_key in self._expired:
+                self._expired.discard(out_key)
+                if out_key in self._expired_calm:
+                    # benign calm-expiry (issue #74): wind picked back up
+                    self._expired_calm.discard(out_key)
+                    log.debug('LoopJsonWriter: %s recovered, serving live '
+                              'values again' % out_key)
+                else:
+                    log.info('LoopJsonWriter: %s recovered, serving live '
+                             'values again' % out_key)
 
         # Build output: unexpired cached values + current timestamp. A field
         # past its TTL is omitted, never served stale under a live dateTime.
@@ -430,14 +527,49 @@ class LoopJsonWriter(StdService):
         # would recreate the exact gap it exists to close. pressure_service
         # stamps it into every packet once one fetch has succeeded; absent
         # before then (consumers already treat every field as possibly-missing).
-        fe = pkt.get('barometer_fetch_epoch')
-        if fe is not None:
+        raw_fe = pkt.get('barometer_fetch_epoch')
+        fe, why = _clean_epoch(raw_fe)
+        if fe is not _MISSING:
             data['barometer_fetch_epoch'] = fe
-        data['dateTime'] = pkt.get('dateTime')
+            self._unclean.discard('barometer_fetch_epoch')
+        elif why is not None and 'barometer_fetch_epoch' not in self._unclean:
+            self._unclean.add('barometer_fetch_epoch')
+            log.warning('LoopJsonWriter: barometer_fetch_epoch value %.60r %s, '
+                        'treated as missing' % (raw_fe, why))
+
+        # A packet without a usable dateTime writes nothing: a wall-clock stamp
+        # would call a broken station live, and the liveness gate exists to tell
+        # the truth. The consumer sees the previous file age, which is honest.
+        if stamp is _MISSING:
+            if not self._bad_time:
+                self._bad_time = True
+                log.error('LoopJsonWriter: packet dateTime %.60r %s; writing '
+                          'nothing until a packet carries a valid one'
+                          % (pkt.get('dateTime'), stamp_why or 'is missing'))
+            return
+        if self._bad_time:
+            self._bad_time = False
+            log.info('LoopJsonWriter: packet dateTime valid again, writing resumes')
+        data['dateTime'] = stamp
         data['writer'] = 'loop_json_writer/' + __version__
+        data['contract'] = CONTRACT
         interval = self._loop_interval()
         if interval is not None:
             data['loop_interval_s'] = interval
+
+        # Serialize once, strictly (DEC-0234 item 2). After _clean this cannot
+        # fail; if a future code path skips _clean, writing nothing is honest
+        # (the consumer sees an older dateTime) and writing NaN is not (its
+        # parser refuses the whole file, and the station reads as offline).
+        try:
+            payload = json.dumps(data, allow_nan=False)
+        except (TypeError, ValueError) as e:
+            bad = sorted(k for k, v in data.items()
+                         if not isinstance(v, (int, float, str))
+                         or (isinstance(v, float) and not math.isfinite(v)))
+            log.error('LoopJsonWriter: payload is not strict JSON (%s; keys %s), '
+                      'nothing written for this packet' % (e, ', '.join(bad) or '?'))
+            return
 
         # loop-data.txt on EVERY packet -- it carries the liveness signal.
         # current.json only when its interval has elapsed (DEC-0093). The first
@@ -451,7 +583,7 @@ class LoopJsonWriter(StdService):
             tmp = path + '.tmp'
             try:
                 with open(tmp, 'w') as f:
-                    json.dump(data, f)
+                    f.write(payload)
                 os.replace(tmp, path)
                 if path == self.path:
                     self._note_write()
