@@ -462,10 +462,13 @@ def test_barometer_long_ttl_only_with_a_davispressure_section():
 
 def test_every_write_carries_the_writer_version():
     import loop_json_writer
-    assert loop_json_writer.__version__ == '1.1.0'
+    assert loop_json_writer.__version__ == '1.2.0'
+    assert loop_json_writer.CONTRACT == '1.2'
     with tempfile.TemporaryDirectory() as tmpdir:
         w = _make_writer(tmpdir)
         w.new_loop(_pkt(1000, outTemp=70.0))
         for path in (w.path, w.current_path):
             with open(path) as f:
-                assert json.load(f)['writer'] == 'loop_json_writer/1.1.0'
+                feed = json.load(f)
+            assert feed['writer'] == 'loop_json_writer/1.2.0'
+            assert feed['contract'] == '1.2'

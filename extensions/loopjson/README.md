@@ -7,7 +7,7 @@ WeeWX driver. It does not need the rtldavis driver or this repository's Docker i
 ## Install
 
 ```
-weectl extension install https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/loopjson-v1.1.0/weewx-loopjson-1.1.0.zip
+weectl extension install https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/loopjson-v1.2.0/weewx-loopjson-1.2.0.zip
 ```
 
 Then restart WeeWX. The URL names a version on purpose; bump it when a new release comes out.
@@ -61,8 +61,10 @@ WeeWX names:
   extractor is `sum` (`rain`, `lightning_strike_count`, a driver's `t_rain`). The file is
   overwritten in place and read on the consumer's schedule, so one delta would be counted twice or
   not at all. List its cumulative counterpart instead (`dayRain`, `lightningcount`).
-- A name that collides with a key the writer already writes or stamps (`outTemp`, `dateTime`) is
-  skipped.
+- A name that collides with a key the writer already writes or stamps (`outTemp`, `dateTime`), or
+  with a reserved name (`contract`, and the proxy names `skyState`, `ongoingEvents`,
+  `loop_cadence_s`, `stale_after_s`), is skipped, and so is one whose key is not a letter followed
+  by up to 63 letters, digits or underscores.
 
 ### `loop_interval_s` (1.1.0)
 
@@ -73,6 +75,27 @@ written after a start, and is left out when the rounded value is outside 1 to 36
 
 If you also have a `[DavisPressure]` section, `barometer_inHg` uses twice its `fetch_interval` as
 its TTL. Without one it uses `ttl_default`.
+
+### Strict output (1.2.0)
+
+Every write is strict JSON. A value the contract cannot carry (NaN, infinity, a list, a string in
+one of the 13 standard fields) is treated as missing, exactly like WeeWX's `None`, with one WARNING
+per field until it recovers; a `True`/`False` is written as 1/0. A packet whose `dateTime` is not a
+number writes nothing, with one ERROR, so a broken driver shows as an aging file, never as a live
+one. Every write also carries `"contract": "1.2"`, the version of the field contract it meets.
+
+### Check your feed (1.2.0)
+
+The release carries a checker: one Python file, standard library only, Python 3.8 or later.
+
+```
+curl -LO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/loopjson-v1.2.0/check_contract.py
+python3 check_contract.py loop --max-age 30 /path/to/feed/loop-data.txt
+```
+
+Exit 0 means the file meets the contract. See
+[contract/README.md](https://github.com/WeatheredScientist/weewx-rtldavis/blob/loopjson-v1.2.0/contract/README.md)
+for the schema, the example files and checking your own reader.
 
 ## Cadence and files
 
@@ -87,12 +110,14 @@ its TTL. Without one it uses `ttl_default`.
 ## Fields
 
 The field table, units and caching rules are in
-[INTERFACES.md section 1](https://github.com/WeatheredScientist/weewx-rtldavis/blob/loopjson-v1.1.0/docs/INTERFACES.md#1-loop-json--real-time-surface),
+[INTERFACES.md section 1](https://github.com/WeatheredScientist/weewx-rtldavis/blob/loopjson-v1.2.0/docs/INTERFACES.md#1-loop-json--real-time-surface),
 pinned to the release tag so it matches this version. Every write carries
-`"writer": "loop_json_writer/1.1.0"`.
+`"writer": "loop_json_writer/1.2.0"` and `"contract": "1.2"`.
 
-Versions follow the field contract: major when a key is renamed, removed or changes units; minor
-for a new optional key; patch for a behavior fix.
+The writer's version follows the contract's: major when the contract's major changes (a key
+renamed, removed or given new units); minor for a contract minor (a new optional key) or a new
+setting; patch for a fix. `contract` is the field contract's own version, which a later writer
+release may keep.
 
 ## Not the same as weewx-loopdata
 

@@ -287,6 +287,7 @@ def test_no_extras_output_equals_the_1_0_0_golden(tmp_path):
         feed = _step(w, pkt['dateTime'], **fields)
         feed.pop('writer')
         feed.pop('loop_interval_s', None)  # the one new key in 1.1.0 (DEC-0221)
+        assert feed.pop('contract') == '1.2'  # the one new key in 1.2.0 (DEC-0234)
         got.append(feed)
     assert len(got) == len(_GOLDEN_OUTPUT) == 5, 'the golden is not empty'
     assert got == _GOLDEN_OUTPUT

@@ -13,7 +13,7 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 | `BACKLOG.md`: ideas, RF findings, standing watches | RF or horizon work; whether a watch fired |
 | `docs/CONVENTIONS.md`: git workflow, secrets, exact gates | any gate or commit |
 | `docs/GOTCHAS.md` | a tool's zero/green (§1); a PR, merge or handoff write (§2); marvin or campaign work (§3); judging live or shipped (§4). New traps land here |
-| `docs/PRINCIPLES.md`; reviews `docs/CODE_REVIEW_S*.md`, `docs/ASSESSMENT.md` (S23), `docs/INTERFACES-AUDIT-S197.md` | weighing a decision; the next cleanup; generalizing the contract (P3) |
+| `docs/PRINCIPLES.md`; reviews `docs/CODE_REVIEW_S*.md`, `docs/ASSESSMENT.md` (S23), `docs/INTERFACES-AUDIT-S197.md`, `docs/LOOPJSON-1.2-DESIGN.md` (DEC-0234) | weighing a decision; the next cleanup; generalizing the contract (P3); the loop writer's contract version, schema or checker |
 | `docs/UPSTREAM-THREADS.md` | replying upstream; whether a thread moved |
 | `docs/INSTALL-RESEARCH.md` (behind DEC-0225) | why the install path is what it is |
 
@@ -27,6 +27,7 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 | `weewx_monitor.py`: host-side watchdog, alerter, reception tracker | "what handles X at runtime?" (DEC-0074) |
 | `ops/*`, `scripts/*`, `usb_reset.sh`; runbooks `docs/CAMPAIGN-B-RUNBOOK.md`, `docs/INFLUXDB-MIGRATION.md`, `docs/WINDGUST10-MIGRATION.md` (DEC-0232, not run) | any ops task. A script's header is its manual; `ops/campaign_analyze.py` is the only campaign readout (DEC-0069) |
 | `extensions/<name>/` + its `scripts/*_<name>*.sh` and `.github/workflows/<name>.yml` | that module's version or installer; a `<name>-v*` release |
+| `contract/`: the loop file's JSON Schema, the stdlib checker `check_contract.py`, conformance fixtures, the adopter's `README.md`; run over the fixtures by `scripts/check_contract_fixtures.sh` (DEC-0234) | the loop writer's output or the contract's version; validating a feed or a reader |
 | Go decoder: `patch/rtldavis-*.patch`, `tests/go/` | the Go decoder and its gates |
 | First start: `entrypoint.sh` (DEC-0228), `seed_config.py` (DEC-0225), `doctor.py` | what a new install gets; first-run env vars; `doctor` |
 | Image and release: `Dockerfile`, `.github/workflows/image*.yml`, `scripts/join_multiarch.sh` | a release; anything a Pi user pulls |

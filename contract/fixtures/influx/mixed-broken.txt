@@ -1,0 +1,6 @@
+outTemp_F
+outTemp_C
+windSpeed_mph
+barometer
+rain_in
+dateTime_extra

@@ -34,7 +34,17 @@ jobs:
       - name: Test the extra-field naming rule against real WeeWX
         run: |
           python -m pip install pytest
-          REQUIRE_REAL_WEEWX=1 python -m pytest -q tests/test_loop_json_extra_names.py
+          REQUIRE_REAL_WEEWX=1 python -m pytest -q tests/test_loop_json_extra_names.py \
+            tests/test_contract_checker.py::test_influx_catalog_labels_match_real_weewx
+
+      # DEC-0234: the contract checker claims Python 3.8+, standard library only. Run it
+      # over every fixture on the oldest interpreter it claims, so the claim is measured.
+      # setup-python has no build older than 3.10 for this runner's Ubuntu, so the
+      # official python:3.8-slim image runs it, the repo mounted read-only.
+      - name: Contract checker on Python 3.8, over every fixture
+        run: |
+          docker run --rm -v "$PWD:/w:ro" -w /w python:3.8-slim \
+            bash scripts/check_contract_fixtures.sh python3
 
       # Fails if the module's __version__, install.py's VERSION and (on a tag
       # run) the tag disagree.
@@ -49,6 +59,11 @@ jobs:
       - name: Install into a fresh WeeWX and run the Simulator
         run: scripts/prove_loopjson.sh dist/weewx-loopjson-*.zip
 
+      # The checker and schema ride the release beside the zip, so each has a
+      # tag-pinned URL (contract/README.md).
+      - name: Stage the contract assets
+        run: cp contract/check_contract.py contract/loop-json.v1.schema.json dist/
+
       # --latest=false keeps "Latest" on the Docker image releases.
       - name: Publish the release asset
         if: github.ref_type == 'tag'
@@ -56,6 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" dist/weewx-loopjson-*.zip \
+            dist/check_contract.py dist/loop-json.v1.schema.json \
             --latest=false \
             --title "loop_json_writer ${GITHUB_REF_NAME#loopjson-v}" \
-            --notes "WeeWX extension release. Install: weectl extension install <URL of the weewx-loopjson zip below>. See extensions/loopjson/README.md and docs/INTERFACES.md section 1."
+            --notes "WeeWX extension release. Install: weectl extension install <URL of the weewx-loopjson zip below>. Check a feed: python3 check_contract.py loop loop-data.txt (stdlib only; schema alongside). See extensions/loopjson/README.md, contract/README.md and docs/INTERFACES.md section 1."
