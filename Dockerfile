@@ -59,6 +59,7 @@ COPY patch/rtldavis-dupgate.patch /tmp/rtldavis-dupgate.patch
 COPY patch/rtldavis-crcstats.patch /tmp/rtldavis-crcstats.patch
 COPY patch/rtldavis-burstgate.patch /tmp/rtldavis-burstgate.patch
 COPY patch/rtldavis-timegate.patch /tmp/rtldavis-timegate.patch
+COPY patch/rtldavis-devsel.patch /tmp/rtldavis-devsel.patch
 
 RUN curl -fsSL -o /tmp/src.tgz \
     "https://github.com/weewx-contrib/weewx-rtldavis/raw/${RTLDAVIS_SRC_COMMIT}/src.tgz" && \
@@ -82,6 +83,10 @@ RUN curl -fsSL -o /tmp/src.tgz \
     patch -p1 --batch --forward < /tmp/rtldavis-timegate.patch && \
     echo "timegate (#536, DEC-0229): a frame off its transmitter's schedule is dropped; timegate.Offset and timegate.Off must appear in main.go:" && \
     test "$(grep -c 'timegate\.O' main.go)" = "2" && test -f timegate/timegate.go && \
+    patch -p1 --batch --forward < /tmp/rtldavis-devsel.patch && \
+    echo "devsel (ops#440, DEC-0235): -d picks the dongle (upstream opened 0 regardless); main.go must open sdrIndex, never 0, and call devsel 3 times:" && \
+    test "$(grep -c 'rtlsdr\.Open(sdrIndex)' main.go)" = "1" && test "$(grep -c 'rtlsdr\.Open(0)' main.go)" = "0" && \
+    test "$(grep -c 'devsel\.' main.go)" = "3" && test -f devsel/devsel.go && \
     GOBIN=/usr/local/bin go install -buildvcs=false -v .
 
 #--------------------------------------------

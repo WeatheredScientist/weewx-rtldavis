@@ -6,6 +6,8 @@
 #   /srv/weewx       where weewx-data/ and logs/ live, owned by that user
 #   America/New_York your time zone
 #   v2.4.0           the image tag you want
+# With more than one RTL-SDR on the host (image newer than v2.4.0), add
+# `-e RTLSDR_DEVICE=<serial>` beside BIAS_TEE: `doctor` lists the serials.
 #
 # Install: sudo install -m 0644 weewx-rtldavis.service /etc/systemd/system/
 #          sudo systemctl daemon-reload && sudo systemctl enable --now weewx-rtldavis

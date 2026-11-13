@@ -13325,3 +13325,89 @@ CumulusMX.
   changes for this station. The S197 drift issue is drafted for ops, unposted.
 - A non-WeeWX producer gets a schema, a checker and fixtures, which is what DEC-0233 said it
   lacked.
+
+## DEC-0235 — The Blog V4 needs no image change; prod gets real device pinning first (S201a)
+
+**Status:** Accepted (owner, in chat via the S201 session: "Approve both"); A to C built S201a, D is the owner's own step · **Date:**
+2026-11-12 (S201a, Opus 5.5) · **Answers:** eaglehunt-ops#440 (weewx's two asks), BACKLOG "Second
+dongle" item 3 · **Findings:** `docs/RTLSDR-V4-AND-PINNING.md` · **Applies:** DEC-0014 (incremental:
+one patch, no rewrite), DEC-0222 (a minor image release), DEC-0225/0228 (`.env` first-run values,
+`doctor`) · **Touches marvin:** asks only, via ops (MARVIN-DEC-0064, -0106).
+
+### Context
+
+ops#440 asked, before the Blog V4 goes anywhere near prod: does the image's librtlsdr support it, and
+how is prod's dongle pinned, given that prod "picks its dongle by index". BOOT carried the lead that
+the V4 needs librtlsdr newer than bookworm's 0.6.0.
+
+### Findings (measured unless marked)
+
+1. The image builds osmocom librtlsdr `v2.0.2-2-gae0dd6d` from `src.tgz` (a clean git clone of
+   `steve-m/librtlsdr`). It carries the V4 commits `1261fbb` and `138cd05`. Prod's decoder and
+   `rtl_biast` load that library (`ldd` in `:marvin-live`). At 915 MHz a V4 takes the R828D air-in
+   path. The bias tee is GPIO 0, as on the v3. Neither osmocom v2.0.3 nor the rtlsdrblog fork V1.4.0
+   adds anything a 915 MHz receiver needs.
+2. The Go decoder (`lheijst/rtldavis` master, byte-identical to ours) resolves `-d` and then calls
+   `rtlsdr.Open(0)`. `-d` is silently ignored.
+3. The entrypoint's `rtl_biast`, `doctor`'s probe and `rtl_eeprom` all default to index 0. The `rtl_*`
+   tools resolve a numeric string as an index before a serial; the decoder does the opposite.
+4. libusb 1.0.29 prepends each discovered device, so index 0 is the last device scanned, not the
+   lowest bus. Inferred: a V4 on marvin's `7-1.x` would likely be index 0 ahead of prod's `5-1`.
+5. Prod's container gets the whole USB bus, and marvin's udev rule grants `t-weewx` every
+   `0bda:2838`. A V4 anywhere on marvin is visible to and openable by prod.
+6. Prod's v3 has the factory-default serial, reported to be the same on most sticks. A serial pin
+   alone cannot separate two default sticks.
+
+### Decision
+
+1. **No librtlsdr change for the V4.** The v3 path stays byte-identical.
+2. **`patch/rtldavis-devsel.patch`** (baked; Dockerfile-gated like the other four; Go tests):
+   - Open the resolved index.
+   - A serial matching more than one dongle is fatal.
+   - An out-of-range index is fatal and lists what is present.
+   - Log `using dongle i of n: manufacturer product SN serial` on every start.
+   - With more than one dongle and no `-d`, warn but keep opening index 0, for back-compatibility.
+   - Record it in CHANGES-FROM-UPSTREAM.md; offer it upstream on the owner's go.
+3. **`RTLSDR_DEVICE`** (`.env`, read every start like `BIAS_TEE`):
+   - `entrypoint.sh` passes it to `rtl_biast -d`.
+   - The driver appends `-d` when `cmd` has none, and refuses to start when the two disagree.
+   - Unset means today's behavior.
+4. **`doctor`:**
+   - List every RTL2832U from sysfs (port, strings, serial, model: V4 / V4L / v3-or-generic).
+   - Probe the selected dongle, not the first.
+   - Exit 15 on ambiguity.
+   - Warn on duplicate or all-digit serials, and on a V4 whose strings were rewritten.
+5. **A unique serial for the V4:**
+   - Burned off-host by the owner (Mac, Homebrew librtlsdr 2.0.3, only the V4 plugged in,
+     `rtl_eeprom -s` only).
+   - It must contain a letter.
+   - It is recorded in the local-infra doc and the heartofgold inventory, never on GitHub.
+   - Prod's v3 EEPROM is left alone (optional later, owner's call).
+6. **marvin asks, raised on ops#440:**
+   - Narrow the udev grant to prod's stick.
+   - Consider passing prod one resolved node instead of the bus.
+   - Key `exec_devices` on serial or port.
+   - Where the V4 lives stays marvin's call.
+7. **Order:**
+   - 2 to 4 ship in a minor image.
+   - Prod runs it with `RTLSDR_DEVICE` set (a heartofgold unit edit) and the log shows the v3.
+   - Then step 5, then marvin's items.
+   - Only then is the V4 plugged into marvin.
+
+### Alternatives considered
+
+- **Container isolation alone** (one node passed): marvin's to build. It does not help a Pi user
+  with two sticks, and today's `-d` still lies. Kept as the second wall, not the only one.
+- **A `[Rtldavis] device` key**: the bias-tee call runs before weewxd and would have to parse
+  `weewx.conf`. The env var reaches both callers.
+- **Burn the v3 now**: it means a prod stop, an EEPROM write to the only receiver, and a replug, for
+  little gain while the V4 is the only other stick and the ambiguity check makes a collision loud.
+- **Move to the rtlsdrblog fork**: nothing it adds matters at 915 MHz, and it lacks osmocom's newer
+  PLL code.
+
+### Consequences
+
+- One baked patch, `entrypoint.sh`, `rtldavis.py` and `doctor.py` change, which means a minor image
+  release and a prod deploy before the V4 is used on marvin. The December A/B depends on it.
+- Separate and not decided here: osmocom `65f0658` (a USB-error hang fix in v2.0.3) is a candidate
+  lead for the freeze blocker. It needs its own pin-bump DEC and a v3 soak.

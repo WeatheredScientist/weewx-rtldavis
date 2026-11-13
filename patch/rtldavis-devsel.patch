@@ -1,0 +1,173 @@
+From: weewx-rtldavis (WeatheredScientist fork)
+Subject: rtldavis: open the dongle -d names, refuse a shared serial, log the dongle opened
+
+eaglehunt-ops#440, DEC-0235.  Upstream resolves -d (a serial, then an index) and
+then calls rtlsdr.Open(0), so -d is silently ignored: the decoder always opens
+whatever librtlsdr lists first.  With one dongle that is harmless.  With two,
+libusb's list order decides (it prepends each device it finds, so index 0 is the
+last one scanned), and a second stick can take the first one's place at the next
+restart.  Duplicate factory-default serials make it worse: librtlsdr's own
+serial lookup silently returns the first match.
+
+devsel.Pick applies one rule: an empty -d is an error; a serial matching exactly
+one dongle wins; a serial matching several is an error naming them; otherwise
+plain decimal digits in range are an index; anything else is an error naming
+every dongle present.  With more than one dongle, an index (or no -d at all,
+which still opens index 0 as before) logs a WARNING that the order can change.
+Every start logs `dongle: using <i> of <n>: <manufacturer> <product> SN <serial>`.
+
+tests/test_devsel_patch.py audits every line this patch adds to or removes from
+main.go, runs devsel's Go tests against tests/go/devsel_cases.json (the same
+table doctor.select_dongle is tested against), and builds the whole program where
+librtlsdr is installed.
+
+Applies AFTER rtldavis-dupgate.patch, rtldavis-crcstats.patch,
+rtldavis-burstgate.patch and rtldavis-timegate.patch, to the rtldavis source
+bundled in src.tgz.
+
+--- a/devsel/devsel.go
++++ b/devsel/devsel.go
+@@ -0,0 +1,91 @@
++package devsel
++
++// Modified by the weewx-rtldavis project (WeatheredScientist): device selection,
++// eaglehunt-ops#440, DEC-0235.
++//
++// Upstream parsed -d (a serial or an index) and then opened device 0 whatever it
++// said, so -d did nothing and a second dongle could silently take the first one's
++// place. Pick decides which dongle to open; main.go lists the dongles, asks Pick,
++// logs Describe, and opens that index. Nothing here touches librtlsdr, so the
++// rules are tested without a dongle.
++//
++// The rule, in order: an empty -d is an error; a serial that matches exactly one dongle wins; a serial that
++// matches several is an error (librtlsdr would silently take the first); otherwise
++// a whole number in range is an index; anything else is an error. Serial first is
++// upstream's own order. The doctor (doctor.py, select_dongle) applies the same
++// rule, and both are tested against one case table (tests/go/devsel_cases.json).
++
++import (
++	"fmt"
++	"strconv"
++	"strings"
++)
++
++// Dongle is what librtlsdr reports for one device, in its own index order.
++type Dongle struct {
++	Manufacturer, Product, Serial string
++}
++
++// Pick returns the index to open, a warning to log (or ""), or an error. given is
++// whether -d was on the command line; without it arg is the default "0".
++func Pick(arg string, given bool, ds []Dongle) (int, string, error) {
++	if len(ds) == 0 {
++		return -1, "", fmt.Errorf("dongle: no RTL-SDR dongle found")
++	}
++	if arg == "" {
++		return -1, "", fmt.Errorf("dongle: -d is empty; give a serial or an index (%s)", List(ds))
++	}
++	var hits []int
++	for i, d := range ds {
++		if d.Serial == arg {
++			hits = append(hits, i)
++		}
++	}
++	if len(hits) > 1 {
++		return -1, "", fmt.Errorf("dongle: -d %s matches the serial of %d dongles (%s); "+
++			"give each dongle a unique serial", arg, len(hits), List(ds))
++	}
++	if len(hits) == 1 {
++		return hits[0], "", nil
++	}
++	i, err := strconv.Atoi(arg)
++	if err != nil || !digitsOnly(arg) || i >= len(ds) {
++		return -1, "", fmt.Errorf("dongle: -d %s is neither the serial nor the index of "+
++			"any of the %d dongle(s) present (%s)", arg, len(ds), List(ds))
++	}
++	if len(ds) > 1 && !given {
++		return i, fmt.Sprintf("dongle: WARNING: %d dongles present and no -d, so opening "+
++			"index %d (%s); the order can change at a re-plug or reboot: set -d to a serial",
++			len(ds), i, List(ds)), nil
++	}
++	if len(ds) > 1 {
++		return i, fmt.Sprintf("dongle: WARNING: -d %s is an index, and with %d dongles "+
++			"the order can change at a re-plug or reboot: set -d to a serial", arg, len(ds)), nil
++	}
++	return i, "", nil
++}
++
++// digitsOnly: an index is plain decimal digits; "+1", "-1", " 0" and "0x1" are not.
++func digitsOnly(s string) bool {
++	for _, r := range s {
++		if r < '0' || r > '9' {
++			return false
++		}
++	}
++	return s != ""
++}
++
++// Describe is the start line naming the dongle that is opened.
++func Describe(i int, ds []Dongle) string {
++	d := ds[i]
++	return fmt.Sprintf("dongle: using %d of %d: %s %s SN %s", i, len(ds), d.Manufacturer, d.Product, d.Serial)
++}
++
++// List names every dongle present, for errors and warnings.
++func List(ds []Dongle) string {
++	parts := make([]string, len(ds))
++	for i, d := range ds {
++		parts[i] = fmt.Sprintf("%d: %s %s SN %s", i, d.Manufacturer, d.Product, d.Serial)
++	}
++	return strings.Join(parts, "; ")
++}
+--- a/main.go
++++ b/main.go
+@@ -40,13 +40,13 @@
+     "os"
+     "os/signal"
+     "time"
+-    "strconv"
+     "fmt"
+ 
+     "github.com/lheijst/rtldavis/protocol"
+     "lheijst/rtldavis/crcstat"
+     "lheijst/rtldavis/burstgate"
+     "lheijst/rtldavis/timegate"
++    "lheijst/rtldavis/devsel"
+     "github.com/jpoirier/gortlsdr"
+ )
+ 
+@@ -213,18 +213,24 @@
+ 
+     fs := p.Cfg.SampleRate
+ 
+-    // First attempt to open the device as a Serial Number
+-    sdrIndex , _ = rtlsdr.GetIndexBySerial(*deviceString)
+-    if (sdrIndex <0 ) {
+-        indexreturn,err := strconv.Atoi(*deviceString)
+-        if (err != nil) {
+-          log.Printf("Could not parse device\n")
+-          log.Fatal(err)
+-        }
+-        sdrIndex = indexreturn
++    // DEC-0235: open the dongle -d names (upstream opened 0 whatever -d said),
++    // refuse a serial shared by several dongles, and log the one opened.
++    dongles := make([]devsel.Dongle, rtlsdr.GetDeviceCount())
++    for i := range dongles {
++        dongles[i].Manufacturer, dongles[i].Product, dongles[i].Serial, _ = rtlsdr.GetDeviceUsbStrings(i)
+     }
++    dGiven := false
++    flag.Visit(func(f *flag.Flag) { dGiven = dGiven || f.Name == "d" })
++    sdrIndex, dWarn, err := devsel.Pick(*deviceString, dGiven, dongles)
++    if err != nil {
++        log.Fatal(err)
++    }
++    if dWarn != "" {
++        log.Print(dWarn)
++    }
++    log.Print(devsel.Describe(sdrIndex, dongles))
+ 
+-    dev, err := rtlsdr.Open(0)
++    dev, err := rtlsdr.Open(sdrIndex)
+     if err != nil {
+         log.Fatal(err)
+     }
