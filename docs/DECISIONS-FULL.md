@@ -13225,8 +13225,8 @@ consumer asks for), moving QC out of the driver (#475 stays parked).
 ## DEC-0234 — `loopjson` 1.2.0: a contract-version key, finite-only output, a schema and a checker (S201b)
 
 **Status:** Accepted by the owner, 2026-11-12 ("Approve both"; Q1 `contract`, Q2 bool→0/1, Q3 SQLite
-checker mode later, Q4 the running monitor left alone). Built on `s201b-loopjson-1.2`; not released
-or deployed · **Date:** 2026-11-12 (S201b,
+checker mode later, Q4 the running monitor left alone). Merged as PR #577 (`5da8171`); released
+`loopjson-v1.2.0`; in prod since 2026-11-12 22:42:25 ET (S201), both feed files checked OK · **Date:** 2026-11-12 (S201b,
 Opus 5.5) · **Builds:** DEC-0233 parts 5 to 7 · **Applies:** DEC-0006, DEC-0211, DEC-0220,
 DEC-0221, DEC-0222, PRINCIPLES §1, §2, §6 · **Design:** `docs/LOOPJSON-1.2-DESIGN.md` (the full
 reasoning, alternatives, test table, rollout and rollback).
