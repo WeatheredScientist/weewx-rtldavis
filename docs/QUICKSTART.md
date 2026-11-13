@@ -10,8 +10,11 @@ minutes on a Raspberry Pi; the console, if you have one, keeps working.
 - A Davis Vantage Pro2, Pro2 Plus or Vue outdoor sensor suite (the ISS), within radio range.
   The factory setting (transmitter ID 1, DIP switches all off) is what this expects. Nothing on the
   ISS changes.
-- An RTL-SDR Blog V3 dongle and a 915 MHz antenna, vertical, on a 1 to 3 m USB extension away from
-  the computer. EU stations use 868 MHz, New Zealand 921 MHz; the antenna has to match.
+- An RTL-SDR Blog V3 or V4 dongle and a 915 MHz antenna, vertical, on a 1 to 3 m USB extension away
+  from the computer. EU stations use 868 MHz, New Zealand 921 MHz; the antenna has to match. The V3
+  is what this project runs. The image's librtlsdr also supports the V4; its first live run here is
+  planned for December 2026. Test a V4 with `doctor` below, not with the host's own `rtl_test`:
+  Debian 12 and Raspberry Pi OS 12 ship a librtlsdr too old for the V4.
 - A Linux computer that stays on, with a free USB port: a Raspberry Pi 4 or 5 running the 64-bit
   OS, a mini PC, a home server, or a NAS that runs Docker. amd64 and arm64 both work. Windows and
   macOS do not: USB through a virtual machine adds timing jitter the radio cannot follow.
@@ -93,6 +96,8 @@ start again.
 | `Permission denied` opening the dongle | The udev rule did not apply. Re-run the setup script, unplug and re-plug; check `PUID`/`PGID` in `.env` match `id -u` and `id -g` |
 | Driver line appears, no `LOOP` after ten minutes | Radio, not software. Check the USB cable and re-plug; antenna vertical and away from the computer; band and channel match the ISS; try `-gain 0` (auto) in `[Rtldavis]` |
 | `weewx.conf` not found | Rare now: the first start writes it, and `doctor` says `not seeded yet` until then |
+| `more than one dongle`, or `dongle: ... matches the serial of 2 dongles` | Two RTL-SDRs are plugged in and the station cannot tell which is its own. See "More than one dongle" below |
+| A V4 found as `R828D` with poor or no reception on the host's `rtl_test` | The host's librtlsdr predates the V4 (Debian 12, Pi OS 12). The container's does not: check with `doctor` |
 
 Stop the station first (`docker compose stop`; one program can hold the dongle), then run:
 
@@ -100,8 +105,44 @@ Stop the station first (`docker compose stop`; one program can hold the dongle),
 docker compose run --rm weewx-rtldavis doctor
 ```
 
-It checks the dongle, the kernel driver, permissions and the radio, prints band, channel and gain
-from `weewx.conf`, and on a failure names the row above that applies.
+It lists every RTL-SDR it sees (USB port, maker, product, serial, and whether it is a Blog V4).
+Then it checks the one the station uses: the kernel driver, permissions and the radio. It prints
+band, channel and gain from `weewx.conf`, and on a failure names the row above that applies.
+
+### More than one dongle
+
+Needs an image newer than v2.4.0. Say you plug in a second RTL-SDR, such as an ADS-B stick or a V4
+next to a V3. Tell the station which one is its own. Otherwise it opens whichever dongle the USB
+library lists first, and that can change at a reboot. Run `doctor`, copy the serial of the
+station's dongle from its list, and put it in `.env`:
+
+```
+RTLSDR_DEVICE=<that serial>
+```
+
+On every start the decoder opens that dongle and logs `dongle: using …` with its serial. The bias
+tee (`BIAS_TEE`) acts on the same dongle.
+
+RTL-SDR dongles often leave the factory with the same serial, so two of them cannot be told apart.
+`doctor` says so when that happens, and the station refuses to guess. Give one of them its own
+serial:
+
+1. Stop the station.
+2. Plug in only that dongle.
+3. Run this inside the container. On any other computer with a recent `rtl-sdr` installed, the
+   part from `rtl_eeprom` on does the same.
+
+   ```bash
+   docker compose run --rm weewx-rtldavis rtl_eeprom -d 0 -s WX2
+   ```
+
+4. It prints the dongle's current settings and asks before writing. Check that it shows the dongle
+   you meant, then answer `y`.
+5. Unplug the dongle and plug it back in.
+
+Put a letter in the serial: the `rtl_*` tools read a serial made only of digits as a position in
+the list. On a Blog V4, change only the serial. Never pass `-m`, `-p` or `-g`: the V4 is recognized
+by its maker and product strings.
 
 ## What next
 

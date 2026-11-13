@@ -23,7 +23,7 @@ services:
     devices:
       - /dev/bus/usb:/dev/bus/usb
     env_file:
-      - path: .env               # TZ, BIAS_TEE and the first-start values; see .env.example
+      - path: .env               # TZ, BIAS_TEE, RTLSDR_DEVICE and the first-start values; see .env.example
         required: false
     environment:
       - HOME=/tmp

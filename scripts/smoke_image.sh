@@ -71,6 +71,14 @@ set -e
 echo "$doctor_out"
 [ "$doctor_rc" -eq 10 ] || { echo "doctor without a dongle exited $doctor_rc, want 10" >&2; exit 1; }
 grep -qF 'not a device node' <<<"$doctor_out" || { echo "doctor did not name the no-device row" >&2; exit 1; }
+# DEC-0235: doctor --resolve loads the image's librtlsdr through ctypes. With no dongle it must say
+# so (exit 15). "cannot be loaded" would mean the bias tee could never be pinned to RTLSDR_DEVICE.
+set +e
+resolve_out="$(docker run --rm -e RTLSDR_DEVICE=SMOKE "$image" /opt/weewx-venv/bin/python3 /opt/doctor.py --resolve 2>&1)"; resolve_rc=$?
+set -e
+echo "$resolve_out"
+[ "$resolve_rc" -eq 15 ] || { echo "doctor --resolve without a dongle exited $resolve_rc, want 15" >&2; exit 1; }
+grep -qF 'no RTL-SDR dongle found' <<<"$resolve_out" || { echo "doctor --resolve did not load librtlsdr" >&2; exit 1; }
 [ "$(docker run --rm "$image" uname -m)" = "$want_arch" ] || { echo "passthrough of uname -m broke" >&2; exit 1; }
 weectl_out="$(docker run --rm "$image" weectl --version)"
 echo "$weectl_out"

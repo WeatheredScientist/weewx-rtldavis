@@ -30,7 +30,7 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 | `contract/`: the loop file's JSON Schema, the stdlib checker `check_contract.py`, conformance fixtures, the adopter's `README.md`; run over the fixtures by `scripts/check_contract_fixtures.sh` (DEC-0234) | the loop writer's output or the contract's version; validating a feed or a reader |
 | Go decoder: `patch/rtldavis-*.patch`, `tests/go/` | the Go decoder and its gates |
 | First start: `entrypoint.sh` (DEC-0228), `seed_config.py` (DEC-0225), `doctor.py` | what a new install gets; first-run env vars; `doctor` |
-| Image and release: `Dockerfile`, `.github/workflows/image*.yml`, `scripts/join_multiarch.sh` | a release; anything a Pi user pulls |
+| Image and release: `Dockerfile`, `.github/workflows/image*.yml`, `scripts/join_multiarch.sh`; dongle support and pinning `docs/RTLSDR-V4-AND-PINNING.md` (DEC-0235) | a release; anything a Pi user pulls; a second dongle, `-d`, the librtlsdr pin |
 | Public face: `README.md`, `docs/QUICKSTART.md`, `docs/DEPLOY.md`, `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `examples/`, `docker-compose.yml` | anything user-visible. No host, tenant or unit names |
 
 ## Never in the load path

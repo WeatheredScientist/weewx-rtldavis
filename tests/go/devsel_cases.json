@@ -1,0 +1,238 @@
+{
+  "_comment": "DEC-0235: one table, two implementations. tests/go/devsel_test.go runs it against the Go decoder's devsel.Pick; tests/test_devsel.py runs it against doctor.select_dongle. Serials are made up. outcome: an index, or \"error\". warn: whether a warning is expected.",
+  "cases": [
+    {
+      "name": "one dongle, no -d",
+      "serials": [
+        "SER1"
+      ],
+      "arg": "0",
+      "given": false,
+      "outcome": 0,
+      "warn": false
+    },
+    {
+      "name": "one dongle, its serial",
+      "serials": [
+        "SER1"
+      ],
+      "arg": "SER1",
+      "given": true,
+      "outcome": 0,
+      "warn": false
+    },
+    {
+      "name": "one dongle, index 0",
+      "serials": [
+        "SER1"
+      ],
+      "arg": "0",
+      "given": true,
+      "outcome": 0,
+      "warn": false
+    },
+    {
+      "name": "no dongle",
+      "serials": [],
+      "arg": "0",
+      "given": false,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "two dongles, no -d: index 0 with a warning",
+      "serials": [
+        "SER1",
+        "SER2"
+      ],
+      "arg": "0",
+      "given": false,
+      "outcome": 0,
+      "warn": true
+    },
+    {
+      "name": "two dongles, the second's serial",
+      "serials": [
+        "SER1",
+        "WXV4"
+      ],
+      "arg": "WXV4",
+      "given": true,
+      "outcome": 1,
+      "warn": false
+    },
+    {
+      "name": "two dongles, the first's serial",
+      "serials": [
+        "WXV4",
+        "SER1"
+      ],
+      "arg": "SER1",
+      "given": true,
+      "outcome": 1,
+      "warn": false
+    },
+    {
+      "name": "two dongles, index 1: honored, with a warning",
+      "serials": [
+        "SER1",
+        "SER2"
+      ],
+      "arg": "1",
+      "given": true,
+      "outcome": 1,
+      "warn": true
+    },
+    {
+      "name": "shared serial is refused",
+      "serials": [
+        "00000001",
+        "00000001"
+      ],
+      "arg": "00000001",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "shared serial refused even with a third unique one",
+      "serials": [
+        "DUP",
+        "WXV4",
+        "DUP"
+      ],
+      "arg": "DUP",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "the unique one beside a shared pair",
+      "serials": [
+        "DUP",
+        "WXV4",
+        "DUP"
+      ],
+      "arg": "WXV4",
+      "given": true,
+      "outcome": 1,
+      "warn": false
+    },
+    {
+      "name": "all-digit serial matches as a serial first",
+      "serials": [
+        "00000915",
+        "00000433"
+      ],
+      "arg": "00000433",
+      "given": true,
+      "outcome": 1,
+      "warn": false
+    },
+    {
+      "name": "all-digit serial that is also an in-range index: serial wins",
+      "serials": [
+        "1",
+        "0"
+      ],
+      "arg": "1",
+      "given": true,
+      "outcome": 0,
+      "warn": false
+    },
+    {
+      "name": "unknown serial",
+      "serials": [
+        "SER1",
+        "SER2"
+      ],
+      "arg": "NOPE",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "index out of range",
+      "serials": [
+        "SER1",
+        "SER2"
+      ],
+      "arg": "2",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "negative index",
+      "serials": [
+        "SER1"
+      ],
+      "arg": "-1",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "number not a serial and out of range (upstream cdavis289 shape)",
+      "serials": [
+        "SER1"
+      ],
+      "arg": "00000915",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "empty argument",
+      "serials": [
+        "SER1"
+      ],
+      "arg": "",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "a blank serial is never matched by an empty argument",
+      "serials": [
+        ""
+      ],
+      "arg": "",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "padded number is not an index",
+      "serials": [
+        "SER1"
+      ],
+      "arg": " 0",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "hex is not an index",
+      "serials": [
+        "SER1",
+        "SER2"
+      ],
+      "arg": "0x1",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    },
+    {
+      "name": "signed number is not an index",
+      "serials": [
+        "SER1",
+        "SER2"
+      ],
+      "arg": "+1",
+      "given": true,
+      "outcome": "error",
+      "warn": false
+    }
+  ]
+}

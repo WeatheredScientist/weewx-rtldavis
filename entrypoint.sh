@@ -30,11 +30,31 @@ fi
 # state: some antennas are DC-shorted and would load the tee. The off branch drives it off
 # explicitly rather than relying on the power-on default -- tee state can survive a warm restart.
 BIAS_TEE="${BIAS_TEE:-0}"
-if [ "$BIAS_TEE" = "1" ]; then
+# RTLSDR_DEVICE (DEC-0235) names the dongle the station uses, by serial (recommended) or index.
+# The driver hands it to the decoder as -d; here it picks the stick the bias tee acts on, so the
+# tee never powers a different dongle's antenna. rtl_biast reads a number as an index first and
+# the decoder reads it as a serial first, so doctor resolves the value with the decoder's own rule
+# and rtl_biast gets that index. If it cannot be resolved, the tee is left alone and the decoder
+# refuses to start with the reason.
+RTLSDR_DEVICE="${RTLSDR_DEVICE:-}"
+biast_dev=()
+biast_skip=0
+if [ -n "$RTLSDR_DEVICE" ]; then
+    if biast_idx="$(/opt/weewx-venv/bin/python3 /opt/doctor.py --resolve)"; then
+        echo "RTLSDR_DEVICE=$RTLSDR_DEVICE is librtlsdr dongle $biast_idx"
+        biast_dev=(-d "$biast_idx")
+    else
+        echo "WARNING: RTLSDR_DEVICE=$RTLSDR_DEVICE matches no single dongle; leaving the bias tee alone (run doctor)"
+        biast_skip=1
+    fi
+fi
+if [ "$biast_skip" = "1" ]; then
+    :
+elif [ "$BIAS_TEE" = "1" ]; then
     echo "Enabling RTL-SDR bias-tee for LNA..."
-    rtl_biast -b 1 || echo "WARNING: rtl_biast failed or not found"
+    rtl_biast "${biast_dev[@]}" -b 1 || echo "WARNING: rtl_biast failed or not found"
 else
     echo "Bias-tee disabled (BIAS_TEE=$BIAS_TEE), driving it off..."
-    rtl_biast -b 0 || echo "WARNING: rtl_biast failed or not found"
+    rtl_biast "${biast_dev[@]}" -b 0 || echo "WARNING: rtl_biast failed or not found"
 fi
 exec /opt/weewx-venv/bin/weewxd /opt/weewx-data/weewx.conf

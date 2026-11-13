@@ -134,6 +134,9 @@
 #   2026-11-10  `schema`: wview_extended plus a windGust10 column and its daily summary,
 #               for the archive a new install of the image creates (DEC-0232). The driver
 #               itself does nothing new; the image's starter config points at it.
+#   2026-11-12  ops#440: RTLSDR_DEVICE (the environment, e.g. the image's .env) becomes the
+#               decoder's -d, a -d in cmd that disagrees stops the start, and Go's `dongle:`
+#               lines (which stick it opened, or why not) are logged (DEC-0235).
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -1062,6 +1065,47 @@ def apply_hotswap_settings(cmd, settings):
     return cmd
 
 
+def cmd_device(cmd):
+    """Return the value of every -d flag in `cmd` (`-d X`, `-d=X`, `--d X`, `--d=X`)."""
+    tokens = shlex.split(cmd)
+    found = []
+    for i, tok in enumerate(tokens):
+        if tok in ('-d', '--d'):
+            found.append(tokens[i + 1] if i + 1 < len(tokens) else '')
+        elif tok.startswith(('-d=', '--d=')):
+            found.append(tok.split('=', 1)[1])
+    return found
+
+
+def apply_device(cmd, device):
+    """Return `cmd` with the decoder's dongle set to `device` (DEC-0235).
+
+    `device` is RTLSDR_DEVICE from the environment: the image's one setting for
+    which dongle to use, which entrypoint.sh also hands to rtl_biast so the bias tee
+    acts on the same stick. Unset or blank leaves `cmd` alone. A cmd with no -d gets
+    one; a cmd whose -d already says the same is left alone; a cmd whose -d says
+    something else is refused, because two settings that disagree about which radio
+    to open must never be resolved silently.
+    """
+    device = (device or '').strip()
+    if not device:
+        return cmd
+    if any(c.isspace() for c in device):
+        raise ValueError("RTLSDR_DEVICE %r contains whitespace; give one serial or index"
+                         % device)
+    present = cmd_device(cmd)
+    if len(present) > 1:
+        raise ValueError("[Rtldavis] cmd has %d -d flags (%s); keep one, or remove them "
+                         "and use RTLSDR_DEVICE" % (len(present), ', '.join(present)))
+    if present:
+        if present[0] != device:
+            raise ValueError("RTLSDR_DEVICE=%s but [Rtldavis] cmd has -d %s: they name "
+                             "different dongles. Set one of them, or make them agree"
+                             % (device, present[0]))
+        return cmd
+    return cmd + ' -d ' + shlex.quote(device)
+
+
 class ProcManager():
 
     def __init__(self):
@@ -1569,6 +1613,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self._sensor_map = stn_dict.get('sensor_map', {})
         loginf('sensor map is %s' % self._sensor_map)
         self.cmd = stn_dict.get('cmd', DEFAULT_CMD)
+        # DEC-0235: which dongle. RTLSDR_DEVICE (the image's environment) becomes -d,
+        # and a -d in cmd that disagrees with it stops the start here.
+        self.cmd = apply_device(self.cmd, os.environ.get('RTLSDR_DEVICE'))
         self.path = stn_dict.get('path', None)
         self.ld_library_path = stn_dict.get('ld_library_path', None)
 
@@ -2128,6 +2175,10 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
             else:
                 self.stats['burst_' + _burst[0]] += 1
                 loginf("Go burst gate dropped a frame: %s" % _line.strip())
+        if "dongle: " in _line:
+            # DEC-0235: which dongle the decoder opened (once per start), a warning
+            # when the choice could change, or why it could not open one.
+            loginf("Go %s" % _line.strip())
         if "offschedule packet:" in _line:
             # #536 (DEC-0229): rare, under one a day, so each is logged with its
             # bytes and offset. The count comes from the crc_stats line above.

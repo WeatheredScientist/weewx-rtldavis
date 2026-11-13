@@ -29,7 +29,7 @@ since S165, DEC-0219; the pin is the `ARG` lines in the base stage):
 
 | Component | Chain |
 |-----------|-------|
-| Go decoder | [bemasher/rtldavis](https://github.com/bemasher/rtldavis) → [lheijst/rtldavis](https://github.com/lheijst/rtldavis) → bundled in `weewx-contrib` `src.tgz` → **patched by us** ([`patch/rtldavis-dupgate.patch`](patch/rtldavis-dupgate.patch), [DEC-0135](docs/DECISIONS.md); [`rtldavis-crcstats.patch`](patch/rtldavis-crcstats.patch), DEC-0216; [`rtldavis-burstgate.patch`](patch/rtldavis-burstgate.patch), DEC-0223; [`rtldavis-timegate.patch`](patch/rtldavis-timegate.patch), DEC-0229) |
+| Go decoder | [bemasher/rtldavis](https://github.com/bemasher/rtldavis) → [lheijst/rtldavis](https://github.com/lheijst/rtldavis) → bundled in `weewx-contrib` `src.tgz` → **patched by us** ([`patch/rtldavis-dupgate.patch`](patch/rtldavis-dupgate.patch), [DEC-0135](docs/DECISIONS.md); [`rtldavis-crcstats.patch`](patch/rtldavis-crcstats.patch), DEC-0216; [`rtldavis-burstgate.patch`](patch/rtldavis-burstgate.patch), DEC-0223; [`rtldavis-timegate.patch`](patch/rtldavis-timegate.patch), DEC-0229; [`rtldavis-devsel.patch`](patch/rtldavis-devsel.patch), DEC-0235) |
 | Driver | [matthewwall/weewx-sdr](https://github.com/matthewwall/weewx-sdr) + [weewx-meteostick](https://github.com/matthewwall/weewx-meteostick) → merged by **Luc Heijst** into [weewx-rtldavis](https://github.com/lheijst/weewx-rtldavis) v0.20 → repackaged by **Vince Skahan** ([weewx-contrib/weewx-rtldavis](https://github.com/weewx-contrib/weewx-rtldavis)) → **patched by us** |
 | InfluxDB uploader | [matthewwall/weewx-influx](https://github.com/matthewwall/weewx-influx) → [david-lutz/weewx-influx2](https://github.com/david-lutz/weewx-influx2) (InfluxDB 2.x port) → **patched by us** |
 | WeatherCloud uploader | [matthewwall/weewx-wcloud](https://github.com/matthewwall/weewx-wcloud) → us (unmodified except an SPDX tag) |
@@ -127,6 +127,7 @@ contribution (see [Upstreaming](#upstreaming) below).
 | 25 | **`freqError` rides the next real DATA packet** (Layer B) | 2026-07-04 | Upstream yields each frequency-error channel packet as its own dataless loop packet, which inflated the reception metric to about 150% (~1.66× the publish-line count). The values are cached and merged onto the next real DATA packet instead, so none is published standalone. Related to 8. [DEC-0024] |
 | 26 | **A re-sent unchanged payload is counted and suppressed** — `dup_count`, `repeat_count` | 2026-09-03 | Driver side of the Go duplicate-filter patch below. The Go decoder can double-decode one RF burst, and a transmitter can re-send an identical payload one loop period later. Duplicates are counted per archive period (`dup_count`, logged as `duplicate frames this period`), and a re-sent unchanged payload is suppressed and counted in the driver, so neither inflates reception nor books a miss. [DEC-0035, DEC-0135] |
 | 27 | **A rain reading after a rejected one is judged against the last accepted count** — `rain_tips_with_anchor()` (#465) | 2026-10-21 | Refines 1. The driver resyncs its rain baseline to every reading, even a rejected one, so a rejected step can never freeze it. The cost was a phantom on recovery: a counter that dipped and came back (115 → 114 → 115) booked the climb back as rain, up to 16 tips (0.16 in) on a clean frame, with nothing logged. A reading is now judged first against the last accepted count, and only then against the resync baseline as before, so everything the old check accepted is still accepted. An exhaustive check over every counter triple: all 241,536 glitch-and-recover cases now book the true tips (the old check got every one wrong), storm jumps are unchanged, and the only cost is an undercount after a counter reset from a count of 18 or less. Credit: the observation came from the weewx-packages continuation of lheijst#22. [DEC-0218] |
+| 28 | **`RTLSDR_DEVICE` picks the dongle; a disagreeing `-d` stops the start** — `apply_device()` | 2026-11-12 | Driver side of the Go device-selection patch below. The image's one dongle setting, from the environment, becomes the decoder's `-d`. A `-d` already in `cmd` that names a different dongle is refused rather than resolved silently. Go's `dongle:` lines (which stick it opened, a warning that the choice could change, or why it could not open one) are logged at INFO. Unset means unchanged. [DEC-0235] |
 ### Why these filters exist: the corruption mechanism
 
 Items 1 and 6 both exist because **corrupt sensor readings arrive with a valid CRC**. The cause is now
@@ -216,6 +217,26 @@ nearest slot of its transmitter's schedule is dropped before anything is booked,
 `offschedule packet:`, and counted as `offsched=N` in the `crc_stats` line. Init, re-init and
 undefined IDs are unchanged. It also resets the `crc_stats` slot label on re-init. Its own package
 (`timegate/`), applied after the burst gate, asserted like the others. Not offered upstream.
+
+**A fifth patch, `patch/rtldavis-devsel.patch` (DEC-0235, eaglehunt-ops#440, 2026-11-12): `-d` picks
+the dongle.** This is a real upstream bug. `main.go` resolves `-d` (serial, then index) into
+`sdrIndex` and then calls `rtlsdr.Open(0)`, so `-d` was silently ignored and the decoder opened
+whatever librtlsdr listed first. libusb lists the last device it scanned first, so a second stick
+can take the first one's place at a restart. Duplicate factory serials hide behind librtlsdr's own
+lookup, which returns the first match.
+
+The patch adds a `devsel/` package with this rule:
+- an empty `-d` is an error;
+- a serial matching exactly one dongle wins;
+- a serial matching several is an error that names them;
+- otherwise plain decimal digits in range are an index;
+- anything else is an error.
+
+With more than one dongle, an index, or no `-d` (which still opens index 0), logs a warning. Every
+start logs `dongle: using <i> of <n>: <maker> <product> SN <serial>`. The patch replaces upstream's
+ignored lookup and touches nothing in the demodulator, hop loop or packet path; the test audits
+every line. `doctor.select_dongle` implements the same rule, and both run against one case table
+(`tests/go/devsel_cases.json`). Applied after the time gate. **Belongs upstream** (owner's go).
 
 ## `influx.py`
 
