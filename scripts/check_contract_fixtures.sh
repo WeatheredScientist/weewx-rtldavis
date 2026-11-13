@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Run contract/check_contract.py over every fixture with the given interpreter and
 # compare each verdict with contract/fixtures/*/expected.json (DEC-0234). loopjson.yml
-# runs it under Python 3.9, so "Python 3.8+, standard library only" is measured.
+# runs it in python:3.8-slim, so "Python 3.8+, standard library only" is measured.
 # The expected.json files are read by the CURRENT python3, never by the one under test.
 # Usage: scripts/check_contract_fixtures.sh [python]
 set -euo pipefail

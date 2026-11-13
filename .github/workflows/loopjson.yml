@@ -38,18 +38,13 @@ jobs:
             tests/test_contract_checker.py::test_influx_catalog_labels_match_real_weewx
 
       # DEC-0234: the contract checker claims Python 3.8+, standard library only. Run it
-      # over every fixture on an old interpreter, so the claim is measured.
-      - name: Set up Python 3.9 for the checker
-        id: py39
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.9"
-          update-environment: false
-
-      - name: Contract checker on Python 3.9, over every fixture
-        env:
-          PY39: ${{ steps.py39.outputs.python-path }}
-        run: scripts/check_contract_fixtures.sh "$PY39"
+      # over every fixture on the oldest interpreter it claims, so the claim is measured.
+      # setup-python has no build older than 3.10 for this runner's Ubuntu, so the
+      # official python:3.8-slim image runs it, the repo mounted read-only.
+      - name: Contract checker on Python 3.8, over every fixture
+        run: |
+          docker run --rm -v "$PWD:/w:ro" -w /w python:3.8-slim \
+            bash scripts/check_contract_fixtures.sh python3
 
       # Fails if the module's __version__, install.py's VERSION and (on a tag
       # run) the tag disagree.

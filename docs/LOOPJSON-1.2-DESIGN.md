@@ -311,7 +311,7 @@ to prove their reader is strict.
 **End-to-end:** `scripts/prove_loopjson.sh` already runs the Simulator on a real WeeWX 5.5.2 with
 the zip installed. It gains one line: `python3 contract/check_contract.py loop` on both output
 files must exit 0 and print `contract 1.2`. **`loopjson.yml` also runs the checker over the
-fixtures under Python 3.9** (`actions/setup-python`), so the "Python ≥ 3.8" claim is measured on
+fixtures under Python 3.8** (the `python:3.8-slim` image; setup-python has no build below 3.10 for the runner's Ubuntu 26.04), so the "Python ≥ 3.8" claim is measured on
 an old interpreter, not asserted.
 
 ## 5. Ease of use: from zero to a validated feed in minutes
@@ -347,7 +347,7 @@ an old interpreter, not asserted.
 - `contract/` (schema, checker, fixtures, README);
 - tests;
 - `ci.yml` (`jsonschema` in the tests job, `REQUIRE_JSONSCHEMA=1`);
-- `loopjson.yml` (the Python 3.9 checker run, release assets);
+- `loopjson.yml` (the Python 3.8 checker run, release assets);
 - `scripts/prove_loopjson.sh`;
 - INTERFACES.md (header 1.2, Versioning, §0 forward-compatibility row, §1 changes; Appendix A
   untouched);
@@ -426,7 +426,7 @@ optional and 1.1.0 never wrote it.
    sequence, the guard, the golden test, the `_clean` table.
 3. Tie tests: schema ↔ INTERFACES, `CONTRACT` ↔ header, embedded ↔ file, checker ↔ `jsonschema`,
    the influx catalog ↔ §2 and real WeeWX.
-4. CI: `ci.yml`, `loopjson.yml` (Python 3.9, assets), `prove_loopjson.sh`.
+4. CI: `ci.yml`, `loopjson.yml` (Python 3.8, assets), `prove_loopjson.sh`.
 5. Docs: INTERFACES.md to 1.2, `contract/README.md`, the extension README, MANIFEST row (checked
    with ops' `manifest-coverage-sweep.sh`).
 6. Gates (ruff, pytest, mypy with new files staged, secret gate with the identifier file copied
