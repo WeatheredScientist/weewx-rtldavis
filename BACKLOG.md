@@ -145,7 +145,8 @@ History: the retired `ops/usb_watchdog.sh` (the file no longer exists) was found
 - **AcuRite listen with `rtl_433` (S202, ops#440, owner's ask, in progress with heartofgold):** the
   neighbor's AcuRite station (a 433 MHz sensor, decoded by `rtl_433`, not our Davis decoder) from
   the NAS with the V4L, in 15-minute listens that write JSON, attributed by comparing readings with
-  the station's Weather Underground page. One stick, so each listen kills `weewx-v4ltest` and
+  the station's Weather Underground page. **First listens (11-14, 9:10:53 to 11:02:19 AM ET) decoded
+  nothing: not hearable from the basement; retry only from a better position.** One stick, so each listen kills `weewx-v4ltest` and
   restarts it (gaps reported on the issue; none during the pre-registered run). Image:
   `v2.4.0-v4l-rtl433-test`. Range is the open question; the V4L's dipole is set for 433 MHz for a
   listen and back to about 8 cm per arm for 915 MHz. When it ends: both Hub test tags stay until the

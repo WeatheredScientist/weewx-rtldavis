@@ -45,6 +45,8 @@ marvin in `builds-v4l-test/` from local branch `s202-v4l-test` (unpushed). Findi
 confined container `weewx-v4ltest` (uid 0, `--cap-drop ALL`, `--network none`, 256m, one device
 node, `--restart no`), data `/volume1/docker/weewx-v4ltest`, seed interval 300 s and default gain,
 so it is a **shakedown, not the A/B**. Nothing from it counts until the pre-registration is posted.
+The antenna was moved on 11-14: treat before and after as two positions. `rxCheckPercent` is null
+only in the first record after each start (by design).
 `v2.4.0` ran confined on DSM; the trial's earlier container is kept as evidence until the end.
 
 S192's cruft audit "Deliberately kept" list is settled. CI fails, not skips, the Go gate tests
@@ -76,9 +78,11 @@ v2.0.2+2; the grant for the v3 is narrowed to its port, so **tell marvin before 
    with the stick. Heartofgold's finish conditions: the fix in a real release, the NAS restored.
    (d) The S197 cross-repo drift ops issue (draft in S201b's notes; owner's go). (e) ops#449 closes
    when the sweep reads `dev`. (f) Design first: #561, #553 (DEC-0014). (g) Owner: #558. (h) ROADMAP diet.
-1. **ops#440 follow-ups:** answer heartofgold's reads; AcuRite listens each pause `weewx-v4ltest`
-   (gap times reported, none in the measured run); end-state cleanup (`BACKLOG.md`: Hub test tags,
-   marvin's `builds-v4l-test/` and two test images). Commit or drop branch `s202-v4l-test`.
+1. **ops#440 follow-ups:** answer heartofgold's reads. The first AcuRite listens (11-14, gap 9:10:53
+   to 11:02:19 AM ET) decoded nothing: not hearable from the basement. Any further listen pauses
+   `weewx-v4ltest` (gap times reported, none in the measured run). End-state cleanup (`BACKLOG.md`:
+   Hub test tags, marvin's `builds-v4l-test/` and two test images). Branch `s202-v4l-test` is
+   committed locally (`3834fb2`, unpushed): push for the record or drop.
 2. **Gate results since 11-13 23:10 ET:** any `gate` line (keep bytes and offset) and any gap with
    none. Around 2026-12-04, re-run `ops/garbage_gap_corr.py` over the 30 days after the deploy;
    #536 stays open until then.
