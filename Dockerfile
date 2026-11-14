@@ -50,6 +50,13 @@ RUN mkdir -p /etc/modprobe.d && \
 #--------------------------------------------
 ARG RTLDAVIS_SRC_COMMIT=bfa9e3d9e1a9fc198fcf81124b709d63d8c30a1f
 ARG RTLDAVIS_SRC_SHA256=7c1a7de1923d2c96844adfba51ec0497f5e8f0a629cc3a6ba64a86d62f26e368
+# TEST BRANCH ONLY (s202-v4l-test, ops#440): replaces src.tgz's bundled librtlsdr (osmocom
+# v2.0.2+2) with osmocom v2.0.3, the release that adds the RTL-SDR Blog V4L. Not for prod.
+ARG OSMO_COMMIT=797f8143266d983c56d8f35d2d442527529dd8a5
+ARG OSMO_SHA256=79ec37cf720277f1f69e167b776ad40d7c5ed6b6f643e265bbd74b5aca5578f8
+# rtl_433 25.12 (merbanan/rtl_433, tag 25.12), same test branch, same rule: one commit, one sha256.
+ARG RTL433_COMMIT=ea7d504877df751a202432d47dbb0c425ab0a93c
+ARG RTL433_SHA256=2a0953c40bacbccfb81273fb0e745fb6403d2b96b6f521b3e39cdf5ce6551727
 
 #--------------------------------------------
 # Build librtlsdr and rtldavis Go binary from src.tgz
@@ -64,10 +71,17 @@ RUN curl -fsSL -o /tmp/src.tgz \
     "https://github.com/weewx-contrib/weewx-rtldavis/raw/${RTLDAVIS_SRC_COMMIT}/src.tgz" && \
     echo "${RTLDAVIS_SRC_SHA256}  /tmp/src.tgz" | sha256sum -c - && \
     cd /tmp && tar zxf src.tgz && \
+    curl -fsSL -o /tmp/osmo.tgz \
+    "https://github.com/steve-m/librtlsdr/archive/${OSMO_COMMIT}.tar.gz" && \
+    echo "${OSMO_SHA256}  /tmp/osmo.tgz" | sha256sum -c - && \
+    rm -rf /tmp/src/librtlsdr && mkdir /tmp/src/librtlsdr && \
+    tar zxf /tmp/osmo.tgz -C /tmp/src/librtlsdr --strip-components=1 && \
     cd /tmp/src/librtlsdr && \
     mkdir build && cd build && \
     cmake ../ -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON -DENABLE_ZEROCOPY=OFF && \
     make -j2 && make install && ldconfig && \
+    echo "V4L test build: librtlsdr must be osmocom v2.0.3 and know the Blog V4L string:" && \
+    ls /usr/local/lib/librtlsdr.so.2.0.3 && grep -c "Blog V4L" /usr/local/lib/librtlsdr.so.2.0.3 && \
     cd /tmp/src/rtldavis/src/lheijst/rtldavis && \
     echo "receiveWindow (upstream default, unpatched — rw350 is an unproven experiment; 24h sweep backlogged, see ROADMAP/ARCHITECTURE §6):" && grep -R "receiveWindow" . && \
     patch -p1 --batch --forward < /tmp/rtldavis-dupgate.patch && \
@@ -83,6 +97,22 @@ RUN curl -fsSL -o /tmp/src.tgz \
     echo "timegate (#536, DEC-0229): a frame off its transmitter's schedule is dropped; timegate.Offset and timegate.Off must appear in main.go:" && \
     test "$(grep -c 'timegate\.O' main.go)" = "2" && test -f timegate/timegate.go && \
     GOBIN=/usr/local/bin go install -buildvcs=false -v .
+
+# TEST BRANCH ONLY (ops#440): rtl_433 25.12 beside the decoder, linked against the librtlsdr above,
+# so one test image can listen for a 433 MHz station (`docker run ... <image> rtl_433 ...`: the
+# entrypoint runs any other first argument as given). Not for prod.
+RUN curl -fsSL -o /tmp/rtl433.tgz \
+    "https://github.com/merbanan/rtl_433/archive/${RTL433_COMMIT}.tar.gz" && \
+    echo "${RTL433_SHA256}  /tmp/rtl433.tgz" | sha256sum -c - && \
+    mkdir /tmp/rtl_433 && tar zxf /tmp/rtl433.tgz -C /tmp/rtl_433 --strip-components=1 && \
+    cd /tmp/rtl_433 && mkdir build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_RTLSDR=ON -DENABLE_SOAPYSDR=OFF && \
+    make -j2 && make install && ldconfig && \
+    echo "rtl_433 must link the 2.0.3 librtlsdr under /usr/local, not the apt copy:" && \
+    ldd /usr/local/bin/rtl_433 | grep librtlsdr && \
+    ldd /usr/local/bin/rtl_433 | grep -q '/usr/local/lib/librtlsdr' && \
+    rtl_433 -V 2>&1 | head -3 && \
+    rm -rf /tmp/rtl_433 /tmp/rtl433.tgz
 
 #--------------------------------------------
 # Install weewx and configure for rtldavis
