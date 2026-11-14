@@ -3,8 +3,10 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-11-08 (S192 — **scheduled full reconciliation, on time**: six lines moved,
-detail in the guardrail section. Next check: S202.)
+**Last updated:** 2026-11-14 (S202 — **scheduled full reconciliation, on time**: six lines moved,
+detail in the guardrail section. Next check: S212.)
+Prior: 2026-11-08 (S192 — **scheduled full reconciliation, on time**: six lines moved,
+detail in the guardrail section.)
 Prior: 2026-11-04 (S190 — targeted update per DEC-0057, not the full reconciliation; DEC-0229
 deployed as v2.4.0, P1.9 step 4 awaits its 30-day re-run. Tripwire still S192.)
 Prior: 2026-11-03 (S189 — targeted: DEC-0229 accepted and built.)
@@ -161,11 +163,28 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S202** (~10 sessions out). If the session counter is
-  at or past S202 and this line still says S202, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146, S156, S172, S183 and S192 did (diff every
+- **Next scheduled reconciliation check: by S212** (~10 sessions out). If the session counter is
+  at or past S212 and this line still says S212, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146, S156, S172, S183, S192 and S202 did (diff every
   open/pending item here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S192, 2026-11-08** — **on time** (due S192; S184 to S191 each updated
+- Last full reconciliation: **S202, 2026-11-14** — **on time** (due S202; S193 to S201 each updated
+  only their own lines, as the banner shows). **Six lines were behind and are fixed.** P1.9's
+  #536 item stopped at the 11-08 10:52 ET clear window: it now reads clear to 11-12 19:43 ET and
+  names DEC-0230, which makes CI fail rather than skip the Go gate tests. P0.8 phase 2 did not
+  say the next minor image is owed: it carries DEC-0235's devsel patch and DEC-0232's migration
+  and is not built. P0.8 phase 4 pointed at `BOOT.md` job 1 for the upstream watch, which is now
+  job 4. The P0 freeze row lacked S201's reading of blocker 1: #579 (a vanished dongle never exits
+  the container) and the librtlsdr USB hang as inferred shapes for the long tail. P3's INTERFACES
+  line already carried DEC-0233 and DEC-0234 (shipped S201) and its status is verified against
+  `git log -- docs/INTERFACES.md`: no line moved there. A sixth line moved late in the session:
+  phase 2's owed image now also names the V4L (the NAS's second stick is a V4L, which the image's
+  librtlsdr does not support; osmocom v2.0.3 does). Classed, no line: DEC-0230 (CI tooling,
+  folded into #536's line), DEC-0231 (tier-file diet), DEC-0232 (already on P1.9's and P3's
+  lines), DEC-0235 (V4 support and device pinning: the second-dongle A/B is `BOOT.md` job 8,
+  `BACKLOG.md` and ops#440, an owner decision, and a decoder swap needs a DEC). Not added: #475
+  (parked), #514, #558, #561, #553 (each waits on a DEC or the owner). Verified current: the P0
+  DB-lock row, P0.7, P1's arc, P1.8, P2's header, phases 1, 3, 5, 6.
+- Prior full reconciliation: **S192, 2026-11-08** — **on time** (due S192; S184 to S191 each updated
   only their own lines, as the banner shows). **Six lines were behind and are fixed.** P0.8 phase
   2 still said prod runs v2.3.0 and `:latest` = `:v2.3.0` (v2.4.0 has been in prod since 2026-11-04
   18:36:38 ET and `:latest` = `:v2.4.0` since 2026-11-06 01:52 ET). P0.8 phase 4 pointed at
@@ -456,7 +475,13 @@ items inside a phase don't depend on each other.
       driver QC changes, once planned as a v2.1.1), v2.3.0 (S185) and v2.4.0 (S190, DEC-0229's time
       gate) shipped; prod runs v2.4.0 since 2026-11-04 18:36:38 ET, and `:latest` = `:v2.4.0` since
       2026-11-06 01:52 ET. **Corrected S192:** this line said prod ran v2.3.0 and `:latest` = `:v2.3.0`. Left: the first arm64 run against a live
-      radio (README says smoke-tested until then). History: merged
+      radio (README says smoke-tested until then). **Owed (S202):** the next minor image, carrying
+      DEC-0235's device-pinning patch (`RTLSDR_DEVICE`, `doctor`'s listing) and DEC-0232's baked
+      archive column; both are on `dev` and not in prod. **V4L (S202, ops#440):** the owner's NAS
+      stick is a Blog V4L, which the image's librtlsdr (osmocom v2.0.2+2) does not support; v2.0.3
+      does, and the V4L decodes on it in two amd64 test tags on Hub (`v2.4.0-v4l-test`,
+      `v2.4.0-v4l-rtl433-test`, not for prod). A normal image carrying it needs a pin-bump DEC and a
+      v3 soak on prod (`BOOT.md` decision 0b). History: merged
       S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
       and joins it into Docker Hub's multi-arch tag, DEC-0215; `:latest` and `:v2.0.20` multi-arch
@@ -477,7 +502,7 @@ items inside a phase don't depend on each other.
       comment on lheijst/rtldavis#2. S181, same day: the david-lutz/weewx-influx2#1 reply — CodeRabbit's
       two valid points (`influx.py:501` logged per record; `verify_ssl` undocumented) fixed in
       commit `0c5d394` on the fork branch, then replied. Nothing left but watching for answers,
-      `BOOT.md` job 1 (**corrected S192:** this said job 2, since renumbered).)*
+      `BOOT.md` job 4 (**corrected S202:** this said job 1; S192 had corrected it from job 2).)*
       `weewx-packages/weewx-rtldavis` is the live continuation (created 2026-10-21, absorbed
       lheijst#22, #23 and lheijst/rtldavis#7 with credit); the lheijst repos have been quiet since
       2023 and keep only the record.
@@ -619,7 +644,8 @@ Steps, in order:
 - [ ] #536 **Time gate.** *(measured and designed S188; DEC-0229 accepted and built S189; in prod
       since 2026-11-04 18:36:38 ET as v2.4.0, S190; two live drops, 11-05 05:06:39 ET (+725.6 ms)
       and 11-07 09:04:56 ET (+1036.2 ms), neither with a gap; no gate line and no gap from
-      11-07 12:01 to 11-08 10:52 ET, S192; closes on the 30-day re-run)* Once
+      11-07 12:01 to 11-12 19:43 ET, read S201; closes on the 30-day re-run; CI fails, not skips,
+      the Go gate tests since DEC-0230)* Once
       synced, drop a CRC-valid frame more than 100 ms off the expected slot before it can re-anchor
       the hop clock, hop, or reach the driver; log it and count it as `offsched=N` in the minute
       line; reset the crcstats slot label on re-init. `patch/rtldavis-timegate.patch` after the
@@ -994,7 +1020,10 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       same shape had no driver line. weewxd was not frozen in any of them: it resumed by itself when
       the decoder re-acquired. DEC-0083's median of 240 s sits inside the 150 to 290 s this predicts.
       Not explained by it: the 10-22 62 min outage and DEC-0083's long tail. Fix is P1.9 step 4,
-      in prod since 2026-11-04 (v2.4.0; **updated S192**).
+      in prod since 2026-11-04 (v2.4.0; **updated S192**). **S201 (inferred, not measured):** the
+      long tail may be #579's shape (a vanished dongle never exits the container; weewxd retries
+      forever) or the osmocom librtlsdr USB hang fixed upstream in osmocom v2.0.3 (`65f0658`); #579 needs a DEC
+      (a `weewxd --exit` setting or a stall watchdog).
 - [x] ~~**P0 — make the campaign metric freeze-aware**~~ — **CLOSED by DEC-0069 (S66).** Two parts,
       and the larger one was a *resolution* problem, not a freeze problem: `harvest()` read the
       monitor's **5-minute** `RECEPTION:` aggregate, where one frozen minute drags a whole bucket

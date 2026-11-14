@@ -9,6 +9,10 @@ container). Everything marked *inferred* is reasoning from source that has not m
 
 ## Verdicts
 
+> **S202 correction: this holds for a V4, not a V4L.** The owner's second stick turned out to be an
+> RTL-SDR Blog V4L (R828S), which the image's librtlsdr does not support. See the V4L addendum at
+> the end.
+
 1. **The image already supports the V4. No image change is needed for it, and the v3 path is
    untouched.** BOOT's lead ("needs librtlsdr newer than bookworm's 0.6.0") is true of bookworm hosts
    and wrong for this image, which builds osmocom librtlsdr v2.0.2+2.
@@ -304,3 +308,30 @@ Not deployed. It reaches prod only with an image release and a unit edit, each t
 - **Docs:** QUICKSTART ("V3 or V4", two troubleshooting rows, a "More than one dongle" section),
   `.env.example`, the compose comment, the systemd example, and CHANGES-FROM-UPSTREAM (the fifth
   patch, driver row 28).
+
+## V4L addendum (S202, 2026-11-14, ops#440)
+
+The stick the owner plugged into the NAS reports manufacturer `RTLSDRBlog`, product `Blog V4L` (the
+Lite model), and the vendor says it uses an R828S tuner. **Measured on the NAS by heartofgold**
+with `v2.4.0` (osmocom v2.0.2+2): `rtl_test` names it "Generic RTL2832U OEM", finds an R820T tuner,
+prints `[R82XX] PLL not locked!`, and the station loops on `rtldavis process stalled` with no decode.
+`doctor` passes (exit 0) because it only checks the node and the tuner line.
+
+**Why (read from the osmocom source, commit `0204c9c`, in v2.0.3 and not in v2.0.2+2):**
+- The V4 check is an exact `strcmp` of the product against "Blog V4", so "Blog V4L" never matched. The
+  chip ID cannot tell an R828S from an R820T, so the library applies the R820T setup to it.
+- v2.0.3 gives the V4L the R828-family VCO power reference in the PLL setup (the code behind "PLL not
+  locked") and its own input switch: above 28.8 MHz it selects the UHF air input and drives the
+  upconverter GPIO. It prints "RTL-SDR Blog V4 Lite Detected" from the R820T branch.
+
+**Measured result with v2.0.3:** two amd64 test tags on Hub, not for prod: `v2.4.0-v4l-test`
+(v2.4.0's tree, the bundled librtlsdr swapped for osmocom v2.0.3 at commit `797f814`, sha256
+pinned) and `v2.4.0-v4l-rtl433-test` (the same, plus rtl_433 25.12). On the NAS the V4L reports "V4
+Lite Detected", prints no PLL line, and decodes; its first archive record matched prod. That proves
+the library; it says nothing about reception quality, and the antenna differs from prod's.
+
+**What this changes:** a V4 needs no image change, a V4L needs librtlsdr 2.0.3. A normal image
+carrying v2.0.3 is a pin-bump decision with a v3 soak on prod (v2.0.3 also carries the USB-hang fix
+`65f0658`, see Follow-ups), `BOOT.md` decision 0b. The earlier statement that `doctor`'s tuner line
+tells a V4 from a v3 was wrong for a V4L: its tuner line reads R820T, the same as a v3's. The stick's
+product string is the identifier.

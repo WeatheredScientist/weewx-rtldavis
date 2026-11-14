@@ -7,6 +7,12 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S199] — 2026-11-11 — INTERFACES.md becomes a specification (DEC-0233, PR #575); #551 closed; branch cleanup
+
+- No prod change. Sonnet 5.5 for the start and chores, then Opus 5.5 (owner's switch) for the decision. On the owner's go, DEC-0233 adopts the S197 audit's eight parts; parts 1 to 4 and 8 are written: `docs/INTERFACES.md` now specifies three surfaces (loop JSON, InfluxDB, and the SQLite archive as §3), a §0 table of rules and meanings, a row per field (only `dateTime` required; InfluxDB's 36 live fields as 17 contract, 12 written-optional, 7 diagnostics outside the contract), contract version 1.1 and one owner. The station history moved verbatim to Appendix A (checked by script); the old §1/§2 headings stay for the README anchors. Two audit claims corrected: `ET` is a per-record increment, and the loop file serves a cached `windDir` through calm until its TTL. ROADMAP P3 updated, with a `loopjson` 1.2.0 line for parts 5 to 7. PR #575 carries the change and this closeout; not merged.
+- #551 closed with a comment on the owner's word (local `main` already equals `origin/main`). Deleted, all with merged PRs: nine `origin/` branches, four local branches and the S198b worktree; only `dev` and `main` remain.
+- Gate read 11-10 19:45 to 11-11 08:55 ET: no time-gate drop and no archive gap (1440 of 1440 records on 11-10); the `Added` grep was the positive control. Rolled S196 to the archive. `BOOT.md` was over its 10,000-char cap (10,597); trimmed to 9,966, with job 6's carry-forward list moved verbatim to `BACKLOG.md`.
+
 ## [S198] — 2026-11-11 — Replied on weewx-packages#15 (CRC-valid gusts); DEC-0232 built by child S198b and merged (PR #573)
 
 - No prod change. Opus 5.5. Issue #15 had nothing new since S197; posted a 109-word reply on the owner's go: ERR-0012 as a CRC-valid phantom gust, and the message-9 `windGust10` cross-check as a flag that discards nothing. `docs/UPSTREAM-THREADS.md` records it and cdavis289's diagnostics fork. On the owner's ask, started child S198b (Opus 5.5, medium, own worktree) for a `windGust10` SQLite column; design approved by the owner in its chat; PR #573 squash-merged 2026-11-11 08:28 ET after all CI checks passed. The prod migration and the dashboard ops note wait on the owner (`BOOT.md` job 00). Gate results since 11-10 19:45 ET not read. Rolled S195 to the archive.

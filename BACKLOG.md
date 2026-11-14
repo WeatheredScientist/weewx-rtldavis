@@ -142,6 +142,15 @@ History: the retired `ops/usb_watchdog.sh` (the file no longer exists) was found
 
 ## Needs a check / housekeeping (moved from STATUS.md, S60)
 
+- **AcuRite listen with `rtl_433` (S202, ops#440, owner's ask, in progress with heartofgold):** the
+  neighbor's AcuRite station (a 433 MHz sensor, decoded by `rtl_433`, not our Davis decoder) from
+  the NAS with the V4L, in 15-minute listens that write JSON, attributed by comparing readings with
+  the station's Weather Underground page. One stick, so each listen kills `weewx-v4ltest` and
+  restarts it (gaps reported on the issue; none during the pre-registered run). Image:
+  `v2.4.0-v4l-rtl433-test`. Range is the open question; the V4L's dipole is set for 433 MHz for a
+  listen and back to about 8 cm per arm for 915 MHz. When it ends: both Hub test tags stay until the
+  owner removes them, `builds-v4l-test/` and the two test images on marvin are ours to remove.
+
 - **Carry forward, none due (moved verbatim from `BOOT.md` job 6, S199, to keep BOOT under its cap):**
   S126's job-8 items, the lheijst/rtldavis#7 watch, ops#306's residual,
    the local-infra marvin entry, the reset-from-112-or-above phantom, whether to tell the
