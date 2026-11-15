@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S202 → S203)
+## ▶ Resume here (S203 → S204)
 
 ### What's settled (do not re-derive)
 
@@ -33,7 +33,11 @@ stamps, flag steps over 90 s (each minute logs twice). A past day's log is `weew
 `git -C /srv/docker/weewx checkout 694938f -- loop_json_writer.py`, then restart.
 
 **DEC-0235 (S201a):** the Go decoder **ignored `-d`**; the devsel fix (`RTLSDR_DEVICE`, `doctor`
-listing, exit 15) is on `dev`, **baked: not in prod until the next image.** **Next DEC: DEC-0236.**
+listing, exit 15) is on `dev`, **baked: not in prod until the next image.** **Next DEC: DEC-0237.**
+**DEC-0236 (S203):** the NAS measured run is **pre-registered, posted on ops#440** (readout
+`ops/ab_frames.py`, blob `f1325c92`): frame-level agreement with prod, gain 372, 24 h burn-in then
+seven days. Bars: coverage ≥ 0.90, ≤ 1 disagreement per 10,000, no NAS stall or restart, memory
+< 200 MB. It judges a reference receiver, never the V4L against the v3.
 **V4L (S202, ops#440):** the owner's NAS stick is a Blog **V4L** (R828S), not a V4. The image's
 librtlsdr (osmocom v2.0.2+2) does not support it (R820T, "PLL not locked", stall loop); osmocom
 v2.0.3 does (`0204c9c`), and the V4L **decodes on it**. amd64 test tags on Hub, **not for prod**:
@@ -44,7 +48,7 @@ marvin in `builds-v4l-test/` from local branch `s202-v4l-test` (unpushed). Findi
 **NAS test bed (ops#440; heartofgold and ops drive it, the owner runs each line on Foundation):**
 confined container `weewx-v4ltest` (uid 0, `--cap-drop ALL`, `--network none`, 256m, one device
 node, `--restart no`), data `/volume1/docker/weewx-v4ltest`, seed interval 300 s and default gain,
-so it is a **shakedown, not the A/B**. Nothing from it counts until the pre-registration is posted.
+so it is a **shakedown, not the A/B**; nothing from it counts. It runs until DEC-0236's start.
 The antenna was moved on 11-14: treat before and after as two positions. `rxCheckPercent` is null
 only in the first record after each start (by design).
 `v2.4.0` ran confined on DSM; the trial's earlier container is kept as evidence until the end.
@@ -63,7 +67,7 @@ inside the prod container is a classifier-gated "production read"**: plan for th
 tag to the ratified Hub repo (Class B, never `latest`, cannot delete). Prod's librtlsdr is still
 v2.0.2+2; the grant for the v3 is narrowed to its port, so **tell marvin before moving the v3's jack**.
 
-### ▶▶ S203 JOB LIST
+### ▶▶ S204 JOB LIST
 
 00. **Owner first.** (a) DEC-0232's migration doc, then `ops/windgust10_check.sql`. (b) Ops note,
    owner's go: dashboard DEC-0442 §3.2's `MAX(windGust)` fallback re-admits ERR-0012. (c) **The next
@@ -71,12 +75,13 @@ v2.0.2+2; the grant for the v3 is narrowed to its port, so **tell marvin before 
    `RTLSDR_DEVICE` = the v3's serial (heartofgold unit edit, owner-run).
 0. **Decisions (Opus).** (a) **#579:** a vanished dongle never exits the container: `weewxd --exit`
    vs a stall watchdog; a DEC. (b) **librtlsdr v2.0.3 pin bump** (now with a concrete reason: the V4L
-   works only on it; plus the USB-hang fix `65f0658`): a DEC with a v3 soak on prod. (c) **The NAS
-   A/B pre-registration, owed on ops#440 before the measured run:** frame-level agreement as the bar
-   (not "within 5 points" of a metric near 99.9%), 60 s records on a fresh database, gain arms
-   (372 like-for-like), NTP, duration, and the stated limit that antenna, position and host differ
-   with the stick. Heartofgold's finish conditions: the fix in a real release, the NAS restored.
-   (d) The S197 cross-repo drift ops issue (draft in S201b's notes; owner's go). (e) ops#449 closes
+   works only on it; plus the USB-hang fix `65f0658`): a DEC with a v3 soak on prod. (c) **PR #582**
+   (DEC-0236 + this closeout): the owner merges. **DEC-0236's run** waits on ops#440's ask (a start
+   date; heartofgold says when NAS step 5 ran). Then, inside the burn-in: prod's two logging edits
+   (`debug_rtld` 2, a `[[[user.rtldavis]]]` DEBUG logger) **in place in the live conf, never copied
+   off the box**, `marvinctl restart weewx.service`, check `data:` lines. After the window: fetch
+   both logs (`marvinctl grep data:` per day), exclusions by rule (prod steps over 90 s), peak memory
+   from the owner, one `ops/ab_frames.py` readout, post it; revert prod's edits. (d) The S197 cross-repo drift ops issue (draft in S201b's notes; owner's go). (e) ops#449 closes
    when the sweep reads `dev`. (f) Design first: #561, #553 (DEC-0014). (g) Owner: #558. (h) ROADMAP diet.
 1. **ops#440 follow-ups:** answer heartofgold's reads. The first AcuRite listens (11-14, gap 9:10:53
    to 11:02:19 AM ET) decoded nothing: not hearable from the basement. Any further listen pauses
@@ -96,9 +101,10 @@ v2.0.2+2; the grant for the v3 is narrowed to its port, so **tell marvin before 
 6. **Watch only:** `no bar_absolute` (DISC-0002) · WU gold star · OWM/Windy rain in mm (ERR-0010) ·
    `Go burst gate dropped a frame` (last 11-08 19:50:07 ET) · first `unhealthy` · any `rejecting
    implausible`, `unknown message type` or loopjson `not finite` WARNING. **Second dongle A/B
-   reminder Sat 2026-12-05 09:00 ET** (a decoder swap needs a DEC). Carry-forwards: `BACKLOG.md`.
+   reminder Sat 2026-12-05 09:00 ET**: by then DEC-0236's run should be under way (a decoder swap
+   still needs its own DEC). Carry-forwards: `BACKLOG.md`.
 
-## Current state (S202)
+## Current state (S203)
 
 | Thing | State |
 |---|---|
@@ -107,7 +113,7 @@ v2.0.2+2; the grant for the v3 is narrowed to its port, so **tell marvin before 
 | Reception | 99.9% mean at USB `5-1`; 0 archive gaps 11-05 00:00 to 11-13 23:10 ET |
 | `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` adds docs, tests, CI, DEC-0232's and DEC-0235's baked changes (next image) and loopjson 1.2.0 (mounted, live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags above |
-| Trackers | repo: #579, #553, #558, #561, #536, #475 parked, #380 info, #514 · ops: #440, #449, #110 (Jan-Feb), #344 |
+| Trackers | repo: #579, #553, #558, #561, #536, #475 parked, #380 info, #514 · PR #582 open (owner merges) · ops: #440, #449, #110 (Jan-Feb), #344 |
 
 ## Blockers
 
@@ -117,12 +123,13 @@ root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email watch.
 
 ## Model tier
 
-S202: Sonnet 5.5 throughout (reconciliation, gate read, tracker answers, the test images); no bare
-`/model`, nothing to restore. S203: Opus 5.5 at `medium` for decisions 0a to 0c, Sonnet for the rest.
+S203: Opus 5.5 throughout (DEC-0236's design, the readout); the desktop session started on it, no
+`/model` switch here, nothing to restore. S204: Opus 5.5 at `medium` for decisions 0a and 0b;
+Sonnet for DEC-0236's run steps (execution of a locked design) and the rest.
 
 ## Gotchas — `docs/GOTCHAS.md`
 
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-14 (S202: ROADMAP reconciled; V4L test tags on Hub; NAS shakedown under way)._
+_Last updated: 2026-11-15 (S203: DEC-0236 pre-registers the NAS run; posted on ops#440; PR #582)._

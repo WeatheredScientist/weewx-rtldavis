@@ -13411,3 +13411,126 @@ the V4 needs librtlsdr newer than bookworm's 0.6.0.
   release and a prod deploy before the V4 is used on marvin. The December A/B depends on it.
 - Separate and not decided here: osmocom `65f0658` (a USB-error hang fix in v2.0.3) is a candidate
   lead for the freeze blocker. It needs its own pin-bump DEC and a v3 soak.
+
+## DEC-0236 — The NAS second-receiver run is pre-registered: frame-level agreement with prod, one arm, seven days (S203)
+
+**Status:** Accepted (owner, in chat S203: "Yes, frame-level" and "Stands as written"); the run has
+not started · **Date:** 2026-11-15 (S203, Opus 5.5) · **Answers:** eaglehunt-ops#440 (the
+pre-registration owed before the measured run; heartofgold's proposed bar) · **Readout:**
+`ops/ab_frames.py` + `tests/test_ab_frames.py`, merged before the run · **Applies:** DEC-0060 (the
+scoped debug logger), DEC-0045 (positive controls), DEC-0069/0097 (truncated records, why the
+per-minute metric is secondary) · **Follows:** DEC-0235 and the S202 V4L finding · **Touches prod:**
+one live-config edit and two restarts (start and end of the run), owner's go given here.
+
+### Context
+
+The owner's second stick is an RTL-SDR Blog V4L. It decodes the Davis ISS on the NAS (Foundation)
+only with osmocom librtlsdr v2.0.3, from the test tag `v2.4.0-v4l-test` (`b599bf27…`); prod's v3 runs
+v2.0.2+2. A shakedown has run since 2026-11-14, at a 300 s archive interval and the seeded default
+gain, with one antenna move and a 1 h 51 min pause for AcuRite listens. heartofgold proposed a bar
+(one week, zero stalls, average loss within 5 points of prod). Prod's per-minute `rxCheckPercent`
+averages 99.9 % since DEC-0229, so a 5-point bar would pass a receiver 5 points worse than prod.
+
+### What the run answers, and what it cannot
+
+- **Answers:** whether the NAS stream can serve as a **reference receiver**: a second, independent
+  record of the same ISS, good enough to test against (the Python port in #514, later decoder
+  comparisons), or to keep as a permanent second receiver if the owner ever decides that.
+- **Cannot answer:** whether the V4L is better or worse than the v3. Stick, librtlsdr version,
+  antenna (a telescopic dipole in the basement against prod's 915 MHz whip), position and host all
+  differ at once. The write-up says so, and no V4L-vs-v3 claim is made from it.
+- **Not evidence for** the librtlsdr v2.0.3 pin bump on prod (BOOT decision 0b). That needs its own
+  DEC and a v3 soak. "v2.0.3 ran eight days on the V4L" is supporting context at most.
+
+### Metric
+
+Every decoded data frame is logged by the driver at `debug_rtld = 2` as
+`data: HH:MM:SS.µs <8 bytes> …`, the Go decoder's own timestamp. `ops/ab_frames.py` pairs the two
+streams:
+
+1. **Clock offset:** median of (NAS minus prod) over identical-byte frames within ±5 s. Reported;
+   it is also the NTP check.
+2. **Pairing:** after removing the offset, each prod frame takes an unused NAS frame within ±1 s,
+   identical bytes first, else the nearest. The ISS sends every 2.8125 s (channel 5), so a slot holds
+   at most one frame per side.
+3. **Outcomes:** PAIRED (same bytes), DISAGREE (the NAS decoded different bytes in that slot),
+   PROD-ONLY; unused NAS frames are NAS-ONLY.
+4. **Primary:** coverage = PAIRED / prod frames. **Reported:** the reverse (PAIRED / NAS frames),
+   the disagreement rate per 10,000 paired slots with every case listed, and per-day figures.
+5. **Secondary, reported only:** per-minute `rxCheckPercent` on both sides (60 s records).
+
+### Bars (all must hold for a PASS)
+
+| Condition | Bar |
+|---|---|
+| Coverage, NAS of prod | ≥ 0.90 |
+| Disagreement | ≤ 1 per 10,000 paired slots |
+| NAS stalls (`rtldavis process stalled`) | 0 |
+| NAS restarts (the driver's `rtldavis: … band, ISS channel` start line) | 0 |
+| NAS container peak memory | < 200 MB (cap 256 MB) |
+| Clock offset estimated from | ≥ 100 identical-byte pairs |
+
+The script prints FAIL when memory is not supplied: an unread condition is not a pass.
+
+### Arms, window, duration
+
+- **One arm: gain 372**, prod's. No decision depends on the best gain for a basement dipole, and each
+  further arm costs days (DEC-0059's arithmetic). Auto gain is not run.
+- **Window:** a 24 h burn-in from the NAS start, not scored; then **seven full days, 00:00 to 00:00
+  ET**. The readout runs once, after the window. No early stop on good numbers.
+- The run sits between DST changes, so both hosts' local clocks are one zone throughout.
+
+### Setup
+
+**NAS** (owner-run lines, heartofgold relays; nothing below is weewx's to run on Foundation):
+
+1. `docker kill weewx-v4ltest` ends the shakedown. Its container and data stay as evidence until the
+   end, like the earlier trial's.
+2. A fresh data directory, `/volume1/docker/weewx-v4lab`, with a `logs/` subdirectory.
+3. Seed only, no start: the same confined `docker run --rm` flags and env as the shakedown,
+   image `v2.4.0-v4l-test`, command `/opt/weewx-venv/bin/python3 /opt/seed_config.py`.
+4. Edit the seeded `weewx.conf`: `[StdArchive] archive_interval = 60`; `[Rtldavis] cmd =
+   /usr/local/bin/rtldavis -gain 372 -v -fc 0 -ppm 0` (prod's); `debug_rtld = 2`; under
+   `[Logging][[loggers]]` a `[[[user.rtldavis]]]` with `level = DEBUG`, `handlers = rotate,`,
+   `propagate = 0` (DEC-0060: `debug_rtld` alone logs nothing).
+5. Start `weewx-v4lab` with the shakedown's confinement flags **plus `-v
+   /volume1/docker/weewx-v4lab/logs:/var/log/weewx`**. The seeded config logs to
+   `/var/log/weewx/weewx.log`, which is outside the data mount: without this mount the log lives in
+   the container layer and is lost with it.
+6. Confirm the start line reads `… rain bucket 0, cmd /usr/local/bin/rtldavis -gain 372 …` and that
+   `data:` lines appear in `logs/weewx.log`. Record the antenna's leg length and position; DSM's NTP
+   on.
+
+**Prod** (marvin): the same two logging edits in the live `weewx.conf` (`debug_rtld` 1 → 2, the
+`[[[user.rtldavis]]]` logger), during the burn-in, then `marvinctl restart weewx.service` and a check
+that `data:` lines appear. About a minute's gap; about 31,000 frames a day, a few MB of log. Reverted
+the same way after the window. The live conf is secret-bearing: edit it in place, never copy it off
+the box.
+
+### What voids or ends the run
+
+- **Void, restart the clock:** any AcuRite or other listen on the V4L, any antenna move, any human
+  kill or restart of `weewx-v4lab`, a NAS reboot, a prod outage over 1 h.
+- **Ends early as a FAIL:** a NAS stall loop over 30 min (a single stall already fails the bar).
+- **Excluded from both sides** (declared by rule, not chosen after the readout): each prod archive
+  step over 90 s, from the earlier record to the later one, read from prod's `Added record` lines.
+
+### Consequences
+
+- **PASS:** the NAS stream is a reference receiver at this antenna and position. Its uses (#514's test
+  bed, keeping it) are separate decisions.
+- **FAIL:** the figures are reported on ops#440. A changed setup (antenna above ground, another gain)
+  is a new DEC and a new run, not a re-read of this one.
+- **Either way:** heartofgold's finish conditions stand: librtlsdr v2.0.3 reaches a real release only
+  through decision 0b's soak, and the NAS is restored unless the owner decides to keep a receiver
+  there. Prod's logging edits are reverted after the window.
+
+### Alternatives considered
+
+- **heartofgold's bar** (loss within 5 points): too weak against a metric near 100 %; kept as the
+  secondary figure.
+- **Counts only, prod untouched:** per-minute counts cannot see a disagreement, which is the defect
+  class (ERR-0012) a reference receiver most needs to expose.
+- **Two gain arms (372, auto):** doubles the run for a question nothing depends on.
+- **Both sticks on one antenna through a splitter:** the only way to judge the V4L itself; a
+  different experiment, not this one.

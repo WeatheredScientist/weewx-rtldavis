@@ -7,6 +7,11 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S200] — 2026-11-12 — PR #575 (DEC-0233) landed; gate read to 11-11 22:35 ET; branches cleaned
+
+- No prod change. Sonnet 5.5 throughout, no bare `/model`. PR #575's image and tests jobs had failed on a runner DNS error (`ports.ubuntu.com` unresolvable); `gh run rerun --failed` turned all seven checks green, and the owner's go merged it (squash `960107d`, 2026-11-12 08:51 ET). `s199-interfaces-spec` (remote, local, worktree) deleted after a clean-tree check: only `dev` and `main` remain. Rolled S197 to the archive; `BOOT.md` rewritten to 9,488 chars (ops#452 measured it at 2,649 tokens over the 2,500 cap).
+- Gate read 11-10 19:45 to 11-11 22:35 ET: no `gate` line, no `rejecting implausible` or `unknown message type`, no archive gap (1,611 records, none over 90 s); the `Added` grep returned records, so the empty `gate` grep is a real zero.
+
 ## [S199] — 2026-11-11 — INTERFACES.md becomes a specification (DEC-0233, PR #575); #551 closed; branch cleanup
 
 - No prod change. Sonnet 5.5 for the start and chores, then Opus 5.5 (owner's switch) for the decision. On the owner's go, DEC-0233 adopts the S197 audit's eight parts; parts 1 to 4 and 8 are written: `docs/INTERFACES.md` now specifies three surfaces (loop JSON, InfluxDB, and the SQLite archive as §3), a §0 table of rules and meanings, a row per field (only `dateTime` required; InfluxDB's 36 live fields as 17 contract, 12 written-optional, 7 diagnostics outside the contract), contract version 1.1 and one owner. The station history moved verbatim to Appendix A (checked by script); the old §1/§2 headings stay for the README anchors. Two audit claims corrected: `ET` is a per-record increment, and the loop file serves a cached `windDir` through calm until its TTL. ROADMAP P3 updated, with a `loopjson` 1.2.0 line for parts 5 to 7. PR #575 carries the change and this closeout; not merged.
