@@ -481,7 +481,8 @@ items inside a phase don't depend on each other.
       stick is a Blog V4L, which the image's librtlsdr (osmocom v2.0.2+2) does not support; v2.0.3
       does, and the V4L decodes on it in two amd64 test tags on Hub (`v2.4.0-v4l-test`,
       `v2.4.0-v4l-rtl433-test`, not for prod). A normal image carrying it needs a pin-bump DEC and a
-      v3 soak on prod (`BOOT.md` decision 0b). History: merged
+      v3 soak on prod (`BOOT.md` decision 0b). The NAS measured run is pre-registered (DEC-0236,
+      S203); it judges a reference receiver and is not evidence for that bump. History: merged
       S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
       and joins it into Docker Hub's multi-arch tag, DEC-0215; `:latest` and `:v2.0.20` multi-arch
