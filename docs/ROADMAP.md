@@ -480,8 +480,9 @@ items inside a phase don't depend on each other.
       archive column; both are on `dev` and not in prod. **V4L (S202, ops#440):** the owner's NAS
       stick is a Blog V4L, which the image's librtlsdr (osmocom v2.0.2+2) does not support; v2.0.3
       does, and the V4L decodes on it in two amd64 test tags on Hub (`v2.4.0-v4l-test`,
-      `v2.4.0-v4l-rtl433-test`, not for prod). A normal image carrying it needs a pin-bump DEC and a
-      v3 soak on prod (`BOOT.md` decision 0b). The NAS measured run is pre-registered (DEC-0236,
+      `v2.4.0-v4l-rtl433-test`, not for prod). **S204, DEC-0238:** the bump is decided; the first tag
+      soaks on prod's v3 for seven days (outside DEC-0236's window), then the next minor image
+      carries v2.0.3. The NAS measured run is pre-registered (DEC-0236,
       S203); it judges a reference receiver and is not evidence for that bump. History: merged
       S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR

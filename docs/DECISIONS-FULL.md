@@ -13651,3 +13651,107 @@ it.
 - **Exit on the first decoder exit:** a single transient (a USB hiccup the in-process retry clears)
   would cost a full container restart; three consecutive exits is cheap insurance.
 - **Opt-in (default off):** leaves every existing install with the silent loop, which no user wants.
+
+## DEC-0238 — librtlsdr moves to osmocom v2.0.3, after a seven-day soak of the library alone on prod's v3 (S204)
+
+**Status:** Accepted (design; owner in chat S204: "draft it"); soak not started · **Date:**
+2026-11-15 (S204, Opus 5.5) · **Answers:** `BOOT.md` decision 0b; the follow-up in
+`docs/RTLSDR-V4-AND-PINNING.md` (osmocom `65f0658`) and its V4L addendum (ops#440) · **Applies:**
+DEC-0214 (one commit, one sha256), DEC-0011 (prod is sacred), DEC-0045 (positive controls) · **Orders
+against:** DEC-0236 (prod's image does not change inside that run's window) · **Touches prod:** one
+image swap and, at most, one rollback, each on the owner's go.
+
+### Context
+
+The image builds librtlsdr from the copy bundled in `src.tgz`: osmocom `v2.0.2-2-gae0dd6d`
+(S201a, measured). The owner's NAS stick, an RTL-SDR Blog V4L, does not work on it ("PLL not locked",
+a stall loop); osmocom v2.0.3 supports it, and the V4L decodes on the S202 test tags
+(`v2.4.0-v4l-test`, `b599bf27…`, amd64). v2.0.3 also carries `65f0658`, "Fix application hang on USB
+transfer errors".
+
+### What v2.0.3 changes (read S204 from osmocom's compare `ae0dd6d...797f814`)
+
+Nine commits; 13 files, of which four carry code.
+
+| Commit | Change | On prod's v3 (R820T, product "Blog V3") |
+|---|---|---|
+| `0204c9c` V4L support | `rtlsdr_open` prints "RTL-SDR Blog V4 Lite Detected" for the V4L; `r82xx_set_pll` gives it the R828-family VCO power reference; `r82xx_set_freq` gets a V4L input-switch branch and an HF tracking-filter bypass (also added to the V4 branch) | **None.** Every change is gated on an exact `strcmp` with "Blog V4L" or "Blog V4", or on `CHIP_R828D`. The v3 never matches. The HF bypass applies only below 28.8 MHz |
+| `65f0658` USB-hang fix | On `LIBUSB_TRANSFER_ERROR` / `NO_DEVICE` the callback still sets `dev_lost` but no longer calls `rtlsdr_cancel_async` from inside itself; the async loop moves to canceling and `rtlsdr_read_async` returns −1 | **The only change on the v3's path, and only on a USB transfer error.** The Go decoder ignores `ReadAsync`'s return either way (#579 item 1), so it still goes silent and the driver's 150 s stall raise still kills it. What changes is that the library can no longer deadlock in the callback |
+| `5e4d386`, `84195f1` | CMake version range; include path relative to the project | Build only |
+| four `debian:` commits, `797f814` | Packaging and the version number | None |
+
+**What it fixes for prod: nothing observed.** Prod logged no stall raise from 2026-11-04 to 11-15
+(DEC-0237's greps). The bump is for the published image: a current Blog product that does not work
+with it, an upstream correctness fix, and a pin kept current.
+
+### Decision
+
+1. **The Dockerfile replaces `src.tgz`'s bundled librtlsdr with osmocom v2.0.3**: a second pinned
+   download, the archive of commit `797f8143266d983c56d8f35d2d442527529dd8a5`, sha256
+   `79ec37cf720277f1f69e167b776ad40d7c5ed6b6f643e265bbd74b5aca5578f8` (both as on branch
+   `s202-v4l-test`), unpacked over `/tmp/src/librtlsdr` before the existing cmake build. The build
+   asserts `librtlsdr.so.2.0.3` exists and contains "Blog V4L". `CHANGES-FROM-UPSTREAM.md` and the
+   Dockerfile's credits name the new source.
+2. **Before any release carries it, the library alone is soaked on prod**: `v2.4.0-v4l-test` (v2.4.0's
+   tree with only librtlsdr swapped) runs as `:marvin-live` for seven full days, 00:00 to 00:00 ET,
+   after a 24 h settle that is not scored.
+3. **After a PASS, the next minor image carries the bump** with DEC-0235, DEC-0232 and DEC-0237. That
+   image is proven as usual (DEC-0204); the soak only removes librtlsdr from the list of suspects.
+4. **Branch `s202-v4l-test` is pushed** before the swap: the source of an image prod runs is on
+   GitHub. It stays a record branch, never merged (its rtl_433 build is test-only).
+
+### Soak
+
+**Before the swap (agent):** `marvinctl exec-ro` confirms `/usr/local/lib/librtlsdr.so.2.0.3` in the
+local `v2.4.0-v4l-test` image and its digest `b599bf27…`. The baseline is v2.4.0's seven full days
+before the swap, read by the same greps.
+
+**Swap (owner's go):** `marvinctl tag …:v2.4.0-v4l-test …:marvin-live`, `restart weewx.service`. Then
+check the start log: "Found Rafael Micro R820T tuner", no "V4 Lite" line, no `PLL not locked`, and
+the decoder's `dongle:` line naming the v3.
+
+**PASS needs all of:**
+
+| Condition | Bar | Baseline (v2.4.0) |
+|---|---|---|
+| Archive gaps over 90 s (the `Added record` step rule, DEC-0229), the swap itself excluded | 0 | 0, 11-05 to 11-13 |
+| Stall raises (`rtldavis process stalled`) | 0 | 0, 11-04 to 11-15 |
+| `rtldavis exited` | 0 | 0 |
+| `PLL not locked` | 0 | — |
+| Mean per-minute `rxCheckPercent` | ≥ 99.5 | 99.9 |
+
+Every zero count gets a positive control from the same file (a full day's `Added` count), DEC-0045.
+**Reported, not scored:** `Go time gate dropped a frame` and `Go burst gate dropped a frame` counts,
+peak container memory (owner-read), the `crcstats` lines.
+
+**FAIL or any doubt:** roll back (`marvinctl tag …:v2.4.0 …:marvin-live`, restart), report, and the
+bump waits for a new DEC. A failure attributable to something outside the image (an RF-dead episode
+with the decoder emitting, a host event) is reported as such and does not by itself fail the soak;
+the readout says which rows it touched.
+
+**Ordering with DEC-0236.** Prod's image must not change inside that run's burn-in or window, or its
+reference side changes mid-run. The soak runs entirely before DEC-0236's burn-in starts, or after its
+window ends. DEC-0236 has no start date yet; if one is set first, the soak waits.
+
+### Consequences
+
+- Pi and other arm64 users get v2.0.3 without an arm64 soak on a live radio. That gap is already open
+  (`docs/ROADMAP.md`, phase 6's first arm64 run); the diff's v3 path is architecture-neutral C.
+- Hub's `v2.4.0-v4l-test` becomes evidence for a prod run and stays until the next minor image is in
+  prod, then joins the S202 test-tag cleanup in `BACKLOG.md`.
+- The image's apt `rtl-sdr` (2.0.2, no V4L) stays in both stages, unused in the run path. Removing it
+  is the cleanup S201a already named, not part of this.
+
+### Alternatives considered
+
+- **Bump inside the next minor image, no separate soak:** four changes in one release; a regression
+  could not be attributed, and librtlsdr is the one change with no test that runs the real radio.
+- **Stay on v2.0.2+2:** the image keeps failing on a current Blog product, measured; the published
+  tool exists for people who buy these sticks.
+- **The rtlsdrblog fork (V1.4.0):** fork-only PLL tweaks aimed above 1.5 GHz, and it lacks osmocom's
+  newer PLL code (S201a); osmocom is the canonical upstream the image already tracks.
+- **Fetch by `git` at the commit instead of an archive:** the commit hash is a stronger content
+  address, but `git` is not in the build stage. A GitHub archive is not guaranteed byte-stable; if
+  it is ever regenerated, the sha256 check stops the build, loudly. Revisit then.
+- **Soak on the NAS V4L instead:** a different stick, tuner branch, antenna and host; it says nothing
+  about the v3's path, which is what prod runs.
