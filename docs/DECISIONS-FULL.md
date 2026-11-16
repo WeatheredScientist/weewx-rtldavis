@@ -13534,3 +13534,120 @@ the box.
 - **Two gain arms (372, auto):** doubles the run for a question nothing depends on.
 - **Both sticks on one antenna through a splitter:** the only way to judge the V4L itself; a
   different experiment, not this one.
+
+## DEC-0237 — A decoder that cannot run exits the container: the driver escalates after three consecutive decoder exits, default on (S204)
+
+**Status:** Accepted (design; owner in chat S204: "Yes, draft DEC-0237"); not built · **Date:**
+2026-11-15 (S204, Opus 5.5) · **Answers:** #579 · **Ships in:** the next minor image (baked driver
+layer, DEC-0031), alongside DEC-0235 and DEC-0232 · **Leaves alone:** the healthcheck and the host
+monitor (the freeze blocker's decision, DEC-0068/0094), DEC-0081's stall handling · **Touches prod:**
+nothing until that image is released.
+
+### Context
+
+#579 (S201a, read from source) found that a lost RTL-SDR never exits the container:
+
+1. The Go decoder ignores `ReadAsync`'s return and blocks forever on an `io.Pipe` nobody writes, so a
+   lost device hangs it instead of ending it.
+2. After 150 s of silence the driver raises `WeeWxIOError("rtldavis process stalled")`.
+3. weewxd 5.5.2 catches `WeeWxIOError`, sleeps `retry_wait` (60 s) and rebuilds the engine in-process,
+   forever unless `-x` is passed. The new decoder cannot open a stick that re-enumerated under a new
+   device node (inferred: Docker creates device nodes and device-cgroup rules at container start), so
+   it `log.Fatal`s, the driver raises `rtldavis process is not running`, and the loop repeats.
+4. The healthcheck stays green: the retry loop keeps writing `weewx.log`.
+
+So `Restart=always` (prod's unit), compose's `restart: unless-stopped` (the shipped
+`docker-compose.yml`) and the systemd example never act.
+
+**Measured S204, with positive controls** (each day's `Added record` count read 2756 to 2880, so
+every grep read a full log):
+
+- Prod logged zero `WeeWxIOError` and zero `STALL` lines from 2026-11-04 to 11-15 (v2.4.0's run).
+  This is a correctness fix, not a fix for a loss seen in prod.
+- The 2026-10-22 62 min outage, the one long outage DEC-0229 left unexplained, logged two stall raises
+  (10:38:15 and 11:06:11) whose diagnoses read `child emitting -- RF class`, and no `rtldavis exited`
+  line. It is not #579's shape. The freeze link #579 raised stays a hypothesis with no supporting log.
+
+Read from upstream source (weewx v5.5.2, `src/weewxd.py` and `src/weewx/__init__.py`):
+
+- `WeeWxIOError` subclasses `IOError`, which is `OSError` in Python 3.
+- weewxd retries `WeeWxIOError` after `retry_wait`, database errors after 60 or 120 s, and any other
+  `OSError` after 10 s; with `-x` the first two exit instead.
+- Any other `Exception` is logged as `Caught unrecoverable exception` with a traceback and re-raised,
+  so weewxd exits non-zero. That is the lever this decision uses.
+
+### Decision
+
+1. **The driver counts consecutive decoder exits**: each raise of `rtldavis process is not running`
+   (the `while self._mgr.running()` loop ending). Stall raises are **not** counted, and neither are
+   the `RESTART RTLDAVIS PROGRAM` freqOffset raises.
+2. **Any received packet resets the count** (the point where `time_last_received` advances, hop or
+   data).
+3. **The count lives at module level**, beside `_SPAWNED_CHILDREN`: weewxd builds a fresh driver on
+   every retry, so an instance attribute would reset each cycle (the S73 lesson).
+4. **At N consecutive exits the driver raises `RtldavisDecoderFatal`**, a plain `Exception`
+   subclass (never `OSError` or `WeeWxIOError`, which weewxd retries), after one `logerr` line naming
+   the count and saying it exits so the supervisor can restart the container with fresh device nodes.
+   weewxd logs it as unrecoverable and exits non-zero; the container exits; the supervisor recreates
+   it.
+5. **N is set by `RTLDAVIS_EXIT_AFTER`, default 3; `0` turns it off** (the old loop-forever
+   behavior). Read once at driver start; a non-integer or negative value is a `ValueError` at start,
+   like `RTLSDR_DEVICE`'s checks.
+
+**Why decoder exits only.** DEC-0081 measured the common stall as RF-dead episodes (median 240 s,
+some 11 min): the decoder alive and emitting, nothing decoding. A container restart does nothing for
+those, and 10-22 shows one lasting an hour. A lost dongle looks different: one stall from the hung
+decoder, then every retry's decoder fails to open the stick and exits. Counting exits separates the
+two without a timer.
+
+**Why default on.** Every documented install path restarts on exit (`docker-compose.yml`'s
+`restart: unless-stopped`, `examples/systemd/weewx-rtldavis.service`, prod's `Restart=always`), so
+each recovers about 150 s + 3 × ~65 s ≈ 6 min after a loss. A user with no restart policy gets a
+stopped container instead of a silent endless loop: no worse for data, easier to see. Three
+consecutive exits with no packet between them means the decoder cannot run; the in-process retry has
+not recovered by then and, with the device node gone, cannot.
+
+**Release note (SemVer minor, DEC-0222):** a behavior change for every user, stated in the release
+and in `docs/QUICKSTART.md`'s troubleshooting table, with the off switch.
+
+### Optional follow-up, not part of this decision
+
+A sixth Go patch: exit when `ReadAsync` returns. It turns the first event from a 150 s stall into a
+counted exit (recovery about 2.5 min sooner) and is the root fix for #579's item 1, so it could be
+offered upstream. It needs its own small DEC and the Go gate tests (DEC-0230); nothing here waits on
+it.
+
+### Accepted costs
+
+- **A config that makes the decoder exit at once** (a bad `cmd` flag, a wrong `RTLSDR_DEVICE`) now
+  becomes a supervisor restart every few minutes instead of an in-process loop. Both are broken
+  stations; the restart loop is the more visible one.
+- **A stick missing at container start** gives the same slow restart loop until it is plugged in.
+- **Each restart re-runs the decoder's init** (up to `INIT_GRACE_S`, 240 s) and drops weewxd's
+  in-memory state (accumulators, the QC reseed); both already happen on every prod restart.
+
+### Test plan
+
+- **Unit (pytest):** the count increments only on the not-running raise; a stall raise neither
+  increments nor resets; a received packet resets; at N it raises `RtldavisDecoderFatal`, which is not
+  an `OSError`; `RTLDAVIS_EXIT_AFTER` parsing (default 3, `0` off, bad values refused); the count
+  survives a fresh driver instance. Mutation-check the boundary (N−1 does not raise).
+- **Container (before release, off prod):** the built image with `rtldavis` replaced by a stub that
+  exits 1 at once, under `--restart no`: the container must exit non-zero after three cycles (about
+  3 × 65 s) with the fatal line in the log. With `RTLDAVIS_EXIT_AFTER=0` it must still be running at
+  five minutes.
+- **Prod, after release:** nothing to provoke. Watch item: a `RtldavisDecoderFatal` line, which
+  should be accompanied by a container restart in the unit's journal.
+
+### Alternatives considered
+
+- **`weewxd -x` behind an image setting (#579 option A):** database errors would exit too, turning a
+  SQLite lock past `[[SQLite]] timeout` into a container restart, and it gives no way to tell a lost
+  stick from an RF-dead stall.
+- **A stall watchdog in the host monitor (option B):** helps only hosts that run the monitor (a Pi on
+  plain compose gets nothing), adds machinery, and DEC-0074's remedy was retired once for cause.
+- **Count stalls as well:** would restart the container during long RF-dead episodes such as 10-22's,
+  where a restart cannot help.
+- **Exit on the first decoder exit:** a single transient (a USB hiccup the in-process retry clears)
+  would cost a full container restart; three consecutive exits is cheap insurance.
+- **Opt-in (default off):** leaves every existing install with the silent loop, which no user wants.
