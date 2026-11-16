@@ -13534,3 +13534,224 @@ the box.
 - **Two gain arms (372, auto):** doubles the run for a question nothing depends on.
 - **Both sticks on one antenna through a splitter:** the only way to judge the V4L itself; a
   different experiment, not this one.
+
+## DEC-0237 — A decoder that cannot run exits the container: the driver escalates after three consecutive decoder exits, default on (S204)
+
+**Status:** Accepted (design; owner in chat S204: "Yes, draft DEC-0237"); not built · **Date:**
+2026-11-15 (S204, Opus 5.5) · **Answers:** #579 · **Ships in:** the next minor image (baked driver
+layer, DEC-0031), alongside DEC-0235 and DEC-0232 · **Leaves alone:** the healthcheck and the host
+monitor (the freeze blocker's decision, DEC-0068/0094), DEC-0081's stall handling · **Touches prod:**
+nothing until that image is released.
+
+### Context
+
+#579 (S201a, read from source) found that a lost RTL-SDR never exits the container:
+
+1. The Go decoder ignores `ReadAsync`'s return and blocks forever on an `io.Pipe` nobody writes, so a
+   lost device hangs it instead of ending it.
+2. After 150 s of silence the driver raises `WeeWxIOError("rtldavis process stalled")`.
+3. weewxd 5.5.2 catches `WeeWxIOError`, sleeps `retry_wait` (60 s) and rebuilds the engine in-process,
+   forever unless `-x` is passed. The new decoder cannot open a stick that re-enumerated under a new
+   device node (inferred: Docker creates device nodes and device-cgroup rules at container start), so
+   it `log.Fatal`s, the driver raises `rtldavis process is not running`, and the loop repeats.
+4. The healthcheck stays green: the retry loop keeps writing `weewx.log`.
+
+So `Restart=always` (prod's unit), compose's `restart: unless-stopped` (the shipped
+`docker-compose.yml`) and the systemd example never act.
+
+**Measured S204, with positive controls** (each day's `Added record` count read 2756 to 2880, so
+every grep read a full log):
+
+- Prod logged zero `WeeWxIOError` and zero `STALL` lines from 2026-11-04 to 11-15 (v2.4.0's run).
+  This is a correctness fix, not a fix for a loss seen in prod.
+- The 2026-10-22 62 min outage, the one long outage DEC-0229 left unexplained, logged two stall raises
+  (10:38:15 and 11:06:11) whose diagnoses read `child emitting -- RF class`, and no `rtldavis exited`
+  line. It is not #579's shape. The freeze link #579 raised stays a hypothesis with no supporting log.
+
+Read from upstream source (weewx v5.5.2, `src/weewxd.py` and `src/weewx/__init__.py`):
+
+- `WeeWxIOError` subclasses `IOError`, which is `OSError` in Python 3.
+- weewxd retries `WeeWxIOError` after `retry_wait`, database errors after 60 or 120 s, and any other
+  `OSError` after 10 s; with `-x` the first two exit instead.
+- Any other `Exception` is logged as `Caught unrecoverable exception` with a traceback and re-raised,
+  so weewxd exits non-zero. That is the lever this decision uses.
+
+### Decision
+
+1. **The driver counts consecutive decoder exits**: each raise of `rtldavis process is not running`
+   (the `while self._mgr.running()` loop ending). Stall raises are **not** counted, and neither are
+   the `RESTART RTLDAVIS PROGRAM` freqOffset raises.
+2. **Any received packet resets the count** (the point where `time_last_received` advances, hop or
+   data).
+3. **The count lives at module level**, beside `_SPAWNED_CHILDREN`: weewxd builds a fresh driver on
+   every retry, so an instance attribute would reset each cycle (the S73 lesson).
+4. **At N consecutive exits the driver raises `RtldavisDecoderFatal`**, a plain `Exception`
+   subclass (never `OSError` or `WeeWxIOError`, which weewxd retries), after one `logerr` line naming
+   the count and saying it exits so the supervisor can restart the container with fresh device nodes.
+   weewxd logs it as unrecoverable and exits non-zero; the container exits; the supervisor recreates
+   it.
+5. **N is set by `RTLDAVIS_EXIT_AFTER`, default 3; `0` turns it off** (the old loop-forever
+   behavior). Read once at driver start; a non-integer or negative value is a `ValueError` at start,
+   like `RTLSDR_DEVICE`'s checks.
+
+**Why decoder exits only.** DEC-0081 measured the common stall as RF-dead episodes (median 240 s,
+some 11 min): the decoder alive and emitting, nothing decoding. A container restart does nothing for
+those, and 10-22 shows one lasting an hour. A lost dongle looks different: one stall from the hung
+decoder, then every retry's decoder fails to open the stick and exits. Counting exits separates the
+two without a timer.
+
+**Why default on.** Every documented install path restarts on exit (`docker-compose.yml`'s
+`restart: unless-stopped`, `examples/systemd/weewx-rtldavis.service`, prod's `Restart=always`), so
+each recovers about 150 s + 3 × ~65 s ≈ 6 min after a loss. A user with no restart policy gets a
+stopped container instead of a silent endless loop: no worse for data, easier to see. Three
+consecutive exits with no packet between them means the decoder cannot run; the in-process retry has
+not recovered by then and, with the device node gone, cannot.
+
+**Release note (SemVer minor, DEC-0222):** a behavior change for every user, stated in the release
+and in `docs/QUICKSTART.md`'s troubleshooting table, with the off switch.
+
+### Optional follow-up, not part of this decision
+
+A sixth Go patch: exit when `ReadAsync` returns. It turns the first event from a 150 s stall into a
+counted exit (recovery about 2.5 min sooner) and is the root fix for #579's item 1, so it could be
+offered upstream. It needs its own small DEC and the Go gate tests (DEC-0230); nothing here waits on
+it.
+
+### Accepted costs
+
+- **A config that makes the decoder exit at once** (a bad `cmd` flag, a wrong `RTLSDR_DEVICE`) now
+  becomes a supervisor restart every few minutes instead of an in-process loop. Both are broken
+  stations; the restart loop is the more visible one.
+- **A stick missing at container start** gives the same slow restart loop until it is plugged in.
+- **Each restart re-runs the decoder's init** (up to `INIT_GRACE_S`, 240 s) and drops weewxd's
+  in-memory state (accumulators, the QC reseed); both already happen on every prod restart.
+
+### Test plan
+
+- **Unit (pytest):** the count increments only on the not-running raise; a stall raise neither
+  increments nor resets; a received packet resets; at N it raises `RtldavisDecoderFatal`, which is not
+  an `OSError`; `RTLDAVIS_EXIT_AFTER` parsing (default 3, `0` off, bad values refused); the count
+  survives a fresh driver instance. Mutation-check the boundary (N−1 does not raise).
+- **Container (before release, off prod):** the built image with `rtldavis` replaced by a stub that
+  exits 1 at once, under `--restart no`: the container must exit non-zero after three cycles (about
+  3 × 65 s) with the fatal line in the log. With `RTLDAVIS_EXIT_AFTER=0` it must still be running at
+  five minutes.
+- **Prod, after release:** nothing to provoke. Watch item: a `RtldavisDecoderFatal` line, which
+  should be accompanied by a container restart in the unit's journal.
+
+### Alternatives considered
+
+- **`weewxd -x` behind an image setting (#579 option A):** database errors would exit too, turning a
+  SQLite lock past `[[SQLite]] timeout` into a container restart, and it gives no way to tell a lost
+  stick from an RF-dead stall.
+- **A stall watchdog in the host monitor (option B):** helps only hosts that run the monitor (a Pi on
+  plain compose gets nothing), adds machinery, and DEC-0074's remedy was retired once for cause.
+- **Count stalls as well:** would restart the container during long RF-dead episodes such as 10-22's,
+  where a restart cannot help.
+- **Exit on the first decoder exit:** a single transient (a USB hiccup the in-process retry clears)
+  would cost a full container restart; three consecutive exits is cheap insurance.
+- **Opt-in (default off):** leaves every existing install with the silent loop, which no user wants.
+
+## DEC-0238 — librtlsdr moves to osmocom v2.0.3, after a seven-day soak of the library alone on prod's v3 (S204)
+
+**Status:** Accepted (design; owner in chat S204: "draft it"); soak not started · **Date:**
+2026-11-15 (S204, Opus 5.5) · **Answers:** `BOOT.md` decision 0b; the follow-up in
+`docs/RTLSDR-V4-AND-PINNING.md` (osmocom `65f0658`) and its V4L addendum (ops#440) · **Applies:**
+DEC-0214 (one commit, one sha256), DEC-0011 (prod is sacred), DEC-0045 (positive controls) · **Orders
+against:** DEC-0236 (prod's image does not change inside that run's window) · **Touches prod:** one
+image swap and, at most, one rollback, each on the owner's go.
+
+### Context
+
+The image builds librtlsdr from the copy bundled in `src.tgz`: osmocom `v2.0.2-2-gae0dd6d`
+(S201a, measured). The owner's NAS stick, an RTL-SDR Blog V4L, does not work on it ("PLL not locked",
+a stall loop); osmocom v2.0.3 supports it, and the V4L decodes on the S202 test tags
+(`v2.4.0-v4l-test`, `b599bf27…`, amd64). v2.0.3 also carries `65f0658`, "Fix application hang on USB
+transfer errors".
+
+### What v2.0.3 changes (read S204 from osmocom's compare `ae0dd6d...797f814`)
+
+Nine commits; 13 files, of which four carry code.
+
+| Commit | Change | On prod's v3 (R820T, product "Blog V3") |
+|---|---|---|
+| `0204c9c` V4L support | `rtlsdr_open` prints "RTL-SDR Blog V4 Lite Detected" for the V4L; `r82xx_set_pll` gives it the R828-family VCO power reference; `r82xx_set_freq` gets a V4L input-switch branch and an HF tracking-filter bypass (also added to the V4 branch) | **None.** Every change is gated on an exact `strcmp` with "Blog V4L" or "Blog V4", or on `CHIP_R828D`. The v3 never matches. The HF bypass applies only below 28.8 MHz |
+| `65f0658` USB-hang fix | On `LIBUSB_TRANSFER_ERROR` / `NO_DEVICE` the callback still sets `dev_lost` but no longer calls `rtlsdr_cancel_async` from inside itself; the async loop moves to canceling and `rtlsdr_read_async` returns −1 | **The only change on the v3's path, and only on a USB transfer error.** The Go decoder ignores `ReadAsync`'s return either way (#579 item 1), so it still goes silent and the driver's 150 s stall raise still kills it. What changes is that the library can no longer deadlock in the callback |
+| `5e4d386`, `84195f1` | CMake version range; include path relative to the project | Build only |
+| four `debian:` commits, `797f814` | Packaging and the version number | None |
+
+**What it fixes for prod: nothing observed.** Prod logged no stall raise from 2026-11-04 to 11-15
+(DEC-0237's greps). The bump is for the published image: a current Blog product that does not work
+with it, an upstream correctness fix, and a pin kept current.
+
+### Decision
+
+1. **The Dockerfile replaces `src.tgz`'s bundled librtlsdr with osmocom v2.0.3**: a second pinned
+   download, the archive of commit `797f8143266d983c56d8f35d2d442527529dd8a5`, sha256
+   `79ec37cf720277f1f69e167b776ad40d7c5ed6b6f643e265bbd74b5aca5578f8` (both as on branch
+   `s202-v4l-test`), unpacked over `/tmp/src/librtlsdr` before the existing cmake build. The build
+   asserts `librtlsdr.so.2.0.3` exists and contains "Blog V4L". `CHANGES-FROM-UPSTREAM.md` and the
+   Dockerfile's credits name the new source.
+2. **Before any release carries it, the library alone is soaked on prod**: `v2.4.0-v4l-test` (v2.4.0's
+   tree with only librtlsdr swapped) runs as `:marvin-live` for seven full days, 00:00 to 00:00 ET,
+   after a 24 h settle that is not scored.
+3. **After a PASS, the next minor image carries the bump** with DEC-0235, DEC-0232 and DEC-0237. That
+   image is proven as usual (DEC-0204); the soak only removes librtlsdr from the list of suspects.
+4. **Branch `s202-v4l-test` is pushed** before the swap: the source of an image prod runs is on
+   GitHub. It stays a record branch, never merged (its rtl_433 build is test-only).
+
+### Soak
+
+**Before the swap (agent):** `marvinctl exec-ro` confirms `/usr/local/lib/librtlsdr.so.2.0.3` in the
+local `v2.4.0-v4l-test` image and its digest `b599bf27…`. The baseline is v2.4.0's seven full days
+before the swap, read by the same greps.
+
+**Swap (owner's go):** `marvinctl tag …:v2.4.0-v4l-test …:marvin-live`, `restart weewx.service`. Then
+check the start log: "Found Rafael Micro R820T tuner", no "V4 Lite" line, no `PLL not locked`, and
+the decoder's `dongle:` line naming the v3.
+
+**PASS needs all of:**
+
+| Condition | Bar | Baseline (v2.4.0) |
+|---|---|---|
+| Archive gaps over 90 s (the `Added record` step rule, DEC-0229), the swap itself excluded | 0 | 0, 11-05 to 11-13 |
+| Stall raises (`rtldavis process stalled`) | 0 | 0, 11-04 to 11-15 |
+| `rtldavis exited` | 0 | 0 |
+| `PLL not locked` | 0 | — |
+| Mean per-minute `rxCheckPercent` | ≥ 99.5 | 99.9 |
+
+Every zero count gets a positive control from the same file (a full day's `Added` count), DEC-0045.
+**Reported, not scored:** `Go time gate dropped a frame` and `Go burst gate dropped a frame` counts,
+peak container memory (owner-read), the `crcstats` lines.
+
+**FAIL or any doubt:** roll back (`marvinctl tag …:v2.4.0 …:marvin-live`, restart), report, and the
+bump waits for a new DEC. A failure attributable to something outside the image (an RF-dead episode
+with the decoder emitting, a host event) is reported as such and does not by itself fail the soak;
+the readout says which rows it touched.
+
+**Ordering with DEC-0236.** Prod's image must not change inside that run's burn-in or window, or its
+reference side changes mid-run. The soak runs entirely before DEC-0236's burn-in starts, or after its
+window ends. DEC-0236 has no start date yet; if one is set first, the soak waits.
+
+### Consequences
+
+- Pi and other arm64 users get v2.0.3 without an arm64 soak on a live radio. That gap is already open
+  (`docs/ROADMAP.md`, phase 6's first arm64 run); the diff's v3 path is architecture-neutral C.
+- Hub's `v2.4.0-v4l-test` becomes evidence for a prod run and stays until the next minor image is in
+  prod, then joins the S202 test-tag cleanup in `BACKLOG.md`.
+- The image's apt `rtl-sdr` (2.0.2, no V4L) stays in both stages, unused in the run path. Removing it
+  is the cleanup S201a already named, not part of this.
+
+### Alternatives considered
+
+- **Bump inside the next minor image, no separate soak:** four changes in one release; a regression
+  could not be attributed, and librtlsdr is the one change with no test that runs the real radio.
+- **Stay on v2.0.2+2:** the image keeps failing on a current Blog product, measured; the published
+  tool exists for people who buy these sticks.
+- **The rtlsdrblog fork (V1.4.0):** fork-only PLL tweaks aimed above 1.5 GHz, and it lacks osmocom's
+  newer PLL code (S201a); osmocom is the canonical upstream the image already tracks.
+- **Fetch by `git` at the commit instead of an archive:** the commit hash is a stronger content
+  address, but `git` is not in the build stage. A GitHub archive is not guaranteed byte-stable; if
+  it is ever regenerated, the sha256 check stops the build, loudly. Revisit then.
+- **Soak on the NAS V4L instead:** a different stick, tuner branch, antenna and host; it says nothing
+  about the v3's path, which is what prod runs.

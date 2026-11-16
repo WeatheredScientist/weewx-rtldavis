@@ -480,8 +480,9 @@ items inside a phase don't depend on each other.
       archive column; both are on `dev` and not in prod. **V4L (S202, ops#440):** the owner's NAS
       stick is a Blog V4L, which the image's librtlsdr (osmocom v2.0.2+2) does not support; v2.0.3
       does, and the V4L decodes on it in two amd64 test tags on Hub (`v2.4.0-v4l-test`,
-      `v2.4.0-v4l-rtl433-test`, not for prod). A normal image carrying it needs a pin-bump DEC and a
-      v3 soak on prod (`BOOT.md` decision 0b). The NAS measured run is pre-registered (DEC-0236,
+      `v2.4.0-v4l-rtl433-test`, not for prod). **S204, DEC-0238:** the bump is decided; the first tag
+      soaks on prod's v3 for seven days (outside DEC-0236's window), then the next minor image
+      carries v2.0.3. The NAS measured run is pre-registered (DEC-0236,
       S203); it judges a reference receiver and is not evidence for that bump. History: merged
       S156: #450 (both downloads pinned;
       CI builds and smoke-tests amd64 and arm64, DEC-0214) and #460 (CI publishes arm64 to GHCR
@@ -1023,8 +1024,9 @@ pre-governance sweep scripts are deleted; two of them were silently broken.
       Not explained by it: the 10-22 62 min outage and DEC-0083's long tail. Fix is P1.9 step 4,
       in prod since 2026-11-04 (v2.4.0; **updated S192**). **S201 (inferred, not measured):** the
       long tail may be #579's shape (a vanished dongle never exits the container; weewxd retries
-      forever) or the osmocom librtlsdr USB hang fixed upstream in osmocom v2.0.3 (`65f0658`); #579 needs a DEC
-      (a `weewxd --exit` setting or a stall watchdog).
+      forever) or the osmocom librtlsdr USB hang fixed upstream in osmocom v2.0.3 (`65f0658`).
+      **S204, DEC-0237:** #579 is decided (the driver exits after three consecutive decoder exits,
+      next minor image). The 10-22 outage was not #579's shape: two RF-class stalls, no decoder exit.
 - [x] ~~**P0 — make the campaign metric freeze-aware**~~ — **CLOSED by DEC-0069 (S66).** Two parts,
       and the larger one was a *resolution* problem, not a freeze problem: `harvest()` read the
       monitor's **5-minute** `RECEPTION:` aggregate, where one frozen minute drags a whole bucket
