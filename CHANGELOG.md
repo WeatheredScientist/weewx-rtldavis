@@ -6,6 +6,11 @@ under [Pre-S16].
 
 ---
 
+## [S204z] — 2026-11-16 — A dev/test receiver on Zaphod is planned (#586); the starter conf's enabled uploaders filed (#587)
+
+- No prod change; nothing built, nothing changed on any box. `docs/ZAPHOD-DEV-RECEIVER-DESIGN.md` (PR #585, merged to `dev` as `90e58bc`) plans the receiver: WSL2 with Debian's Docker Engine in a dedicated distro, usbipd-win reachable from WSL only (it has no listen-address setting, so a single firewall rule on WSL's adapter and a Manual service), no secrets, uploaders disabled before the first start. The owner chose the purpose (a dev/test receiver, closing the "no drop-in dev receiver" gap) and the radio (the V4L, after DEC-0236). Hyper-V, VirtualBox/Vagrant and Docker Desktop are rejected with reasons. WSL's weak isolation is stated as an accepted residual. The DEC is assigned when the plan is accepted. An independent review was folded in, and the starter-uploader line was corrected (Wunderground, not OWM; DavisPressure inert per #451).
+- #587: `weewx.conf.example` ships AWEKAS, CWOP, PWSweather, WOW, WOW-BE, Wunderground, Influx and OgoXe with `enable = true` and `YOUR_*` placeholders, and the entrypoint seeds then starts `weewxd`, so a first start runs them all. Found by reading, not run. Secret gate clean on both commits, positive-controlled with a planted token. Opus 5.5, no `/model` switch. Nothing rolled (a side session).
+
 ## [S204] — 2026-11-16 — #579 decided (DEC-0237); librtlsdr v2.0.3 decided with a prod soak first (DEC-0238); MANIFEST under cap
 
 - No prod change. DEC-0237 (#579, posted there): the driver counts consecutive decoder exits (stall raises not counted, any packet resets, module-level) and at `RTLDAVIS_EXIT_AFTER` (default 3, `0` off) raises `RtldavisDecoderFatal`, a plain `Exception` weewxd 5.5.2 does not retry, so the container exits and its supervisor restarts it. Read from upstream weewxd 5.5.2. Prod logged no stall or `WeeWxIOError` 11-04 to 11-15; the 10-22 62 min outage was two RF-class stalls, not #579's shape. The Opus re-check dropped the Sonnet draft's "count stalls" rule, which would have restarted the container in exactly that outage.

@@ -77,8 +77,11 @@ narrowed to its port: **tell marvin before moving its jack.**
    DEC-0237's behavior note; then prod's `RTLSDR_DEVICE` = the v3's serial (owner-run unit edit).
 2. **DEC-0236's run**, after the soak: prod's two logging edits inside the burn-in (in place, never
    copied off the box), restart, check `data:` lines; after the window, one `ops/ab_frames.py`
-   readout; revert.
-3. **Decisions and design:** the S197 cross-repo drift ops issue (owner's go); ops#449 closes when the
+   readout; revert. **Then #586**: the Zaphod dev/test receiver (`docs/ZAPHOD-DEV-RECEIVER-DESIGN.md`,
+   proposed; its DEC is assigned when it's accepted) takes the V4L the day after this window ends.
+   Every step runs through Zaphod's own session, on the owner's yes there.
+3. **Decisions and design:** #587 (the starter conf ships eight uploaders enabled), design first;
+   the S197 cross-repo drift ops issue (owner's go); ops#449 closes when the
    sweep reads `dev`; #561, #553 design first (DEC-0014); #558 owner; ROADMAP diet; optional Go patch
    (exit when `ReadAsync` returns, its own DEC).
 4. **Gate results since 11-16 09:24 ET**; around 2026-12-04 re-run `ops/garbage_gap_corr.py` over 30
@@ -102,7 +105,7 @@ narrowed to its port: **tell marvin before moving its jack.**
 | Reception | 99.9% mean at USB `5-1`; 0 archive gaps 11-05 to 11-16 09:24 ET |
 | `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` adds DEC-0232's and DEC-0235's baked changes (next image) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
-| Trackers | repo: #579 (DEC-0237), #553, #558, #561, #536, #475 parked, #380, #514 · ops: #440, #449, #457, #110 |
+| Trackers | repo: #579 (DEC-0237), #553, #558, #561, #536, #475 parked, #380, #514, #586, #587 · ops: #440, #449, #457, #110 |
 
 ## Blockers
 
@@ -121,4 +124,5 @@ design); Opus 5.5 at `medium` only for building DEC-0237 if it turns up a design
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-16 (S204: DEC-0237 (#579), DEC-0238 (librtlsdr soak first); MANIFEST trim)._
+_Last updated: 2026-11-16 (S204: DEC-0237 (#579), DEC-0238 (librtlsdr soak first); MANIFEST trim;
+S204z: Zaphod dev-receiver plan (#586), #587)._
