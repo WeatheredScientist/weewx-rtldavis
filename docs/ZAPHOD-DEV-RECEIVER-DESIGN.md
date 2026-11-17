@@ -36,11 +36,12 @@ this design are here; the rest stays in Zaphod's private repo.
   `docs/RTLSDR-V4-AND-PINNING.md`). DEC-0238 moves the image to v2.0.3 after a prod soak. Until
   then, the test tag `v2.4.0-v4l-test` is the only image that drives it.
 - **Side finding, this repo:** the image's starter config (`weewx.conf.example`) ships eight
-  uploaders with `enable = true` and `YOUR_*` placeholders (AWEKAS, CWOP, PWS, WOW, WOW-BE, OWM,
-  Influx, OgoXe) plus a live `[DavisPressure]` stanza. The entrypoint seeds and then starts
-  `weewxd` in one step (`entrypoint.sh`, DEC-0225). **A plain first start therefore runs every
-  uploader against placeholder credentials.** §5 works around it here; the product question
-  (should the starter ship them off?) is its own tracker item.
+  uploaders with `enable = true` and `YOUR_*` placeholders (AWEKAS, CWOP, PWSweather, WOW,
+  WOW-BE, Wunderground, Influx, OgoXe). The entrypoint seeds and then starts `weewxd` in one step
+  (`entrypoint.sh`, DEC-0225). **A plain first start therefore runs every one of those uploaders
+  against placeholder credentials.** `[DavisPressure]` is listed in the services too. Its
+  placeholder station id makes it inert (#451), so it makes no API call. §5 works around the
+  uploaders here; the product question (should the starter ship them off?) is #587.
 
 ## 1. Purpose (owner, 2026-11-16)
 
@@ -277,8 +278,9 @@ there's nothing to leak, rotate or keep out of a commit.
   runs the starter's uploaders (§0's side finding). So phase C runs the seeder alone first
   (`--entrypoint` the venv Python on `/opt/seed_config.py`; it copies the starter into the empty
   mount and applies the environment, then exits). Then it sets `enable = false` on every
-  `[StdRESTful]` uploader and `[[Influx]]`, removes `DavisPressure` from the services list (or the
-  stanza), and only then starts `weewxd`. Phase D greps the conf: no `enable = true` under
+  `[StdRESTful]` uploader and `[[Influx]]`, removes `DavisPressure` from the services list (it's inert
+  with the placeholder, but no service this instance doesn't use should load), and only then starts
+  `weewxd`. Phase D greps the conf: no `enable = true` under
   `[StdRESTful]`, and no `DavisPressure` service.
 - **The seed variables** (DEC-0225, `seed_config.py`): `WEEWX_DRIVER` unset (the radio),
   `WEEWX_LOCATION=weewx-dev` (the `[Station] location` text), `WEEWX_LATITUDE` and
