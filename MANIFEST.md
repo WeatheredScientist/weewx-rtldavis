@@ -12,10 +12,9 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 | `docs/ROADMAP.md` (P0–P3) | choosing what's next; a line a DEC shipped |
 | `BACKLOG.md`: ideas, RF findings, standing watches | RF or horizon work; whether a watch fired |
 | `docs/CONVENTIONS.md`: git workflow, secrets, exact gates | any gate or commit |
-| `docs/GOTCHAS.md` | a tool's zero/green (§1); a PR, merge or handoff write (§2); marvin or campaign work (§3); judging live or shipped (§4). New traps land here |
-| `docs/PRINCIPLES.md`; reviews, audits and designs: `docs/*REVIEW*`, `*AUDIT*`, `*DESIGN*`, `ASSESSMENT.md` (each self-describes) | weighing a decision; the next cleanup; why a design is what it is |
+| `docs/GOTCHAS.md` (sections as in BOOT) | before trusting a zero, a merge, a marvin step or a "shipped". New traps land here |
+| `docs/PRINCIPLES.md`; reviews, audits, designs, research: `docs/*REVIEW*`, `*AUDIT*`, `*DESIGN*`, `*RESEARCH*`, `ASSESSMENT.md` | weighing a decision; the next cleanup; why a design is what it is |
 | `docs/UPSTREAM-THREADS.md` | replying upstream; whether a thread moved |
-| `docs/INSTALL-RESEARCH.md` (behind DEC-0225) | why the install path is what it is |
 
 ## Technical
 
@@ -25,12 +24,12 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 | `CHANGES-FROM-UPSTREAM.md` (DEC-0034) | changing a forked file; an upstream PR |
 | Root runtime modules: driver `rtldavis.py`; uploaders `influx.py`, `owm.py`, `windy.py`, `wcloud.py`, `ogoxeUploader.py` and their base `rest_site.py`; services `pressure_service.py`, `dewpoint_service.py`, `loop_json_writer.py` | any behavior change; `CONSTANTS.md`'s deploy layers say which copy wins |
 | `weewx_monitor.py`: host-side watchdog, alerter, reception tracker | "what handles X at runtime?" (DEC-0074) |
-| `ops/*`, `scripts/*`, `usb_reset.sh`; runbooks `docs/CAMPAIGN-B-RUNBOOK.md`, `docs/INFLUXDB-MIGRATION.md`, `docs/WINDGUST10-MIGRATION.md` (DEC-0232, not run) | any ops task. A script's header is its manual; `ops/campaign_analyze.py` is the only campaign readout (DEC-0069) |
+| `ops/*`, `scripts/*`, `usb_reset.sh`; runbooks `docs/*RUNBOOK*`, `docs/*-MIGRATION.md` | any ops task. A script's header is its manual; `ops/campaign_analyze.py` is the only campaign readout (DEC-0069) |
 | `extensions/<name>/` + its `scripts/*_<name>*.sh` and `.github/workflows/<name>.yml` | that module's version or installer; a `<name>-v*` release |
-| `contract/`: the loop file's JSON Schema, the stdlib checker `check_contract.py`, conformance fixtures, the adopter's `README.md`; run over the fixtures by `scripts/check_contract_fixtures.sh` (DEC-0234) | the loop writer's output or the contract's version; validating a feed or a reader |
+| `contract/`: loop-file JSON Schema, checker, fixtures, adopter `README.md` (DEC-0234) | the loop writer's output or the contract's version; validating a feed or reader |
 | Go decoder: `patch/rtldavis-*.patch`, `tests/go/` | the Go decoder and its gates |
 | First start: `entrypoint.sh` (DEC-0228), `seed_config.py` (DEC-0225), `doctor.py` | what a new install gets; first-run env vars; `doctor` |
-| Image and release: `Dockerfile`, `.github/workflows/image*.yml`, `scripts/join_multiarch.sh`; dongle support and pinning `docs/RTLSDR-V4-AND-PINNING.md` (DEC-0235) | a release; anything a Pi user pulls; a second dongle, `-d`, the librtlsdr pin |
+| Image and release: `Dockerfile`, `.github/workflows/image*.yml`; dongles and pinning `docs/RTLSDR-V4-AND-PINNING.md` | a release; anything a Pi user pulls; a second dongle, `-d`, the librtlsdr pin |
 | Public face: `README.md`, `docs/QUICKSTART.md`, `docs/DEPLOY.md`, `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `examples/`, `docker-compose.yml` | anything user-visible. No host, tenant or unit names |
 
 ## Never in the load path
@@ -38,8 +37,8 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 | Thing | Why |
 |---|---|
 | `ARCHIVE/` | local-only, gitignored (DEC-0012) |
-| `docs/handoffs/` | retired handoffs, cited by path from the archives; leave in place |
-| `docs/upstream/` | gitignored drafts, never posted without an explicit go |
+| `docs/handoffs/` | retired, cited by path; leave in place |
+| `docs/upstream/` | gitignored drafts; never posted without a go |
 | Dashboard code and decisions | `eaglehunt-weather-dashboard` (DEC-0010) |
 | Real infra values, coordinates | the gitignored local-infra doc |
-| Cross-repo coordination, `~/.claude/` guards | `eaglehunt-ops` (private, never a prerequisite) |
+| Cross-repo coordination, guards | `eaglehunt-ops` (never a prerequisite) |
