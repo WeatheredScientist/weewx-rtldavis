@@ -53,7 +53,7 @@ suffix: upstream's base version, `+ws`, our revision.
 | File | Upstream version | Ours |
 |------|------------------|------|
 | `rtldavis.py` | `0.20` | `0.20+ws.10` from v2.4.0 (`ws.9` v2.2.0 and v2.3.0; `ws.8` v2.1.0; `ws.7` v2.0.21; `ws.6` v2.0.18 to v2.0.20; v2.0.13 through v2.0.17 report `0.20+ws.5`) |
-| `influx.py` | `0.20` | `0.20+ws.2` |
+| `influx.py` | `0.20` | `0.20+ws.3` (item 6 removed, DEC-0242) |
 
 The suffix sorts after the base version and is unambiguous about its parent. `rtldavis.py` also logs
 `(fork of lheijst 0.20, patched by WeatheredScientist -- not stock upstream)` at startup, which
@@ -241,7 +241,7 @@ every line. `doctor.select_dongle` implements the same rule, and both run agains
 ## `influx.py`
 
 Base: `david-lutz/weewx-influx2` (itself a fork of `matthewwall/weewx-influx` for InfluxDB 2.x).
-Delta through item 5: **+33 / −14 lines**; item 6 (2026-08-21) adds roughly 64 more, not
+Delta through item 5: **+33 / −14 lines**; item 6 (2026-08-21) added roughly 64 more and was removed again (DEC-0242), not
 re-measured against true upstream here — the number above predates it and is left as historical
 rather than guessed at. The image and the `influx-v*` releases (DEC-0219) both install this repo's
 root copy as the `influx` extension; the image no longer downloads upstream's.
@@ -253,12 +253,12 @@ root copy as the `influx` extension; the image no longer downloads upstream's.
 | 3 | **CLI `KeyError` when env vars unset** | 2026-07-04 | `os.environ['INFLUX_HOST']` (and `_ORG`, `_TOKEN`) are read at option-parse time, so `--help` crashes with `KeyError` unless all three are exported. Now `os.environ.get()`. Also fixed the `InluxDfB` help-text typos. |
 | 4 | **Per-record logging at INFO** | 2026-07-05 | `loginf("Add Bindding Tag = ...")` and `loginf("tags = ...")` fire on every record. Demoted to `logdbg`. |
 | 5 | **`distutils.StrictVersion` removed** | 2026-07-04 | `distutils` is gone in Python 3.12+; this image runs 3.14. Replaced with a tuple compare. |
-| 6 | **NAS-LEASE courtesy yield (opt-in)** | 2026-08-21 | `InfluxThread` gains a `lease_dir` param (default `None`, off unless `weewx.conf` sets it) and a thin `skip_this_post` override: while another tenant's `NAS-LEASE.md` lease is held and unexpired, `post_interval` rises from its configured value to 1800s (safe per DEC-0092's own data-integrity analysis: prod runs `stale=None`/`max_backlog=1,000,000`, so a 30-minute deferral queues ~30 records against a million-record cap and loses none). Any lease-file read/parse failure, or weewx's own held lease, is treated as "not held" — fails toward normal operation, never toward silently slowing our own uploads. Design: DEC-0099/DEC-0104; build: DEC-0111. |
+| 6 | ~~NAS-LEASE courtesy yield (opt-in)~~ **removed 2026-11-18** | 2026-08-21 | Added an opt-in `lease_dir` that raised `post_interval` to 1800s while another tenant's NAS-LEASE lease was held (DEC-0099/0104/0111). A no-op once InfluxDB left the NAS (DEC-0141), so `0.20+ws.3` removes it; `lease_dir` is still accepted and ignored with one INFO line, so an existing config keeps starting (DEC-0242). |
 
 | 7 | Type-checker annotations and CLI test-block cleanup | 2026-07-26 | S49, so the mypy gate passes: `# type: ignore[...]` comments on the Python 2/3 import shims, the `__main__` test block's local `queue` renamed to `q` so it no longer shadows the module, and trailing whitespace stripped. No behavior change in the uploader. |
 | 8 | License tag | 2026-10-29 | `SPDX-License-Identifier` is `GPL-3.0-only`, not `-or-later` (DEC-0226): upstream's header says GPLv3 and its license file is the plain GPLv3 text. A notice line in the header says so. No code change. |
 
-Items 1, 2, 3 and 5 are unambiguous upstream bugs. Item 2 is a security fix. Item 6 is original functionality, not an upstream-divergence fix.
+Items 1, 2, 3 and 5 are unambiguous upstream bugs. Item 2 is a security fix. Item 6 was original functionality and is gone.
 
 ---
 

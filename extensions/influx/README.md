@@ -47,8 +47,9 @@ Fill in these four:
   internal certificate, either add the CA to the system store or set `verify_ssl = false` in
   `[[Influx]]`. That setting is new; the upstream behavior was always "do not verify".
 - Per-record messages that upstream logged at INFO are now DEBUG.
-- Optional `lease_dir` (off unless set): yield uploads while a shared-host lease file says another
-  job holds the machine. Most installs never set it.
+- `0.20+ws.3` removes the `lease_dir` upload yield that `ws.2` added. A config that still sets
+  `lease_dir` keeps working: the key is ignored and logged once at startup, so you can delete it
+  whenever convenient.
 
 The InfluxDB line-protocol schema the uploader writes is described in
 [INTERFACES.md section 2](https://github.com/WeatheredScientist/weewx-rtldavis/blob/main/docs/INTERFACES.md#2-influxdb--archivetime-series-surface).

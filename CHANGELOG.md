@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S207d] — 2026-11-18 — DEC-0242: the dead NAS-LEASE yield leaves `influx.py` (#558)
+
+- No prod change. `influx.py` `0.20+ws.3`: the courtesy yield (DEC-0111) is removed; `lease_dir` is popped and ignored with one INFO line, because the thread takes `**site_dict` and the key would otherwise stop weewxd (prod's conf and rx-baseline still set it). `ops/nas_build.py` and its 26 tests deleted; `tests/test_influx_lease_dir_ignored.py` (5, positive-controlled). Rollout after DEC-0238's soak: pull + restart, then the owner deletes the key from both conf files; tag `influx-v0.20+ws.3` after merge.
+
 ## [S207b] — 2026-11-18 — #561 closed: the two unreachable frequency-band `else:` branches in `rtldavis.py` removed
 
 - No prod change; baked on `dev`, ships with the next image. `__init__` already raises unless the band is EU, US or NZ, so the `if self.frequency in [...]` guards in the v13 and v12 channel-packet parsers were always true. Behavior identical. The rest of #561 landed in #567 (S193).

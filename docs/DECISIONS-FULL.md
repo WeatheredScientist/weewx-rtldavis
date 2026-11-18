@@ -13883,3 +13883,75 @@ ends the hot-swap option, and because the references are wider than the files: `
 ### Consequences
 
 17 tests keep skipping while `SCHEDULE=` is empty, by design (DEC-0096), not by neglect.
+
+## DEC-0242 — The NAS-LEASE courtesy yield is removed; `lease_dir` stays accepted and ignored (S207d)
+
+**Status:** Accepted (owner in chat S207d: "Remove, key ignored") · **Date:** 2026-11-18 (S207d,
+Opus 5.5) · **Answers:** #558 (S192a cruft audit, item 9) · **Retires:** DEC-0108's
+`ops/nas_build.py`, DEC-0111's yield · **Applies:** DEC-0014 (No-Rewrite Rule: cause, alternative,
+migration), DEC-0031/0046 (deploy layers), DEC-0045 (positive controls).
+
+### Context
+
+DEC-0111 gave `influx.py` an opt-in `lease_dir`: while another tenant's NAS-LEASE lease was held,
+`post_interval` rose to 1800 s. Its one purpose was to protect NAS-hosted InfluxDB writes from a
+concurrent heavy NAS job. DEC-0141 moved InfluxDB to marvin; since then weewx has no NAS I/O to
+yield, and `/nas-lease` on marvin is an empty local directory (MARVIN-DEC-0063), so the code is a
+permanent no-op. It still ships in the public `extensions/influx` release (`0.20+ws.2`) and in
+prod's mounted `influx.py`. `ops/nas_build.py`, the holder side, carries a RETIRED banner since
+DEC-0118. 26 tests pinned both (14 + 12).
+
+Verified S207d on `dev`@`7d054b8` and on marvin (read-only): prod's mounted `influx.py` has `dev`'s
+sha (`1c5fa931…`); the container bind-mounts the empty `/srv/docker/weewx/nas-lease` at
+`/nas-lease`; the live `weewx.conf` and `weewx.conf.rx-baseline` both set
+`[[Influx]] lease_dir = /nas-lease`.
+
+**The finding that shaped the change:** `Influx.__init__` builds its thread with
+`InfluxThread(queue, **site_dict)`, and `get_site_dict` passes every `[[Influx]]` key through. Deleting
+the `lease_dir` parameter alone would make any config that still sets the key raise `TypeError` at
+startup and stop weewxd. Prod's tenant root is a `dev` checkout and is the mount source, so a later
+`marvinctl pull` plus restart would ship the new file whether or not the config was edited first.
+
+### Decision
+
+1. Remove the yield: `TENANT`, `LEASE_YIELD_POST_INTERVAL_S`, `_foreign_lease_active`, the
+   `skip_this_post` override, the `lease_dir` thread parameter, and the now-unused `json` and
+   `datetime` imports.
+2. `Influx.__init__` pops `lease_dir` from the site dict and, if it was set, logs one INFO line
+   (`lease_dir is no longer used and is ignored; remove it from [[Influx]]`). The key stays accepted
+   and ignored permanently: one `pop`, and no adopter's config can break on it.
+3. Delete `ops/nas_build.py`, `tests/test_nas_build.py`, `tests/test_influx_lease_yield.py` (git
+   history keeps the method). New `tests/test_influx_lease_dir_ignored.py` (5 tests): a config with
+   the key starts and logs one line, one without logs nothing, the thread itself still rejects the key
+   (so the pop is load-bearing), the yield is gone. Positive control: `pop` → `get` fails 2 of 5.
+4. The extension becomes `0.20+ws.3` (a patch on the `+ws.N` counter: no schema change, no consumer
+   sees a difference). Release note: the yield is removed; `lease_dir` is ignored with a log line.
+
+### Alternatives
+
+- **Keep it, documented as on purpose for other adopters:** none are known, the lease protocol is
+  this estate's own, and the code costs 26 tests and a misleading README bullet.
+- **Remove and tolerate the key for one release only:** the later removal would crash any adopter
+  config still setting it, for one saved line.
+- **Remove with no tolerance, edit prod's config first:** depends on rollout order across two layers
+  and owner gestures; any `pull` + restart in the wrong order stops prod.
+
+### Migration (both layers)
+
+- **Extension release:** after merge, tag `influx-v0.20+ws.3`; `.github/workflows/influx.yml`
+  publishes the zip. The image bakes `influx.py` too (it ships with the next image; the mount wins in
+  prod, CONSTANTS' deploy layers).
+- **Prod's mounted `influx.py`:** nothing now (prod waits on DEC-0238's soak). It ships at the first
+  `marvinctl pull` + `restart weewx.service` after the soak. Verify: sha = `dev`'s, the log shows
+  `service version is 0.20+ws.3` and the `lease_dir ... ignored` line, uploads continue.
+- **Prod's config:** then, owner-run, delete `lease_dir` from `[[Influx]]` in both the live
+  `weewx.conf` and `weewx.conf.rx-baseline` (DEC-0080's two-copies hazard), restart; the ignored line
+  is gone. Any order of these steps is safe: the old code with the key removed or the mount gone fails
+  open, the new code ignores the key.
+- **heartofgold (optional, theirs):** drop the `/nas-lease` bind mount from the weewx unit and
+  remove the empty `nas-lease/` directory; a heartofgold CHANGELOG line then.
+
+### Consequences
+
+`influx.py` is about 50 lines shorter and holds no estate-specific protocol. CONSTANTS' `lease_dir`
+row records the key as ignored until the config edit lands, then goes.

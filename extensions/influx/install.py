@@ -10,7 +10,7 @@ from weecfg.extension import ExtensionInstaller
 
 # Keep equal to influx.VERSION; scripts/build_influx_zip.sh fails the build if they differ,
 # or if the release tag disagrees.
-VERSION = "0.20+ws.2"
+VERSION = "0.20+ws.3"
 
 
 def loader():
