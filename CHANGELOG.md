@@ -10,6 +10,10 @@ under [Pre-S16].
 
 - No prod change. `ops/rx_experiment.sh`, `weewx-rx-experiment.service` and `.timer` headers now say stand-down (DEC-0096), the NAS default versus marvin's `RX_BASE`, and reference copy (heartofgold owns the deployed unit). Retirement deferred to the gain-campaign decision.
 
+## [S207a] — 2026-11-18 — DEC-0240: the starter config ships every uploader off (#587)
+
+- No prod change; ships with the next minor image. Eleven uploaders ran on a new install's first start, not eight: OWM, Windy and WeatherCloud had no `enable` line, which weewx 5.5.2 reads as on (`get_site_dict` skips only `replace_me`). All eleven now carry `enable = false`; a comment in `[StdRESTful]`, one seed line and QUICKSTART say how to turn one on. `tests/test_starter_uploaders_off.py` pins them off in the starter and after seeding, positive-controlled; real weewx 5.5.2 confirms 11 → 0. Opus 5.5, no `/model` switch. A side session of S206; nothing rolled.
+
 ## [S206] — 2026-11-17 — DEC-0237 built: a lost dongle exits the container after three decoder exits (#579)
 
 - No prod change; baked on `dev`, ships with the next minor image. `rtldavis.py`: `RtldavisDecoderFatal` (a plain `Exception`, so weewxd exits instead of retrying), `RTLDAVIS_EXIT_AFTER` (default 3, `0` off, junk falls back to 3 with a log line), a module-level consecutive count that any received packet resets and a stall never touches. 18 unit tests with positive controls (`tests/test_decoder_exit_after.py`; `conftest.py` resets the count per test). `scripts/exit_after_image.sh` runs a stub decoder in two containers: the default exited 1 after 121 s, `=0` ran five minutes through 6 decoder exits; `image.yml` runs it on both architectures. `.env.example` documents the setting. Gate: ruff clean, pytest 1060 passed / 27 skipped, mypy clean (115 files). Sonnet 5.5, no `/model` switch. Checks since 11-16 09:24 ET: no archive gap through 11-18 01:57 ET (the logs are in `/srv/docker/weewx/logs`, not under `weewx-data`); heartofgold has not posted the move's gap times on ops#440. Rolled S204.

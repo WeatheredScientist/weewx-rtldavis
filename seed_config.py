@@ -146,6 +146,7 @@ def seed(data_dir, dist_dir, env, out=print):
     copy_missing(dist_dir, data_dir)
     os.chmod(conf_path, 0o600)
     out('seed: %s was empty; wrote a starter weewx.conf and its folders' % data_dir)
+    out('seed: every uploader starts off; turn one on in [StdRESTful] (DEC-0240)')
     if values:
         try:
             applied = apply_values(conf_path, values)
