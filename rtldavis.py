@@ -1413,22 +1413,19 @@ class CHANNELPacket(Packet):
 
             if abs(int(m.group(3))) > 20000:
                 raise weewx.WeeWxIOError("RESTART RTLDAVIS PROGRAM: abs freqOffset channel %s too big (> 20000): %s" % (m.group(1), m.group(3)))
-            # save frequency errors for the EU, US and NZ bands
-            if self.frequency in ['EU', 'US', 'NZ']:
-                # Store the FreqErrors only for one transmitter
-                # The data for each transmitter is stored during 2 full days
-                if int(m.group(4)) == self.transm_to_store:
-                    pkt['dateTime'] = int(time.time() + 0.5)
-                    pkt['usUnits'] = weewx.METRICWX
-                    for y in range(0, 5):
-                        if int(m.group(1)) == y:
-                            pkt['freqError%d' % y] = int(m.group(3))
-                            dbg_rtld(3, "Store freqError%d: %s for transmitter: %s" % (y, int(m.group(3)), int(m.group(4))))
-                    dbg_rtld(3, "chan_pkt: %s" % pkt)
-                else:
-                    dbg_rtld(3, "Don't store freqErr: %s for transm: %s" % (int(m.group(3)), int(m.group(4))))
+            # freqErrors are stored for every band; __init__ accepts only EU, US, NZ
+            # Store the FreqErrors only for one transmitter
+            # The data for each transmitter is stored during 2 full days
+            if int(m.group(4)) == self.transm_to_store:
+                pkt['dateTime'] = int(time.time() + 0.5)
+                pkt['usUnits'] = weewx.METRICWX
+                for y in range(0, 5):
+                    if int(m.group(1)) == y:
+                        pkt['freqError%d' % y] = int(m.group(3))
+                        dbg_rtld(3, "Store freqError%d: %s for transmitter: %s" % (y, int(m.group(3)), int(m.group(4))))
+                dbg_rtld(3, "chan_pkt: %s" % pkt)
             else:
-                dbg_rtld(3, "Don't store freqErrors for frequency band %s" % self.frequency)
+                dbg_rtld(3, "Don't store freqErr: %s for transm: %s" % (int(m.group(3)), int(m.group(4))))
             lines.pop(0)
             return pkt
         else:
@@ -1439,27 +1436,23 @@ class CHANNELPacket(Packet):
 
                 if abs(int(m.group(3))) > 20000:
                     raise weewx.WeeWxIOError("RESTART RTLDAVIS PROGRAM: abs freqOffset channel %s too big (> 20000): %s" % (m.group(1), m.group(3)))
-                # save frequency errors for the EU, US and NZ bands
-                if self.frequency in ['EU', 'US', 'NZ']:
-                    # Unlike PATTERNv13 above, this protocol has no
-                    # Transmitter field to gate on -- with more than one
-                    # active transmitter there is no way to know which one
-                    # a v12 freqError came from, so storing it would
-                    # silently mix transmitters' data into the same
-                    # per-transmitter fields.
-                    if self.tr_count > 1:
-                        dbg_rtld(1, "CHANNELPacket: v12 protocol has no "
-                                    "per-transmitter field; not storing "
-                                    "freqError with tr_count=%d" % self.tr_count)
-                    else:
-                        pkt['dateTime'] = int(time.time() + 0.5)
-                        pkt['usUnits'] = weewx.METRICWX
-                        for y in range(0, 5):
-                            if int(m.group(1)) == y:
-                                pkt['freqError%d' % y] = int(m.group(3))
-                        dbg_rtld(3, "chan_pkt: %s" % pkt)
+                # Unlike PATTERNv13 above, this protocol has no
+                # Transmitter field to gate on -- with more than one
+                # active transmitter there is no way to know which one
+                # a v12 freqError came from, so storing it would
+                # silently mix transmitters' data into the same
+                # per-transmitter fields.
+                if self.tr_count > 1:
+                    dbg_rtld(1, "CHANNELPacket: v12 protocol has no "
+                                "per-transmitter field; not storing "
+                                "freqError with tr_count=%d" % self.tr_count)
                 else:
-                    dbg_rtld(3, "Don't store freqErrors for frequency band %s" % self.frequency)
+                    pkt['dateTime'] = int(time.time() + 0.5)
+                    pkt['usUnits'] = weewx.METRICWX
+                    for y in range(0, 5):
+                        if int(m.group(1)) == y:
+                            pkt['freqError%d' % y] = int(m.group(3))
+                    dbg_rtld(3, "chan_pkt: %s" % pkt)
                 lines.pop(0)
                 return pkt
             else:

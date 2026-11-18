@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S207b] — 2026-11-18 — #561 closed: the two unreachable frequency-band `else:` branches in `rtldavis.py` removed
+
+- No prod change; baked on `dev`, ships with the next image. `__init__` already raises unless the band is EU, US or NZ, so the `if self.frequency in [...]` guards in the v13 and v12 channel-packet parsers were always true. Behavior identical. The rest of #561 landed in #567 (S193).
+
 ## [S207c] — 2026-11-18 — #553: RX campaign apparatus kept and labeled (DEC-0241)
 
 - No prod change. `ops/rx_experiment.sh`, `weewx-rx-experiment.service` and `.timer` headers now say stand-down (DEC-0096), the NAS default versus marvin's `RX_BASE`, and reference copy (heartofgold owns the deployed unit). Retirement deferred to the gain-campaign decision.
