@@ -171,6 +171,11 @@ version = 5.5.2
 
 [StdRESTful]
 
+    # Every uploader below starts off (DEC-0240). To turn one on, register
+    # with the site, set its 'enable' to true, replace each YOUR_ value with
+    # your own, then restart. WeeWX treats a section with no 'enable' line as
+    # on, so keep the line in every section.
+
     # Uncomment and change to override logging for uploading services.
     # log_success = True
     # log_failure = True
@@ -186,7 +191,7 @@ version = 5.5.2
         # If you wish to post to AWEKAS, set the option 'enable' to true, then
         # specify a username and password.
         # Use quotes around the password to guard against parsing errors.
-        enable = true
+        enable = false
         username = YOUR_USERNAME
         password = YOUR_PASSWORD
 
@@ -195,7 +200,7 @@ version = 5.5.2
 
         # If you wish to post to CWOP, set the option 'enable' to true,
         # then specify the station ID (e.g., CW1234).
-        enable = true
+        enable = false
         station = YOUR_STATION_ID
         # If this is an APRS (radio amateur) station, specify the
         # passcode (e.g., 12345). Otherwise, ignore.
@@ -209,7 +214,7 @@ version = 5.5.2
         # If you wish to post to PWSweather.com, set the option 'enable' to
         # true, then specify a station and password.
         # Use quotes around the password to guard against parsing errors.
-        enable = true
+        enable = false
         station = YOUR_STATION_ID
         password = YOUR_PASSWORD
 
@@ -219,7 +224,7 @@ version = 5.5.2
         # If you wish to post to WOW, set the option 'enable' to true, then
         # specify a station and password.
         # Use quotes around the password to guard against parsing errors.
-        enable = true
+        enable = false
         station = YOUR_STATION_ID
         post_interval = 300
         password = YOUR_PASSWORD
@@ -230,7 +235,7 @@ version = 5.5.2
         # If you wish to post to WOW-BE, set the option 'enable' to true, then
         # specify a station and password.
         # Use quotes around the password to guard against parsing errors.
-        enable = true
+        enable = false
         station = YOUR_STATION_ID
         password = YOUR_PASSWORD
 
@@ -241,7 +246,7 @@ version = 5.5.2
         # 'enable' to true,  then specify a station (e.g., 'KORHOODR3'). Use
         # the station key (find it at
         # https://www.wunderground.com/member/devices) for the password.
-        enable = true
+        enable = false
         station = YOUR_STATION_ID
         password = YOUR_PASSWORD
 
@@ -250,18 +255,21 @@ version = 5.5.2
         rapidfire = True
         archive_post = True
     [[OWM]]
+        enable = false
         api_key = YOUR_API_KEY
         station_id = YOUR_STATION_ID
     [[Windy]]
+        enable = false
         station_id = YOUR_STATION_ID
         password = YOUR_PASSWORD
         post_interval = 300
     [[WeatherCloud]]
+        enable = false
         id = YOUR_ID
         key = YOUR_KEY
     [[Influx]]
         # weewx-influx2 (david-lutz fork) — InfluxDB 2.x
-        enable = true
+        enable = false
         server_url = http://influxdb:8086
         org = YOUR_INFLUX_ORG
         bucket = weewx
@@ -270,7 +278,7 @@ version = 5.5.2
     [[OgoxeUploader]]
         # This section is for configuring posts to the Ogoxe Weather Platform
         # that expects Weather Underground formatted data (without the "Rapidfire" protocol).
-        enable = true
+        enable = false
         station = YOUR_STATION_ID
         password = YOUR_PASSWORD
 
@@ -278,7 +286,7 @@ version = 5.5.2
         # thus, optional parameters supported by WeeWX's Weather Underground uploader
         # 'should' work. Please consult the WeeWX documentation for details.
 
-        # Set enable = false above to turn this uploader off, and specify your
+        # Set enable = true above to turn this uploader on, and specify your
         # appropriate values for station and password.
         # The server url is preset and cannot be modified.
 
