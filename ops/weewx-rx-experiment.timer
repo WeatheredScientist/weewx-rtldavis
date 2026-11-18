@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # weewx-rx-experiment.timer -- fires weewx-rx-experiment.service every 5 min,
 # matching ops/rx_experiment.sh's own documented cadence for `tick`/`guard`.
-# See weewx-rx-experiment.service for the full rationale and install steps.
+# REFERENCE COPY, may lag; heartofgold owns the deployed timer (disabled on marvin, stand-down).
+# See weewx-rx-experiment.service for the full rationale.
 
 [Unit]
 Description=Periodic driver for weewx-rtldavis RX campaigns (S108)

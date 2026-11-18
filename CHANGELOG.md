@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S207c] — 2026-11-18 — #553: RX campaign apparatus kept and labeled (DEC-0241)
+
+- No prod change. `ops/rx_experiment.sh`, `weewx-rx-experiment.service` and `.timer` headers now say stand-down (DEC-0096), the NAS default versus marvin's `RX_BASE`, and reference copy (heartofgold owns the deployed unit). Retirement deferred to the gain-campaign decision.
+
 ## [S207a] — 2026-11-18 — DEC-0240: the starter config ships every uploader off (#587)
 
 - No prod change; ships with the next minor image. Eleven uploaders ran on a new install's first start, not eight: OWM, Windy and WeatherCloud had no `enable` line, which weewx 5.5.2 reads as on (`get_site_dict` skips only `replace_me`). All eleven now carry `enable = false`; a comment in `[StdRESTful]`, one seed line and QUICKSTART say how to turn one on. `tests/test_starter_uploaders_off.py` pins them off in the starter and after seeding, positive-controlled; real weewx 5.5.2 confirms 11 → 0. Opus 5.5, no `/model` switch. A side session of S206; nothing rolled.

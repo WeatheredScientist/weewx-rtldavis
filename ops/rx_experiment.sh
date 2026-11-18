@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# RETIRED (NAS era, DEC-0118): kept as a record of the method. Its paths and nasctl calls no longer reach a live system.
+# STAND-DOWN (DEC-0096), NAS-era paths (DEC-0118): kept as a record of the method and for a future gain
+# campaign (DEC-0117). The SCHEDULE= block is empty, so `install` refuses and `tick`/`guard` are no-ops.
+# The defaults below name the NAS (`/volume1/...`); on marvin a unit sets RX_BASE. Retire-or-keep: #553.
 # rx_experiment.sh — the DEC-0048 designed RX experiment, as an apparatus.
 #
 # DEC-0048 said a proper RX test is "a stated hypothesis, a fixed observation
@@ -9,8 +11,8 @@
 # apparatus. The schedule table below is the pre-registration: it is fixed, static,
 # and reviewable before a single block runs.
 #
-# CURRENTLY LOADED: campaign B — pilot + hold + square (DEC-0064). Campaign A is
-# finished and STOPped; its sentinel stays in place. Read any campaign result with
+# CURRENTLY LOADED: nothing (stand-down, DEC-0096). Campaign B (pilot + hold + square,
+# DEC-0064) finished and the SCHEDULE= block was emptied; campaign A's sentinel stays in place. Read any campaign result with
 # ops/campaign_analyze.py, never from the 5-minute aggregate this script harvests
 # (DEC-0069) — and note `install` REFUSES a schedule whose first row has already
 # passed, because due_arm() would otherwise silently join mid-square (DEC-0066).
@@ -68,8 +70,8 @@
 set -uo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-# RX_BASE exists only so the dry-run harness can point at a fixture directory.
-# Production always uses the default.
+# RX_BASE points the script at a fixture directory (dry-run harness) or, on marvin, at
+# /srv/docker/weewx (weewx-rx-experiment.service sets it). The default is the NAS path.
 BASE="${RX_BASE:-/volume1/docker/weewx-rtldavis}"
 CONF="$BASE/weewx-data/weewx.conf"
 BASELINE_SNAP="$BASE/weewx.conf.rx-baseline"
