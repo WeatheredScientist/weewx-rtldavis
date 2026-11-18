@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S205 → S206)
+## ▶ Resume here (S206 → S207)
 
 ### What's settled (do not re-derive)
 
@@ -31,9 +31,9 @@ path.
 **DEC-0234:** `loopjson` 1.2.0 **in prod since 2026-11-12 22:42:25 ET** (writer sha `8c2365d6…`).
 Rollback: owner-run `git -C /srv/docker/weewx checkout 694938f -- loop_json_writer.py`, restart.
 **Baked on `dev`, not in prod until the next minor image:** DEC-0235 (devsel: `RTLSDR_DEVICE`,
-`doctor` listing) and DEC-0232 (`windGust10` column). **Decided S204, not built:** DEC-0237 (#579:
-the driver raises `RtldavisDecoderFatal` after `RTLDAVIS_EXIT_AFTER` = 3 consecutive decoder exits;
-stalls not counted; module-level count) and DEC-0238 (librtlsdr → osmocom v2.0.3, `797f814` +
+`doctor` listing) DEC-0232 (`windGust10` column) and DEC-0237 (#579: the driver raises `RtldavisDecoderFatal`
+after `RTLDAVIS_EXIT_AFTER` = 3 consecutive decoder exits; stalls not counted; built S206, proved
+by `scripts/exit_after_image.sh`, which CI runs). **Decided S204, not built:** DEC-0238 (librtlsdr → osmocom v2.0.3, `797f814` +
 sha256 as on `s202-v4l-test`, after a prod soak). **Next DEC: DEC-0240.**
 
 **DEC-0238's soak (owner's go for the swap):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
@@ -65,16 +65,15 @@ Standing facts: images are multi-arch (DEC-0214/0215); SemVer per DEC-0222; the 
 image is not. `marvinctl push` publishes a versioned tag (Class B, never `latest`). The v3's grant is
 narrowed to its port: **tell marvin before moving its jack.**
 
-### ▶▶ S206 JOB LIST
+### ▶▶ S207 JOB LIST
 
 00. **Owner first.** (a) DEC-0232's migration doc, then `ops/windgust10_check.sql`. (b) Ops note,
    owner's go: dashboard DEC-0442 §3.2's `MAX(windGust)` fallback re-admits ERR-0012. (c) **PR for
-   S205** (DEC-0239): the owner merges.
+   S206** (DEC-0237): the owner merges.
 0. **DEC-0238's soak:** after heartofgold posts the move's gap times, check the v3 at `5-1` and a
    clean post-move day, then ask the owner for the swap; post the swap time on ops#440. During it:
    daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
-1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 (build it: unit tests,
-   the stub-decoder container test) + DEC-0238's pin; build, prove, release, SemVer minor with
+1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 (built S206) + DEC-0238's pin; build, prove, release, SemVer minor with
    DEC-0237's behavior note; then prod's `RTLSDR_DEVICE` = the v3's serial (owner-run unit edit).
 2. **DEC-0236's run**, after the soak: prod's two logging edits inside the burn-in (in place, never
    copied off the box), restart, check `data:` lines; after the window, one `ops/ab_frames.py`
@@ -99,14 +98,14 @@ narrowed to its port: **tell marvin before moving its jack.**
    project, owner-paced; plan `docs/ZAPHOD-DEV-RECEIVER-DESIGN.md` (S204z, no DEC); Zaphod's session
    runs it. Carry-forwards: `BACKLOG.md`.
 
-## Current state (S205)
+## Current state (S206)
 
 | Thing | State |
 |---|---|
 | Prod | marvin, `v2.4.0` as `:marvin-live` since 2026-11-04 18:36:38 ET, weewx 5.5.2, gain 372. Writer 1.2.0 since 2026-11-12 22:42 ET |
 | InfluxDB / monitor | `weewx-influxdb.service`; monitor sha `2f8a1eda…` (S193's message-only edit live at next restart), `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB `5-1`; 0 archive gaps 11-05 to 11-16 09:24 ET |
-| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` adds DEC-0232's and DEC-0235's baked changes (next image) and loopjson 1.2.0 (live) |
+| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` adds DEC-0232's, DEC-0235's and DEC-0237's baked changes (next image) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
 | Trackers | repo: #579 (DEC-0237), #553, #558, #561, #536, #475 parked, #380, #514, #586, #587 · ops: #440, #449, #110 |
 
@@ -118,13 +117,13 @@ unexplained, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email w
 
 ## Model tier
 
-S205: Opus 5.5 throughout (the desktop app's persisted choice), no `/model` switch; ops#457 was
-mechanical, Sonnet would have done. S206: Sonnet for the soak's checks and reads; Opus 5.5 at
-`medium` only for building DEC-0237 if it turns up a design question.
+S206: Sonnet 5.5 throughout, no `/model` switch; DEC-0237's build raised no design question.
+S207: Sonnet for the soak's checks and reads; Opus 5.5 at `medium` only if the next image's
+build turns up a design question.
 
 ## Gotchas — `docs/GOTCHAS.md`
 
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-16 (S205: ops#457 closed for good, DEC-0239 tier caps in CI; MANIFEST 879 tok; S204z: Zaphod dev-receiver plan #586, #587)._
+_Last updated: 2026-11-17 (S206: DEC-0237 built, a lost dongle exits the container; PR #588 merged)._

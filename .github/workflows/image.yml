@@ -52,3 +52,7 @@ jobs:
       # The same checks run on the arm64 image before image-publish.yml pushes it (DEC-0215).
       - name: Smoke test
         run: scripts/smoke_image.sh weewx-rtldavis:ci ${{ matrix.uname }} requirements.txt
+
+      # DEC-0237: a decoder that keeps exiting makes the container exit (about 6 minutes).
+      - name: Decoder-exit test
+        run: scripts/exit_after_image.sh weewx-rtldavis:ci

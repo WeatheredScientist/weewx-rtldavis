@@ -137,6 +137,9 @@
 #   2026-11-12  ops#440: RTLSDR_DEVICE (the environment, e.g. the image's .env) becomes the
 #               decoder's -d, a -d in cmd that disagrees stops the start, and Go's `dongle:`
 #               lines (which stick it opened, or why not) are logged (DEC-0235).
+#   2026-11-18  #579: RTLDAVIS_EXIT_AFTER (default 3, 0 off) consecutive decoder exits raise
+#               RtldavisDecoderFatal so weewxd exits and the supervisor recreates the
+#               container; stalls are not counted (DEC-0237).
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -993,6 +996,63 @@ STALL_TIMEOUT_S = 150
 # anything is received. (Until #456 only the hot swap got it.)
 INIT_GRACE_S = 240
 HOTSWAP_GRACE_S = INIT_GRACE_S
+
+
+# --- A lost dongle becomes an exit (DEC-0237, #579) ---------------------------
+# Nothing in the stack used to exit when the RTL-SDR disappeared: the decoder
+# hangs or dies, the driver raises WeeWxIOError, weewxd sleeps 60 s and rebuilds
+# the engine, the new decoder cannot open the stick (a re-plugged one gets a new
+# device node that this container does not have), and the loop repeats forever
+# behind a healthy-looking container. So the driver counts CONSECUTIVE decoder
+# exits ("rtldavis process is not running") and, at RTLDAVIS_EXIT_AFTER of them,
+# raises RtldavisDecoderFatal. weewxd retries WeeWxIOError and IOError but treats
+# any other Exception as unrecoverable, logs it and exits non-zero; the supervisor
+# (compose, systemd) then recreates the container with fresh device nodes.
+#
+# Deliberately NOT counted: the stall raise. An RF-dead episode (DEC-0081) stalls
+# with the decoder alive, and a restart cannot help it. A lost dongle shows one
+# stall, then a decoder exit on every retry, and the exits are what is counted.
+# The count is module-level because weewxd builds a fresh driver on each retry,
+# and any received packet resets it.
+EXIT_AFTER_DEFAULT = 3
+_decoder_exits = 0
+
+
+class RtldavisDecoderFatal(Exception):
+    """The decoder keeps exiting and a restart of the whole container is the remedy.
+
+    A plain Exception on purpose: weewx.WeeWxIOError subclasses IOError, which
+    weewxd retries in-process, so this must not be one."""
+
+
+def exit_after_limit(raw):
+    """RTLDAVIS_EXIT_AFTER as an int: unset or empty is the default (3), 0 turns the
+    behavior off. Anything else (text, negative) is logged and falls back to the
+    default, so a typo leaves the protection on rather than killing the start."""
+    if raw is None or not str(raw).strip():
+        return EXIT_AFTER_DEFAULT
+    try:
+        n = int(str(raw).strip())
+    except ValueError:
+        n = -1
+    if n < 0:
+        logerr("RTLDAVIS_EXIT_AFTER=%r is not a whole number of 0 or more; using the "
+               "default %d" % (raw, EXIT_AFTER_DEFAULT))
+        return EXIT_AFTER_DEFAULT
+    return n
+
+
+def note_decoder_exit():
+    """Count one decoder exit; return the consecutive total."""
+    global _decoder_exits
+    _decoder_exits += 1
+    return _decoder_exits
+
+
+def note_packet_received():
+    """Any received packet shows the decoder works: the consecutive count restarts."""
+    global _decoder_exits
+    _decoder_exits = 0
 
 # Accepted control-file keys and their inclusive bounds. gain is tuner gain in
 # tenths of a dB (0 = the binary's "auto"; 496 = the R820T's 49.6 dB maximum);
@@ -2256,6 +2316,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 for data in PacketFactory.create(self, lines):
                     if data:
                         time_last_received = int(time.time())
+                        note_packet_received()    # DEC-0237
                         # The child is alive and emitting -- any post-swap
                         # grace has served its purpose (S103, DEC-0117).
                         stall_timeout = STALL_TIMEOUT_S
@@ -2324,6 +2385,17 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 logerr("rtldavis exited; last stderr: %s" % " | ".join(_err))
             else:
                 logerr("rtldavis exited with no stderr captured")
+            # DEC-0237: the Nth decoder exit with no packet between them is a lost
+            # dongle, not a glitch. Exit the container; weewxd's retry cannot help.
+            _exits = note_decoder_exit()
+            _limit = exit_after_limit(os.environ.get('RTLDAVIS_EXIT_AFTER'))
+            if _limit and _exits >= _limit:
+                logerr("rtldavis exited %d times in a row with no packet between them "
+                       "(RTLDAVIS_EXIT_AFTER=%d): the dongle is probably gone; exiting "
+                       "so the container is recreated with fresh device nodes"
+                       % (_exits, _limit))
+                raise RtldavisDecoderFatal("rtldavis process exited %d times in a row"
+                                           % _exits)
             raise weewx.WeeWxIOError("rtldavis process is not running")
 
     # NOTE (S24 L5): parse_raw, parse_text, and ch_to_xmit are declared

@@ -13537,7 +13537,7 @@ the box.
 
 ## DEC-0237 — A decoder that cannot run exits the container: the driver escalates after three consecutive decoder exits, default on (S204)
 
-**Status:** Accepted (design; owner in chat S204: "Yes, draft DEC-0237"); not built · **Date:**
+**Status:** Accepted (design; owner in chat S204: "Yes, draft DEC-0237"); built S206 (`ad94db6`), baked on `dev` · **Date:**
 2026-11-15 (S204, Opus 5.5) · **Answers:** #579 · **Ships in:** the next minor image (baked driver
 layer, DEC-0031), alongside DEC-0235 and DEC-0232 · **Leaves alone:** the healthcheck and the host
 monitor (the freeze blocker's decision, DEC-0068/0094), DEC-0081's stall handling · **Touches prod:**
