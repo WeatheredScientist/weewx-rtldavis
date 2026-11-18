@@ -147,7 +147,8 @@ by its maker and product strings.
 ## What next
 
 - Uploads (Weather Underground, CWOP, Windy, OpenWeatherMap, WeatherCloud, InfluxDB): each has a
-  section in `weewx-data/weewx.conf` with its registration link; enable it and
+  section under `[StdRESTful]` in `weewx-data/weewx.conf`, and every one starts off. Register with
+  the site, set the section's `enable = true`, replace its `YOUR_` values, then
   `docker compose restart`.
 - A dashboard: the live JSON feed in `weewx-data/feed/` and the InfluxDB uploader are the data
   contract, described in [docs/INTERFACES.md](INTERFACES.md).
