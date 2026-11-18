@@ -6,6 +6,10 @@ under [Pre-S16].
 
 ---
 
+## [S207b] — 2026-11-18 — #561 closed: the two unreachable frequency-band `else:` branches in `rtldavis.py` removed
+
+- No prod change; baked on `dev`, ships with the next image. `__init__` already raises unless the band is EU, US or NZ, so the `if self.frequency in [...]` guards in the v13 and v12 channel-packet parsers were always true. Behavior identical. The rest of #561 landed in #567 (S193).
+
 ## [S206] — 2026-11-17 — DEC-0237 built: a lost dongle exits the container after three decoder exits (#579)
 
 - No prod change; baked on `dev`, ships with the next minor image. `rtldavis.py`: `RtldavisDecoderFatal` (a plain `Exception`, so weewxd exits instead of retrying), `RTLDAVIS_EXIT_AFTER` (default 3, `0` off, junk falls back to 3 with a log line), a module-level consecutive count that any received packet resets and a stall never touches. 18 unit tests with positive controls (`tests/test_decoder_exit_after.py`; `conftest.py` resets the count per test). `scripts/exit_after_image.sh` runs a stub decoder in two containers: the default exited 1 after 121 s, `=0` ran five minutes through 6 decoder exits; `image.yml` runs it on both architectures. `.env.example` documents the setting. Gate: ruff clean, pytest 1060 passed / 27 skipped, mypy clean (115 files). Sonnet 5.5, no `/model` switch. Checks since 11-16 09:24 ET: no archive gap through 11-18 01:57 ET (the logs are in `/srv/docker/weewx/logs`, not under `weewx-data`); heartofgold has not posted the move's gap times on ops#440. Rolled S204.
