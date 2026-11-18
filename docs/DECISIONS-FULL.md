@@ -13796,6 +13796,94 @@ A close that grows a tier file past its cap is a red PR, fixed in the same PR by
 `ARCHIVE/`. If STANDARD's caps change, this test changes with them; the sweep keeps catching any
 drift between the two.
 
+## DEC-0240 — The starter weewx.conf ships every uploader off (S207a)
+
+**Status:** Accepted (owner in chat S207a, the recommended option) · **Date:** 2026-11-18 (S207a,
+Opus 5.5) · **Answers:** #587 · **Amends:** DEC-0225 (what the seed writes) · **Ships in:** the next
+minor image.
+
+### Context
+
+`seed_config.py` copies `weewx.conf.example` into an empty mount and the entrypoint starts `weewxd`
+in the same step (DEC-0225, DEC-0228), so a new user never gets to edit the starter first. #587
+found eight sections with `enable = true` and `YOUR_*` placeholders. Reading weewx 5.5.2's
+`weewx.restx.get_site_dict` showed three more: a section with no `enable` key is on, and the only
+placeholder it skips is the literal `replace_me`. Run against the starter with real weewx 5.5.2,
+`get_site_dict` returned a site dict for eleven sections: AWEKAS, CWOP, PWSweather, WOW, WOW-BE,
+Wunderground, OWM, Windy, WeatherCloud, Influx, OgoxeUploader. CWOP would open APRS-IS under the
+callsign `YOUR_STATION_ID` and send the seeded coordinates; the rest fail each interval and fill a
+fresh log with errors that read as a broken install. QUICKSTART already told users to "enable"
+each upload.
+
+### Decision
+
+1. Every uploader section in the starter has `enable = false`; OWM, Windy and WeatherCloud gain the
+   line. Placeholders stay `YOUR_*`. A comment at the top of `[StdRESTful]` says how to turn one on
+   and why each section keeps its `enable` line. OgoXe's trailing comment now says `true` to turn it
+   on.
+2. `seed_config.py` prints `every uploader starts off; turn one on in [StdRESTful]` after seeding.
+3. QUICKSTART's "What next" spells out the steps: register, `enable = true`, replace the `YOUR_`
+   values, restart.
+4. `tests/test_starter_uploaders_off.py`: every `restful_services` entry maps to a section that is
+   off (StationRegistry: `register_this_station` false), checked on the starter and on a seeded
+   copy; every `[StdRESTful]` section is off even if unlisted; a new service with no mapped section
+   fails. Positive controls: the old starter fails, and a starter with one `enable` line removed
+   fails. Real weewx 5.5.2 (scratch venv): 11 sections would run before, 0 after.
+
+### Alternatives
+
+- **A warning at every start** for an enabled section still holding a `YOUR_` value: a new
+  per-start step for a state the user creates on purpose, whose uploader already logs the failure.
+- **A `doctor` check:** doctor diagnoses the radio; uploads are out of its scope.
+- **Switch the placeholders to `replace_me`:** weewx would skip only the required keys it is given,
+  sections stay on, and QUICKSTART's wording stays false.
+
+### Consequences
+
+A new install's first start posts nowhere. Existing installs, prod included, keep their own
+config (seeding never overwrites). User-visible only to new installs, so it rides the next minor
+image (DEC-0222).
+
+## DEC-0241 — The RX campaign apparatus is kept, stood down, and labeled (S207c)
+
+**Status:** Accepted (owner in chat S207c, "defer, record it") · **Date:** 2026-11-18 (S207c) ·
+**Answers:** #553 · **Relates:** DEC-0014 (No-Rewrite), DEC-0096, DEC-0117, DEC-0118.
+
+### Context
+
+#553 found the campaign apparatus contradicting itself: `rx_experiment.sh` carried a RETIRED banner
+while a unit still launched it, its header claimed campaign B was loaded and that production always
+uses the default `RX_BASE`, and the unit file had no reference-copy label. Re-verified on `dev`
+`7d054b8`: all still true. Read-only on marvin (`marvinctl --tenant weewx`): the timer is
+`disabled`, the service `inactive (static)`, the script and unit files present under
+`/srv/docker/weewx/ops`; no campaign state beyond an old `rx_experiment.state` and baseline conf.
+
+### Decision
+
+Keep the apparatus for now and make every header truthful (script, unit, timer). Retirement needs
+its own DEC under DEC-0014 and is tied to BOOT's hot-swap/gain-campaign decision (DEC-0117), which
+reuses this script converted. Not decided today: what that campaign looks like.
+
+### Alternative considered
+
+Retire now: delete the script, unit, timer and the 66-test file. Rejected for today because it
+ends the hot-swap option, and because the references are wider than the files: `weewx_monitor.py`
+(campaign inhibit), `ops/tenant_mounts.py`, `ops/freeze_baseline.py`, `ops/campaign_analyze.py`,
+`docs/CAMPAIGN-B-RUNBOOK.md` and five other test files name it, while heartofgold's
+`host/install-weewx-privdrop.sh`, `host/tests/unit-privilege-lint-test.sh` and
+`host/etc/marvin/heartbeat.conf` name the unit.
+
+### Migration plan if retired later
+
+1. File a heartofgold request: remove both unit files from `host/etc/systemd/system/`, drop the unit
+   from the privdrop installer, lint test and heartbeat note, remove the deployed unit.
+2. Then here: delete the script, unit, timer and `test_rx_experiment.py`; strip the monitor's
+   campaign inhibit and the other references; move the runbook to `ARCHIVE/`; new DEC.
+
+### Consequences
+
+17 tests keep skipping while `SCHEDULE=` is empty, by design (DEC-0096), not by neglect.
+
 ## DEC-0242 — The NAS-LEASE courtesy yield is removed; `lease_dir` stays accepted and ignored (S207d)
 
 **Status:** Accepted (owner in chat S207d: "Remove, key ignored") · **Date:** 2026-11-18 (S207d,
