@@ -13795,3 +13795,43 @@ after-the-fact filing.
 A close that grows a tier file past its cap is a red PR, fixed in the same PR by rule 9 or
 `ARCHIVE/`. If STANDARD's caps change, this test changes with them; the sweep keeps catching any
 drift between the two.
+
+## DEC-0241 — The RX campaign apparatus is kept, stood down, and labeled (S207c)
+
+**Status:** Accepted (owner in chat S207c, "defer, record it") · **Date:** 2026-11-18 (S207c) ·
+**Answers:** #553 · **Relates:** DEC-0014 (No-Rewrite), DEC-0096, DEC-0117, DEC-0118.
+
+### Context
+
+#553 found the campaign apparatus contradicting itself: `rx_experiment.sh` carried a RETIRED banner
+while a unit still launched it, its header claimed campaign B was loaded and that production always
+uses the default `RX_BASE`, and the unit file had no reference-copy label. Re-verified on `dev`
+`7d054b8`: all still true. Read-only on marvin (`marvinctl --tenant weewx`): the timer is
+`disabled`, the service `inactive (static)`, the script and unit files present under
+`/srv/docker/weewx/ops`; no campaign state beyond an old `rx_experiment.state` and baseline conf.
+
+### Decision
+
+Keep the apparatus for now and make every header truthful (script, unit, timer). Retirement needs
+its own DEC under DEC-0014 and is tied to BOOT's hot-swap/gain-campaign decision (DEC-0117), which
+reuses this script converted. Not decided today: what that campaign looks like.
+
+### Alternative considered
+
+Retire now: delete the script, unit, timer and the 66-test file. Rejected for today because it
+ends the hot-swap option, and because the references are wider than the files: `weewx_monitor.py`
+(campaign inhibit), `ops/tenant_mounts.py`, `ops/freeze_baseline.py`, `ops/campaign_analyze.py`,
+`docs/CAMPAIGN-B-RUNBOOK.md` and five other test files name it, while heartofgold's
+`host/install-weewx-privdrop.sh`, `host/tests/unit-privilege-lint-test.sh` and
+`host/etc/marvin/heartbeat.conf` name the unit.
+
+### Migration plan if retired later
+
+1. File a heartofgold request: remove both unit files from `host/etc/systemd/system/`, drop the unit
+   from the privdrop installer, lint test and heartbeat note, remove the deployed unit.
+2. Then here: delete the script, unit, timer and `test_rx_experiment.py`; strip the monitor's
+   campaign inhibit and the other references; move the runbook to `ARCHIVE/`; new DEC.
+
+### Consequences
+
+17 tests keep skipping while `SCHEDULE=` is empty, by design (DEC-0096), not by neglect.

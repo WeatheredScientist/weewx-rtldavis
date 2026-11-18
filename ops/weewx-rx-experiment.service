@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # weewx-rx-experiment.service -- periodic tick/guard driver for RX campaigns (S108)
 #
+# REFERENCE COPY, may lag. The deployed unit is owned by heartofgold (host/etc/systemd/system/,
+# ADR-0005); edit it there, not here. On marvin the timer is disabled and this unit inactive
+# (stand-down, DEC-0096), and the script's SCHEDULE= is empty, so a pass is a no-op.
+#
 # WHAT THIS REPLACES
 # -------------------
 # On Foundation, ops/rx_experiment.sh's `tick` and `guard` subcommands were driven
@@ -32,8 +36,8 @@
 # adaptation is the weewx repo's job. host/tests/unit-privilege-lint.sh keeps this from
 # regressing to root (install-tenant-units.sh runs it and refuses on failure).
 #
-# INSTALL (marvin session / owner -- NOT from the weewx repo session, matching
-# weewx-monitor.service's own convention)
+# INSTALL (historical; heartofgold's host/ tooling installs it now. Marvin session / owner,
+# NOT the weewx repo session, matching weewx-monitor.service's convention)
 # ------------------------------------------------------------------
 #   install -m 0644 weewx-rx-experiment.service weewx-rx-experiment.timer /etc/systemd/system/
 #   systemctl daemon-reload
