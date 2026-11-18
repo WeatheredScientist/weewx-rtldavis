@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S204 → S205)
+## ▶ Resume here (S205 → S206)
 
 ### What's settled (do not re-derive)
 
@@ -34,7 +34,7 @@ Rollback: owner-run `git -C /srv/docker/weewx checkout 694938f -- loop_json_writ
 `doctor` listing) and DEC-0232 (`windGust10` column). **Decided S204, not built:** DEC-0237 (#579:
 the driver raises `RtldavisDecoderFatal` after `RTLDAVIS_EXIT_AFTER` = 3 consecutive decoder exits;
 stalls not counted; module-level count) and DEC-0238 (librtlsdr → osmocom v2.0.3, `797f814` +
-sha256 as on `s202-v4l-test`, after a prod soak). **Next DEC: DEC-0239.**
+sha256 as on `s202-v4l-test`, after a prod soak). **Next DEC: DEC-0240.**
 
 **DEC-0238's soak (owner's go for the swap):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
 marvin: `librtlsdr.so.2.0.3`, driver sha `7b6fb60a…` = prod's) as `:marvin-live`, 24 h settle, then
@@ -55,7 +55,8 @@ nothing from it counts; alive 11-15 21:40 ET.
 
 CI fails, not skips, the Go gate tests (DEC-0230). DEC-0233: `docs/INTERFACES.md` is a
 specification. **Check a MANIFEST edit with ops' `checks/manifest-coverage-sweep.sh` before landing
-it** (fixture mode, `MANIFEST_COVERAGE_FIXTURE_DIR`, reads the local branch; S204 positive-controlled).
+it** (fixture mode, `MANIFEST_COVERAGE_FIXTURE_DIR`, reads the local branch; positive-controlled).
+DEC-0239: pytest fails a PR over the BOOT/MANIFEST caps (`tests/test_tier_caps.py`); MANIFEST 879/1000 tok at S205.
 
 Standing facts: images are multi-arch (DEC-0214/0215); SemVer per DEC-0222; the loop writer and
 `influx.py` ship as extensions, prod mounts both; `t-weewx` (996:986) runs under `--cap-drop ALL`.
@@ -64,11 +65,11 @@ Standing facts: images are multi-arch (DEC-0214/0215); SemVer per DEC-0222; the 
 image is not. `marvinctl push` publishes a versioned tag (Class B, never `latest`). The v3's grant is
 narrowed to its port: **tell marvin before moving its jack.**
 
-### ▶▶ S205 JOB LIST
+### ▶▶ S206 JOB LIST
 
 00. **Owner first.** (a) DEC-0232's migration doc, then `ops/windgust10_check.sql`. (b) Ops note,
    owner's go: dashboard DEC-0442 §3.2's `MAX(windGust)` fallback re-admits ERR-0012. (c) **PR for
-   S204** (DEC-0237, DEC-0238, this closeout): the owner merges.
+   S205** (DEC-0239): the owner merges.
 0. **DEC-0238's soak:** after heartofgold posts the move's gap times, check the v3 at `5-1` and a
    clean post-move day, then ask the owner for the swap; post the swap time on ops#440. During it:
    daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
@@ -89,14 +90,16 @@ narrowed to its port: **tell marvin before moving its jack.**
 5. **Upstream:** lheijst/rtldavis#2, weewx-influx2#1, matthewwall/weewx-wcloud#6, #514; the devsel
    patch on the owner's go. Keep `docs/UPSTREAM-THREADS.md` current.
 6. **Needs the owner:** GitHub About text and topics; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1`; the
-   hot-swap code (#553). ops#457 closes when the sweep reads S204's MANIFEST trim on `dev`.
+   hot-swap code (#553).
 7. **Phase 6's acceptance test** and the first arm64 run against a live radio.
 8. **Watch only:** `no bar_absolute` · WU gold star · OWM/Windy rain in mm (ERR-0010) · `Go burst
    gate dropped a frame` (last 11-08) · first `unhealthy` · `rejecting implausible`, `unknown message
    type`, loopjson `not finite`. ops#440 cleanup at the end (`BACKLOG.md`). Second-dongle reminder
-   Sat 2026-12-05 09:00 ET. Carry-forwards: `BACKLOG.md`.
+   Sat 2026-12-05 09:00 ET. **Zaphod dev receiver (V4L, WSL2):** a future weekend
+   project, owner-paced; plan `docs/ZAPHOD-DEV-RECEIVER-DESIGN.md` (S204z, no DEC); Zaphod's session
+   runs it. Carry-forwards: `BACKLOG.md`.
 
-## Current state (S204)
+## Current state (S205)
 
 | Thing | State |
 |---|---|
@@ -105,7 +108,7 @@ narrowed to its port: **tell marvin before moving its jack.**
 | Reception | 99.9% mean at USB `5-1`; 0 archive gaps 11-05 to 11-16 09:24 ET |
 | `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` adds DEC-0232's and DEC-0235's baked changes (next image) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
-| Trackers | repo: #579 (DEC-0237), #553, #558, #561, #536, #475 parked, #380, #514, #586, #587 · ops: #440, #449, #457, #110 |
+| Trackers | repo: #579 (DEC-0237), #553, #558, #561, #536, #475 parked, #380, #514, #586, #587 · ops: #440, #449, #110 |
 
 ## Blockers
 
@@ -115,14 +118,13 @@ unexplained, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email w
 
 ## Model tier
 
-S204: started on Sonnet 5.5; a bare `/model claude-opus-5-5` for DEC-0237/0238 (persists in the
-desktop app), restored to Sonnet at close. S205: Sonnet for the soak's checks and reads (a locked
-design); Opus 5.5 at `medium` only for building DEC-0237 if it turns up a design question.
+S205: Opus 5.5 throughout (the desktop app's persisted choice), no `/model` switch; ops#457 was
+mechanical, Sonnet would have done. S206: Sonnet for the soak's checks and reads; Opus 5.5 at
+`medium` only for building DEC-0237 if it turns up a design question.
 
 ## Gotchas — `docs/GOTCHAS.md`
 
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-16 (S204: DEC-0237 (#579), DEC-0238 (librtlsdr soak first); MANIFEST trim;
-S204z: Zaphod dev-receiver plan (#586), #587)._
+_Last updated: 2026-11-16 (S205: ops#457 closed for good, DEC-0239 tier caps in CI; MANIFEST 879 tok; S204z: Zaphod dev-receiver plan #586, #587)._

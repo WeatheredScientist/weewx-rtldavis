@@ -13755,3 +13755,43 @@ window ends. DEC-0236 has no start date yet; if one is set first, the soak waits
   it is ever regenerated, the sha256 check stops the build, loudly. Revisit then.
 - **Soak on the NAS V4L instead:** a different stick, tuner branch, antenna and host; it says nothing
   about the v3's path, which is what prod runs.
+
+## DEC-0239 — Tier-file caps are gated in this repo's CI (S205)
+
+**Status:** Accepted (owner in chat S205: "let's knock out ops457 for good") · **Date:** 2026-11-16
+(S205, Opus 5.5) · **Answers:** eaglehunt-ops#457 · **Applies:** STANDARD §1 (caps), rule 9 (index
+classes, not instances), DEC-0045 (positive controls).
+
+### Context
+
+eaglehunt-ops' `checks/tier-sweep.sh` measures `BOOT.md` and `MANIFEST.md` on the pushed `dev` and
+files one inbox issue per repo when a cap is crossed. MANIFEST crossed three times: #554 (diet at
+S195), ops#457 at 1006 tok, trimmed at S204 to 3938 characters (984 tok), 16 tok under the line. Every
+crossing was a doc-only regrowth at a session close: a new runbook, design or module named by
+instance. Nothing in this repo measured the file before the merge, so the only signal was the
+after-the-fact filing.
+
+### Decision
+
+1. `tests/test_tier_caps.py` runs in pytest (so in CI on every PR and push): `BOOT.md` ≤ 10,000
+   characters, `MANIFEST.md` ≤ 4,000. Characters are code points (Python `len` on decoded text, equal
+   to `wc -m` under a UTF-8 locale) and the comparison is on characters, as the sweep's
+   `chars -le CHAR_CAP` is. Comparing floored tokens would pass a 4,001-character file the sweep
+   files on (positive-controlled: 4,000 passes, 4,001 fails; a 500-character overrun fails).
+2. MANIFEST trimmed to 3518 characters (879 tok): the reviews row absorbs `*RESEARCH*`; runbooks and
+   migrations become `docs/*RUNBOOK*`, `docs/*-MIGRATION.md`; the contract and image rows drop files
+   already covered by `scripts/*` or `contract/`; the never-loaded table is shortened. Coverage sweep
+   green in fixture mode; an empty MANIFEST positive control reports 58 holes.
+
+### Alternatives
+
+- **Trim only:** what S195 and S204 did; it holds until the next instance row.
+- **A pre-commit hook:** skippable and absent in worktrees and fresh clones; CI is not.
+- **Fetch the caps from eaglehunt-ops at test time:** a private repo must never be a prerequisite of
+  this public one's CI (MANIFEST's never-loaded table).
+
+### Consequences
+
+A close that grows a tier file past its cap is a red PR, fixed in the same PR by rule 9 or
+`ARCHIVE/`. If STANDARD's caps change, this test changes with them; the sweep keeps catching any
+drift between the two.
