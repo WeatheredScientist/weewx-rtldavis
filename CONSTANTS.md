@@ -62,7 +62,7 @@ recreate from a stock config silently reverts them:** re-apply and re-verify aft
 | `[DavisPressure]` → `fetch_interval` | **300** (DEC-0113) | ~1.2% of WeatherLink's quota; a 5-min barometer step, not 60 |
 | `[Rtldavis]` → `cmd` gain | **372** (DEC-0125) | 496 (DEC-0115, Foundation's siting) gained +1.16 pts at marvin, under DEC-0059's 2.0-pt bar |
 | `[[Influx]]` → `server_url` | **`http://<MARVIN_IP>:8086`** (DEC-0141); + baseline | Else `restore_baseline` points the writer at the dead Foundation port |
-| `[[Influx]]` → `lease_dir` | **`/nas-lease`** (DEC-0111) | An empty local dir on marvin (MARVIN-DEC-0063): the NAS-LEASE yield is a no-op, moot since DEC-0141; fails open |
+| `[[Influx]]` → `lease_dir` | **`/nas-lease`** (DEC-0111); + baseline | The yield is removed in `influx.py` `0.20+ws.3`, which ignores the key with one INFO line (DEC-0242). Delete it from both files once `ws.3` runs, then this row goes |
 | file modes for the 996 container | `archive/weewx.sdb` owner-writable, `logs/weewx.log` 996:986 | Root-written files are unwritable as 996; a root-owned hot `weewx.sdb-journal` blocks the DB open (DEC-0147) |
 | live conf mode + backups | live `weewx.conf` **0600**; backups only in **`weewx-data/conf-archive/`** (0700, files 0600) (DEC-0201) | **A conf-rewriting `weectl` run** leaves `weewx.conf.<timestamp>` beside it and a 0644 conf: `chmod 0600`, move the copy |
 | `[LoopJsonWriter]` → `path`, `current_path` | **`/opt/weewx-data/feed/loop-data.txt`**, **`…/feed/current.json`** (DEC-0202); + baseline | `feed/` is all `eh-proxy` (994:984) mounts: dir 0755, files `o+r`, present before it starts; while it runs, only rename files in, never recreate the dir (the bind pins the inode) |

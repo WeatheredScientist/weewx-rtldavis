@@ -283,7 +283,8 @@ History: the retired `ops/usb_watchdog.sh` (the file no longer exists) was found
   yield — the courtesy-yield mount had one purpose (protect NAS-hosted InfluxDB writes from a
   concurrent NAS reader) and that store no longer lives there. `lease_dir` stays set (harmless no-op
   against the empty dir, `MARVIN-DEC-0063`); a later config-only cleanup may drop the key, but the
-  cross-host wiring this item asked for will never be built.
+  cross-host wiring this item asked for will never be built. S207d: the yield code is removed and the
+  key ignored (DEC-0242).
 - ~~**Hot-swap gain / receive-window without restarting the container (owner question, S89).**~~
   **BUILT S103, [DEC-0117](docs/DECISIONS.md).** Watched control file carrying bounds-checked
   `gain`/`ex` integers only (never a command string — `cmd` reaches `shlex.split()` → `Popen`);
