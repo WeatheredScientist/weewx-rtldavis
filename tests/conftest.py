@@ -148,6 +148,17 @@ def reset_wd():
 
 
 @pytest.fixture(autouse=True)
+def _reset_decoder_exit_count():
+    """The driver's consecutive-decoder-exit count (DEC-0237) is module-level, so a test
+    that ends in 'rtldavis process is not running' would otherwise carry its count into the
+    next one, and the third such test in a run would raise RtldavisDecoderFatal instead."""
+    import rtldavis
+    rtldavis._decoder_exits = 0
+    yield
+    rtldavis._decoder_exits = 0
+
+
+@pytest.fixture(autouse=True)
 def _restore_monitor_state():
     """Give every test the weewx_monitor state dicts it found, whatever ran before.
 
