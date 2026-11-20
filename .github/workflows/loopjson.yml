@@ -4,6 +4,9 @@ name: loopjson extension
 # Every PR builds the zip and installs it into a fresh WeeWX 5.5.2 with the
 # Simulator driver, so "works without the rtldavis driver" is measured, not
 # asserted. A pushed loopjson-vX.Y.Z tag also publishes the zip as a release.
+# The `weewx-range` job repeats the install-and-run proof on the first release of
+# each older WeeWX 5 minor, so "WeeWX 5.0 and later" in the extension's README is
+# measured too (DEC-0243).
 
 on:
   push:
@@ -75,3 +78,32 @@ jobs:
             --latest=false \
             --title "loop_json_writer ${GITHUB_REF_NAME#loopjson-v}" \
             --notes "WeeWX extension release. Install: weectl extension install <URL of the weewx-loopjson zip below>. Check a feed: python3 check_contract.py loop loop-data.txt (stdlib only; schema alongside). See extensions/loopjson/README.md, contract/README.md and docs/INTERFACES.md section 1."
+
+  # DEC-0243: the README says WeeWX 5.0 and later. The job above proves 5.5.2; this
+  # one proves the first release of every older 5.x minor that PyPI carries. Add a
+  # row when a new minor comes out and the job above moves to it.
+  weewx-range:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        weewx: ["5.0.0", "5.1.0", "5.2.0", "5.3.0", "5.4.0"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install WeeWX ${{ matrix.weewx }}
+        run: python -m pip install --upgrade pip weewx==${{ matrix.weewx }}
+
+      - name: Build the zip
+        run: scripts/build_loopjson_zip.sh
+
+      - name: Install into a fresh WeeWX ${{ matrix.weewx }} and run the Simulator
+        run: scripts/prove_loopjson.sh dist/weewx-loopjson-*.zip

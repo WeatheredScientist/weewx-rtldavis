@@ -12,6 +12,10 @@ weectl extension install https://github.com/WeatheredScientist/weewx-rtldavis/re
 
 Then restart WeeWX. The URL names a version on purpose; bump it when a new release comes out.
 
+It needs WeeWX 5.0 or later. Every change is installed into a fresh station and run with the
+Simulator driver on 5.0.0, 5.1.0, 5.2.0, 5.3.0, 5.4.0 and 5.5.2, on Python 3.14. WeeWX 4 is not
+tested.
+
 The installer does two things:
 
 - Copies `loop_json_writer.py` into WeeWX's `user` directory.

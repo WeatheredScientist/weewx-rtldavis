@@ -13955,3 +13955,50 @@ startup and stop weewxd. Prod's tenant root is a `dev` checkout and is the mount
 
 `influx.py` is about 50 lines shorter and holds no estate-specific protocol. CONSTANTS' `lease_dir`
 row records the key as ignored until the config edit lands, then goes.
+
+## DEC-0243 — The loopjson extension states WeeWX 5.0 and later, and CI proves every 5.x minor (S208)
+
+**Status:** Accepted (owner in chat S208: "Yes, open the PR") · **Date:** 2026-11-20 (S208,
+Fable 5.2) · **Answers:** the dashboard's Ask on ops#465 (the install-package investigation) ·
+**Applies:** DEC-0211 item 6 (the CI proof), DEC-0045 (measure, do not assert).
+
+### Context
+
+`extensions/loopjson/README.md` said the extension works with any WeeWX driver and named no WeeWX
+version. CI proved one combination: WeeWX 5.5.2 on Python 3.14 with the Simulator. An adopter of the
+dashboard attaches to whatever stock WeeWX 5 their distribution carries, so the dashboard side asked
+which versions the extension supports.
+
+Measured S208, locally on macOS, with `scripts/prove_loopjson.sh` (`weectl station create`,
+`weectl extension install` of the released 1.2.0 zip, a 20 s Simulator run, both files checked
+against contract 1.2):
+
+| Python | WeeWX versions, all passing |
+|---|---|
+| 3.12 | 5.0.0, 5.1.0, 5.2.0, 5.3.1, 5.4.0, 5.5.2 |
+| 3.14 | 5.0.0, 5.1.0, 5.2.0, 5.3.0, 5.3.1, 5.4.0 |
+
+### Decision
+
+1. The README states the floor: WeeWX 5.0 or later, and names the versions CI runs.
+2. A second job in `.github/workflows/loopjson.yml`, `weewx-range`, runs the build and the proof
+   script on the first release of each older 5.x minor (5.0.0, 5.1.0, 5.2.0, 5.3.0, 5.4.0), Python
+   3.14, `fail-fast: false`. The existing job keeps 5.5.2, the naming-rule tests, the Python 3.8
+   checker run and the release step, and keeps its name.
+3. No claim is made for WeeWX 4, for a Python older than 3.12, or for a driver other than the
+   Simulator and Rtldavis. `extensions/influx` gets no range statement: it has had no such run.
+
+### Alternatives
+
+- **Turn the existing job into a matrix:** it renames the job, and the release step would run once
+  per row on a tag.
+- **State the range from the local run alone:** an assertion again the day a change lands.
+- **Lowest and highest only:** five rows cost nothing on a public repository's runners, and a
+  regression in a middle minor would otherwise go unseen.
+
+### Consequences
+
+Neither job is a required check (those are `secret-scan`, `lint`, `tests`), so a red row shows on
+the PR without blocking it; read it before merging. A new WeeWX minor means moving the first job to
+it and adding the old one here. The writer is unchanged and stays 1.2.0; the README line reaches
+adopters of the zip at the next `loopjson` release.

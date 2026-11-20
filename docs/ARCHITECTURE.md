@@ -102,7 +102,7 @@ find /opt/weewx-venv -name "*.pyc" -path "*/user/*" -delete
 
 `Docker → entrypoint.sh (baked; changes need rebuild) → weewxd /data/weewx.conf`
 
-`entrypoint.sh` reads `BIAS_TEE` (default `1`) and drives the RTL-SDR's bias-tee accordingly
+`entrypoint.sh` reads `BIAS_TEE` (default `0` since v2.2.0, DEC-0227) and drives the RTL-SDR's bias-tee accordingly
 (`rtl_biast -b 1` / `-b 0`) before launching `weewxd`; the off-branch drives the tee off explicitly
 rather than relying on the power-on default, since tee state can survive a warm restart.
 **Live value is currently `BIAS_TEE=0`** (verified on `weewx.service`'s command line, 2026-10-10) —

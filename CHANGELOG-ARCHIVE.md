@@ -7,6 +7,10 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S205] — 2026-11-16 — ops#457 closed for good: tier caps gated in CI (DEC-0239); MANIFEST 879 tok
+
+- No prod change. The ops tier sweep already read `dev` green (MANIFEST 984 tok, S204's trim) with 16 tok of headroom. `MANIFEST.md` 3938 → 3518 chars: doc instance rows folded into class globs (`docs/*RUNBOOK*`, `docs/*-MIGRATION.md`, `*RESEARCH*`); coverage sweep green in fixture mode, empty-MANIFEST positive control reports 58 holes. DEC-0239: `tests/test_tier_caps.py` fails any PR whose BOOT or MANIFEST crosses the sweep's exact character cap (boundary positive-controlled, 4,000 passes, 4,001 fails). Green gate: ruff clean, pytest 1037 passed / 27 skipped, mypy clean (114 files). Opus 5.5 throughout, no `/model` switch. Rolled S202.
+
 ## [S204z] — 2026-11-16 — A dev/test receiver on Zaphod is planned (#586); the starter conf's enabled uploaders filed (#587)
 
 - No prod change; nothing built, nothing changed on any box. `docs/ZAPHOD-DEV-RECEIVER-DESIGN.md` (PR #585, merged to `dev` as `90e58bc`) plans the receiver: WSL2 with Debian's Docker Engine in a dedicated distro, usbipd-win reachable from WSL only (it has no listen-address setting, so a single firewall rule on WSL's adapter and a Manual service), no secrets, uploaders disabled before the first start. The owner chose the purpose (a dev/test receiver, closing the "no drop-in dev receiver" gap) and the radio (the V4L, after DEC-0236). Hyper-V, VirtualBox/Vagrant and Docker Desktop are rejected with reasons. WSL's weak isolation is stated as an accepted residual. The DEC is assigned when the plan is accepted. An independent review was folded in, and the starter-uploader line was corrected (Wunderground, not OWM; DavisPressure inert per #451).
