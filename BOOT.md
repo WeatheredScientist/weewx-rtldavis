@@ -40,7 +40,7 @@ dead NAS-LEASE yield removed, `lease_dir` ignored with one INFO line; on `dev`, 
 at the next `marvinctl pull` + restart (tenant root's `dev` checkout): **no pull during the soak.**
 Rollout after it: pull, restart, verify sha + `service version is 0.20+ws.3`; owner deletes
 `lease_dir` from the live conf and `weewx.conf.rx-baseline`; heartofgold may drop `/nas-lease`.
-Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0245.**
+Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0246.**
 
 **DEC-0238's soak (owner's go for the swap):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
 marvin: `librtlsdr.so.2.0.3`, driver sha `7b6fb60a…` = prod's) as `:marvin-live`, 24 h settle, then
@@ -76,8 +76,8 @@ narrowed to its port: **tell marvin before moving its jack.**
 00. **Owner first.** (a) DEC-0232 step 7's migration-day rebuild, owner's yes (Class C):
    `weectl database rebuild-daily … --date=2026-11-21 -y` through `marvin-sudo` (runbook step 7),
    then step 5's check; after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) After a NAS reboot, re-read `weewx-v4ltest`'s USB node. (c) **#584:**
-   `docs/WINDGUST-PLAUSIBILITY-DESIGN.md` (S211): B, a driver check of `windGust10` against received
-   wind, is recommended; C reverses S187's ERR-0012 call. Owner picks B/C/document-only; DEC-0245.
+   DEC-0245 (S211): B, a driver check of `windGust10` against received wind, accepted, not built;
+   re-run the design's readout after a 25 mph event first (`docs/WINDGUST-PLAUSIBILITY-DESIGN.md`).
 0. **DEC-0238's soak:** marvin's move is done (11-21: archive gap 13:40 to 14:03 ET, v3 back on
    `5-1`, ops#440). Check the first full post-move day (11-22); the swap is the owner's go, 11-23 at
    the earliest; post its time on ops#440. During it:

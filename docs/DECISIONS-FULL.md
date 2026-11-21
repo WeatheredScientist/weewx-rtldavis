@@ -14085,3 +14085,45 @@ overwrites), so nothing changes for them. Prod's mounts of `loop_json_writer.py`
 only for names the venv lacks, and prod's config lists none it could not already import. User-visible to new
 installs: a SemVer minor, ridden by the next minor image with DEC-0232/0235/0237/0240/0238. A Pi on
 an SD card writes `feed/` on every loop packet; remove the writer from `process_services` to stop.
+
+## DEC-0245 — #584: the driver nulls an ISS 10-minute gust that received wind cannot support (S211)
+
+**Status:** Accepted design, not built (owner's menu choice in chat S211: "B: driver cross-check";
+re-measure after a 25 mph wind event) · **Date:** 2026-11-21 (S211, Sonnet 5.5) · **Answers:** #584
+· **Extends:** DEC-0224 (bounds only on `wind_gust_10`), DEC-0029 · **Ships in:** the next minor
+image (DEC-0222) once built. Design and measurement: `docs/WINDGUST-PLAUSIBILITY-DESIGN.md`.
+
+### Decision
+
+Add option B of the design: the driver keeps a rolling maximum of **accepted** `wind_speed` over
+11 minutes and, on a Type 9 frame whose `wind_gust_10` exceeds that maximum by more than
+`max(10 mph, 50% of the gust)` with at least about 90% reception coverage, sets `wind_gust_10` to
+None (honest null, DEC-0006) and logs a `rejecting implausible` line. It fails open: no judgment
+until the window holds about 10 minutes of samples, and a low-coverage window passes the value. It
+nulls `wind_gust_10` only; it is not frame-level proof (DEC-0054 stays as is). Config
+`qc_wind_gust_10_margin`; `sensor_qc = false` turns it off with the rest. Baked driver change, so a
+banner bump on the next minor image.
+
+### Why
+
+#584 is a bad ISS reading (Type 9 echoed 58 mph for ten minutes) while every received sample read
+about 0; `windGust10` had bounds checks only. Measured on 24 days of the live archive, B's largest
+real difference between `windGust10` and the rolling received maximum is +2 mph against #584's
+about +58.
+
+### Not decided
+
+Option C (nulling our received gust when it beats `windGust10`, ERR-0012's class) is not chosen: it
+reverses the owner's S187 call, and its margin is thinner (+26 for ERR-0012 against +8 for the next
+case). The owner may revisit it.
+
+### Conditions before the build
+
+Re-run the design's §6 readout after the first wind event over 25 mph (the 24-day window tops out at
+14 mph, so a squall's false-positive rate is unmeasured), and set the margin from it. Tests replay
+#584's sequence and the 10-31 minute as positive controls, with a mutation check on the margin.
+
+### Alternatives
+
+Document only (A); B plus C; a dashboard-only guard (already covers ERR-0012's class, DEC-0427,
+nothing for the feed, InfluxDB or other consumers).
