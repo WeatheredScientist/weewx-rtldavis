@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S206 + S207a–d → S208)
+## ▶ Resume here (S208 → S209)
 
 ### What's settled (do not re-derive)
 
@@ -33,8 +33,8 @@ Rollback: owner-run `git -C /srv/docker/weewx checkout 694938f -- loop_json_writ
 **Baked on `dev`, not in prod until the next minor image:** DEC-0235 (devsel: `RTLSDR_DEVICE`,
 `doctor` listing) DEC-0232 (`windGust10` column) and DEC-0237 (#579: the driver raises `RtldavisDecoderFatal`
 after `RTLDAVIS_EXIT_AFTER` = 3 consecutive decoder exits; stalls not counted; built S206, proved
-by `scripts/exit_after_image.sh`, which CI runs) and DEC-0240 (#587: the starter `weewx.conf`
-ships all 11 uploaders off). **Decided S204, not built:** DEC-0238 (librtlsdr → osmocom v2.0.3, `797f814` +
+by `scripts/exit_after_image.sh`, which CI runs) and DEC-0240 (#587), **which fixed
+the wrong file (#596):** an empty mount gets `weectl`'s output, and its `[[Influx]]` is on. **Decided S204, not built:** DEC-0238 (librtlsdr → osmocom v2.0.3, `797f814` +
 sha256 as on `s202-v4l-test`, after a prod soak). **DEC-0242** (#558): `influx.py` `0.20+ws.3`, the
 dead NAS-LEASE yield removed, `lease_dir` ignored with one INFO line; on `dev`, so it ships to prod
 at the next `marvinctl pull` + restart (tenant root's `dev` checkout): **no pull during the soak.**
@@ -42,7 +42,11 @@ Rollout after it: pull, restart, verify sha + `service version is 0.20+ws.3`; ow
 `lease_dir` from the live conf and `weewx.conf.rx-baseline`; heartofgold may drop `/nas-lease`.
 Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **DEC-0241** (#553):
 campaign apparatus kept and stood down, headers truthful; retirement deferred to the hot-swap
-decision. **Next DEC: DEC-0243.**
+decision. **DEC-0243:** loopjson states WeeWX 5.0+; CI proves each minor. **Next DEC: DEC-0244.**
+
+**ops#465** records the install-package investigation with the dashboard (shape: attach to stock
+WeeWX; the owner decides). **#597:** the image's starter runs none of this
+repo's services, so a new install has no loop feed.
 
 **DEC-0238's soak (owner's go for the swap):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
 marvin: `librtlsdr.so.2.0.3`, driver sha `7b6fb60a…` = prod's) as `:marvin-live`, 24 h settle, then
@@ -73,11 +77,11 @@ Standing facts: images are multi-arch (DEC-0214/0215); SemVer per DEC-0222; the 
 image is not. `marvinctl push` publishes a versioned tag (Class B, never `latest`). The v3's grant is
 narrowed to its port: **tell marvin before moving its jack.**
 
-### ▶▶ S208 JOB LIST
+### ▶▶ S209 JOB LIST
 
 00. **Owner first.** (a) DEC-0232's migration doc, then `ops/windgust10_check.sql`. (b) Ops note,
    owner's go: dashboard DEC-0442 §3.2's `MAX(windGust)` fallback re-admits ERR-0012. (c) Close
-   #587, #561, #558 with a comment (merged to `dev`, so GitHub did not auto-close); #553 stays open.
+   #598 with a comment once S208's PR merges. (d) #596 and #597: design, then a DEC each, before item 1.
 0. **DEC-0238's soak:** after heartofgold posts the move's gap times, check the v3 at `5-1` and a
    clean post-move day, then ask the owner for the swap; post the swap time on ops#440. During it:
    daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
@@ -105,7 +109,7 @@ narrowed to its port: **tell marvin before moving its jack.**
    project, owner-paced; plan `docs/ZAPHOD-DEV-RECEIVER-DESIGN.md` (S204z, no DEC); Zaphod's session
    runs it. Carry-forwards: `BACKLOG.md`.
 
-## Current state (S207)
+## Current state (S208)
 
 | Thing | State |
 |---|---|
@@ -114,7 +118,7 @@ narrowed to its port: **tell marvin before moving its jack.**
 | Reception | 99.9% mean at USB `5-1`; 0 archive gaps 11-05 to 11-16 09:24 ET |
 | `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`d0bc77b`) adds DEC-0232/0235/0237/0240 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
-| Trackers | repo: #579 (DEC-0237), #553, #536, #475 parked, #380, #514, #586, #584 (+ #558, #561, #587 to close) · ops: #440, #449, #110 |
+| Trackers | repo: #596, #597, #598, #579 (DEC-0237), #553, #536, #475 parked, #380, #514, #586, #584 · ops: #465, #440, #449, #110 |
 
 ## Blockers
 
@@ -124,13 +128,11 @@ unexplained, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email w
 
 ## Model tier
 
-S206: Sonnet for DEC-0237's build, then a bare `/model claude-opus-5-5` (persists in the desktop
-app: restore Sonnet at close) to coordinate S207a–d: #587 and #558 on Opus, #561 and #553 on
-Sonnet. S208: Sonnet for the soak's checks and reads; Opus 5.5 at `medium` only for a design question.
+S208: Fable 5.2, as the desktop app had it (no switch; check the selector). S209: Sonnet for the soak's checks and reads; Opus 5.5 at `medium` for #596/#597.
 
 ## Gotchas — `docs/GOTCHAS.md`
 
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-18 (S206 coordinating S207a–d: #590–#594 merged; DEC-0240/0241/0242)._
+_Last updated: 2026-11-20 (S208: ops#465, DEC-0243, #596–#598 filed)._

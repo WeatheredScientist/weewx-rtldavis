@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Install a built weewx-loopjson zip into a fresh WeeWX and prove it works with
 # the Simulator driver, i.e. without the rtldavis driver (DEC-0211 item 6).
-# Needs `weectl` and `weewxd` on PATH (pip install weewx==5.5.2).
+# Needs `weectl` and `weewxd` on PATH (pip install weewx). CI runs it on 5.5.2 and on
+# the first release of each older 5.x minor (DEC-0243).
 # Usage: scripts/prove_loopjson.sh dist/weewx-loopjson-X.Y.Z.zip
 set -euo pipefail
 zip=$(realpath "$1")
