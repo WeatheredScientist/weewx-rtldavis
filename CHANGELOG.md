@@ -6,6 +6,11 @@ under [Pre-S16].
 
 ---
 
+## [S211] — 2026-11-21 — #584 gust plausibility design drafted and measured (no DEC, no code)
+
+- `docs/WINDGUST-PLAUSIBILITY-DESIGN.md`: Class A (a bad received sample, ERR-0012) vs Class B (a bad ISS 10-minute gust, #584); recommends B, a driver cross-check of `windGust10` against received wind; C is optional and reverses S187. Measured on a read-only copy of the live archive, 24 days: B's largest real diff +2 mph, C's next case +8 after ERR-0012's +26; no wind above 14 mph in the window, so the margin is `max(10 mph, 50%)` and fails open. Owner's call on B/C/document-only.
+- Post-move partial read (14:04 to 15:01 ET): 58 of 58 archive records, no exits, PLL lines or stalls; a path note: the live log is `<tenant root>/logs/weewx.log`.
+
 ## [S210] — 2026-11-21 — DEC-0232's `windGust10` column migrated on prod; #584 answered; coordinator plus S210a-d
 
 - Prod change (data, no image or config): the archive gained `windGust10` (11:22 AM ET, restart 11:23), backfilled 22,395 cells from InfluxDB back to 10-28 through the proxy's JSON series call (raw Flux is closed, DEC-0440), day summaries 10-28 to 11-20 rebuilt; backup `weewx.sdb.pre-dec0232`. `docs/WINDGUST10-MIGRATION.md` corrected: `--dry-run` needs `-y` under `docker exec`, and step 6's CSV route. Left: the 11-21 day rebuild, the copy's deletion after 11-28.
