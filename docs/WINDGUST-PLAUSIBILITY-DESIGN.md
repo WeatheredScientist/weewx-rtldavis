@@ -1,7 +1,7 @@
 # Design: wind gust plausibility (#584) — DRAFT, no DEC yet
 
-**Status:** proposal for the owner's go. No code until the approach is agreed (PRINCIPLES §8). Next free
-DEC is DEC-0245; it is logged only when this is accepted. Drafted S211 on Sonnet; §6's measurement ran
+**Status:** B accepted as DEC-0245 (owner's menu choice, S211); not built. C and A were not chosen.
+The build waits on a re-run of §6 after a wind event over 25 mph. Drafted S211 on Sonnet; §6's measurement ran
 the same day (24 days of calm data, no strong wind in the window).
 
 ## 1. The problem
