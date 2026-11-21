@@ -9,7 +9,7 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 |---|---|
 | `docs/DECISIONS.md` (index) + `docs/DECISIONS-FULL.md` (bodies) | near a settled area; never re-litigate a listed decision |
 | `CHANGELOG.md` + `CHANGELOG-ARCHIVE.md` | writing a closeout entry |
-| `docs/ROADMAP.md` (P0–P3) | choosing what's next; a line a DEC shipped |
+| `docs/ROADMAP.md` (P0–P3); `docs/ROADMAP-ARCHIVE.md` | choosing what's next; a line a DEC shipped; closed-item detail |
 | `BACKLOG.md`: ideas, RF findings, standing watches | RF or horizon work; whether a watch fired |
 | `docs/CONVENTIONS.md`: git workflow, secrets, exact gates | any gate or commit |
 | `docs/GOTCHAS.md` (sections as in BOOT) | before trusting a zero, a merge, a marvin step or a "shipped". New traps land here |
