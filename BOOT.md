@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S209 → S210)
+## ▶ Resume here (S210 → S211)
 
 ### What's settled (do not re-derive)
 
@@ -22,28 +22,25 @@ built out**; only its acceptance test is left. ROADMAP reconciled S202; **next c
 
 **DEC-0229 in one line:** a CRC-valid noise frame re-anchored the hop clock (2 to 5 min loss); the
 gate drops a frame over 100 ms off schedule. ERR-0012's on-schedule frames are out of its reach.
-**Three drops so far, none with a gap** (11-05, 11-07, 11-14 06:36:24 ET `6CAD1A79E1114BE3`
-+640 ms). **No archive gap 11-13 00:00 to 11-16 09:24 ET.** The crcstats line is lowercase, so
+Time-gate drops (`Go time gate dropped`; the burst gate is separate) through 11-21: none followed
+by a gap. **One gap it missed (S210b):** 11-20 02:23 to 02:27 ET, after a CRC-valid 83.6 mph frame
+it passed, the pre-DEC-0229 shape; evidence for #536. The crcstats line is lowercase, so
 `grep CRC` is a false zero. Gap check: `grep Added`, keep the `record 2026-…` stamps, flag steps over
 90 s. A past day's log is `weewx.log.YYYY-MM-DD`; `marvinctl grep` takes one token and an absolute
 path.
 
 **DEC-0234:** `loopjson` 1.2.0 **in prod since 2026-11-12 22:42:25 ET** (writer sha `8c2365d6…`).
 Rollback: owner-run `git -C /srv/docker/weewx checkout 694938f -- loop_json_writer.py`, restart.
+**DEC-0232 migrated on prod S210** (11-21, backfilled; the runbook says what's left).
 **Baked on `dev`, not in prod until the next minor image:** DEC-0235 (devsel: `RTLSDR_DEVICE`,
-`doctor` listing) DEC-0232 (`windGust10` column) and DEC-0237 (#579: the driver raises `RtldavisDecoderFatal`
-after `RTLDAVIS_EXIT_AFTER` = 3 consecutive decoder exits; stalls not counted; built S206, proved
-by `scripts/exit_after_image.sh`, which CI runs) and DEC-0240 (#587; DEC-0244 corrects its file). **Decided S204, not built:** DEC-0238 (librtlsdr → osmocom v2.0.3, `797f814` +
+`doctor` listing) DEC-0232's starter schema (new installs) and DEC-0237 (#579: the driver raises `RtldavisDecoderFatal`
+after `RTLDAVIS_EXIT_AFTER` = 3 consecutive decoder exits; CI proves it) and DEC-0240 (#587; DEC-0244 corrects its file). **Decided S204, not built:** DEC-0238 (librtlsdr → osmocom v2.0.3, `797f814` +
 sha256 as on `s202-v4l-test`, after a prod soak). **DEC-0244** (#596/#597, `dev`): the starter runs the loop writer and DewpointCacher, `[[Influx]]` idles on `replace_me`, mount `bin/user` imports. **DEC-0242** (#558): `influx.py` `0.20+ws.3`, the
 dead NAS-LEASE yield removed, `lease_dir` ignored with one INFO line; on `dev`, so it ships to prod
 at the next `marvinctl pull` + restart (tenant root's `dev` checkout): **no pull during the soak.**
 Rollout after it: pull, restart, verify sha + `service version is 0.20+ws.3`; owner deletes
 `lease_dir` from the live conf and `weewx.conf.rx-baseline`; heartofgold may drop `/nas-lease`.
-Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **DEC-0241** (#553):
-campaign apparatus kept and stood down, headers truthful; retirement deferred to the hot-swap
-decision. **DEC-0243:** loopjson states WeeWX 5.0+; CI proves each minor. **Next DEC: DEC-0245.**
-
-**ops#465:** install-package investigation (attach to stock WeeWX; owner decides).
+Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0245.**
 
 **DEC-0238's soak (owner's go for the swap):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
 marvin: `librtlsdr.so.2.0.3`, driver sha `7b6fb60a…` = prod's) as `:marvin-live`, 24 h settle, then
@@ -74,12 +71,14 @@ Standing facts: images are multi-arch (DEC-0214/0215); SemVer per DEC-0222; the 
 image is not. `marvinctl push` publishes a versioned tag (Class B, never `latest`). The v3's grant is
 narrowed to its port: **tell marvin before moving its jack.**
 
-### ▶▶ S209 JOB LIST
+### ▶▶ S210 JOB LIST
 
-00. **Owner first.** (a) DEC-0232's migration doc, then `ops/windgust10_check.sql`. (b) Ops note,
-   owner's go: dashboard DEC-0442 §3.2's `MAX(windGust)` fallback re-admits ERR-0012. (c) Close
-   #596 and #597 with a comment once S209's PR merges. (d) Recreate `weewx-v4ltest` after Foundation's
-   DSM restart (Sun 11-22 about 6:45 AM ET, ops#440); nothing from it counts, no other window needed.
+00. **Owner first.** (a) DEC-0232 step 7's migration-day rebuild, owner's yes (Class C):
+   `weectl database rebuild-daily … --date=2026-11-21 -y` through `marvin-sudo` (runbook step 7),
+   then step 5's check; after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) Recreate
+   `weewx-v4ltest` after Foundation's DSM restart (Sun 11-22 about 6:45 AM ET, ops#440); nothing
+   from it counts. (c) #584 (a bad ISS reading): a driver gust plausibility check? The column now
+   stores the ISS's spikes; design first, its own DEC.
 0. **DEC-0238's soak:** after heartofgold posts the move's gap times, check the v3 at `5-1` and a
    clean post-move day, then ask the owner for the swap; post the swap time on ops#440. During it:
    daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
@@ -92,13 +91,13 @@ narrowed to its port: **tell marvin before moving its jack.**
    proposed; its DEC is assigned when it's accepted) takes the V4L the day after this window ends.
    Every step runs through Zaphod's own session, on the owner's yes there.
 3. **Decisions and design:** the S197 cross-repo drift ops issue (owner's go); ops#449 closes when
-   the sweep reads `dev`; ROADMAP diet; optional Go patch (exit when `ReadAsync` returns, its own DEC).
-4. **Gate results since 11-16 09:24 ET**; around 2026-12-04 re-run `ops/garbage_gap_corr.py` over 30
+   the sweep reads `dev`; optional Go patch (exit when `ReadAsync` returns, its own DEC).
+4. **Gate results since 11-21 10:55 ET**; around 2026-12-04 re-run `ops/garbage_gap_corr.py` over 30
    days (#536 open until then).
 5. **Upstream:** lheijst/rtldavis#2, weewx-influx2#1, matthewwall/weewx-wcloud#6, #514; the devsel
    patch on the owner's go. Keep `docs/UPSTREAM-THREADS.md` current.
-6. **Needs the owner:** GitHub About text and topics; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1`; the
-   hot-swap code (#553).
+6. **Needs the owner:** the hot-swap code (#553). The owner's shell now sets
+   `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1`: a worktree needs `scripts/.identifiers` copied in.
 7. **Phase 6's acceptance test** and the first arm64 run against a live radio.
 8. **Watch only:** `no bar_absolute` · WU gold star · OWM/Windy rain in mm (ERR-0010) · `Go burst
    gate dropped a frame` (last 11-08) · first `unhealthy` · `rejecting implausible`, `unknown message
@@ -107,16 +106,16 @@ narrowed to its port: **tell marvin before moving its jack.**
    project, owner-paced; plan `docs/ZAPHOD-DEV-RECEIVER-DESIGN.md` (S204z, no DEC); Zaphod's session
    runs it. Carry-forwards: `BACKLOG.md`.
 
-## Current state (S209)
+## Current state (S210)
 
 | Thing | State |
 |---|---|
 | Prod | marvin, `v2.4.0` as `:marvin-live` since 2026-11-04 18:36:38 ET, weewx 5.5.2, gain 372. Writer 1.2.0 since 2026-11-12 22:42 ET |
 | InfluxDB / monitor | `weewx-influxdb.service`; monitor sha `2f8a1eda…` (S193's message-only edit live at next restart), `REMEDY_MODE=none` |
-| Reception | 99.9% mean at USB `5-1`; 0 archive gaps 11-05 to 11-16 09:24 ET |
+| Reception | 99.9% mean at USB `5-1`; 11-05 to 11-21: one gap (11-20 02:23, 4 min) plus S210's restart (11-21 11:23) |
 | `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`d0bc77b`) adds DEC-0232/0235/0237/0240/0244 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
-| Trackers | repo: #596, #597, #598, #579 (DEC-0237), #553, #536, #475 parked, #380, #514, #586, #584 · ops: #465, #440, #449, #110 |
+| Trackers | repo: #579 (DEC-0237), #553, #536, #475 parked, #380, #514, #586, #584 · ops: #465, #440, #449, #110 |
 
 ## Blockers
 
@@ -126,11 +125,11 @@ unexplained, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email w
 
 ## Model tier
 
-S209: Opus 5.5 (no switch). S210: Sonnet for the soak's checks and reads.
+S210: Opus 5.5 (no switch), children on Sonnet. S211: Sonnet.
 
 ## Gotchas — `docs/GOTCHAS.md`
 
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-20 (S209: DEC-0244 for #596/#597)._
+_Last updated: 2026-11-21 (S210: DEC-0232 migrated on prod; S210a-d)._
