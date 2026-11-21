@@ -142,8 +142,8 @@ S210c; their full text, with every PR and issue number, is `docs/ROADMAP-ARCHIVE
       DEC-0229's time gate). **Prod runs v2.4.0 since 2026-11-04 18:36:38 ET; `:latest` = `:v2.4.0`**
       (multi-arch). Left: the first arm64 run against a live radio (README says smoke-tested until
       then). **Owed: the next minor image**, baked on `dev` and not in prod: DEC-0235 (device pinning:
-      `RTLSDR_DEVICE`, `doctor`'s listing), DEC-0232 (the `windGust10` archive column; prod migration
-      owner-run), DEC-0237 (#579: the driver exits the container after three consecutive decoder
+      `RTLSDR_DEVICE`, `doctor`'s listing), DEC-0232 (the `windGust10` column for new installs; prod migrated S210
+      2026-11-21), DEC-0237 (#579: the driver exits the container after three consecutive decoder
       exits), DEC-0240 (the starter conf ships every uploader off) and DEC-0244 (the starter runs the
       loop writer and DewpointCacher, Influx idles on `replace_me`, the mount's `bin/user` imports),
       plus DEC-0238's librtlsdr v2.0.3 pin, decided S204 and **not built**: it waits on a seven-day prod
@@ -379,7 +379,7 @@ every figure and S-number, is `docs/ROADMAP-ARCHIVE.md` Block 5 (verbatim).
       Appendix A. The per-DEC progress list this line carried (DEC-0032, 0053, 0086, 0091, 0093, 0200,
       0202, 0209, 0211, 0220, 0221, 0224, the S146 and S97 corrections, ops#442) is in
       `docs/ROADMAP-ARCHIVE.md` Block 6. **DEC-0232** (S198b) gives the archive a `windGust10` column
-      (built; prod migration owner-run, `docs/WINDGUST10-MIGRATION.md`). Audited S197
+      (built; prod migrated and backfilled S210, `docs/WINDGUST10-MIGRATION.md`). Audited S197
       (`docs/INTERFACES-AUDIT-S197.md`, 16 findings): parts 1 to 4 and 8 done S199, parts 5 to 7 shipped
       as `loopjson` 1.2.0 (next line). What remains is the ops issue below.)
 - [x] `loopjson` 1.2.0, DEC-0233 parts 5 to 7 — **shipped S201 (DEC-0234)**: the `contract` key

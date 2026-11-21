@@ -1,7 +1,9 @@
 # windGust10 archive column — prod migration plan (DEC-0232)
 
-Status: **plan, not run.** Owner-run: every step that writes goes through `marvin-sudo` or a
-restart. Written S198b, 2026-11-10. Run the commands from the repo root on the Mac, one per line.
+Status: **run on prod 2026-11-21 (S210)**: column added 11:22 AM ET, restart 11:23, 22,395 cells
+backfilled, day summaries 10-28 to 11-20 rebuilt. Left: step 7's migration-day rebuild
+(`--date=2026-11-21`) and step 8 (delete the copy after 11-28). Every step that writes goes
+through `marvin-sudo` (the Class C token path) or a restart. Written S198b, 2026-11-10. Run the commands from the repo root on the Mac, one per line.
 
 ## What changes, and what does not
 
@@ -40,9 +42,10 @@ overwrites `weewx.sdb.bak` every night:
 
 ### 2. Dry run
 
-- `ssh marvin-sudo docker exec -u 996:986 weewx-rtldavis-v2 /opt/weewx-venv/bin/weectl database add-column windGust10 --config=/opt/weewx-data/weewx.conf --dry-run`
+- `ssh marvin-sudo docker exec -u 996:986 weewx-rtldavis-v2 /opt/weewx-venv/bin/weectl database add-column windGust10 --config=/opt/weewx-data/weewx.conf --dry-run -y`
 
-A `--- Logging error ---` / `/dev/log` traceback from `weectl` inside `docker exec` is harmless;
+`--dry-run` still asks y/n, and `docker exec` has no TTY: without `-y` it ends in `EOFError`
+(S210). A `--- Logging error ---` / `/dev/log` traceback from `weectl` inside `docker exec` is harmless;
 read the last lines.
 
 ### 3. Add the column
@@ -70,6 +73,11 @@ today's day row exists. A value that never appears after several minutes means t
 not happen or the column went to another database: stop and look before going on.
 
 ### 6. Backfill from InfluxDB (optional; the owner approved shipping it)
+
+**The proxy no longer takes raw Flux (dashboard DEC-0440), so `--query-url` fails.** S210 used
+`--csv` instead: a JSON series call to `<proxy_origin>/query` (`{"v":1,"range":{...},"q":[{"id":
+"g10","field":"windGust10_mph","agg":"none"}]}`; epoch-ms `t` and `v` arrays, up to 50,000 rows),
+converted to a CSV with `_time` (RFC 3339) and `_value` columns. Stop the range at the restart.
 
 InfluxDB has held the same value since 2026-10-28 12:30 ET (DEC-0224). Run after step 4, so the
 backfill reaches up to the minutes the running `weewxd` already fills. The script only reads
