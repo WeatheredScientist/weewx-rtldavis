@@ -164,11 +164,15 @@ bad=(
   'token = YOUR_TOKEN_HERE; password = not-a-real-secret-0000'     # (hole 59) a placeholder, then a literal
   'token = INFLUX_TOKEN  # api_key = not-a-real-secret-0000'       # (hole 60) a reference, then a commented literal
   '"gmail_pass": abcd efgh ijkl mnop'                              # (hole 61) unquoted 4x4 behind a quoted key (the `_apppw_assign` separator)
+  'token = replace_me-not-a-real-secret-0000'                      # (hole 62) WeeWX's placeholder as a prefix, DEC-0244
+  'token = replace_menotarealsecret0000'                           # (hole 63) the placeholder run into a literal
 )
 
 # --- must PASS (exit zero) ------------------------------------------------------
 good=(
   'api_key = YOUR_API_KEY_HERE'                                  # placeholder
+  'token = replace_me'                                           # WeeWX's placeholder (DEC-0244)
+  "                        'token': 'replace_me'}}},"            # the influx installer's spelling
   'token = "${INFLUX_TOKEN}"'                                    # interpolation (inert: a value starting with $ is never detected)
   "password = os.environ.get('WEEWX_PW')"                        # runtime lookup
   'api_key = ""'                                                 # empty (inert: a quote is not a value character)

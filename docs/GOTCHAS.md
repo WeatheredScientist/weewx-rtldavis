@@ -426,6 +426,8 @@ method; none reaches a live system. The live marvin entries are above.
   `weewx-data/bin/user` (weewx appends that directory to `sys.path` last), and prod hid it by mounting
   the file. Found only by running `python -m user.influx` in the built image on marvin. The image CI
   smoke test imports it now. Prove an import path inside the image, not from the Dockerfile's text.
+  Since DEC-0244 the venv package falls back to the mount's `bin/user` (`user_init.py`), so a mount-only
+  module imports; a name the venv also has still resolves to the venv copy.
 - **`marvinctl enable <unit> --now` and `disable <unit> --now` both need the unit's `[Install]`
   section to actually do anything** (S124/S125) — a unit installed but never enabled has no
   `timers.target.wants` symlink for `disable` to remove, and `enable --now` is what creates it AND

@@ -146,12 +146,20 @@ by its maker and product strings.
 
 ## What next
 
-- Uploads (Weather Underground, CWOP, Windy, OpenWeatherMap, WeatherCloud, InfluxDB): each has a
-  section under `[StdRESTful]` in `weewx-data/weewx.conf`, and every one starts off. Register with
-  the site, set the section's `enable = true`, replace its `YOUR_` values, then
-  `docker compose restart`.
-- A dashboard: the live JSON feed in `weewx-data/feed/` and the InfluxDB uploader are the data
-  contract, described in [docs/INTERFACES.md](INTERFACES.md).
+- Uploads: nothing posts anywhere until you configure it. Weather Underground, CWOP, PWSweather,
+  AWEKAS, WOW and WOW-BE each have a section under `[StdRESTful]` in `weewx-data/weewx.conf` with
+  `enable = false`: register with the site, set `enable = true`, fill in its values, then
+  `docker compose restart`. InfluxDB's `[[Influx]]` stays idle while `org`, `bucket` or `token` is
+  `replace_me`; fill in all three and `server_url`. Windy, OpenWeatherMap and WeatherCloud are in
+  the image but not in the starter: add `user.windy.Windy`, `user.owm.OWM` or
+  `user.wcloud.WeatherCloud` to `restful_services` and copy its section from
+  [weewx.conf.example](../weewx.conf.example).
+- A dashboard: the live JSON feed is written to `weewx-data/feed/` from the first start, and with
+  the InfluxDB uploader it is the data contract, described in [docs/INTERFACES.md](INTERFACES.md).
+  To stop the feed, remove `user.loop_json_writer.LoopJsonWriter` from `process_services`.
+- Davis WeatherLink barometer (needs a WeatherLink v2 API key): add
+  `user.pressure_service.DavisPressureFetcher` to `process_services` just before the loop writer,
+  and copy the `[DavisPressure]` section from [weewx.conf.example](../weewx.conf.example).
 - Run it as a system service with a dedicated user, or on a Synology: [docs/DEPLOY.md](DEPLOY.md).
 - Update: change the tag in `docker-compose.yml`, then `docker compose pull && docker compose up -d`.
   Tags follow SemVer against the data you read from the image; a patch or minor never breaks a

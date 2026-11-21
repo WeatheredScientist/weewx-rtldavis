@@ -14002,3 +14002,86 @@ Neither job is a required check (those are `secret-scan`, `lint`, `tests`), so a
 the PR without blocking it; read it before merging. A new WeeWX minor means moving the first job to
 it and adding the old one here. The writer is unchanged and stays 1.2.0; the README line reaches
 adopters of the zip at the next `loopjson` release.
+
+## DEC-0244 — The image's starter runs the loop writer and DewpointCacher, the influx extension idles on replace_me, and the mount's bin/user imports (S209)
+
+**Status:** Accepted (owner in chat S209: "Yes, write DEC-0244") · **Date:** 2026-11-20 (S209,
+Opus 5.5) · **Answers:** #596, #597 · **Amends:** DEC-0240 (corrects its source file: the image
+seeds `weectl`'s output, not `weewx.conf.example`; `replace_me` is now the method for `[[Influx]]`)
+and DEC-0225 (what the seed writes) · **Ships in:** the next minor image (DEC-0222).
+
+### Context
+
+S208 measured the released `v2.4.0` image (`/opt/weewx-dist/weewx.conf`, read-only exec). The
+starter a new install gets is written by `weectl station create` at build time, plus the upstream
+rtldavis and this repo's influx extension installs and a few `sed` edits. `weewx.conf.example` is
+never copied, so DEC-0240 fixed a file no image user receives.
+
+- #596: the stock uploaders were already `enable = false`, and OWM, Windy, WeatherCloud and OgoXe
+  are not in `restful_services`. `[[Influx]]` has `YOUR_INFLUX_*` values and no `enable` line, and
+  WeeWX 5.5.2's `get_site_dict` reads a missing `enable` as on, so it ran and failed every interval.
+- #597: `process_services` is the stock four. None of this repo's services runs: no loop feed, no
+  wind filtering. The README and QUICKSTART call the feed half of the data contract.
+- The `user` package: the image makes `user` a package in the venv so the patched driver beats the
+  mount's stock copy (DEC-0031). That package hides the mount's `bin/user`, where
+  `weectl extension install` puts a module, so an extension installed there is listed in
+  `weewx.conf` and then fails to import (measured for `influx.py` at S169, `docs/GOTCHAS.md`).
+
+### Decision
+
+1. **Mount fallback.** The venv's `user/__init__.py` is now `user_init.py`, which appends
+   `/opt/weewx-data/bin/user` to the package's `__path__` when that directory exists. The baked
+   modules are found first, so the driver, services and uploaders keep winning (DEC-0031 holds); a
+   module the image does not bake is found in the mount. One fix for every extension, not one COPY
+   per file.
+2. **Loop writer, on by default.** The build installs the `loopjson` extension the way it installs
+   the influx one: `[LoopJsonWriter]` with the extension's defaults (`feed/loop-data.txt`,
+   `feed/current.json`, relative to the data mount) and the writer last in `process_services`.
+   `loop_json_writer.py` is also copied into the venv. It writes local files only.
+3. **DewpointCacher, on.** Inserted after `StdWXCalculate`, before the writer. It needs no config
+   and carries the wind and rxCheck filters the reference deployment relies on. The build asserts
+   the final `process_services` line exactly, and fails otherwise.
+4. **DavisPressureFetcher, off.** Baked as before but not in the starter: without WeatherLink
+   credentials it logs an error at every start, which reads like a broken install. QUICKSTART says
+   how to add it.
+5. **`[[Influx]]` idles on `replace_me`.** `extensions/influx/install.py` writes `org`, `bucket` and
+   `token` as `replace_me`; `influx.py` passes those three to `get_site_dict`, which skips the
+   service while any is the literal `replace_me`. Not `enable = false`: `weectl` merges only keys a
+   section lacks, so an `enable` line in the installer would land in a working config that has none
+   and silently switch it off on a reinstall. With `replace_me`, a set value is never touched.
+   This rides `0.20+ws.3`, which is not yet tagged; `VERSION` does not change.
+6. **Checks on the file the image seeds.** `scripts/smoke_image.sh` (CI, every PR) seeds an empty
+   directory and asserts with WeeWX's own `get_site_dict` that no `[StdRESTful]` section would post,
+   that `process_services` ends with DewpointCacher and the writer, that a module dropped into the
+   mount's `bin/user` imports while `user.rtldavis` still resolves to the venv, and that the
+   Simulator run writes `feed/loop-data.txt` with no Influx errors. `tests/test_starter_services.py`
+   pins the inputs offline (Dockerfile lines, installer keys, the package fallback with
+   positive controls).
+   `scripts/check_secrets.sh` allows `replace_me` as a whole-word placeholder value; holes 62 and 63
+   in `scripts/test_check_secrets.sh` prove a run-on or prefixed literal is still caught.
+7. **Text corrected.** `seed_config.py`'s message, QUICKSTART's "What next", the influx extension's
+   README, the Dockerfile's HEALTHCHECK comment, and `tests/test_starter_uploaders_off.py`'s
+   docstring, which now says it guards `weewx.conf.example` as the reference users copy from.
+
+### Alternatives
+
+- **Bake `weewx.conf.example` as the starter instead:** it is a full reference with every uploader
+  and prod-shaped sections; a new install would carry config it never uses, and two sources for one
+  starter is the drift #596 found.
+- **A COPY into the venv per extension:** fixes today's two modules, and the next extension a user
+  installs fails the same way.
+- **Remove the venv `user` package and bake into `bin/user`:** an existing mount (prod included)
+  keeps its own `bin/user`, so an upgrade would run the stock driver. DEC-0031 exists to stop that.
+- **The loop writer behind a first-run variable:** the feed is half the contract and needs no
+  credentials; off by default would leave the gap #597 found.
+- **`enable = false` in the influx installer:** the reinstall hazard in item 5.
+
+### Consequences
+
+A new install writes the live feed from its first start and filters wind; nothing posts until
+configured. Existing installs, prod included, keep their own `weewx.conf` (seeding never
+overwrites), so nothing changes for them. Prod's mounts of `loop_json_writer.py`, `influx.py` and
+`ogoxeUploader.py` cover the venv paths and still win. Its mount `bin/user` gains importability
+only for names the venv lacks, and prod's config lists none it could not already import. User-visible to new
+installs: a SemVer minor, ridden by the next minor image with DEC-0232/0235/0237/0240/0238. A Pi on
+an SD card writes `feed/` on every loop packet; remove the writer from `process_services` to stop.

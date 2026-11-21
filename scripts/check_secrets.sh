@@ -240,6 +240,9 @@ _private_ip='(^|[^0-9.])(10\.[0-9x]{1,3}\.[0-9x]{1,3}\.[0-9x]{1,3}|172\.(1[6-9]|
 # trailing comment or a stray mention elsewhere on the line CANNOT rescue a real
 # secret. This is the fix for bug class (2) above.
 #   YOUR_* / your_*                 placeholder
+#   replace_me                      WeeWX's own placeholder, which get_site_dict skips (DEC-0244).
+#     The whole word only: it must end at a quote, whitespace or the line's end, so
+#     `replace_me-<literal>` and `replace_meXYZ...` are still flagged.
 #   ${VAR}                          shell / compose interpolation
 #   os.environ / getenv / argv / input()   runtime lookup
 #   "" / '' / None / -1             empty
@@ -258,7 +261,7 @@ _private_ip='(^|[^0-9.])(10\.[0-9x]{1,3}\.[0-9x]{1,3}\.[0-9x]{1,3}|172\.(1[6-9]|
 # token. The test marks such lines (inert).
 # `os.getenv(` is the exception (S151, #421 item 4): the value does begin with `os.`, so
 # it is excused on its own alternate, like `os.environ`.
-_val='(YOUR_|your_|\$\{|os\.environ|os\.getenv|getenv|sys\.argv|argv|input\(|""|'"''"'|None|-1\b|self\.|options\.|[A-Za-z_][A-Za-z_0-9]*\.get\(|(site|config|stn)_dict|[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\b)'
+_val='(YOUR_|your_|replace_me(["'"'"']|[[:space:]]|$)|\$\{|os\.environ|os\.getenv|getenv|sys\.argv|argv|input\(|""|'"''"'|None|-1\b|self\.|options\.|[A-Za-z_][A-Za-z_0-9]*\.get\(|(site|config|stn)_dict|[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\b)'
 allow_value="${_key}${_sep}"'[[:space:]]*["'"'"']?'"$_val"
 
 # --- ALLOW (2): prose, as the value of THE SECRET KEY ITSELF. ---

@@ -29,17 +29,19 @@ upstream copy. The service class stays `user.influx.Influx` and the section stay
 `[StdRESTful]` / `[[Influx]]`, so an existing configuration keeps working untouched. Restart WeeWX
 afterward. The URL names a version on purpose; bump it when a new release comes out.
 
-If you have no `[[Influx]]` section yet, the installer adds one with `YOUR_INFLUX_*` placeholders.
-Fill in these four:
+If you have no `[[Influx]]` section yet, the installer adds one with `replace_me` placeholders,
+and the uploader stays idle until `org`, `bucket` and `token` are all filled in. Set these four:
 
 ```
 [StdRESTful]
     [[Influx]]
         server_url = http://localhost:8086
-        org = YOUR_INFLUX_ORG
-        bucket = YOUR_INFLUX_BUCKET
-        token = YOUR_INFLUX_TOKEN
+        org = replace_me
+        bucket = replace_me
+        token = replace_me
 ```
+
+A reinstall never changes a value you have set: the installer adds only the keys a section lacks.
 
 ## What changed that you might notice
 
