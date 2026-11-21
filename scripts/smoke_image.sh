@@ -40,6 +40,10 @@ echo "== the OWM and Windy uploaders import, with their shared base from the use
 docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
   "import user.owm as o, user.windy as w; b = o.OWMThread.__mro__[1].__module__; print('owm', b, 'windy', w.WindyThread.__mro__[1].__module__); assert b == 'user.rest_site'"
 
+echo "== the services the starter runs import (DEC-0244)"
+docker run --rm "$image" /opt/weewx-venv/bin/python3 -c \
+  "import user.loop_json_writer as l, user.dewpoint_service as d; print('loopjson', l.__version__, d.DewpointCacher.__name__)"
+
 echo "== an empty data mount is seeded once, and a second start leaves it alone (DEC-0225)"
 seed_dir="$(mktemp -d)"
 trap 'rm -rf "$seed_dir"' EXIT
@@ -63,6 +67,38 @@ if docker run --rm --user "$(id -u):$(id -g)" -v "$bad_dir:/opt/weewx-data" -e R
 fi
 [ -z "$(ls -A "$bad_dir")" ] || { echo "a bad value left files behind" >&2; exit 1; }
 rm -rf "$bad_dir"
+
+echo "== the seeded starter: this repo's services run, and no uploader would post (DEC-0244, #596, #597)"
+# Checked on the seeded copy, the file a new user really gets, with WeeWX's own get_site_dict.
+docker run --rm --user "$(id -u):$(id -g)" -v "$seed_dir:/opt/weewx-data" "$image" \
+  /opt/weewx-venv/bin/python3 -c "
+import configobj, weewx.restx
+c = configobj.ConfigObj('/opt/weewx-data/weewx.conf')
+svc = c['Engine']['Services']['process_services']
+svc = [svc] if isinstance(svc, str) else list(svc)
+print('process_services:', svc)
+assert svc[-2:] == ['user.dewpoint_service.DewpointCacher', 'user.loop_json_writer.LoopJsonWriter'], svc
+assert 'LoopJsonWriter' in c.sections, 'no [LoopJsonWriter] section'
+posting = []
+for name in c['StdRESTful'].sections:
+    if name == 'StationRegistry':
+        if c['StdRESTful'][name].as_bool('register_this_station'):
+            posting.append(name)
+        continue
+    args = ('org', 'bucket', 'token') if name == 'Influx' else ()
+    if weewx.restx.get_site_dict(c, name, *args) is not None:
+        posting.append(name)
+print('sections that would post:', posting)
+assert not posting, posting
+"
+
+echo "== a module installed into the mount's bin/user imports, and the baked driver still wins (DEC-0244)"
+echo "WHERE = 'mount'" > "$seed_dir/bin/user/smoke_mount_ext.py"
+test -f "$seed_dir/bin/user/rtldavis.py" || { echo "the seeded bin/user has no stock rtldavis.py to shadow" >&2; exit 1; }
+docker run --rm --user "$(id -u):$(id -g)" -v "$seed_dir:/opt/weewx-data" "$image" \
+  /opt/weewx-venv/bin/python3 -c \
+  "import user.smoke_mount_ext as m, user.rtldavis as d; print(m.WHERE, d.__file__); assert m.WHERE == 'mount'; assert d.__file__.startswith('/opt/weewx-venv/'), d.__file__"
+rm -f "$seed_dir/bin/user/smoke_mount_ext.py"
 
 echo "== the entrypoint dispatches: doctor, passthrough, weectl, and an informational health check (DEC-0228)"
 set +e
@@ -109,3 +145,7 @@ if grep -q 'Traceback' "$sim_log/weewx.log"; then
   echo "traceback in weewx.log under the Simulator" >&2; tail -n 60 "$sim_log/weewx.log" >&2; exit 1
 fi
 [ -s "$sim_dir/archive/weewx.sdb" ] || { echo "the Simulator run created no archive/weewx.sdb" >&2; exit 1; }
+[ -s "$sim_dir/feed/loop-data.txt" ] || { echo "the starter wrote no feed/loop-data.txt (DEC-0244)" >&2; tail -n 40 "$sim_log/weewx.log" >&2; exit 1; }
+if grep -qiE 'influx.*(fail|error)' "$sim_log/weewx.log"; then
+  echo "the unconfigured Influx uploader ran (DEC-0244)" >&2; grep -iE 'influx' "$sim_log/weewx.log" | tail -n 10 >&2; exit 1
+fi

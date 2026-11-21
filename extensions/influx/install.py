@@ -27,12 +27,17 @@ class InfluxInstaller(ExtensionInstaller):
             author='Matthew Wall; David Lutz; WeatheredScientist',
             author_email='',
             restful_services='user.influx.Influx',
+            # replace_me, not an `enable = false` line (DEC-0244): weewx skips the uploader while
+            # org, bucket or token is the literal replace_me, so a new install posts nothing until
+            # configured. weectl merges only missing keys, so a reinstall over a working config
+            # keeps its values; an enable line here would be merged into a config without one and
+            # silently switch a working uploader off.
             config={
                 'StdRESTful': {
                     'Influx': {
                         'server_url': 'http://localhost:8086',
-                        'org': 'YOUR_INFLUX_ORG',
-                        'bucket': 'YOUR_INFLUX_BUCKET',
-                        'token': 'YOUR_INFLUX_TOKEN'}}},
+                        'org': 'replace_me',
+                        'bucket': 'replace_me',
+                        'token': 'replace_me'}}},
             files=[('bin/user', ['bin/user/influx.py'])],
         )

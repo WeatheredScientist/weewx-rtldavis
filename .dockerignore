@@ -16,6 +16,9 @@
 !wcloud.py
 !influx.py
 !extensions/influx/install.py
+!extensions/loopjson/install.py
+!loop_json_writer.py
+!user_init.py
 !rtldavis.py
 !entrypoint.sh
 !seed_config.py

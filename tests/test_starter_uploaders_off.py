@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The image's starter weewx.conf ships every uploader off (DEC-0240, #587).
+"""weewx.conf.example ships every uploader off (DEC-0240, #587; source file corrected by DEC-0244).
 
-seed_config.py copies weewx.conf.example into an empty mount and the entrypoint starts weewxd
-straight after, so an uploader left on runs against YOUR_ placeholders on a new install's first
-start. weewx.restx.get_site_dict treats a section with no 'enable' key as on, so each section
-must carry an explicit false.
+weewx.conf.example is the full reference config that users copy sections from. It is NOT what the
+image seeds: that starter is written by `weectl station create` at build time (#596), and
+tests/test_starter_services.py plus scripts/smoke_image.sh cover it. A section copied from here
+must not post until the user turns it on. weewx.restx.get_site_dict treats a section with no
+'enable' key as on, so each section carries an explicit false.
 """
 import os
 import shutil
@@ -79,5 +80,5 @@ def test_seeding_keeps_every_uploader_off(tmp_path):
            "WEEWX_ALTITUDE": "100,foot", "WEEWX_LOCATION": "Test", "RTLDAVIS_BAND": "US"}
     lines = []
     assert seed_config.seed(str(data), str(dist), env, out=lines.append) == 0
-    assert any("every uploader starts off" in line for line in lines)
+    assert any("no uploader posts until configured" in line for line in lines)
     assert_all_off(configobj.ConfigObj(str(data / "weewx.conf"), encoding="utf-8"))

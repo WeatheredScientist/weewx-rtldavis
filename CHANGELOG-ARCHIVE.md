@@ -7,6 +7,11 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S206] — 2026-11-17 — DEC-0237 built: a lost dongle exits the container after three decoder exits (#579)
+
+- No prod change; baked on `dev`, ships with the next minor image. `rtldavis.py`: `RtldavisDecoderFatal` (a plain `Exception`, so weewxd exits instead of retrying), `RTLDAVIS_EXIT_AFTER` (default 3, `0` off, junk falls back to 3 with a log line), a module-level consecutive count that any received packet resets and a stall never touches. 18 unit tests with positive controls (`tests/test_decoder_exit_after.py`; `conftest.py` resets the count per test). `scripts/exit_after_image.sh` runs a stub decoder in two containers: the default exited 1 after 121 s, `=0` ran five minutes through 6 decoder exits; `image.yml` runs it on both architectures. `.env.example` documents the setting. Gate: ruff clean, pytest 1060 passed / 27 skipped, mypy clean (115 files). Sonnet 5.5, no `/model` switch. Checks since 11-16 09:24 ET: no archive gap through 11-18 01:57 ET (the logs are in `/srv/docker/weewx/logs`, not under `weewx-data`); heartofgold has not posted the move's gap times on ops#440. Rolled S204.
+- S206 then coordinated S207a–d as parallel sessions (#587, #561, #553, #558) and merged #590–#594 into `dev` in order, merging `dev` into each branch between merges (CHANGELOG and DEC rows: both sides kept). Upstream: the lheijst#15 follow-up was posted (the S38 comment had been posted 2026-07-13; memory had it as unposted).
+
 ## [S205] — 2026-11-16 — ops#457 closed for good: tier caps gated in CI (DEC-0239); MANIFEST 879 tok
 
 - No prod change. The ops tier sweep already read `dev` green (MANIFEST 984 tok, S204's trim) with 16 tok of headroom. `MANIFEST.md` 3938 → 3518 chars: doc instance rows folded into class globs (`docs/*RUNBOOK*`, `docs/*-MIGRATION.md`, `*RESEARCH*`); coverage sweep green in fixture mode, empty-MANIFEST positive control reports 58 holes. DEC-0239: `tests/test_tier_caps.py` fails any PR whose BOOT or MANIFEST crosses the sweep's exact character cap (boundary positive-controlled, 4,000 passes, 4,001 fails). Green gate: ruff clean, pytest 1037 passed / 27 skipped, mypy clean (114 files). Opus 5.5 throughout, no `/model` switch. Rolled S202.

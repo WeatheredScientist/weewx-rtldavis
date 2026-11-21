@@ -97,12 +97,17 @@ COPY requirements.txt /tmp/requirements.txt
 # only copy, laid out here the way the release zip lays it out. No upstream download.
 COPY extensions/influx/install.py /tmp/weewx-influx/install.py
 COPY influx.py /tmp/weewx-influx/bin/user/influx.py
+# The live JSON feed installs the same way, from this repo's loopjson extension (DEC-0244): the
+# installer adds [LoopJsonWriter] and puts the writer last in process_services.
+COPY extensions/loopjson/install.py /tmp/weewx-loopjson/install.py
+COPY loop_json_writer.py /tmp/weewx-loopjson/bin/user/loop_json_writer.py
 RUN python3 -m venv --copies /opt/weewx-venv && \
     /opt/weewx-venv/bin/pip install -q -r /tmp/requirements.txt && \
     /opt/weewx-venv/bin/weectl station create /opt/weewx-data --no-prompt && \
     /opt/weewx-venv/bin/weectl extension install /tmp/src/weewx-rtldavis \
         --yes --config=/opt/weewx-data/weewx.conf && \
     /opt/weewx-venv/bin/weectl extension install /tmp/weewx-influx --yes --config=/opt/weewx-data/weewx.conf && \
+    /opt/weewx-venv/bin/weectl extension install /tmp/weewx-loopjson --yes --config=/opt/weewx-data/weewx.conf && \
     /opt/weewx-venv/bin/weectl station reconfigure \
         --driver=user.rtldavis --no-prompt --config=/opt/weewx-data/weewx.conf && \
     sed -i 's/frequency = EU/frequency = US/' /opt/weewx-data/weewx.conf && \
@@ -162,6 +167,18 @@ RUN sed -i 's|^\([[:space:]]*\)schema = weewx\.schemas\.wview_extended\.schema$|
     (echo "FATAL: the archive schema line did not change — new installs would have no windGust10 column" && exit 1)
 
 #--------------------------------------------
+# The starter runs this repo's services (DEC-0244)
+#--------------------------------------------
+# DewpointCacher carries the wind filters and the dewpoint/heat-index cache; it needs no config
+# and goes after StdWXCalculate. The loopjson install above already put the writer last, where it
+# sees the final values. DavisPressureFetcher stays out: without WeatherLink credentials it only
+# logs an error, and docs/QUICKSTART.md says how to add it.
+RUN sed -i 's|^\([[:space:]]*process_services = .*weewx\.wxservices\.StdWXCalculate\), user\.loop_json_writer\.LoopJsonWriter$|\1, user.dewpoint_service.DewpointCacher, user.loop_json_writer.LoopJsonWriter|' /opt/weewx-data/weewx.conf && \
+    grep -q '^[[:space:]]*process_services = weewx\.engine\.StdConvert, weewx\.engine\.StdCalibrate, weewx\.engine\.StdQC, weewx\.wxservices\.StdWXCalculate, user\.dewpoint_service\.DewpointCacher, user\.loop_json_writer\.LoopJsonWriter$' /opt/weewx-data/weewx.conf && \
+    grep -q '^\[LoopJsonWriter\]$' /opt/weewx-data/weewx.conf || \
+    (echo "FATAL: the starter's process_services is not the stock four plus DewpointCacher and LoopJsonWriter" && exit 1)
+
+#--------------------------------------------
 # Copy custom service files
 #--------------------------------------------
 COPY dewpoint_service.py /opt/weewx-venv/lib/python3.14/site-packages/user/dewpoint_service.py
@@ -174,6 +191,7 @@ COPY wcloud.py /opt/weewx-venv/lib/python3.14/site-packages/user/wcloud.py
 # `user` package shadows (weewx appends that directory to sys.path last), so `user.influx` must
 # also live here or weewxd cannot import it. Same root file, no second copy in the repo.
 COPY influx.py /opt/weewx-venv/lib/python3.14/site-packages/user/influx.py
+COPY loop_json_writer.py /opt/weewx-venv/lib/python3.14/site-packages/user/loop_json_writer.py
 
 #--------------------------------------------
 # Copy the patched rtldavis.py — the driver weewx actually imports (user.* resolves
@@ -187,8 +205,10 @@ COPY rtldavis.py /opt/weewx-venv/lib/python3.14/site-packages/user/rtldavis.py
 # src.tgz) and would clobber the patched rtldavis.py COPY'd above — which is the
 # file weewx actually imports (user.* resolves to the venv site-packages/user).
 # The old `cp` silently shipped the stock driver (no rain filter, no H1/H2/M3).
-RUN touch /opt/weewx-venv/lib/python3.14/site-packages/user/__init__.py && \
-    touch /opt/weewx-venv/lib/python3.14/site-packages/user/extensions.py
+# The package's __init__ also searches the data mount's bin/user after the baked modules, so a
+# module installed there with `weectl extension install` imports (DEC-0244).
+COPY user_init.py /opt/weewx-venv/lib/python3.14/site-packages/user/__init__.py
+RUN touch /opt/weewx-venv/lib/python3.14/site-packages/user/extensions.py
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
@@ -237,7 +257,8 @@ ENTRYPOINT ["/entrypoint.sh"]
 CMD ["weewxd"]
 
 # Healthy means weewx.log changed in the last 600 s, two archive intervals: weewxd logs every
-# archive record. The log, not loop-data.txt, because the baked config installs no loop writer.
+# archive record. The log, not loop-data.txt: the starter runs the loop writer (DEC-0244), but a
+# user may turn it off, and every install keeps a log.
 # A missing log is unhealthy. Runs as the container's own user and needs no capability.
 # Informational only (DEC-0225, DEC-0228): `docker ps` shows healthy or unhealthy. Docker itself
 # never acts on the status, and nothing in this repository restarts on it; restarting a stale
