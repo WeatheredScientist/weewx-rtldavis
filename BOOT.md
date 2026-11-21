@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S210 → S211)
+## ▶ Resume here (S211 → S212)
 
 ### What's settled (do not re-derive)
 
@@ -71,16 +71,16 @@ Standing facts: images are multi-arch (DEC-0214/0215); SemVer per DEC-0222; the 
 image is not. `marvinctl push` publishes a versioned tag (Class B, never `latest`). The v3's grant is
 narrowed to its port: **tell marvin before moving its jack.**
 
-### ▶▶ S210 JOB LIST
+### ▶▶ S211 JOB LIST
 
 00. **Owner first.** (a) DEC-0232 step 7's migration-day rebuild, owner's yes (Class C):
    `weectl database rebuild-daily … --date=2026-11-21 -y` through `marvin-sudo` (runbook step 7),
-   then step 5's check; after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) Recreate
-   `weewx-v4ltest` after Foundation's DSM restart (Sun 11-22 about 6:45 AM ET, ops#440); nothing
-   from it counts. (c) #584 (a bad ISS reading): a driver gust plausibility check? The column now
-   stores the ISS's spikes; design first, its own DEC.
-0. **DEC-0238's soak:** after heartofgold posts the move's gap times, check the v3 at `5-1` and a
-   clean post-move day, then ask the owner for the swap; post the swap time on ops#440. During it:
+   then step 5's check; after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) After a NAS reboot, re-read `weewx-v4ltest`'s USB node. (c) **#584:**
+   `docs/WINDGUST-PLAUSIBILITY-DESIGN.md` (S211): B, a driver check of `windGust10` against received
+   wind, is recommended; C reverses S187's ERR-0012 call. Owner picks B/C/document-only; DEC-0245.
+0. **DEC-0238's soak:** marvin's move is done (11-21: archive gap 13:40 to 14:03 ET, v3 back on
+   `5-1`, ops#440). Check the first full post-move day (11-22); the swap is the owner's go, 11-23 at
+   the earliest; post its time on ops#440. During it:
    daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
 1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 + DEC-0240 + DEC-0244 + DEC-0238's
    pin; build, prove, release, SemVer minor with DEC-0237's, DEC-0240's and DEC-0244's notes; DEC-0242's rollout
@@ -106,7 +106,7 @@ narrowed to its port: **tell marvin before moving its jack.**
    project, owner-paced; plan `docs/ZAPHOD-DEV-RECEIVER-DESIGN.md` (S204z, no DEC); Zaphod's session
    runs it. Carry-forwards: `BACKLOG.md`.
 
-## Current state (S210)
+## Current state (S211)
 
 | Thing | State |
 |---|---|
@@ -125,11 +125,11 @@ unexplained, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email w
 
 ## Model tier
 
-S210: Opus 5.5 (no switch), children on Sonnet. S211: Sonnet.
+S211 and S212: Sonnet.
 
 ## Gotchas — `docs/GOTCHAS.md`
 
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-21 (S210: DEC-0232 migrated on prod; S210a-d)._
+_Last updated: 2026-11-21 (S211)._
