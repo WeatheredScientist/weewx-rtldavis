@@ -10,6 +10,7 @@ under [Pre-S16].
 
 - `docs/WINDGUST-PLAUSIBILITY-DESIGN.md`: Class A (a bad received sample, ERR-0012) vs Class B (a bad ISS 10-minute gust, #584); recommends B, a driver cross-check of `windGust10` against received wind; C is optional and reverses S187. Measured on a read-only copy of the live archive, 24 days: B's largest real diff +2 mph, C's next case +8 after ERR-0012's +26; no wind above 14 mph in the window, so the margin is `max(10 mph, 50%)` and fails open. Owner chose B by menu (DEC-0245, accepted, not built; re-measure after a 25 mph event first).
 - Post-move partial read (14:04 to 15:01 ET): 58 of 58 archive records, no exits, PLL lines or stalls; a path note: the live log is `<tenant root>/logs/weewx.log`.
+- 11-22 (to 9:54 AM ET): 595 records for 595 minutes, no gap over 90 s, mean `rxCheckPercent` 99.92%, no exits, PLL or stalls (a partial day, not the soak verdict). The 433 MHz AcuRite listens with the LNA inline on the V4L (bias tee on) decoded nothing (heartofgold, ops#440); the LNA is out and the dipole is back at 915 MHz (owner), so DEC-0236's hard stop is cleared. `weewx-v4ltest`'s Influx errors every archive interval are the seed's placeholder uploader with no network, harmless (ops#440). The 12-05 second-dongle reminder is dropped.
 
 ## [S210] — 2026-11-21 — DEC-0232's `windGust10` column migrated on prod; #584 answered; coordinator plus S210a-d
 

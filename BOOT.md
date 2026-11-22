@@ -79,8 +79,8 @@ narrowed to its port: **tell marvin before moving its jack.**
    DEC-0245 (S211): B, a driver check of `windGust10` against received wind, accepted, not built;
    re-run the design's readout after a 25 mph event first (`docs/WINDGUST-PLAUSIBILITY-DESIGN.md`).
 0. **DEC-0238's soak:** marvin's move is done (11-21: archive gap 13:40 to 14:03 ET, v3 back on
-   `5-1`, ops#440). Check the first full post-move day (11-22); the swap is the owner's go, 11-23 at
-   the earliest; post its time on ops#440. During it:
+   `5-1`, ops#440). 11-22 to 9:54 AM ET: no gap, rxCheck 99.92%; re-read the full day. Swap = owner's go, 11-23 at
+   the earliest; post its time on ops#440. V4L is bare again (owner, 11-22). During it:
    daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
 1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 + DEC-0240 + DEC-0244 + DEC-0238's
    pin; build, prove, release, SemVer minor with DEC-0237's, DEC-0240's and DEC-0244's notes; DEC-0242's rollout
@@ -101,9 +101,7 @@ narrowed to its port: **tell marvin before moving its jack.**
 7. **Phase 6's acceptance test** and the first arm64 run against a live radio.
 8. **Watch only:** `no bar_absolute` · WU gold star · OWM/Windy rain in mm (ERR-0010) · `Go burst
    gate dropped a frame` (last 11-08) · first `unhealthy` · `rejecting implausible`, `unknown message
-   type`, loopjson `not finite`. ops#440 cleanup at the end (`BACKLOG.md`). Second-dongle reminder
-   Sat 2026-12-05 09:00 ET. **Zaphod dev receiver (V4L, WSL2):** a future weekend
-   project, owner-paced; plan `docs/ZAPHOD-DEV-RECEIVER-DESIGN.md` (S204z, no DEC); Zaphod's session
+   type`, loopjson `not finite`. ops#440 cleanup at the end (`BACKLOG.md`). **Zaphod dev receiver (V4L, WSL2):** owner-paced; plan `docs/ZAPHOD-DEV-RECEIVER-DESIGN.md`; Zaphod's session
    runs it. Carry-forwards: `BACKLOG.md`.
 
 ## Current state (S211)
@@ -132,4 +130,4 @@ S211 and S212: Sonnet.
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-21 (S211)._
+_Last updated: 2026-11-22 (S211)._
