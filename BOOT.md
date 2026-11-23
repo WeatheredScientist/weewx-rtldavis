@@ -42,7 +42,7 @@ Rollout after it: pull, restart, verify sha + `service version is 0.20+ws.3`; ow
 `lease_dir` from the live conf and `weewx.conf.rx-baseline`; heartofgold may drop `/nas-lease`.
 Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0246.**
 
-**DEC-0238's soak (owner's go for the swap):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
+**DEC-0238's soak (SWAPPED 11-23 7:58:14 AM ET):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
 marvin: `librtlsdr.so.2.0.3`, driver sha `7b6fb60a…` = prod's) as `:marvin-live`, 24 h settle, then
 seven days 00:00 to 00:00 ET. PASS: 0 gaps over 90 s, 0 stalls, 0 `rtldavis exited`, 0 `PLL not
 locked`, mean `rxCheckPercent` ≥ 99.5. Rollback `tag …:v2.4.0 …:marvin-live` + restart. **Order:**
@@ -79,9 +79,8 @@ narrowed to its port: **tell marvin before moving its jack.**
    DEC-0245 (S211): B, a driver check of `windGust10` against received wind, accepted, not built;
    re-run the design's readout after a 25 mph event first (`docs/WINDGUST-PLAUSIBILITY-DESIGN.md`).
 0. **DEC-0238's soak:** marvin's move is done (11-21: archive gap 13:40 to 14:03 ET, v3 back on
-   `5-1`, ops#440). 11-22 to 9:54 AM ET: no gap, rxCheck 99.92%; re-read the full day. Swap = owner's go, 11-23 at
-   the earliest; post its time on ops#440. V4L is bare again (owner, 11-22). During it:
-   daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
+   `5-1`, ops#440). 11-22 clean (1,440/1,440, rxCheck 99.94%). **Swapped 11-23 7:58:14 AM ET** (posted on ops#440);
+   settle to 11-24 7:58 AM, scored 11-25 to 12-02 00:00 ET. Still to confirm: the decoder's `dongle:` line names the v3. V4L bare (11-22). Daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
 1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 + DEC-0240 + DEC-0244 + DEC-0238's
    pin; build, prove, release, SemVer minor with DEC-0237's, DEC-0240's and DEC-0244's notes; DEC-0242's rollout
    rides the same window; then prod's `RTLSDR_DEVICE` = the v3's serial (owner-run unit edit).
