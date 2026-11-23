@@ -39,6 +39,8 @@ gitignored local-infra doc (DEC-0012).
   both exist. Five releases (v2.0.12–v2.0.16) shipped to prod and Docker Hub with no `vX.Y.Z` tag
   and no GitHub release for weeks before this line existed (#331) — nothing in the promotion path
   named the step, so no session was ever prompted to do it.
+  **A major bump needs the owner's explicit yes to that number, and every release carries a one-line
+  reason for its number (DEC-0246, on top of DEC-0222's SemVer rule).**
 - **Docker Hub release tags are multi-arch (DEC-0215).** After marvin's build is verified:
   `marvinctl tag …:vX.Y.Z …:vX.Y.Z-amd64` and `marvinctl push …:vX.Y.Z-amd64` (never `:vX.Y.Z`
   from marvin). Pushing the `vX.Y.Z` tag starts `image-publish.yml`, which builds, smoke-tests and
