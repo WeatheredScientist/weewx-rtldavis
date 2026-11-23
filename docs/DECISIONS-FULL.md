@@ -14127,3 +14127,20 @@ Re-run the design's §6 readout after the first wind event over 25 mph (the 24-d
 
 Document only (A); B plus C; a dashboard-only guard (already covers ERR-0012's class, DEC-0427,
 nothing for the feed, InfluxDB or other consumers).
+
+---
+
+## DEC-0246 — The estate versioning rule is adopted as DEC-0222 plus two additions (S211)
+
+Date: 2026-11-23 (S211, Sonnet 5.5). Status: accepted; the owner accepted the estate rule on 2026-11-23, and this records weewx's adoption of it. Docs only.
+
+### Decision
+
+1. **DEC-0222 stands unchanged**: image tags are SemVer against what consumers read (the loop-JSON contract, the InfluxDB schema, the archive's column meanings, the documented run and mount layout). The estate rule (major: a consumer must act or something they rely on breaks; minor: a consumer gains something or a value's meaning changes; patch: everything else; the highest bump in a release wins; when unsure between minor and patch, minor) says the same.
+2. **Added: a major release needs the owner's explicit yes to that number.** Patch and minor ride the owner's ordinary release approval. A 1.0.0-style promise ("strangers may rely on this; later breaks cost a major") is the owner's declaration, never reached by counting. This repo is already past 1.0, so the rule bites at the next major.
+3. **Added: every release carries a one-line reason for its number**, in the release notes or the CHANGELOG entry.
+4. **Unchanged from DEC-0222**: the driver (`0.20+ws.N`), the data contract (SemVer, DEC-0211) and the extension tags number separately, and a contract change sets the image's number only through its effect on the image's consumers. No past tag is renumbered; a published number is never reused.
+
+### Why
+
+The owner accepted one rule for the estate's releasing repos (ops#476); DEC-0222 already matched it, so this adds only the two missing gates. This repo is public, so the rule is stated here in full and needs no pointer elsewhere to be read.

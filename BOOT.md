@@ -40,7 +40,7 @@ dead NAS-LEASE yield removed, `lease_dir` ignored with one INFO line; on `dev`, 
 at the next `marvinctl pull` + restart (tenant root's `dev` checkout): **no pull during the soak.**
 Rollout after it: pull, restart, verify sha + `service version is 0.20+ws.3`; owner deletes
 `lease_dir` from the live conf and `weewx.conf.rx-baseline`; heartofgold may drop `/nas-lease`.
-Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0246.**
+Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0247.**
 
 **DEC-0238's soak (SWAPPED 11-23 7:58:14 AM ET):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
 marvin: `librtlsdr.so.2.0.3`, driver sha `7b6fb60a…` = prod's) as `:marvin-live`, 24 h settle, then
