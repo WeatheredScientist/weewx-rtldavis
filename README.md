@@ -53,7 +53,7 @@ check, is [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
 **1. Prepare the computer.** Download the script, read it, run it. It checks the dongle, stops the
 kernel's TV driver from claiming it, lets your user open it, installs Docker if you want it, and
-creates `~/weewx` with a `docker-compose.yml` and a `.env`.
+creates a `weewx` folder, in the directory you run it from, with a `docker-compose.yml` and a `.env`.
 
 ```bash
 curl -fsSLO https://github.com/WeatheredScientist/weewx-rtldavis/releases/download/v2.4.0/host-setup.sh
@@ -67,7 +67,7 @@ less host-setup.sh
 bash host-setup.sh
 ```
 
-**2. Tell it where you are.** Edit `~/weewx/.env`: uncomment `WEEWX_LOCATION`, `WEEWX_LATITUDE`,
+**2. Tell it where you are.** Edit `weewx/.env`: uncomment `WEEWX_LOCATION`, `WEEWX_LATITUDE`,
 `WEEWX_LONGITUDE` and `WEEWX_ALTITUDE`, and outside the US set `RTLDAVIS_BAND` to `EU` or `NZ`.
 The image reads these once, on the first start, into `weewx-data/weewx.conf`; after that the file
 is the only truth.
@@ -75,21 +75,23 @@ is the only truth.
 **3. Start it.** Plug the dongle in first.
 
 ```bash
-cd ~/weewx && docker compose up -d
+cd weewx && docker compose up -d
 ```
 
-**4. Check it.** `tail -f ~/weewx/logs/weewx.log` should show
+**4. Check it.** `tail -f logs/weewx.log` should show
 `driver version is 0.20+ws.10 (fork of 0.20, patched by WeatheredScientist -- not stock upstream)`,
-then an `rtldavis: US band, ISS channel 1, rain bucket 0` line, then `LOOP` data and, once uploads
-are enabled, `Published record` lines.
+then an `rtldavis: US band, ISS channel 1, rain bucket 0` line, then, within about ten minutes, an
+`Added record` line and, once uploads are enabled, `Published record` lines. WeeWX does not log each
+reading.
 
 To run it as a system service, see [docs/DEPLOY.md](docs/DEPLOY.md). systemd is the recommended
 path, and a Synology NAS works too.
 
 ## Uploads
 
-Enable any of these in `weewx.conf`; each section in [weewx.conf.example](weewx.conf.example)
-says where to register and what to set.
+Nothing posts until you enable it in `weewx.conf`. The image's starter file has off-by-default
+sections for some of these, not all: [docs/QUICKSTART.md](docs/QUICKSTART.md#what-next) lists which.
+Each section in [weewx.conf.example](weewx.conf.example) says where to register and what to set.
 
 | Service | Suggested interval |
 |---|---|

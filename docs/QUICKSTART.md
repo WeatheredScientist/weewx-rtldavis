@@ -69,14 +69,16 @@ start after that uses the file as it is.
 ## 4. Check it
 
 ```bash
-docker compose logs --tail 30
+tail -n 30 logs/weewx.log
 ```
 
 You should see the driver line, `driver version is 0.20+ws.10 (fork of 0.20, patched by
 WeatheredScientist -- not stock upstream)`, then `rtldavis: US band, ISS channel 1 …`, and within
-about three minutes the first `LOOP` line with real readings. `docker compose ps` shows `healthy`
-while WeeWX keeps writing its log and `unhealthy` after ten quiet minutes; nothing restarts on it.
-The full log is `weewx/logs/weewx.log`.
+about ten minutes the first `Added record` line: WeeWX saved its first archive record from real
+readings. WeeWX does not log each reading. `docker compose logs` carries only the startup lines,
+warnings and errors, so a short, quiet `docker compose logs` is normal. `docker compose ps` shows
+`healthy` while WeeWX keeps writing its log and `unhealthy` after ten quiet minutes; nothing
+restarts on it.
 
 That is the install. WeeWX records to `weewx-data/archive/weewx.sdb` every five minutes.
 
@@ -94,7 +96,7 @@ start again.
 | `not a device node` and the container restarts | The container sees no RTL2832U. Plug the dongle in; with `docker run`, pass `--device /dev/bus/usb`; a VM needs a USB controller with the dongle attached |
 | `usb_claim_interface error -6` or `Device or resource busy` | The kernel TV driver has the dongle. Re-run the setup script, then reboot. If `doctor` says another program holds it, stop that program |
 | `Permission denied` opening the dongle | The udev rule did not apply. Re-run the setup script, unplug and re-plug; check `PUID`/`PGID` in `.env` match `id -u` and `id -g` |
-| Driver line appears, no `LOOP` after ten minutes | Radio, not software. Check the USB cable and re-plug; antenna vertical and away from the computer; band and channel match the ISS; try `-gain 0` (auto) in `[Rtldavis]` |
+| Driver line appears, no `LOOP` after ten minutes (that is, no `Added record` line in `weewx.log`) | Radio, not software. Check the USB cable and re-plug; antenna vertical and away from the computer; band and channel match the ISS; try `-gain 0` (auto) in `[Rtldavis]` |
 | `weewx.conf` not found | Rare now: the first start writes it, and `doctor` says `not seeded yet` until then |
 | `more than one dongle`, or `dongle: ... matches the serial of 2 dongles` | Two RTL-SDRs are plugged in and the station cannot tell which is its own. See "More than one dongle" below |
 | A V4 found as `R828D` with poor or no reception on the host's `rtl_test` | The host's librtlsdr predates the V4 (Debian 12, Pi OS 12). The container's does not: check with `doctor` |
@@ -156,6 +158,9 @@ by its maker and product strings.
   [weewx.conf.example](../weewx.conf.example).
 - A dashboard: the live JSON feed is written to `weewx-data/feed/` from the first start, and with
   the InfluxDB uploader it is the data contract, described in [docs/INTERFACES.md](INTERFACES.md).
+  This needs an image newer than v2.4.0: v2.4.0's starter has no feed (#597), so a v2.4.0 install
+  writes no `weewx-data/feed/` until you update. The feed also runs on any WeeWX without this
+  image: see [extensions/loopjson](../extensions/loopjson/README.md).
   To stop the feed, remove `user.loop_json_writer.LoopJsonWriter` from `process_services`.
 - Davis WeatherLink barometer (needs a WeatherLink v2 API key): add
   `user.pressure_service.DavisPressureFetcher` to `process_services` just before the loop writer,
