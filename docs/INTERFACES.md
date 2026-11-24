@@ -482,8 +482,10 @@ only because not yet seen this run):
   ISS's own 10-minute gust, written since 2026-10-28 12:30 ET. It is the last value in the interval
   (WeeWX's stock `last` extractor), it inherits the driver's QC on the loop packet, and a minute
   without a message-9 packet has no field at all, never a 0 (about a third of minutes). Unlike
-  `windGust_mph` (the per-minute peak of loop samples), a single bad frame cannot move it
-  (ERR-0012). A point backfilled from an archive row before the `windGust10` column existed has no
+  `windGust_mph` (the per-minute peak of loop samples), a single bad wind frame cannot move it
+  (ERR-0012). A bad message-9 frame can: the value itself travels over RF and the driver checks it
+  against bounds only (0 to 89.4 m/s). Cross-checking it against received wind is DEC-0245 (#584),
+  accepted and not yet built. A point backfilled from an archive row before the `windGust10` column existed has no
   `windGust10_mph`; `ops/backfill_*.py` copy the column when it is there.
 - **The SQLite archive's `windGust10` column (DEC-0232).** The same value gets an archive column,
   so the archive keeps a copy InfluxDB does not have to supply: `REAL`, in the archive's own unit
