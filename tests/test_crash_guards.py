@@ -40,8 +40,9 @@ class _FakeDriver:
 def test_thermistor_temp_raw_zero_degrades_instead_of_crashing():
     """Pre-fix: ZeroDivisionError from `1.0 / temp_raw`, raised outside the
     function's own try/except (which only wrapped math.log()). Post-fix:
-    same degrade path as an out-of-domain math.log(), same sentinel."""
-    assert calculate_thermistor_temp(0) == DEFAULT_SOIL_TEMP
+    same degrade path as an out-of-domain math.log(). DEC-0247: the degraded
+    result is None (no reading), no longer the 24 C default."""
+    assert calculate_thermistor_temp(0) is None
 
 
 def test_thermistor_temp_normal_value_still_works():

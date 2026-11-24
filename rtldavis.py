@@ -140,6 +140,9 @@
 #   2026-11-18  #579: RTLDAVIS_EXIT_AFTER (default 3, 0 off) consecutive decoder exits raise
 #               RtldavisDecoderFatal so weewxd exits and the supervisor recreates the
 #               container; stalls are not counted (DEC-0237).
+#   2026-11-24  DEC-0247 (no version bump until the next release): the process sweep guards each
+#               PID; message 9's gust is published only from the wind channel; a failed
+#               thermistor decode is no reading, not 24 C.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -719,7 +722,9 @@ def calculate_thermistor_temp(temp_raw):
         return thermistor_temp
     except (ValueError, ZeroDivisionError) as e:
         logerr('thermistor_temp failed for temp_raw %s: %s' % (temp_raw, e))
-    return DEFAULT_SOIL_TEMP
+    # None, not DEFAULT_SOIL_TEMP (DEC-0247, amends #221): a published temperature
+    # is never a made-up one. Callers skip the reading.
+    return None
 
 
 def lookup_potential(sensor_name, norm_fact, sensor_raw, sensor_temp, lookup):
@@ -1182,12 +1187,17 @@ class ProcManager():
     def startup(self, cmd, path=None, ld_library_path=None):
         # kill existiing rtld processes
         try:
-            pid_list = self.get_pid("rtldavis")
-            for pid in pid_list:
+            pid_list = list(self.get_pid("rtldavis"))
+        except Exception:
+            pid_list = []
+        for pid in pid_list:
+            # Per PID (DEC-0247): one that exited between pidof and kill must not
+            # skip the rest.
+            try:
                 os.kill(int(pid), signal.SIGKILL)
                 loginf("rtldavis with pid %s killed" % pid)
-        except Exception:
-            pass
+            except OSError:
+                pass
         # Reap anything the kills above (or a prior instance) left behind --
         # SIGKILL without wait() is where the zombies came from (S73, ws.5).
         n = reap_spawned_children()
@@ -1232,8 +1242,14 @@ class ProcManager():
         except Exception:
             pid_list = []
         for pid in pid_list:
-            os.kill(int(pid), signal.SIGKILL)
-            loginf("rtldavis with pid %s killed" % pid)
+            # Per PID (DEC-0247): a PID that exited between pidof and kill raises
+            # ProcessLookupError; unguarded it skipped the rest of the sweep and
+            # the owned child's kill, wait and reap below.
+            try:
+                os.kill(int(pid), signal.SIGKILL)
+                loginf("rtldavis with pid %s killed" % pid)
+            except OSError:
+                pass
         # Belt-and-braces direct kill via the Popen handle (#233): the sweep
         # above only ends the child if `pidof rtldavis` matches its name.
         # That has held across every DEC-0081 incident, but has no fallback
@@ -2604,7 +2620,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                         temp_c = calculate_thermistor_temp(temp_raw)
                         dbg_parse(2, "thermistor temp_raw=%s temp_c=%s"
                                   % (temp_raw, temp_c))
-                    if data['channel'] == self.channels['temp_hum_1']:
+                    # A failed thermistor decode is no reading (DEC-0247), never a
+                    # default temperature.
+                    if temp_c is None:
+                        pass
+                    elif data['channel'] == self.channels['temp_hum_1']:
                         data['temp_1'] = temp_c
                     elif data['channel'] == self.channels['temp_hum_2']:
                         data['temp_2'] = temp_c
@@ -2617,7 +2637,11 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 # 90 00 00 00 05 00 31 51 (no sensor)
                 gust_raw = pkt[3]  # mph
                 gust_index_raw = pkt[5] >> 4
-                if not(gust_raw == 0 and gust_index_raw == 0):
+                # Only the channel that carries the wind (DEC-0247, like message 1
+                # above): an ISS with a separate anemometer, or any other
+                # transmitter, does not own this gust.
+                if (data['channel'] == self.channels['wind_channel']
+                        and not (gust_raw == 0 and gust_index_raw == 0)):
                     dbg_parse(2, "W10=%s gust_index_raw=%s" %
                               (gust_raw, gust_index_raw))
                     # A 10-minute maximum, so it goes to windGust10 and never to
@@ -2708,10 +2732,17 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     if pkt[3] != 0xFF:
                         # soil temperature
                         temp_c = calculate_thermistor_temp(temp_raw)
-                        data['soil_temp_%s' % sensor_num] = temp_c
-                        dbg_parse(2, "soil_temp_%s=%s 0x%03x" %
-                                  (sensor_num, temp_c, temp_raw))
-                    if pkt[2] != 0xFF:
+                        if temp_c is not None:
+                            data['soil_temp_%s' % sensor_num] = temp_c
+                            dbg_parse(2, "soil_temp_%s=%s 0x%03x" %
+                                      (sensor_num, temp_c, temp_raw))
+                    # The moisture lookup is temperature-compensated (norm_fact
+                    # 0.009). A thermistor that is present but failed to decode
+                    # (temp_c None) leaves no honest compensation, so no moisture
+                    # reading rather than one corrected for a guessed 24 C
+                    # (DEC-0247). A sensor with no thermistor (pkt[3] == 0xFF)
+                    # keeps temp_c at the default, as before.
+                    if pkt[2] != 0xFF and temp_c is not None:
                         # soil moisture potential
                         # Lookup soil moisture potential in SM_MAP
                         norm_fact = 0.009  # Normalize potential_raw
@@ -2729,16 +2760,22 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     if pkt[3] != 0xFF:
                         # leaf temperature
                         temp_c = calculate_thermistor_temp(temp_raw)
-                        data['leaf_temp_%s' % sensor_num] = temp_c
-                        dbg_parse(2, "leaf_temp_%s=%s 0x%03x" %
-                                  (sensor_num, temp_c, temp_raw))
+                        if temp_c is not None:
+                            data['leaf_temp_%s' % sensor_num] = temp_c
+                            dbg_parse(2, "leaf_temp_%s=%s 0x%03x" %
+                                      (sensor_num, temp_c, temp_raw))
                     if pkt[2] != 0:
                         # leaf wetness potential
                         # Lookup leaf wetness potential in LW_MAP
                         norm_fact = 0.0  # Do not normalize potential_raw
+                        # norm_fact 0.0 makes the temperature drop out of the
+                        # compensation, so a failed thermistor costs only its own
+                        # reading; the default stands in for the unused argument
+                        # (DEC-0247).
                         leaf_wetness = lookup_potential(
-                            "leaf_wetness", norm_fact,
-                            potential_raw, temp_c, LW_MAP)
+                            "leaf_wetness", norm_fact, potential_raw,
+                            DEFAULT_SOIL_TEMP if temp_c is None else temp_c,
+                            LW_MAP)
                         data['leaf_wetness_%s' % sensor_num] = leaf_wetness
                         dbg_parse(2, "leaf_wetness_%s=%s 0x%03x" %
                                   (sensor_num, leaf_wetness, potential_raw))
