@@ -14144,3 +14144,33 @@ Date: 2026-11-23 (S211, Sonnet 5.5). Status: accepted; the owner accepted the es
 ### Why
 
 The owner accepted one rule for the estate's releasing repos (ops#476); DEC-0222 already matched it, so this adds only the two missing gates. This repo is public, so the rule is stated here in full and needs no pointer elsewhere to be read.
+
+## DEC-0247 — A failed thermistor decode is no reading, and message 9's gust is published only from the wind channel (S211)
+
+Date: 2026-11-24 (S211, side session of an outside review, Sonnet 5.5). Status: accepted; the owner chose C2, C5 and C6 from the triage in chat. Driver only, no prod change; ships with the next minor image. Prod runs a digital outside sensor and an ISS that carries its own wind, so neither value change reaches it.
+
+### Context
+
+An unverified outside review of the public repo was triaged and reproduced (`BOOT.md` S211 notes). Three code findings were confirmed and built; the rest (burst-gate carry-over, rain cap vs elapsed time, the wall-clock time gate) were not.
+
+### Decision
+
+1. **C6, thermistor.** `calculate_thermistor_temp` returns None when the decode fails (raw 0 divides by zero; a 10-bit raw over 1001 takes the log of a negative resistance). It returned `DEFAULT_SOIL_TEMP` (24 C), and the analog outside-temperature path published that as `temperature` (`outTemp`), `temp_1` or `temp_2`, inside the QC bounds so nothing rejected it. The #221 guard (2026-08-19, `CHANGES-FROM-UPSTREAM.md` row 21) chose "log and degrade" to stop a crash; no DEC chose 24 C, and this amends that row: the no-crash property stays, the invented value goes. Rule, from DEC-0233 §0: omit rather than null or zero, and a published temperature is never a default. Every caller was traced:
+   - Analog outside temperature (message 8): a None is skipped, so no key.
+   - Soil temperature (message F, subtype 1): a None is skipped.
+   - Soil moisture, which is compensated by that temperature (`lookup_potential`, factor 0.009): **no reading** when the thermistor is present but failed, rather than a moisture corrected for a guessed 24 C. A soil sensor with no thermistor (`pkt[3] == 0xFF`) is unchanged: the compensation temperature stays at the 24 C reference, as before, since there is no failure to hide.
+   - Leaf temperature (subtype 2): a None is skipped.
+   - Leaf wetness: **kept**. Its factor is 0.0, so the temperature drops out of the arithmetic; the 24 C reference stands in for the unused argument, and a failed thermistor costs only the temperature.
+2. **C5, message 9.** `wind_gust_10` is set only when `data['channel'] == self.channels['wind_channel']`, the gate message 1's wind already has (#222). With the ISS carrying the wind (prod, `anemometer = 0`) nothing changes. With a separate anemometer the ISS's own message 9 is no longer published, and no other channel's can be. This is orthogonal to DEC-0245 (#584): that check runs on `wind_gust_10` after parsing and is neither built nor pre-empted here.
+3. **C2, process sweep (a fix, not a choice).** `startup()` and `shutdown()` guard `os.kill` per PID (`OSError`), so a PID that exits between `pidof` and the kill no longer skips the rest or, in `shutdown()`, the owned child's kill, wait and reap.
+
+### Emitted values by user type
+
+- Digital outside sensor, ISS-only wind (prod and almost every user): no change.
+- Analog outside sensor (older ISS), on a frame whose thermistor fails to decode: no `outTemp` instead of 24 C.
+- Leaf/Soil station, failed thermistor: no soil or leaf temperature; no soil moisture (soil only); leaf wetness unchanged.
+- ISS plus a separate anemometer transmitter: no `windGust10` from the ISS's message 9.
+
+### Why
+
+A weather value that is not a measurement must not reach a consumer looking like one. The tests (`tests/test_dec0247_c2_c5_c6.py`, `tests/test_crash_guards.py`) fail on the old driver and pass on this one.
