@@ -41,4 +41,4 @@ names a class (rule 9) and instances self-describe at source; a file in no class
 | `docs/upstream/` | gitignored drafts; never posted without a go |
 | Dashboard code and decisions | `eaglehunt-weather-dashboard` (DEC-0010) |
 | Real infra values, coordinates | the gitignored local-infra doc |
-| Cross-repo coordination, guards | `eaglehunt-ops` (never a prerequisite) |
+| Cross-repo coordination, guards | `eaglehunt-ops` (maintainer-only, never a prerequisite) |
