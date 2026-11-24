@@ -15,6 +15,7 @@ under [Pre-S16].
 - Post-move partial read (14:04 to 15:01 ET): 58 of 58 archive records, no exits, PLL lines or stalls; a path note: the live log is `<tenant root>/logs/weewx.log`.
 - 11-22 (to 9:54 AM ET): 595 records for 595 minutes, no gap over 90 s, mean `rxCheckPercent` 99.92%, no exits, PLL or stalls (a partial day, not the soak verdict). The 433 MHz AcuRite listens with the LNA inline on the V4L (bias tee on) decoded nothing (heartofgold, ops#440); the LNA is out and the dipole is back at 915 MHz (owner), so DEC-0236's hard stop is cleared. `weewx-v4ltest`'s Influx errors every archive interval are the seed's placeholder uploader with no network, harmless (ops#440). The 12-05 second-dongle reminder is dropped.
 - **Prod change (11-23 7:58:14 AM ET, owner's go): DEC-0238's swap.** `:marvin-live` now points at `v2.4.0-v4l-test` (`b599bf27…`, librtlsdr v2.0.3 under the v3), `weewx.service` restarted, healthy, R820T tuner found, no PLL or exit lines in the first minute. 11-22 was clean (1,440/1,440 records, rxCheck 99.94%). Settle to 11-24 7:58 AM; scored days 11-25 to 12-02. Posted on ops#440.
+- 2026-11-24: DEC-0232 step 7 run on prod (11-21 daily summaries rebuilt, step 5's check read back); outside review S3: `CONSTANTS.md`'s hygiene sentence narrowed to match its rows.
 
 ## [S210] — 2026-11-21 — DEC-0232's `windGust10` column migrated on prod; #584 answered; coordinator plus S210a-d
 
