@@ -69,7 +69,7 @@ start after that uses the file as it is.
 ## 4. Check it
 
 ```bash
-tail -n 30 weewx/logs/weewx.log
+tail -n 30 logs/weewx.log
 ```
 
 You should see the driver line, `driver version is 0.20+ws.10 (fork of 0.20, patched by

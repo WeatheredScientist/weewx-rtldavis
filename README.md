@@ -78,7 +78,7 @@ is the only truth.
 cd weewx && docker compose up -d
 ```
 
-**4. Check it.** `tail -f weewx/logs/weewx.log` should show
+**4. Check it.** `tail -f logs/weewx.log` should show
 `driver version is 0.20+ws.10 (fork of 0.20, patched by WeatheredScientist -- not stock upstream)`,
 then an `rtldavis: US band, ISS channel 1, rain bucket 0` line, then, within about ten minutes, an
 `Added record` line and, once uploads are enabled, `Published record` lines. WeeWX does not log each
