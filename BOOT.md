@@ -70,9 +70,8 @@ narrowed to its port: **tell marvin before moving its jack.**
 
 ### ▶▶ S211 JOB LIST
 
-00. **Owner first.** (a) DEC-0232 step 7's migration-day rebuild, owner's yes (Class C):
-   `weectl database rebuild-daily … --date=2026-11-21 -y` through `marvin-sudo` (runbook step 7),
-   then step 5's check; after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) After a NAS reboot, re-read `weewx-v4ltest`'s USB node. (c) **#584:**
+00. **Owner first.** (a) DEC-0232 step 7 done 11-24 (rebuilt 11-21, step 5's check read back);
+   after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) After a NAS reboot, re-read `weewx-v4ltest`'s USB node. (c) **#584:**
    DEC-0245 (S211): B, a driver check of `windGust10` against received wind, accepted, not built;
    re-run the design's readout after a 25 mph event first (`docs/WINDGUST-PLAUSIBILITY-DESIGN.md`).
 0. **DEC-0238's soak:** moved 11-21 (gap 13:40 to 14:03 ET, v3 on `5-1`); 11-22 clean (1,440/1,440,
@@ -88,7 +87,7 @@ narrowed to its port: **tell marvin before moving its jack.**
    Zaphod's session runs it, on the owner's yes.
 3. **Decisions and design:** the S197 cross-repo drift ops issue (owner's go); ops#449 closes when
    the sweep reads `dev`; optional Go patch (exit when `ReadAsync` returns, its own DEC).
-   Outside review (S211): C1 burst carry-over held (no conflicts seen), C3 rain cap needs a design, S3 `CONSTANTS.md` topology undecided.
+   Outside review (S211): C1 burst carry-over held (no conflicts seen), C3 rain cap needs a design; S3 settled (the hygiene sentence, not the rows).
 4. **Gate results since 11-21 10:55 ET**; around 2026-12-04 re-run `ops/garbage_gap_corr.py` over 30
    days (#536 open until then).
 5. **Upstream:** lheijst/rtldavis#2, weewx-influx2#1, matthewwall/weewx-wcloud#6, #514; the devsel

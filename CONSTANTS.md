@@ -9,9 +9,10 @@ holds the current value and at most one "before it"; a release replaces the valu
 
 ## Secret hygiene — this governs everything below (DEC-0012)
 
-**The repo is PUBLIC and permanent.** Real hostnames, IPs, ports, usernames, coordinates, the WU PWS
-id, and every credential live **only** in the gitignored local-infra doc. Committed docs and source
-carry the placeholders below and `YOUR_*` values. Never paste a live secret into an LLM prompt —
+**The repo is PUBLIC and permanent.** Real IPs, DNS names, coordinates, the WU PWS id, and every
+credential live **only** in gitignored files (DEC-0012); committed docs and source carry the
+placeholders below and `YOUR_*` values. Operational labels (`marvin`, `t-weewx`, ssh alias names)
+and default ports are not secrets and may appear. Never paste a live secret into an LLM prompt —
 treat anything that reaches one as compromised and rotate it server-side.
 
 ## Infra

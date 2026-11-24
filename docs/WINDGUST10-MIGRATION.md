@@ -1,8 +1,8 @@
 # windGust10 archive column — prod migration plan (DEC-0232)
 
 Status: **run on prod 2026-11-21 (S210)**: column added 11:22 AM ET, restart 11:23, 22,395 cells
-backfilled, day summaries 10-28 to 11-20 rebuilt. Left: step 7's migration-day rebuild
-(`--date=2026-11-21`) and step 8 (delete the copy after 11-28). Every step that writes goes
+backfilled, day summaries 10-28 to 11-20 rebuilt. Step 7's
+migration-day rebuild (`--date=2026-11-21`) ran 2026-11-24. Left: step 8 (delete the copy after 11-28). Every step that writes goes
 through `marvin-sudo` (the Class C token path) or a restart. Written S198b, 2026-11-10. Run the commands from the repo root on the Mac, one per line.
 
 ## What changes, and what does not
