@@ -32,6 +32,9 @@ holds nothing weewx uses (verified S142). Verify a row against live state before
 
 ## Deploy layers — the single most expensive thing to get wrong
 
+*Maintainer context: this table describes the maintainer's own production install. A user's
+install differs; their guide is `docs/DEPLOY.md`.*
+
 **The driver is BAKED into the image; the config is MOUNTED. They are exact inverses (DEC-0031 /
 DEC-0046).** Ask "which layer wins in prod?" for every file, every time. The authority is
 `marvinctl --tenant weewx inspect weewx-rtldavis-v2`'s mount list.
