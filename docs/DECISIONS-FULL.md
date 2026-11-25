@@ -14192,3 +14192,33 @@ An outside review (finding C3) showed that the cap ignores elapsed time: counts 
 ### Why
 
 No rain loss is shown: 31 days of logs hold no counter rejection. That is weak, since little of that time had heavy rain and the summer logs are gone, so the cap's safety cannot be claimed from it either way. Confirmation uses what a real counter move has and a random corruption almost never has: it persists.
+
+---
+
+## DEC-0249 — Confirm-on-reject is built, with a catch-up cap of 45 tips and `[StdQC]` rain at 0.6 in (S212)
+
+Date: 2026-11-25 (S212 side session, Opus 5.5). Status: accepted (owner's menu choice: "45 tips (Recommended)"), built on a held branch, not merged. **Executes DEC-0248; amends DEC-0056 and DEC-0218.** Design, model, rollout and release note: `docs/RAIN-CAP-DESIGN.md` §6 to §8.
+
+### Decision
+
+1. **The rules are §6's, unchanged.** A is the last accepted count, P the reading rejected just before n. If n is accepted against P and not against A, book `(n - A) mod 128` when P and n are at least 2 s apart, the total is at most `elapsed_s / 4 + 1` since A, at most 45, and P is not 0. If any fails, book what was booked before. No reading is accepted or rejected differently.
+2. **`rain_catch_up_tips()` is a pure function** beside `rain_tips_with_anchor()`, which is untouched; the driver supplies the two intervals. Times are `time.monotonic()`, stored beside `last_rain_count` and `last_accepted_rain_count`, set and cleared with them. A co-rejected frame (DEC-0054) sets none of the four.
+3. **The catch-up cap is 45.** 45 plus the wettest minute on record (10) is 0.55 in, inside a 0.6 in `[StdQC]` limit that still refuses a 64-tip flip with a 0.01 in bucket. One corrupt reading alone still books at most 16.
+4. **`[StdQC]` rain goes 0.3 to 0.6 in `weewx.conf.example` only.** The image's starter is `weectl station create`'s output, whose limit is stock WeeWX 5.5.2's `rain = 0, 10, inch`; nothing in the repo set 0.3 there (DEC-0244), so it is left. Prod's live conf and `weewx.conf.rx-baseline` are owner-run at rollout (§7).
+5. **One INFO line per catch-up** with A, P, n, the total and the elapsed time. It does not contain the monitor's marker, so it sends no email. The ERROR line and email on P stay.
+6. **Its own minor**, after the post-soak image: emitted rain values change (DEC-0222, DEC-0246).
+
+### Evidence
+
+`tests/test_rain_catch_up_dec0249.py`. Against the functions as built, every figure in §6's table reproduces at 20, 30 and 45: 1,818,624 triples, 0 verdicts changed; 45,339 bookings changed at 45; 10,668 of 10,752 real 17-to-45-tip jumps exact, none before, and the 84 misses are the ones that land on 0; 241,536 glitch-then-true-count cases all right; 0 reset phantoms with the zero rule, 29 without. On the old driver 23 of the 39 tests fail, the loss sequences by exactly the tips lost (`20, 40, 41` books 1, not 21). Each of the four conditions, dropped or moved by one, is caught, as are a wall clock, an anchor time that never moves or moves on a reject, and a catch-up tried on a recovered reading.
+
+### Who sees a change
+
+- **Any station with a rain-counter gap of 17 to 45 tips:** that rain is booked, in the minute it was confirmed. Before, it was lost. Everyone else: nothing.
+- **Adopters who copied `weewx.conf.example`:** `[StdQC]` stays 0.3 until they edit it. A catch-up of 31 to 45 is then nulled, as it was before. One of 30 or less that takes its minute over 0.3 nulls that minute's `rain`, other tips included: the reason to edit.
+- **Seeded installs:** stock's 10 in, no edit needed.
+- **0.2 mm bucket with the 0.6 limit:** a 64-tip flip is 0.50 in and no longer stops at `[StdQC]`. The driver's filter still rejects it.
+
+### Not addressed
+
+Two corrupt readings that agree; a reset first heard off 0; the reset phantom from 112 to 127 (option D); tips that fall during a restart. Times are processing times, since frames carry no arrival stamp (§6). The rejection email still says to reconcile by hand, so look for the DEC-0249 line first (§7).

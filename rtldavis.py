@@ -143,6 +143,10 @@
 #   2026-11-24  DEC-0247 (no version bump until the next release): the process sweep guards each
 #               PID; message 9's gust is published only from the wind channel; a failed
 #               thermistor decode is no reading, not 24 C.
+#   2026-11-25  DEC-0249 (no version bump until the next release): a counter jump rejected
+#               for size is booked in full (up to 45 tips) once the next independent reading
+#               continues from it and the elapsed time allows that much rain. No reading is
+#               accepted or rejected differently.
 #
 #   Full narrative, rationale and upstreaming status: CHANGES-FROM-UPSTREAM.md.
 #   Some of these fixes are offered upstream; this fork ships them in the meantime.
@@ -312,14 +316,24 @@ MPH_TO_MPS = 1609.34 / 3600.0 # meter/mile * hour/second
 # in 70 days; reception during rain never below 50%). Worst-ever real minute:
 # 7 tips. Worst-ever real 3-min accumulation: exactly 16 (2026-06-14 storm) --
 # which still PASSES, because the check is `delta > max_tips`. Note weewx's
-# [StdQC] 0.3 in/min cap already rejected anything over 30 tips system-wide,
-# so the band this tightening newly exposes is only 17-30 tips -- never once
-# occupied in the record. A false reject logs loudly (weewx_monitor emails on
+# [StdQC] 0.3 in/min cap (0.6 since DEC-0249) already rejected anything over 30
+# tips system-wide, so the band this tightening newly exposes is only 17-30
+# tips -- never once occupied in the record. The "safe at any observed gap"
+# reading of this was withdrawn (DEC-0248); DEC-0249 below recovers a confirmed
+# jump. A false reject logs loudly (weewx_monitor emails on
 # the rejection line) and is reconcilable against the co-located WeatherLink
 # console -- playbook in DEC-0056. Rejected deltas yield None
 # (null-on-rejection, DEC-0006) rather than phantom rain.
 MAX_PLAUSIBLE_TIPS = 16
 RAIN_WRAPAROUND_THRESHOLD = -100
+
+# --- Confirm-on-reject (DEC-0249; design and model: docs/RAIN-CAP-DESIGN.md section 6) ---
+# A jump rejected for size is booked in full when the next reading continues from it.
+# 45 tips plus the wettest minute on record (10) is 0.55 in, inside weewx.conf.example's
+# [StdQC] 0.6 in. One corrupt reading alone can still book no more than MAX_PLAUSIBLE_TIPS.
+MAX_CATCH_UP_TIPS = 45
+RAIN_SECONDS_PER_TIP = 4.0      # the bucket's ceiling (DEC-0056)
+RAIN_CONFIRM_MIN_GAP_S = 2.0    # one burst can be decoded twice, ms apart (DEC-0035)
 
 def rain_delta_tips(last_count, new_count, max_tips=MAX_PLAUSIBLE_TIPS):
     """Rain tips between two Davis 7-bit rain-counter readings (0..127, wraps at 128).
@@ -420,6 +434,31 @@ def rain_tips_with_anchor(anchor, last_count, new_count, max_tips=MAX_PLAUSIBLE_
         if tips is not None:
             return tips, True
     return rain_delta_tips(last_count, new_count, max_tips), False
+
+
+def rain_catch_up_tips(anchor, rejected, new_count, elapsed_s, gap_s,
+                       max_tips=MAX_CATCH_UP_TIPS):
+    """Tips since the anchor when two readings agree the counter moved (DEC-0249).
+
+    Call only for a reading accepted against `rejected`, the rejected reading just
+    before it, and not against `anchor`. The counter is cumulative, so real rain is
+    still there in the next transmission, and a random corruption almost never is.
+    `elapsed_s` is the time since the anchor was accepted, `gap_s` the time since
+    `rejected` arrived, both from time.monotonic().
+
+    Returns `(new_count - anchor) mod 128`, or None when any condition fails and the
+    caller books what it would have booked without this.
+    """
+    if gap_s < RAIN_CONFIRM_MIN_GAP_S:
+        return None                 # maybe one burst decoded twice: not independent
+    if rejected == 0:
+        return None                 # an ISS reset lands on 0 and persists, like rain
+    total = (new_count - anchor) % 128
+    if total > max_tips:
+        return None
+    if total > elapsed_s / RAIN_SECONDS_PER_TIP + 1:
+        return None                 # more rain than the bucket can tip in that time
+    return total
 
 
 _CRC_STATS = re.compile(
@@ -1668,6 +1707,9 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
         self._init_stats()
         self.last_rain_count = None
         self.last_accepted_rain_count = None    # anchor for recovery after a reject (DEC-0218)
+        # time.monotonic() of each, None exactly when its count is (DEC-0249)
+        self.last_rain_time = None
+        self.last_accepted_rain_time = None
         # sensor plausibility filter (DEC-0029); deltas overridable per field
         self._sensor_qc_enabled = tobool(stn_dict.get('sensor_qc', True))
         qc_limits = {}
@@ -1863,7 +1905,20 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                 prev = self.last_rain_count
                 anchor = self.last_accepted_rain_count
                 tips, recovered = rain_tips_with_anchor(anchor, prev, data['rain_count'])
+                mono = time.monotonic()
+                if (tips is not None and not recovered
+                        and anchor is not None and anchor != prev):
+                    # prev was rejected and this reading continues from it (DEC-0249)
+                    elapsed = mono - self.last_accepted_rain_time
+                    catch_up = rain_catch_up_tips(anchor, prev, data['rain_count'],
+                                                  elapsed, mono - self.last_rain_time)
+                    if catch_up is not None:
+                        tips = catch_up
+                        loginf("rain: counter move confirmed at %s after %s; booked %s tips "
+                               "since last accepted %s, %.0f s ago (DEC-0249)" %
+                               (data['rain_count'], prev, tips, anchor, elapsed))
                 self.last_rain_count = data['rain_count']   # always resync, even on reject
+                self.last_rain_time = mono
                 if tips is None:
                     logerr("rain: rejecting implausible counter delta last=%s new=%s "
                            "(RF glitch, not rain -- DEC-0021)" %
@@ -1871,6 +1926,7 @@ class RtldavisDriver(weewx.drivers.AbstractDevice, weewx.engine.StdService):
                     packet['rain'] = None               # null-on-rejection, DEC-0006
                 else:
                     self.last_accepted_rain_count = data['rain_count']
+                    self.last_accepted_rain_time = mono
                     if recovered:
                         loginf("rain: counter recovered to %s after rejected %s; "
                                "booked %s tips against last accepted %s (DEC-0218)" %

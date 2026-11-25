@@ -209,8 +209,9 @@ rain-rejection revisit trigger) lives in **`BACKLOG.md` §Standing watches** —
 `BOOT.md` at S67 (DEC-0072), since a watch that has not fired is not in-flight work. Not duplicated
 here, and not evidence this P1 item is still "in progress." **Designed and accepted S211, not built:**
 DEC-0245 (the driver nulls an ISS 10-minute gust that received wind cannot support, #584; re-measure
-after a 25 mph event first) and DEC-0248's confirm-on-reject (`docs/RAIN-CAP-DESIGN.md`; owner's yes and
-cap choice). **On `dev`, next minor image:** DEC-0247. **`#74` calm-windDir left this list at
+after a 25 mph event first). **Built S212 on a held branch, its own minor after the post-soak image:**
+DEC-0249, confirm-on-reject with a catch-up cap of 45 (`docs/RAIN-CAP-DESIGN.md` §7 is the rollout).
+**On `dev`, next minor image:** DEC-0247. **`#74` calm-windDir left this list at
 S59**, closed on five consecutive clean days with a positive control.
 
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-

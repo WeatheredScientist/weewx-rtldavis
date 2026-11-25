@@ -1,7 +1,8 @@
-# Design: the rain-counter cap and elapsed time (outside review C3) — DRAFT, no DEC yet
+# Design: the rain-counter cap and elapsed time (outside review C3)
 
-**Status:** A accepted as DEC-0248 (owner's menu choice, S211), with C as the direction. C is designed
-in §6 and modeled, not built; its build needs its own yes. Drafted on Opus 5.5.
+**Status:** A accepted as DEC-0248 (owner's menu choice, S211). C (§6) is built as DEC-0249 with a catch-up
+cap of 45 (owner's menu choice, 2026-11-25), on a held branch: it merges after the post-soak image and
+ships in its own minor. Rollout: §7. Drafted and built on Opus 5.5.
 
 ## 1. The finding
 
@@ -48,8 +49,11 @@ November gaps, not for earlier ones.
 
 - **A restart re-seeds the counter** (`last_rain_count = None`), so tips that fell during it are
   lost at any cap. Most long gaps are this.
-- **`[StdQC]` rejects rain over 0.3 in per record** here, so a recovered step over 30 tips is
-  discarded anyway.
+- **`[StdQC]` rejects rain over 0.3 in** in prod's config and in `weewx.conf.example`, so a recovered step
+  over 30 tips is discarded anyway. (Corrected at the build: the limit applies to each LOOP packet's `rain`
+  as well as to the archive record's, and nulls only that field. The image's starter is
+  `weectl station create`'s output, which carries stock WeeWX's `rain = 0, 10, inch`, so a seeded install
+  never had 0.3.)
 - **A counter that moves more than 127 tips** in a gap is ambiguous.
 - **An ISS reset after a long silence** is indistinguishable from a wrap by elapsed time alone: 16
   tips need only about 64 s at the bucket's 4 s-per-tip ceiling, and a battery swap outlasts that.
@@ -115,14 +119,16 @@ shipped functions:
 The missed catch-ups are those that land exactly on 0. The model does not cover two corrupt readings that
 agree, or an ISS reset during rain with the count already off 0 when first heard.
 
-**The catch-up cap is the open choice.** `[StdQC]` nulls a whole record over 0.3 in, the other tips in that
-minute included, so a 30-tip catch-up in a wet minute would lose more than it saves.
+**The catch-up cap: 45 chosen** (DEC-0249). At 0.3, `[StdQC]` nulls the record's whole `rain`, the other
+tips in that minute included, so a 30-tip catch-up in a wet minute would lose more than it saves.
 
-- **20 (default proposal):** 20 plus the wettest minute on record (10) is 30, just inside the limit. It recovers
+- **20 (default proposal, not chosen):** 20 plus the wettest minute on record (10) is 30, just inside the limit. It recovers
   only 17 to 20 tips, so on stock config C does little.
-- **45, with `[StdQC]` rain raised to 0.6 in:** 45 plus 10 is 55. 0.6 still refuses the 64-tip and 128-tip
-  flips DEC-0021 named, and one corrupt reading is still capped at 16. It is a live-config and starter-config
-  change, and existing adopters keep 0.3 until they edit it.
+- **45 (chosen), with `[StdQC]` rain raised to 0.6 in:** 45 plus 10 is 55. 0.6 still refuses the 64-tip and
+  128-tip flips DEC-0021 named, and one corrupt reading is still capped at 16. (Corrected at the build: with a
+  0.2 mm bucket 64 tips is 0.50 in, which 0.3 refused and 0.6 does not; the driver's own filter still
+  rejects it.) It is a change to prod's config and to `weewx.conf.example`, not to the seeded starter, which
+  has 10 in (§3). Adopters who copied the example keep 0.3 until they edit it.
 
 Either way the rain lands in the minute it was confirmed, not the minutes it fell; totals are right, and the
 per-minute shape is not.
@@ -134,5 +140,34 @@ today. Left out unless the owner asks.
 **Not covered:** tips that fall during a restart (`last_rain_count = None`). Saving the count across
 restarts has the same confirmation problem and deserves its own design.
 
-Before building: the owner's cap choice; tests for every row above, plus the time, 2 s, restart and
-co-rejection cases; a minor with release notes, since emitted values change.
+**Limits found while building.** The times are when the driver processes a reading, not when the radio
+heard it, because frames carry no arrival stamp. If the engine stalls, two copies of one burst could be
+processed over 2 s apart; both would also have to be corrupt and agree. And a reset that lands on 0 is
+refused only when the first reading heard is 0, as above.
+
+Tests: `tests/test_rain_catch_up_dec0249.py` asserts every row of the table against the shipped functions,
+plus the time, 2 s, zero, restart, co-rejection and stale-P cases.
+
+## 7. Rollout (owner-run, when this ships in its own minor)
+
+1. Before the restart onto that image, set `[StdQC]` `[[MinMax]]` `rain = 0, 0.6, inch` in **both** the live
+   `weewx-data/weewx.conf` and the tenant-root `weewx.conf.rx-baseline` (a campaign `restore_baseline` copies
+   the second over the first, DEC-0080). Both hold 0.3. The config is mounted: the image change alone does
+   not do this (DEC-0046), and with 0.3 left in place a catch-up of 31 to 45 tips is nulled.
+2. Read both back, restart, check the log for the new banner. Add the row to `CONSTANTS.md`'s live-config
+   deviations then, if 0.6 is kept.
+3. **Before reconciling a rejection by hand** (DEC-0056's playbook, which the email still points at), grep the
+   log after it for `DEC-0249`. A catch-up line means the rain is already booked, and adding it again would double it.
+4. Rollback: the previous image. 0.6 with the old driver changes nothing: no reading books over 16 tips.
+
+## 8. Release note (draft)
+
+> **Rain that falls during a reception gap is now recovered.** When the rain counter jumps further than one
+> reading can be trusted for (over 16 tips), the driver still rejects that reading. If the next
+> one, at least 2 seconds later, continues from it, and that much rain was possible in the time since the last good
+> reading, the whole jump (up to 45 tips) is booked; before, it was lost. The rain is recorded in the minute it
+> was confirmed, so totals are right and the per-minute shape is not. A jump to exactly 0 is never recovered
+> (it looks like an ISS reset), and neither is rain that falls while the driver is stopped. If your `weewx.conf` has
+> `rain = 0, 0.3, inch` under `[StdQC]` (copied from our example), change it to `0, 0.6, inch`, or WeeWX will
+> discard larger recoveries. A config the image created has WeeWX's own limit and needs no edit. *Why a minor:*
+> emitted rain values change; no edit is required to keep running.

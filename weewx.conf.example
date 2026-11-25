@@ -543,10 +543,14 @@ version = 5.5.2
         # a rain-counter bit-7 flip injects 1.28 in (caught), but a bit-6 flip
         # injects 0.64 in and sailed straight through -- which is exactly how
         # the 2026-07-04 phantom (ERR-0001) got into the archive and into the
-        # permanent WU/CWOP record. At a 1-minute archive interval 0.3 in is
-        # 18 in/hr, already physically absurd (world 1-min record ~1.23 in),
-        # so it kills both flip classes with room to spare.
-        rain = 0, 0.3, inch
+        # permanent WU/CWOP record. It was 0.3 in until DEC-0249, which books a
+        # confirmed catch-up of up to 45 tips (0.45 in) in one packet; 0.6 fits
+        # that plus the wettest minute on record (0.10 in). WeeWX applies the
+        # limit to each LOOP packet as well as to the archive record. 0.6 still
+        # stops both flip classes with a 0.01 in bucket. With a 0.2 mm bucket a
+        # bit-6 flip is 0.50 in and passes here, so there only the driver's
+        # filter stops it.
+        rain = 0, 0.6, inch
         rainRate = 0, 16, inch_per_hour
         # windGust had NO bound at all, so corrupt gusts were unbounded in the
         # archive; the loop feed showed >180 mph spikes.
