@@ -34,8 +34,8 @@ Rollback: owner-run `git -C /srv/docker/weewx checkout 694938f -- loop_json_writ
 **DEC-0232 migrated on prod S210** (11-21, backfilled; the runbook says what's left).
 **Baked on `dev`, not in prod until the next minor image:** DEC-0235 (devsel: `RTLSDR_DEVICE`,
 `doctor` listing) DEC-0232's starter schema (new installs) and DEC-0237 (#579: the driver raises `RtldavisDecoderFatal`
-after `RTLDAVIS_EXIT_AFTER` = 3 consecutive decoder exits; CI proves it) and DEC-0240 (#587; DEC-0244 corrects its file) and **DEC-0247** (#610, outside review: failed thermistor = no reading, message-9 gust only from the wind channel). **Decided S204, not built:** DEC-0238 (librtlsdr → osmocom v2.0.3, `797f814` +
-sha256 as on `s202-v4l-test`, after a prod soak). **DEC-0244** (#596/#597, `dev`): the starter runs the loop writer and DewpointCacher, `[[Influx]]` idles on `replace_me`, mount `bin/user` imports. **DEC-0242** (#558): `influx.py` `0.20+ws.3`, the
+after `RTLDAVIS_EXIT_AFTER` = 3 consecutive decoder exits; CI proves it) and DEC-0240 (#587; DEC-0244 corrects its file) and **DEC-0247** (#610, outside review: failed thermistor = no reading, message-9 gust only from the wind channel). **DEC-0238's pin** (librtlsdr v2.0.3) is built on held
+**`s212-librtlsdr-pin`** (`1cba5bc`, pushed, no PR until PASS) with `docs/RELEASE-NOTES-NEXT.md` (v2.5.0 draft, checklist). **DEC-0244** (#596/#597, `dev`): the starter runs the loop writer and DewpointCacher, `[[Influx]]` idles on `replace_me`, mount `bin/user` imports. **DEC-0242** (#558): `influx.py` `0.20+ws.3`, the
 dead NAS-LEASE yield removed, `lease_dir` ignored with one INFO line; on `dev`, so it ships to prod
 at the next `marvinctl pull` + restart (tenant root's `dev` checkout): **no pull during the soak.**
 Rollout after it: pull, restart, verify sha + `service version is 0.20+ws.3`; owner deletes
@@ -76,9 +76,9 @@ narrowed to its port: **tell marvin before moving its jack.**
    re-run the design's readout after a 25 mph event first (`docs/WINDGUST-PLAUSIBILITY-DESIGN.md`).
 0. **DEC-0238's soak:** moved 11-21 (gap 13:40 to 14:03 ET, v3 on `5-1`); 11-22 clean (1,440/1,440,
    rxCheck 99.94%); settle ended 11-24 7:58 AM; scored 11-25 to 12-02 00:00 ET. 11-24 (unscored) and 11-25 to 7:57 AM: all bars met,
-   rxCheck 99.96%. Time-gate drops rose: 7 in 48 h after the swap vs 8 in 18.6 days, CRC failures flat, no gap: report it. No `dongle:` line on this image (it predates DEC-0235): the port grant is what names the v3. First full scored read: 11-26. Daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
+   rxCheck 99.96%. Time-gate drops rose: 7 in 48 h after the swap vs 8 in 18.6 days, CRC failures flat, no gap: report it. No `dongle:` line on this image (it predates DEC-0235): the port grant is what names the v3. First full scored read: 11-26. Daily reads per the bars. After it: one readout, post it, then (PASS) the pin branch's PR.
 1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 + DEC-0240 + DEC-0244 + DEC-0247 +
-   DEC-0238's pin; build, prove, release, SemVer minor with DEC-0237's, DEC-0240's, DEC-0244's and DEC-0247's notes; DEC-0242's rollout
+   DEC-0238's pin; build, prove, release by the notes file's checklist; DEC-0242's rollout
    rides the same window; then prod's `RTLSDR_DEVICE` = the v3's serial (owner-run unit edit).
 2. **DEC-0236's run**, after the soak: prod's two logging edits inside the burn-in (in place, never
    copied off the box), restart, check `data:` lines; after the window, one `ops/ab_frames.py`
@@ -106,7 +106,7 @@ narrowed to its port: **tell marvin before moving its jack.**
 | Prod | marvin, soak image `v2.4.0-v4l-test` since 11-23 7:58 AM ET, weewx 5.5.2, gain 372. Writer 1.2.0 since 2026-11-12 22:42 ET |
 | InfluxDB / monitor | `weewx-influxdb.service`; monitor sha `2f8a1eda…` (S193's message-only edit live at next restart), `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB `5-1`; 11-05 to 11-21: one gap (11-20 02:23, 4 min) plus S210's restart (11-21 11:23) |
-| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`f361182`) adds DEC-0232/0235/0237/0240/0244/0247 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
+| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`4c9a24e`) adds DEC-0232/0235/0237/0240/0244/0247 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
 | Trackers | repo: #579 (DEC-0237), #553, #536, #475 parked, #380, #514, #586, #584 · ops: #465, #440, #449, #110 |
 
