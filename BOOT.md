@@ -40,7 +40,7 @@ dead NAS-LEASE yield removed, `lease_dir` ignored with one INFO line; on `dev`, 
 at the next `marvinctl pull` + restart (tenant root's `dev` checkout): **no pull during the soak.**
 Rollout after it: pull, restart, verify sha + `service version is 0.20+ws.3`; owner deletes
 `lease_dir` from the live conf and `weewx.conf.rx-baseline`; heartofgold may drop `/nas-lease`.
-Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0248.**
+Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0249.**
 
 **DEC-0238's soak (SWAPPED 11-23 7:58:14 AM ET):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
 marvin: `librtlsdr.so.2.0.3`, driver sha `7b6fb60a…` = prod's) as `:marvin-live`, 24 h settle, then
@@ -87,7 +87,7 @@ narrowed to its port: **tell marvin before moving its jack.**
    Zaphod's session runs it, on the owner's yes.
 3. **Decisions and design:** the S197 cross-repo drift ops issue (owner's go); ops#449 closes when
    the sweep reads `dev`; optional Go patch (exit when `ReadAsync` returns, its own DEC).
-   Outside review (S211): C1 burst carry-over held (no conflicts seen), C3 rain cap needs a design; S3 settled (the hygiene sentence, not the rows).
+   Outside review (S211): C1 burst carry-over held (no conflicts seen), C3: DEC-0248, cap stays 16, confirm-on-reject designed (cap choice open); S3 settled (the hygiene sentence, not the rows).
 4. **Gate results since 11-21 10:55 ET**; around 2026-12-04 re-run `ops/garbage_gap_corr.py` over 30
    days (#536 open until then).
 5. **Upstream:** lheijst/rtldavis#2, weewx-influx2#1, matthewwall/weewx-wcloud#6, #514; the devsel

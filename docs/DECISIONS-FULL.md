@@ -14174,3 +14174,21 @@ An unverified outside review of the public repo was triaged and reproduced (`BOO
 ### Why
 
 A weather value that is not a measurement must not reach a consumer looking like one. The tests (`tests/test_dec0247_c2_c5_c6.py`, `tests/test_crash_guards.py`) fail on the old driver and pass on this one.
+
+## DEC-0248 — The rain cap stays at 16 with DEC-0056's evidence corrected; confirm-on-reject is the direction (S211)
+
+Date: 2026-11-24 (S211, Opus 5.5). Status: accepted (owner's menu choice: "A now, then C"). **Amends DEC-0056.** No code and no emitted value changes. Design and measurements: `docs/RAIN-CAP-DESIGN.md`.
+
+### Context
+
+An outside review (finding C3) showed that the cap ignores elapsed time: counts 20, 40, 41 book 1 tip, and a reset from 112 to 0 books 16. Both reproduce.
+
+### Decision
+
+1. **`MAX_PLAUSIBLE_TIPS` stays 16.** DEC-0056's claim that 16 is safe at every gap length the station has shown is withdrawn. Over 2026-05-19 to 11-24 (266,201 records, 23.64 in) the wettest minute held 10 tips (DEC-0056: 7), two minutes 19 (12), three 26 (16) and four 34 (23), and 25 archive gaps over 90 s had rain within 15 minutes. The claim is now: a loss needs a storm like 08-05's to meet a live gap of about two minutes or more, which is rare, logged at ERROR, emailed, and repairable from the console.
+2. DEC-0056's tripwire and revisit trigger stand: a rejection on a wet day reopens this.
+3. **The direction is confirm-on-reject with an elapsed-time check** (design §6), not the time-aware cap, which raises what one corrupt reading can book from 0.16 to 0.30 in. It ships in its own minor after the post-soak image, so its effect on rain can be judged alone. The build, and the catch-up cap with its `[StdQC]` consequence, need the owner's yes.
+
+### Why
+
+No rain loss is shown: 31 days of logs hold no counter rejection. That is weak, since little of that time had heavy rain and the summer logs are gone, so the cap's safety cannot be claimed from it either way. Confirmation uses what a real counter move has and a random corruption almost never has: it persists.
