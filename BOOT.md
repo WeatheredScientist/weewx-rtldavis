@@ -11,18 +11,18 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S211 → S212)
+## ▶ Resume here (S212 → S213)
 
 ### What's settled (do not re-derive)
 
 **v2.4.0 in prod 2026-11-04 to 11-23 (soak image since, below)** (image `82220200…`, banner `0.20+ws.10`):
 DEC-0229's arrival-time gate in Go, `-tolerance` default 100 ms; `-tolerance 0` in the live `cmd` is
 the no-rebuild off switch. Rollback: `:v2.3.0-prod-pre-v2.4.0` (`71c201b6…`). **P0.8 phase 6 is
-built out**; only its acceptance test is left. ROADMAP reconciled S202; **next check S212.**
+built out**; only its acceptance test is left. ROADMAP reconciled S212; **next check S222.**
 
 **DEC-0229 in one line:** a CRC-valid noise frame re-anchored the hop clock (2 to 5 min loss); the
 gate drops a frame over 100 ms off schedule. ERR-0012's on-schedule frames are out of its reach.
-Time-gate drops (`Go time gate dropped`; the burst gate is separate) through 11-21: none followed
+Time-gate drops (`Go time gate dropped`; the burst gate is separate) through 11-25: none followed
 by a gap. **One gap it missed (S210b):** 11-20 02:23 to 02:27 ET, after a CRC-valid 83.6 mph frame
 it passed, the pre-DEC-0229 shape; evidence for #536. The crcstats line is lowercase, so
 `grep CRC` is a false zero. Gap check: `grep Added`, keep the `record 2026-…` stamps, flag steps over
@@ -68,15 +68,15 @@ Standing facts: images are multi-arch (DEC-0214/0215); SemVer per DEC-0222; the 
 image is not. `marvinctl push` publishes a versioned tag (Class B, never `latest`). The v3's grant is
 narrowed to its port: **tell marvin before moving its jack.**
 
-### ▶▶ S212 JOB LIST
+### ▶▶ S213 JOB LIST
 
 00. **Owner first.** (a) DEC-0232 step 7 done 11-24 (rebuilt 11-21, step 5's check read back);
    after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) After a NAS reboot, re-read `weewx-v4ltest`'s USB node. (c) **#584:**
    DEC-0245 (S211): B, a driver check of `windGust10` against received wind, accepted, not built;
    re-run the design's readout after a 25 mph event first (`docs/WINDGUST-PLAUSIBILITY-DESIGN.md`).
 0. **DEC-0238's soak:** moved 11-21 (gap 13:40 to 14:03 ET, v3 on `5-1`); 11-22 clean (1,440/1,440,
-   rxCheck 99.94%); settle ended 11-24 7:58 AM; scored 11-25 to 12-02 00:00 ET. Dry run 11-23 8:01 AM to 11-24 9:33 AM: 1,533 records,
-   0 gaps, exits, PLL or stalls (rxCheck unread). No `dongle:` line on this image (it predates DEC-0235): the port grant is what names the v3. First scored read: 11-26. Daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
+   rxCheck 99.94%); settle ended 11-24 7:58 AM; scored 11-25 to 12-02 00:00 ET. 11-24 (unscored) and 11-25 to 7:57 AM: all bars met,
+   rxCheck 99.96%. Time-gate drops rose: 7 in 48 h after the swap vs 8 in 18.6 days, CRC failures flat, no gap: report it. No `dongle:` line on this image (it predates DEC-0235): the port grant is what names the v3. First full scored read: 11-26. Daily reads per the bars. After it: one readout, post it, then (PASS) the Dockerfile pin change.
 1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 + DEC-0240 + DEC-0244 + DEC-0247 +
    DEC-0238's pin; build, prove, release, SemVer minor with DEC-0237's, DEC-0240's, DEC-0244's and DEC-0247's notes; DEC-0242's rollout
    rides the same window; then prod's `RTLSDR_DEVICE` = the v3's serial (owner-run unit edit).
@@ -99,14 +99,14 @@ narrowed to its port: **tell marvin before moving its jack.**
    gate dropped a frame` (last 11-08) · first `unhealthy` · `rejecting implausible`, `unknown message
    type`, loopjson `not finite`. ops#440 cleanup at the end (`BACKLOG.md`). Carry-forwards: `BACKLOG.md`.
 
-## Current state (S211)
+## Current state (S212)
 
 | Thing | State |
 |---|---|
 | Prod | marvin, soak image `v2.4.0-v4l-test` since 11-23 7:58 AM ET, weewx 5.5.2, gain 372. Writer 1.2.0 since 2026-11-12 22:42 ET |
 | InfluxDB / monitor | `weewx-influxdb.service`; monitor sha `2f8a1eda…` (S193's message-only edit live at next restart), `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB `5-1`; 11-05 to 11-21: one gap (11-20 02:23, 4 min) plus S210's restart (11-21 11:23) |
-| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`7e7ae33`) adds DEC-0232/0235/0237/0240/0244/0247 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
+| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`f361182`) adds DEC-0232/0235/0237/0240/0244/0247 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
 | Trackers | repo: #579 (DEC-0237), #553, #536, #475 parked, #380, #514, #586, #584 · ops: #465, #440, #449, #110 |
 
@@ -118,11 +118,11 @@ unexplained, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email w
 
 ## Model tier
 
-S211: Sonnet, Opus 5.5 from 11-24 as coordinator. S212: Sonnet.
+S212: Opus 5.5. S213: Sonnet.
 
 ## Gotchas — `docs/GOTCHAS.md`
 
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-24 (S211)._
+_Last updated: 2026-11-25 (S212)._

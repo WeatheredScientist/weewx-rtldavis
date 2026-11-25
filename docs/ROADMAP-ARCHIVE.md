@@ -916,3 +916,39 @@ _From `docs/ROADMAP.md` lines 1087–1121._
       missing flag, superseding the scope note above), a §0 rules and meanings table, a row per
       field with InfluxDB's three tiers, one contract version (1.1) and one owner; the history moved
       verbatim to its Appendix A. What remains is the next line.)
+
+---
+
+## Block 7 (S212) — Banner and guardrail entries for S202 and S210c (ROADMAP lines 6–10, 29–45 and 49–55 at `f361182`)
+
+**Last updated:** 2026-11-21 (S210c — **the ROADMAP diet, a targeted pass, not the full reconciliation**:
+shipped and closed text moved verbatim to `docs/ROADMAP-ARCHIVE.md`, and the lines left were read against
+DEC-0229 to DEC-0244. Five statuses moved, detail in the guardrail section. **Tripwire still S212.**)
+Prior: 2026-11-14 (S202 — **scheduled full reconciliation, on time**: six lines moved,
+detail in the guardrail section. Next check: S212.)
+
+- Last full reconciliation: **S202, 2026-11-14** — **on time** (due S202; S193 to S201 each updated
+  only their own lines, as the banner shows). **Six lines were behind and are fixed.** P1.9's
+  #536 item stopped at the 11-08 10:52 ET clear window: it now reads clear to 11-12 19:43 ET and
+  names DEC-0230, which makes CI fail rather than skip the Go gate tests. P0.8 phase 2 did not
+  say the next minor image is owed: it carries DEC-0235's devsel patch and DEC-0232's migration
+  and is not built. P0.8 phase 4 pointed at `BOOT.md` job 1 for the upstream watch, which is now
+  job 4. The P0 freeze row lacked S201's reading of blocker 1: #579 (a vanished dongle never exits
+  the container) and the librtlsdr USB hang as inferred shapes for the long tail. P3's INTERFACES
+  line already carried DEC-0233 and DEC-0234 (shipped S201) and its status is verified against
+  `git log -- docs/INTERFACES.md`: no line moved there. A sixth line moved late in the session:
+  phase 2's owed image now also names the V4L (the NAS's second stick is a V4L, which the image's
+  librtlsdr does not support; osmocom v2.0.3 does). Classed, no line: DEC-0230 (CI tooling,
+  folded into #536's line), DEC-0231 (tier-file diet), DEC-0232 (already on P1.9's and P3's
+  lines), DEC-0235 (V4 support and device pinning: the second-dongle A/B is `BOOT.md` job 8,
+  `BACKLOG.md` and ops#440, an owner decision, and a decoder swap needs a DEC). Not added: #475
+  (parked), #514, #558, #561, #553 (each waits on a DEC or the owner). Verified current: the P0
+  DB-lock row, P0.7, P1's arc, P1.8, P2's header, phases 1, 3, 5, 6.
+
+- Last targeted pass: **S210c, 2026-11-21** — the diet (not a full reconciliation; **next check stays
+  S212**). Moved: P1.9's #536 item (a third live drop, 11-14 06:36:24 ET, +640 ms, still no gap; clear to
+  11-16 09:24 ET); P0.8 phase 2's owed image (now also DEC-0237, DEC-0240 and DEC-0244, all baked on
+  `dev`, and DEC-0242 riding the mounted checkout); the P0 freeze row (DEC-0237's decision and DEC-0238's
+  pin named, the long-tail shapes labeled inferred); P2 (DEC-0241: campaign apparatus kept, stood
+  down); P3 (DEC-0242, DEC-0243, DEC-0244 on the extension lines). Classed, no line: DEC-0230 and
+  DEC-0239 (CI and tier gates), DEC-0231 (tier-file diet), DEC-0236 (the NAS run, `BOOT.md` job 2).

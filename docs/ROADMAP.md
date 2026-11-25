@@ -3,12 +3,9 @@
 **Status:** Direction (what next, in what order). For *why* see DECISIONS.md; for *how* see
 ARCHITECTURE.md; for *what's on the bench right now* see `BOOT.md` (the single source of truth for
 the current session + active thread).
-**Last updated:** 2026-11-21 (S210c — **the ROADMAP diet, a targeted pass, not the full reconciliation**:
-shipped and closed text moved verbatim to `docs/ROADMAP-ARCHIVE.md`, and the lines left were read against
-DEC-0229 to DEC-0244. Five statuses moved, detail in the guardrail section. **Tripwire still S212.**)
-Prior: 2026-11-14 (S202 — **scheduled full reconciliation, on time**: six lines moved,
-detail in the guardrail section. Next check: S212.)
-Earlier banner entries (S56 to S192, one per targeted or full pass) are in `docs/ROADMAP-ARCHIVE.md`, Block 1.
+**Last updated:** 2026-11-25 (S212 — **scheduled full reconciliation, on time**: seven lines moved, detail
+in the guardrail section. Next check: S222.)
+Earlier banner entries (S56 to S210c, one per targeted or full pass) are in `docs/ROADMAP-ARCHIVE.md`, Blocks 1 and 7.
 
 `BOOT.md` holds what's *in motion right now*; this holds the ordered, actively-sequenced plan
 (P0–P3 only, per DEC-0058). BACKLOG.md holds unordered near-term ideas **and** long-term/
@@ -22,37 +19,23 @@ a user-asked audit found it, not anything structural. Two rules to not repeat th
 - **When a DEC lands that ships, closes, or reprioritizes a line item here, update that line in
   the same session** — the same discipline CLAUDE.md already requires for DECISIONS.md ("same
   session, not deferred"). Don't wait for a docs-diet pass or an audit to notice.
-- **Next scheduled reconciliation check: by S212** (~10 sessions out). If the session counter is
-  at or past S212 and this line still says S212, that itself is the signal it's overdue — run the
-  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146, S156, S172, S183, S192 and S202 did (diff every
+- **Next scheduled reconciliation check: by S222** (~10 sessions out). If the session counter is
+  at or past S222 and this line still says S222, that itself is the signal it's overdue — run the
+  same pass as S56, S66, S76, S86, S96, S106, S116, S126, S136, S146, S156, S172, S183, S192, S202 and S212 did (diff every
   open/pending item here against DECISIONS.md, CHANGELOG.md and `BOOT.md`).
-- Last full reconciliation: **S202, 2026-11-14** — **on time** (due S202; S193 to S201 each updated
-  only their own lines, as the banner shows). **Six lines were behind and are fixed.** P1.9's
-  #536 item stopped at the 11-08 10:52 ET clear window: it now reads clear to 11-12 19:43 ET and
-  names DEC-0230, which makes CI fail rather than skip the Go gate tests. P0.8 phase 2 did not
-  say the next minor image is owed: it carries DEC-0235's devsel patch and DEC-0232's migration
-  and is not built. P0.8 phase 4 pointed at `BOOT.md` job 1 for the upstream watch, which is now
-  job 4. The P0 freeze row lacked S201's reading of blocker 1: #579 (a vanished dongle never exits
-  the container) and the librtlsdr USB hang as inferred shapes for the long tail. P3's INTERFACES
-  line already carried DEC-0233 and DEC-0234 (shipped S201) and its status is verified against
-  `git log -- docs/INTERFACES.md`: no line moved there. A sixth line moved late in the session:
-  phase 2's owed image now also names the V4L (the NAS's second stick is a V4L, which the image's
-  librtlsdr does not support; osmocom v2.0.3 does). Classed, no line: DEC-0230 (CI tooling,
-  folded into #536's line), DEC-0231 (tier-file diet), DEC-0232 (already on P1.9's and P3's
-  lines), DEC-0235 (V4 support and device pinning: the second-dongle A/B is `BOOT.md` job 8,
-  `BACKLOG.md` and ops#440, an owner decision, and a decoder swap needs a DEC). Not added: #475
-  (parked), #514, #558, #561, #553 (each waits on a DEC or the owner). Verified current: the P0
-  DB-lock row, P0.7, P1's arc, P1.8, P2's header, phases 1, 3, 5, 6.
-- Earlier full reconciliations (S56 to S192, newest first) are in `docs/ROADMAP-ARCHIVE.md`, Block 2,
-  verbatim. The pattern they record: a status carried past the DEC that changed it, found by diffing
+- Last full reconciliation: **S212, 2026-11-25** — **on time** (due S212). Every open line was read
+  against DEC-0230 to DEC-0248, `CHANGELOG.md`, `BOOT.md` and the open issues. **Seven lines moved:**
+  P0.8 phase 2 (DEC-0238's soak is running, DEC-0247 joins the owed image, confirm-on-reject follows in
+  its own minor, DEC-0246's release gate); P1's header, its cap-16 line (DEC-0248 withdraws DEC-0056's
+  safety claim) and its "Still open" list (DEC-0245 and DEC-0248 accepted, not built; DEC-0247 on
+  `dev`); P1.9's #536 item (fifteen live drops, and the 11-20 gap the gate missed); the P0 freeze row
+  (the same gap); P2's closing sentence (it did not name the apparatus decision left open). Classed, no
+  line: DEC-0230, DEC-0231, DEC-0239 (CI and tier gates), DEC-0236 and #586 (`BOOT.md` job 2), C1
+  (held) and C4 (accepted, DEC-0229) of the outside review. Not added: #475 (parked), #514 and #380
+  (watches), ops#465 (weewx's part is done: DEC-0243, DEC-0244).
+- Earlier full reconciliations (S56 to S202) are in `docs/ROADMAP-ARCHIVE.md`, Blocks 2 and 7,
+  verbatim, S210c's targeted pass with them. The pattern they record: a status carried past the DEC that changed it, found by diffing
   every open line against `DECISIONS.md`, `CHANGELOG.md` and `BOOT.md`.
-- Last targeted pass: **S210c, 2026-11-21** — the diet (not a full reconciliation; **next check stays
-  S212**). Moved: P1.9's #536 item (a third live drop, 11-14 06:36:24 ET, +640 ms, still no gap; clear to
-  11-16 09:24 ET); P0.8 phase 2's owed image (now also DEC-0237, DEC-0240 and DEC-0244, all baked on
-  `dev`, and DEC-0242 riding the mounted checkout); the P0 freeze row (DEC-0237's decision and DEC-0238's
-  pin named, the long-tail shapes labeled inferred); P2 (DEC-0241: campaign apparatus kept, stood
-  down); P3 (DEC-0242, DEC-0243, DEC-0244 on the extension lines). Classed, no line: DEC-0230 and
-  DEC-0239 (CI and tier gates), DEC-0231 (tier-file diet), DEC-0236 (the NAS run, `BOOT.md` job 2).
 - Earlier: full pass **S56, 2026-07-28**; targeted DEC-0057 passes at **S63** and **S66**.
 
 ## The vision
@@ -139,15 +122,19 @@ S210c; their full text, with every PR and issue number, is `docs/ROADMAP-ARCHIVE
       three systemd-unit checks S187 (2026-11-02, ops#439, `marvin-vm --usb-host`).
 - [~] **Phase 2 — the image, one release at a time.** v2.0.21 released S169; since then v2.1.0 (S176,
       DEC-0222's first minor: the burst gate and `windGust10`), v2.2.0, v2.3.0 and v2.4.0 (S190,
-      DEC-0229's time gate). **Prod runs v2.4.0 since 2026-11-04 18:36:38 ET; `:latest` = `:v2.4.0`**
+      DEC-0229's time gate). **Prod ran v2.4.0 from 2026-11-04 18:36:38 ET to the 11-23 soak swap (below); `:latest` = `:v2.4.0`**
       (multi-arch). Left: the first arm64 run against a live radio (README says smoke-tested until
       then). **Owed: the next minor image**, baked on `dev` and not in prod: DEC-0235 (device pinning:
       `RTLSDR_DEVICE`, `doctor`'s listing), DEC-0232 (the `windGust10` column for new installs; prod migrated S210
       2026-11-21), DEC-0237 (#579: the driver exits the container after three consecutive decoder
       exits), DEC-0240 (the starter conf ships every uploader off) and DEC-0244 (the starter runs the
       loop writer and DewpointCacher, Influx idles on `replace_me`, the mount's `bin/user` imports),
-      plus DEC-0238's librtlsdr v2.0.3 pin, decided S204 and **not built**: it waits on a seven-day prod
-      soak of the library alone (outside DEC-0236's window). DEC-0242 (`influx.py` `0.20+ws.3`) rides
+      DEC-0247 (a failed thermistor is no reading; message 9's gust only from the wind channel), plus
+      DEC-0238's librtlsdr v2.0.3 pin, **not built**: its prod soak of the library alone is running
+      (swapped 11-23 7:58 AM ET, scored 11-25 to 12-02 00:00 ET; the prod line above is v2.4.0's tree on
+      that library, `v2.4.0-v4l-test`). After a PASS the pin joins this image. **Then, in its own minor:**
+      confirm-on-reject (DEC-0248), on the owner's yes and cap choice. Each release carries a one-line
+      reason for its number; a major needs the owner's explicit yes (DEC-0246). DEC-0242 (`influx.py` `0.20+ws.3`) rides
       the mounted checkout, not the image. **V4L (ops#440):** the NAS stick is a Blog V4L, which the
       image's librtlsdr (osmocom v2.0.2+2) does not support and v2.0.3 does
       (`docs/RTLSDR-V4-AND-PINNING.md`); DEC-0236's NAS run judges a reference receiver and is not
@@ -177,7 +164,7 @@ S210c; their full text, with every PR and issue number, is `docs/ROADMAP-ARCHIVE
 Errors in the Go decoder itself are their own track, P1.9 below; its image changes ride phase 2's
 release or the one after.
 
-## P1 — Data integrity & Sensor-QC hardening (S18–S55c) — ✅ DONE, watch-only
+## P1 — Data integrity & Sensor-QC hardening (S18–S55c) — ✅ DONE; two follow-on designs accepted, not built
 One continuous arc, not several separate efforts: RF/decode corruption that passes CRC has produced
 impossible values (rain, wind, humidity, temperature) since S18, and each release below closed one
 corruption class. Full decision trail in DEC-0021/0022/0024/0026/0029/0033/0037/0042/0044/0049/
@@ -202,7 +189,8 @@ here.
 - **Signed temp decode → v2.0.10** (S55): DEC-0055, fixes negative-temperature encoding and the
   `0xFF8` flag-nibble leak.
 - **Cap-16 tuning → v2.0.11** (S55c): DEC-0056, decided on an evidence pass (R1/R2); monitor
-  tripwire verified live end-to-end.
+  tripwire verified live end-to-end. **Corrected S211 (DEC-0248):** the claim that 16 is "safe at every gap
+  length" is withdrawn (188 days of data: 10 tips in one minute, 19 in two); the cap stays 16.
 - **Battery-flag co-rejection → v2.0.17** (S144): DEC-0203/DEC-0204 — a co-rejected frame now takes
   its battery-low bit with it, and a message type no Davis transmitter sends (0x0, 0x1, 0xB, 0xD,
   0xF) condemns a frame outright. Corrupt frames at reception collapses had produced one-minute
@@ -219,7 +207,10 @@ here.
 signature DEC-0044, first-frost test of the signed-decode negative branch, DEC-0056's
 rain-rejection revisit trigger) lives in **`BACKLOG.md` §Standing watches** — moved there from
 `BOOT.md` at S67 (DEC-0072), since a watch that has not fired is not in-flight work. Not duplicated
-here, and not evidence this P1 item is still "in progress." **`#74` calm-windDir left this list at
+here, and not evidence this P1 item is still "in progress." **Designed and accepted S211, not built:**
+DEC-0245 (the driver nulls an ISS 10-minute gust that received wind cannot support, #584; re-measure
+after a 25 mph event first) and DEC-0248's confirm-on-reject (`docs/RAIN-CAP-DESIGN.md`; owner's yes and
+cap choice). **On `dev`, next minor image:** DEC-0247. **`#74` calm-windDir left this list at
 S59**, closed on five consecutive clean days with a positive control.
 
 **Blocker discipline (DEC-0011):** no drop-in dev receiver — RF-dependent verification is calendar-
@@ -271,9 +262,12 @@ Steps, in order:
       lheijst/rtldavis#2, pointing at `patch/rtldavis-burstgate.patch`; no PR, the repo is quiet
       since 2023 and the continuation has its own gate)*.
 - [ ] #536 **Time gate.** *(measured and designed S188; DEC-0229 accepted and built S189; in prod
-      since 2026-11-04 18:36:38 ET as v2.4.0, S190; three live drops, 11-05 05:06:39 ET (+725.6 ms),
-      11-07 09:04:56 ET (+1036.2 ms) and 11-14 06:36:24 ET (+640 ms), none with a gap; no archive
-      gap 11-13 00:00 to 11-16 09:24 ET, read S209; closes on the 30-day re-run; CI fails, not skips,
+      since 2026-11-04 18:36:38 ET as v2.4.0, S190; fifteen live drops to 11-25 07:57 ET (three to
+      11-14, four 11-18 to 11-21, eight 11-23 to 11-25, read S212), none followed by a gap (seven of them in the 48 h after the
+      11-23 soak swap, against eight in the 18.6 days before it, with CRC failures per minute unchanged:
+      unexplained, watch it through the soak); **one gap it missed, 11-20 02:23 to 02:27 ET, after a CRC-valid 83.6 mph frame it passed
+      (S210b)**; the other gaps 11-17 to 11-25 are the 11-21 restart and receiver move and the 11-23 soak
+      swap; the soak image carries the same gate; closes on the 30-day re-run; CI fails, not skips,
       the Go gate tests since DEC-0230)* Once
       synced, drop a CRC-valid frame more than 100 ms off the expected slot before it can re-anchor
       the hop clock, hop, or reach the driver; log it and count it as `offsched=N` in the minute
@@ -300,7 +294,7 @@ or a capture do, it gets a step here.
 > re-run — see the closing note under Campaign D for the headroom arithmetic that settles it.
 DEC-0048 (S41) deferred this into one designed experiment; the apparatus (`ops/rx_experiment.sh` +
 `tests/test_rx_experiment.py`) was deployed and ran campaigns A to D. **Nothing here is open except the
-two P0 rows at the end of this section.** Every closed item below is one line; the full text of each, with
+two P0 rows at the end of this section and the apparatus decision (DEC-0241, deferred).** Every closed item below is one line; the full text of each, with
 every figure and S-number, is `docs/ROADMAP-ARCHIVE.md` Block 5 (verbatim).
 
 - [x] **Phase 0: `FreqError` telemetry exists** (S57, DEC-0060); rebuilding for it was moot.
@@ -350,12 +344,13 @@ every figure and S-number, is `docs/ROADMAP-ARCHIVE.md` Block 5 (verbatim).
       **Short gaps (2 to 5 min) are a mechanism, not a lead (S188, DEC-0229):** upstream re-anchors the
       hop clock to any accepted frame, so a noise decode costs 51 blind hops plus a re-init park; 12 of
       the 15 garbage frames the driver rejected in 30 days were followed by one, and weewxd resumed by
-      itself. The fix is P1.9 step 4, in prod since 2026-11-04 (v2.4.0). **Not explained:** the 10-22
+      itself. The fix is P1.9 step 4, in prod since 2026-11-04 (v2.4.0); one short gap since has that
+      shape (11-20 02:23 ET, P1.9 #536). **Not explained:** the 10-22
       62 min outage (two RF-class stalls, no decoder exit, S204) and DEC-0083's long tail. **Inferred,
       not measured (S201):** #579's shape (a vanished dongle never exits the container; **decided S204,
       DEC-0237: the driver exits after three consecutive decoder exits, baked on `dev`, next minor
       image**) or the osmocom librtlsdr USB hang fixed in v2.0.3 (`65f0658`; DEC-0238's pin, soak
-      first). Campaign B's metric gate is closed (DEC-0069). Full trail, S-numbers and tool notes:
+      running). Campaign B's metric gate is closed (DEC-0069). Full trail, S-numbers and tool notes:
       archive Block 5.
 - [ ] **P0 — the `database is locked` defect** — **BOUNDED at S66 (DEC-0070); no further work planned.**
       Open because the defect is capped, not eliminated. Cause: `journal_mode=delete` (a reader's SHARED
@@ -379,7 +374,7 @@ every figure and S-number, is `docs/ROADMAP-ARCHIVE.md` Block 5 (verbatim).
       Appendix A. The per-DEC progress list this line carried (DEC-0032, 0053, 0086, 0091, 0093, 0200,
       0202, 0209, 0211, 0220, 0221, 0224, the S146 and S97 corrections, ops#442) is in
       `docs/ROADMAP-ARCHIVE.md` Block 6. **DEC-0232** (S198b) gives the archive a `windGust10` column
-      (built; prod migrated and backfilled S210, `docs/WINDGUST10-MIGRATION.md`). Audited S197
+      (built; prod migrated and backfilled S210, 11-21 summaries rebuilt S211, `docs/WINDGUST10-MIGRATION.md`). Audited S197
       (`docs/INTERFACES-AUDIT-S197.md`, 16 findings): parts 1 to 4 and 8 done S199, parts 5 to 7 shipped
       as `loopjson` 1.2.0 (next line). What remains is the ops issue below.)
 - [x] `loopjson` 1.2.0, DEC-0233 parts 5 to 7 — **shipped S201 (DEC-0234)**: the `contract` key
