@@ -68,7 +68,7 @@ Standing facts: images are multi-arch (DEC-0214/0215); SemVer per DEC-0222; the 
 image is not. `marvinctl push` publishes a versioned tag (Class B, never `latest`). The v3's grant is
 narrowed to its port: **tell marvin before moving its jack.**
 
-### ▶▶ S211 JOB LIST
+### ▶▶ S212 JOB LIST
 
 00. **Owner first.** (a) DEC-0232 step 7 done 11-24 (rebuilt 11-21, step 5's check read back);
    after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) After a NAS reboot, re-read `weewx-v4ltest`'s USB node. (c) **#584:**
@@ -106,7 +106,7 @@ narrowed to its port: **tell marvin before moving its jack.**
 | Prod | marvin, soak image `v2.4.0-v4l-test` since 11-23 7:58 AM ET, weewx 5.5.2, gain 372. Writer 1.2.0 since 2026-11-12 22:42 ET |
 | InfluxDB / monitor | `weewx-influxdb.service`; monitor sha `2f8a1eda…` (S193's message-only edit live at next restart), `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB `5-1`; 11-05 to 11-21: one gap (11-20 02:23, 4 min) plus S210's restart (11-21 11:23) |
-| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`041c2b4`) adds DEC-0232/0235/0237/0240/0244/0247 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
+| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`7e7ae33`) adds DEC-0232/0235/0237/0240/0244/0247 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
 | Trackers | repo: #579 (DEC-0237), #553, #536, #475 parked, #380, #514, #586, #584 · ops: #465, #440, #449, #110 |
 
