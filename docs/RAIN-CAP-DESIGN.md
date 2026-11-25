@@ -100,7 +100,7 @@ rejected (with its time), the new reading n. Everything before step 3 is DEC-021
      an ISS power cycle zeroes the counter).
    If any fails, book what step 2 books today.
 4. Log each catch-up at INFO with A, P, n, the total and the elapsed time, in wording that does not match the
-   monitor's marker. The ERROR line and email on P stay.
+   monitor's marker. The ERROR line and email on P stay (the email's wording gains the check in §7 step 3).
 
 Elapsed time comes from `time.monotonic()`, never the wall clock. A co-rejected frame (DEC-0054) sets
 neither A nor P. Every restart clears both.
@@ -156,9 +156,14 @@ plus the time, 2 s, zero, restart, co-rejection and stale-P cases.
    not do this (DEC-0046), and with 0.3 left in place a catch-up of 31 to 45 tips is nulled.
 2. Read both back, restart, check the log for the new banner. Add the row to `CONSTANTS.md`'s live-config
    deviations then, if 0.6 is kept.
-3. **Before reconciling a rejection by hand** (DEC-0056's playbook, which the email still points at), grep the
-   log after it for `DEC-0249`. A catch-up line means the rain is already booked, and adding it again would double it.
-4. Rollback: the previous image. 0.6 with the old driver changes nothing: no reading books over 16 tips.
+3. **Before reconciling a rejection by hand** (DEC-0056's playbook), look in `weewx.log` after it for
+   `rain: counter move confirmed` (DEC-0249) or `rain: counter recovered` (DEC-0218). The first means the rain is
+   already booked, the second that none is missing; adding it would double it. The rejection email says this.
+4. **The email's text is a separate step.** `weewx_monitor.py` is a host daemon: a `marvinctl pull` updates the
+   file, but the running monitor keeps the old text until a deliberate `restart weewx-monitor.service`. Verify
+   its sha against `dev`, a start time after the file's mtime, and the `Remedy armed:` line. It can go before
+   or after the image: the text holds either way.
+5. Rollback: the previous image. 0.6 with the old driver changes nothing: no reading books over 16 tips.
 
 ## 8. Release note (draft)
 

@@ -502,8 +502,10 @@ def get_new_lines(offset):
 # earned its keep, plus a running record of how often the glitch actually fires.
 # Since DEC-0056 tightened the cap (60 -> 16 tips), this email is ALSO the
 # tripwire for the rare other explanation: real rain suppressed across a long
-# reception gap. The body prompts the WeatherLink cross-check either way, and
-# any rejection on a genuinely wet day is the predefined trigger to revisit
+# reception gap. The body sends the reader to weewx.log first, so rain the
+# driver booked itself (DEC-0249) is not added twice, then to the WeatherLink
+# cross-check. It can go out before the next reading, and beside an older image,
+# so it never says which happened. Any rejection on a genuinely wet day is the predefined trigger to revisit
 # the cap with that event's data (DEC-0056).
 RAIN_GLITCH_MARKER = 'rejecting implausible counter delta'
 RAIN_GLITCH_CD     = 300   # seconds between glitch emails (dedupe a repeated line)
@@ -538,9 +540,18 @@ def send_rain_glitch_alert(ts, detail, phantom_in, raw_line, test=False):
             f"Most likely: an RF-decode glitch, caught working as designed.\n"
             f"But check one thing: if heavy rain was actually falling around this "
             f"time, this could be REAL rain suppressed across a rare long reception "
-            f"gap. Cross-check the WeatherLink console total for this window and "
-            f"reconcile per the DEC-0056 playbook (docs/DECISIONS-FULL.md). A "
-            f"rejection on a genuinely wet day is the agreed trigger to revisit "
+            f"gap.\n\n"
+            f"Before adding any rain by hand, look in weewx.log after this "
+            f"rejection for these lines (this email can go out before they are written):\n"
+            f"- 'rain: counter move confirmed' (DEC-0249, driver versions that have "
+            f"it): the driver booked the missing rain. Do not add it again; check "
+            f"that the archive record for that minute has it.\n"
+            f"- 'rain: counter recovered' (DEC-0218): the rejected reading was the "
+            f"glitch and no rain is missing. Add nothing.\n"
+            f"- Neither, once later rain readings have come in: cross-check the "
+            f"WeatherLink console total for this window and reconcile any shortfall "
+            f"per the DEC-0056 playbook (docs/DECISIONS-FULL.md).\n\n"
+            f"A rejection on a genuinely wet day is the agreed trigger to revisit "
             f"the cap with this event's data.\n")
     if phantom_in is not None:
         body += f"\nA naive (pre-fix) decode would have logged +{phantom_in}\" of rain here.\n"

@@ -53,6 +53,39 @@ def test_ignores_non_glitch_lines():
         assert wm.parse_rain_glitch(line) is None, f"false positive on: {line!r}"
 
 
+def _body(monkeypatch):
+    sent = []
+    monkeypatch.setattr(wm, 'send_email', lambda subject, body: sent.append(body))
+    wm.send_rain_glitch_alert(*wm.parse_rain_glitch(JUL4), JUL4)
+    return sent[0]
+
+
+def test_email_says_to_check_the_log_before_reconciling(monkeypatch):
+    """DEC-0249: a catch-up is already booked, so a hand correction would double it."""
+    body = _body(monkeypatch)
+    order = [body.index(x) for x in (
+        'Before adding any rain by hand', "'rain: counter move confirmed'",
+        'Do not add it again', "'rain: counter recovered'", 'Add nothing',
+        'Neither, once later rain readings', 'WeatherLink console', 'DEC-0056 playbook')]
+    assert order == sorted(order)
+
+
+def test_email_reads_right_before_the_next_reading_and_on_an_older_image(monkeypatch):
+    body = _body(monkeypatch)
+    assert 'this email can go out before they are written' in body
+    assert 'driver versions that have it' in body
+
+
+def test_email_quotes_the_driver_lines_it_names(monkeypatch):
+    """The two lines the reader greps for are the driver's, and neither is the marker."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "rtldavis.py")) as f:
+        src = f.read()
+    body = _body(monkeypatch)
+    for line in ('rain: counter move confirmed', 'rain: counter recovered'):
+        assert line in body and 'loginf("' + line in src
+
+
 def test_marker_matches_driver_source():
     """Cross-module contract (DEC-0056): the monitor's marker must appear
     verbatim in rtldavis.py's rejection logerr. If the driver message is ever

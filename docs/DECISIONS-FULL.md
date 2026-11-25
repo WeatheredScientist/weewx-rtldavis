@@ -2173,7 +2173,10 @@ in the record. "60 → 16" is really "30 → 16."
    30 days — a zero-noise tripwire. A cross-module contract test now pins the monitor's marker to
    the driver's exact logerr wording, so a reworded message breaks CI instead of silently killing
    the alert.
-3. **The recovery playbook** (this section is it): the co-located WeatherLink console receives the
+3. *(Amended by DEC-0249: first look in `weewx.log` after the rejection. `rain: counter move confirmed`
+   means the rain is already booked, `rain: counter recovered` (DEC-0218) that none is missing;
+   the steps below are for neither.)*
+   **The recovery playbook** (this section is it): the co-located WeatherLink console receives the
    same ISS broadcast independently and keeps its own rain record. On any rejection that coincides
    with real rain: compare the console's window total against ours, and book the shortfall via the
    established ERR correction process (DEC-0025/0032/0037 — both stores, derived fields included).
@@ -14205,7 +14208,7 @@ Date: 2026-11-25 (S212 side session, Opus 5.5). Status: accepted (owner's menu c
 2. **`rain_catch_up_tips()` is a pure function** beside `rain_tips_with_anchor()`, which is untouched; the driver supplies the two intervals. Times are `time.monotonic()`, stored beside `last_rain_count` and `last_accepted_rain_count`, set and cleared with them. A co-rejected frame (DEC-0054) sets none of the four.
 3. **The catch-up cap is 45.** 45 plus the wettest minute on record (10) is 0.55 in, inside a 0.6 in `[StdQC]` limit that still refuses a 64-tip flip with a 0.01 in bucket. One corrupt reading alone still books at most 16.
 4. **`[StdQC]` rain goes 0.3 to 0.6 in `weewx.conf.example` only.** The image's starter is `weectl station create`'s output, whose limit is stock WeeWX 5.5.2's `rain = 0, 10, inch`; nothing in the repo set 0.3 there (DEC-0244), so it is left. Prod's live conf and `weewx.conf.rx-baseline` are owner-run at rollout (§7).
-5. **One INFO line per catch-up** with A, P, n, the total and the elapsed time. It does not contain the monitor's marker, so it sends no email. The ERROR line and email on P stay.
+5. **One INFO line per catch-up** with A, P, n, the total and the elapsed time. It does not contain the monitor's marker, so it sends no email. The ERROR line and email on P stay. The email's text changes (owner: "C3 session fixes it"): it sends the reader to `weewx.log` for the DEC-0249 and DEC-0218 lines before any hand correction, so a booked catch-up is not added twice. It can go out before the next reading and beside an older image, so it never says which happened. Marker, matching, cooldown and state are unchanged.
 6. **Its own minor**, after the post-soak image: emitted rain values change (DEC-0222, DEC-0246).
 
 ### Evidence
@@ -14221,4 +14224,4 @@ Date: 2026-11-25 (S212 side session, Opus 5.5). Status: accepted (owner's menu c
 
 ### Not addressed
 
-Two corrupt readings that agree; a reset first heard off 0; the reset phantom from 112 to 127 (option D); tips that fall during a restart. Times are processing times, since frames carry no arrival stamp (§6). The rejection email still says to reconcile by hand, so look for the DEC-0249 line first (§7).
+Two corrupt readings that agree; a reset first heard off 0; the reset phantom from 112 to 127 (option D); tips that fall during a restart. Times are processing times, since frames carry no arrival stamp (§6).
