@@ -7,6 +7,11 @@ Nothing here is rewritten — text moves, history stays greppable.
 
 ---
 
+## [S208] — 2026-11-20 — The install-package investigation with the dashboard (ops#465); DEC-0243, three defects filed
+
+- No prod change, no image change. Answered the dashboard's install-package investigation on ops#465 from this repo: the non-Davis path, the loop contract's rules, the host assumptions. Reading the released `v2.4.0` image (read-only exec) for it found that an empty mount is seeded from `weectl`'s output, not `weewx.conf.example`: DEC-0240's change and test act on a file no image user receives, the seeded `[[Influx]]` has no `enable` line (#596), and the seeded `process_services` is stock, so a new install runs none of this repo's services and has no loop feed (#597). Neither is fixed.
+- DEC-0243: `extensions/loopjson/README.md` states WeeWX 5.0 or later; a second CI job, `weewx-range`, runs the install-and-run proof on 5.0.0, 5.1.0, 5.2.0, 5.3.0 and 5.4.0 beside the existing 5.5.2 job. All pass locally on Python 3.12 and 3.14. `docs/ARCHITECTURE.md` §4 gives the `BIAS_TEE` default as 0 (#598). Fable 5.2, the desktop app's selected model; no `/model` switch. S205 rolled to the archive.
+
 ## [S207d] — 2026-11-18 — DEC-0242: the dead NAS-LEASE yield leaves `influx.py` (#558)
 
 - No prod change. `influx.py` `0.20+ws.3`: the courtesy yield (DEC-0111) is removed; `lease_dir` is popped and ignored with one INFO line, because the thread takes `**site_dict` and the key would otherwise stop weewxd (prod's conf and rx-baseline still set it). `ops/nas_build.py` and its 26 tests deleted; `tests/test_influx_lease_dir_ignored.py` (5, positive-controlled). Rollout after DEC-0238's soak: pull + restart, then the owner deletes the key from both conf files; tag `influx-v0.20+ws.3` after merge.
