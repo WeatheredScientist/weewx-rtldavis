@@ -131,7 +131,7 @@ S210c; their full text, with every PR and issue number, is `docs/ROADMAP-ARCHIVE
       loop writer and DewpointCacher, Influx idles on `replace_me`, the mount's `bin/user` imports),
       DEC-0247 (a failed thermistor is no reading; message 9's gust only from the wind channel), plus
       DEC-0238's librtlsdr v2.0.3 pin, **not built**: its prod soak of the library alone is running
-      (swapped 11-23 7:58 AM ET, scored 11-25 to 12-02 00:00 ET; the prod line above is v2.4.0's tree on
+      (swapped 11-23 7:58 AM ET, scored 11-27 to 12-04 00:00 ET; the prod line above is v2.4.0's tree on
       that library, `v2.4.0-v4l-test`). After a PASS the pin joins this image. **Then, in its own minor:**
       confirm-on-reject (DEC-0248), on the owner's yes and cap choice. Each release carries a one-line
       reason for its number; a major needs the owner's explicit yes (DEC-0246). DEC-0242 (`influx.py` `0.20+ws.3`) rides
