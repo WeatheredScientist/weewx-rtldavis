@@ -6,6 +6,11 @@ under [Pre-S16].
 
 ---
 
+## [S212] — 2026-11-25 — ROADMAP full reconciliation (on time); partial read of the first soak day
+
+- `docs/ROADMAP.md` read line by line against DEC-0230 to DEC-0248: seven lines moved, the S202 and S210c entries moved verbatim to `docs/ROADMAP-ARCHIVE.md` Block 7, next check S222. No code, no prod change.
+- DEC-0238's soak: 11-25 to 7:57 AM ET meets every bar (478 records, 0 gaps, exits, PLL or stalls; mean `rxCheckPercent` 99.96%), as does 11-24 (unscored, 1,440 records). Reported, not scored: 7 time-gate drops in the 48 h after the swap against 8 in the 18.6 days before it, with CRC failures per minute unchanged (about 254); none followed by a gap, cause unknown.
+
 ## [S211] — 2026-11-21 — #584 gust plausibility design drafted and measured (no DEC, no code)
 
 - No prod change; ships with the next minor image (driver version unchanged until that release). DEC-0247, from an outside review: a failed thermistor decode is no reading (not 24 C), message 9's `wind_gust_10` only from the wind channel, the process sweep guarded per PID. Digital-sensor, ISS-only stations (prod) see no change.
