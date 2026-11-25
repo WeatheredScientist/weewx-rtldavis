@@ -50,10 +50,15 @@ RUN mkdir -p /etc/modprobe.d && \
 #--------------------------------------------
 ARG RTLDAVIS_SRC_COMMIT=bfa9e3d9e1a9fc198fcf81124b709d63d8c30a1f
 ARG RTLDAVIS_SRC_SHA256=7c1a7de1923d2c96844adfba51ec0497f5e8f0a629cc3a6ba64a86d62f26e368
+#   librtlsdr: osmocom v2.0.3 (2026-08-12), which adds the RTL-SDR Blog V4L; it replaces the v2.0.2+2
+#     copy bundled in src.tgz (DEC-0238). GitHub's archive of one commit, so its content is fixed; if
+#     GitHub ever repacks the archive, the sha256 stops the build.
+ARG LIBRTLSDR_COMMIT=797f8143266d983c56d8f35d2d442527529dd8a5
+ARG LIBRTLSDR_SHA256=79ec37cf720277f1f69e167b776ad40d7c5ed6b6f643e265bbd74b5aca5578f8
 
 #--------------------------------------------
-# Build librtlsdr and rtldavis Go binary from src.tgz
-# librtlsdr is bundled in src.tgz — no git clone needed
+# Build librtlsdr (the pin above, unpacked over src.tgz's bundled copy) and the rtldavis Go binary
+# from src.tgz
 #--------------------------------------------
 COPY patch/rtldavis-dupgate.patch /tmp/rtldavis-dupgate.patch
 COPY patch/rtldavis-crcstats.patch /tmp/rtldavis-crcstats.patch
@@ -65,10 +70,18 @@ RUN curl -fsSL -o /tmp/src.tgz \
     "https://github.com/weewx-contrib/weewx-rtldavis/raw/${RTLDAVIS_SRC_COMMIT}/src.tgz" && \
     echo "${RTLDAVIS_SRC_SHA256}  /tmp/src.tgz" | sha256sum -c - && \
     cd /tmp && tar zxf src.tgz && \
+    curl -fsSL -o /tmp/librtlsdr.tgz \
+    "https://github.com/steve-m/librtlsdr/archive/${LIBRTLSDR_COMMIT}.tar.gz" && \
+    echo "${LIBRTLSDR_SHA256}  /tmp/librtlsdr.tgz" | sha256sum -c - && \
+    rm -rf /tmp/src/librtlsdr && mkdir /tmp/src/librtlsdr && \
+    tar zxf /tmp/librtlsdr.tgz -C /tmp/src/librtlsdr --strip-components=1 && \
     cd /tmp/src/librtlsdr && \
     mkdir build && cd build && \
     cmake ../ -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON -DENABLE_ZEROCOPY=OFF && \
     make -j2 && make install && ldconfig && \
+    echo "librtlsdr (DEC-0238): the installed library must be v2.0.3 and know the Blog V4L:" && \
+    test -f /usr/local/lib/librtlsdr.so.2.0.3 && \
+    grep -q "Blog V4L" /usr/local/lib/librtlsdr.so.2.0.3 && \
     cd /tmp/src/rtldavis/src/lheijst/rtldavis && \
     echo "receiveWindow (upstream default, unpatched — rw350 is an unproven experiment; 24h sweep backlogged, see ROADMAP/ARCHITECTURE §6):" && grep -R "receiveWindow" . && \
     patch -p1 --batch --forward < /tmp/rtldavis-dupgate.patch && \

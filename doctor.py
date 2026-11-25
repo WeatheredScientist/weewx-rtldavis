@@ -92,7 +92,7 @@ def model(manufacturer, product):
     if (manufacturer, product) == V4:
         return 'RTL-SDR Blog V4'
     if (manufacturer, product) == V4L:
-        return 'RTL-SDR Blog V4L (not specifically supported by this image\'s librtlsdr 2.0.2)'
+        return 'RTL-SDR Blog V4L'
     return 'RTL-SDR Blog V3 or another RTL2832U'
 
 
