@@ -335,3 +335,46 @@ carrying v2.0.3 is a pin-bump decision with a v3 soak on prod (v2.0.3 also carri
 `65f0658`, see Follow-ups), `BOOT.md` decision 0b. The earlier statement that `doctor`'s tuner line
 tells a V4 from a v3 was wrong for a V4L: its tuner line reads R820T, the same as a v3's. The stick's
 product string is the identifier.
+
+## USB fault test on the NAS stick (S213, proposed, not run)
+
+DEC-0238's prod soak only exercises v2.0.3's one change on the v3's path (`65f0658`, the transfer
+callback no longer cancels from inside itself) if a USB transfer error happens by chance. This test
+causes one on purpose, on the NAS V4L, which already runs v2.0.3 (`v2.4.0-v4l-test`). That fix sits in
+the library's transfer callback, before any tuner code, so the V4L exercises the same lines the v3
+would. Prod is not touched.
+
+**What it answers:** after a USB error mid-stream, does the stack recover with no human step: no hung
+decoder, no container restart? It cannot compare against the old library, which does not drive a V4L.
+
+**Before:** the stick is `/dev/bus/usb/001/003` (product `Blog V4L`, read 2026-11-25 from
+`/sys/bus/usb/devices/1-3`; re-read after any reboot or replug). No USB driver on the NAS can claim it
+(no DVB module in `/sys/bus/usb/drivers`), so the kernel cannot take it back during the reset. Not
+inside DEC-0236's window.
+
+**The fault (owner, root, one line):** a port reset on the stick's node (`USBDEVFS_RESET`, ioctl
+21780). It keeps the device address, so the container's one-node grant still matches afterwards.
+
+    ssh -t nas-admin sudo python3 -c "'import fcntl,os,sys; fcntl.ioctl(os.open(sys.argv[1],os.O_WRONLY),21780,0)'" /dev/bus/usb/001/003
+
+Note the time (ET).
+
+**Watch (owner, about 10 minutes later):**
+
+    ssh -t nas-admin sudo docker logs --tail 80 weewx-v4ltest
+
+    ssh -t nas-admin sudo docker top weewx-v4ltest
+
+**Expected, on v2.0.3:** the decoder goes silent; after 150 s the driver logs `rtldavis process
+stalled`; weewx restarts the driver, which respawns the decoder and reopens the stick; packets resume
+within about 5 minutes of the reset. `docker top` shows one `rtldavis` process, none stuck. The agent
+reads the archive (`nasctl cat` of `archive/weewx.sdb`): at most two 5-minute records short or
+missing, then normal reception.
+
+**PASS:** decoding resumes with no human step and one decoder process remains. **FAIL:** no packets
+after 10 minutes, a decoder process that does not exit, or the stick missing from the container.
+Recovery is the reboot procedure already in use: unplug and replug, re-read the node, recreate the
+container on it.
+
+**What a PASS means for the pin:** the one changed path works on a live stream; with the code read
+(DEC-0238) and the soak's clean days, that is the evidence the bump needs.
