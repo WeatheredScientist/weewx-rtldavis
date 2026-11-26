@@ -11,7 +11,7 @@ under [Pre-S16].
 - DEC-0238's scored window moved to 11-27 00:00 to 12-04 00:00 ET (owner's choice; amendment in `docs/DECISIONS-FULL.md`): bars unchanged, 11-24 to 11-26 reported separately and any fault there must be explained before a PASS. No prod change
 - 11-25 met every bar (1,440/1,440 records, 0 gaps, exits, PLL or stalls; mean `rxCheckPercent` 99.93%); 2 time-gate drops. heartofgold's radar alarm install (4:24:50 to 4:24:59 PM ET 11-25) left no gap
 - The NAS V4L against prod's v3, 5-minute slots: 98.4% vs 99.8% from 11-15 to 11-20, ~88.7% vs 99.95% since 11-22 (an LNA likely left inline unpowered after the AcuRite listen; owner to check). Losses uncorrelated, so receiver-side
-- `docs/RTLSDR-V4-AND-PINNING.md`: a USB fault test for the NAS V4L, exercising v2.0.3's one change on the v3's path (#618, proposed, not run). No prod change
+- `docs/RTLSDR-V4-AND-PINNING.md`: a USB fault test for the NAS V4L, exercising v2.0.3's one change on the v3's path (#618, proposed, not run). DEC-0250 retires the RX campaign apparatus to `ARCHIVE/rx-campaign/` (supersedes DEC-0241, #553), keeping the hot-swap; BOOT's V4L line corrected: the antenna move on 11-21, not the LNA. No prod change
 
 ## [S212] — 2026-11-25 — ROADMAP full reconciliation (on time); partial read of the first soak day
 

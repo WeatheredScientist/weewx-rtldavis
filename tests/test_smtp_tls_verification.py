@@ -10,15 +10,14 @@ channel designed to reach a human independent of weewx_monitor.py itself.
 
 influx.py's post_request() already does this correctly; weewx_monitor.py and
 rx_experiment.sh simply never got the same fix. Found by the S91 full-repo
-security audit; see docs/DECISIONS-FULL.md DEC-0101.
+security audit; see docs/DECISIONS-FULL.md DEC-0101. rx_experiment.sh and its
+starttls check moved to ARCHIVE/rx-campaign/ with the apparatus (DEC-0250).
 """
 import ast
-import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 MONITOR = REPO / "weewx_monitor.py"
-RX_SCRIPT = REPO / "ops" / "rx_experiment.sh"
 
 
 def _smtp_calls_without_context(tree):
@@ -52,26 +51,3 @@ def test_the_monitor_detector_actually_catches_the_original_bug():
     assert _smtp_calls_without_context(tree), (
         "detector no longer catches an unverified SMTP_SSL call"
     )
-
-
-# rx_experiment.sh embeds its mailer in a bash heredoc, not a standalone .py
-# file, so this checks the source text directly rather than via ast.parse --
-# the same approach the rest of this repo's tests use for this script.
-_STARTTLS_RE = re.compile(r"\.starttls\(([^)]*)\)")
-
-
-def test_rx_experiment_starttls_verifies_tls():
-    calls = _STARTTLS_RE.findall(RX_SCRIPT.read_text())
-    assert calls, "expected to find a starttls() call in ops/rx_experiment.sh"
-    offenders = [c for c in calls if "context=" not in c]
-    assert not offenders, (
-        "ops/rx_experiment.sh calls starttls() with no context= -- defaults "
-        "to unverified TLS, exposing GMAIL_PASS to an on-path attacker"
-    )
-
-
-def test_the_rx_experiment_detector_actually_catches_the_original_bug():
-    """POSITIVE CONTROL (DEC-0045)."""
-    calls = _STARTTLS_RE.findall("s = smtplib.SMTP('smtp.gmail.com', 587); s.starttls()")
-    offenders = [c for c in calls if "context=" not in c]
-    assert offenders, "detector no longer catches a bare starttls() call"

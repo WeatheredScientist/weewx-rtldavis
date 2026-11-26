@@ -357,8 +357,8 @@ alone did not catch.
 
 ### NAS era (retired 2026-09-05)
 
-The NAS (Foundation) stopped hosting weewx on 2026-09-05 (MARVIN-DEC-0134), and `ops/rx_experiment.sh` is a retired
-apparatus (DEC-0118). These entries are moved here verbatim from the top of §3 (S193, #555) as a record of the
+The NAS (Foundation) stopped hosting weewx on 2026-09-05 (MARVIN-DEC-0134), and `rx_experiment.sh` is a retired
+apparatus (DEC-0118; moved to `ARCHIVE/rx-campaign/` by DEC-0250). These entries are moved here verbatim from the top of §3 (S193, #555) as a record of the
 method; none reaches a live system. The live marvin entries are above.
 
 - **`nasctl` is read-only** — NAS mutations need the Class C mint path (mint and re-run as TWO

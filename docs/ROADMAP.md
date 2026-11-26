@@ -323,10 +323,9 @@ every figure and S-number, is `docs/ROADMAP-ARCHIVE.md` Block 5 (verbatim).
       2.0-pt bar.
 - [x] **`receiveWindow` = 300, the upstream default** (S116, three confirmations); the sweep was
       dissolved by DEC-0059.
-- **Apparatus status (DEC-0241, S207c, #553):** `ops/rx_experiment.sh`, its unit and timer and
-  `tests/test_rx_experiment.py` are kept and stood down (`SCHEDULE=` empty, DEC-0096; the timer is
-  disabled on marvin); retirement is deferred to the gain-campaign decision and starts as a
-  heartofgold request, since `weewx_monitor.py` and heartofgold's installer name them.
+- [x] **Apparatus retired (DEC-0250, S213, #553; supersedes DEC-0241):** `rx_experiment.sh`, its unit
+  and timer, `tests/test_rx_experiment.py` and the campaign B runbook moved to `ARCHIVE/rx-campaign/`.
+  The driver's hot-swap (DEC-0117) stays; heartofgold removes the deployed unit (ops issue).
 
 - [ ] **P0 — why does the weewx process freeze? (DEC-0067, DEC-0068)** Open; the mechanism is
       unproven. **Rate: 1.31/day, 40 events over 30.5 d (DEC-0088; ~1.51/day excluding an incident day,

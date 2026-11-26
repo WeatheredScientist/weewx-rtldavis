@@ -293,9 +293,9 @@ History: the retired `ops/usb_watchdog.sh` (the file no longer exists) was found
   period against a 150 s watchdog the respawn does *not* reset. Plus rollback, an ack file
   recording the measured respawn gap (answers constraint 4 below), and init-time honoring so a
   restart cannot silently revert a swap. **Default off; `rtldavis.py` is BAKED, so this is not in
-  prod until an image rebuild.** Still open: converting `ops/rx_experiment.sh` to use it — a
-  separate change, and the one that must not land mid-campaign. Original analysis kept below.
-- **[CLOSED — built S103, DEC-0117] Hot-swap gain / receive-window without restarting the container (S89).** The original analysis (the trigger was the only gap; constraints; the unmeasured respawn gap) moved to `CHANGELOG-ARCHIVE.md` ("BACKLOG.md resolved and demoted blocks, rehomed S193"). Still open: converting `ops/rx_experiment.sh` to use it (BOOT job; #553). Tracked jointly with ops: [ops#179](https://github.com/WeatheredScientist/eaglehunt-ops/issues/179).
+  prod until an image rebuild.** The campaign script that
+  would have used it is retired (DEC-0250, `ARCHIVE/rx-campaign/`). Original analysis kept below.
+- **[CLOSED — built S103, DEC-0117] Hot-swap gain / receive-window without restarting the container (S89).** The original analysis (the trigger was the only gap; constraints; the unmeasured respawn gap) moved to `CHANGELOG-ARCHIVE.md` ("BACKLOG.md resolved and demoted blocks, rehomed S193"). The campaign script is retired (DEC-0250); the hot-swap stays for a dev receiver (#586). Tracked jointly with ops: [ops#179](https://github.com/WeatheredScientist/eaglehunt-ops/issues/179).
 - ~~**Retention policy for the SQLite archive + the InfluxDB `weewx` bucket**~~ — **ANSWERED S87,
   [DEC-0095](docs/DECISIONS.md).** The weewx half of
   [ops#175](https://github.com/WeatheredScientist/eaglehunt-ops/issues/175) is settled:
