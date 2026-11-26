@@ -6,11 +6,17 @@ under [Pre-S16].
 
 ---
 
+## [S213] — 2026-11-26 — DEC-0238's window moves to 11-27 to 12-04; V4L vs v3 compared; a USB fault test written
+
+- DEC-0238's scored window moved to 11-27 00:00 to 12-04 00:00 ET (owner's choice; amendment in `docs/DECISIONS-FULL.md`): bars unchanged, 11-24 to 11-26 reported separately and any fault there must be explained before a PASS. No prod change
+- 11-25 met every bar (1,440/1,440 records, 0 gaps, exits, PLL or stalls; mean `rxCheckPercent` 99.93%); 2 time-gate drops. heartofgold's radar alarm install (4:24:50 to 4:24:59 PM ET 11-25) left no gap
+- The NAS V4L against prod's v3, 5-minute slots: 98.4% vs 99.8% from 11-15 to 11-20, ~88.7% vs 99.95% since 11-22 (an LNA likely left inline unpowered after the AcuRite listen; owner to check). Losses uncorrelated, so receiver-side
+- `docs/RTLSDR-V4-AND-PINNING.md`: a USB fault test for the NAS V4L, exercising v2.0.3's one change on the v3's path (#618, proposed, not run). No prod change
+
 ## [S212] — 2026-11-25 — ROADMAP full reconciliation (on time); partial read of the first soak day
 
 - `docs/ROADMAP.md` read line by line against DEC-0230 to DEC-0248: seven lines moved, the S202 and S210c entries moved verbatim to `docs/ROADMAP-ARCHIVE.md` Block 7, next check S222. No code, no prod change.
 - DEC-0238's soak: 11-25 to 7:57 AM ET meets every bar (478 records, 0 gaps, exits, PLL or stalls; mean `rxCheckPercent` 99.96%), as does 11-24 (unscored, 1,440 records). Reported, not scored: 7 time-gate drops in the 48 h after the swap against 8 in the 18.6 days before it, with CRC failures per minute unchanged (about 254); none followed by a gap, cause unknown.
-- DEC-0238's scored window moved to 11-27 00:00 to 12-04 00:00 ET (owner's choice; amendment in `docs/DECISIONS-FULL.md`): bars unchanged, 11-24 to 11-26 reported separately and any fault there must be explained before a PASS. No prod change
 - Next-image prep on held branch `s212-librtlsdr-pin` (`1cba5bc`, pushed, no PR until DEC-0238's PASS): librtlsdr v2.0.3 pinned and asserted, `docs/RELEASE-NOTES-NEXT.md` (v2.5.0 draft and release-day checklist), `doctor`'s V4L caveat dropped, DEC-0237's missing QUICKSTART row. The base stage builds on arm64 and a wrong sha256 stops it; amd64 and the full image wait for CI. S209 rolled to the archive.
 
 ## [S211] — 2026-11-21 — #584 gust plausibility design drafted and measured (no DEC, no code)
@@ -24,8 +30,3 @@ under [Pre-S16].
 - **Prod change (11-23 7:58:14 AM ET, owner's go): DEC-0238's swap.** `:marvin-live` now points at `v2.4.0-v4l-test` (`b599bf27…`, librtlsdr v2.0.3 under the v3), `weewx.service` restarted, healthy, no PLL or exit lines in the first minute. (Corrected 11-24: this entry also claimed an R820T tuner line; none is in `weewx.log`, so the v3 is named by its USB port grant.) 11-22 was clean (1,440/1,440 records, rxCheck 99.94%). Settle to 11-24 7:58 AM; scored days 11-25 to 12-02. Posted on ops#440.
 - 2026-11-24: DEC-0232 step 7 run on prod (11-21 daily summaries rebuilt, step 5's check read back); outside review S3: `CONSTANTS.md`'s hygiene sentence narrowed to match its rows.
 - DEC-0248 (outside review C3): the rain cap stays 16 and DEC-0056's safety claim is withdrawn on 188 days of data; confirm-on-reject designed and modeled (`docs/RAIN-CAP-DESIGN.md`), no code.
-
-## [S210] — 2026-11-21 — DEC-0232's `windGust10` column migrated on prod; #584 answered; coordinator plus S210a-d
-
-- Prod change (data, no image or config): the archive gained `windGust10` (11:22 AM ET, restart 11:23), backfilled 22,395 cells from InfluxDB back to 10-28 through the proxy's JSON series call (raw Flux is closed, DEC-0440), day summaries 10-28 to 11-20 rebuilt; backup `weewx.sdb.pre-dec0232`. `docs/WINDGUST10-MIGRATION.md` corrected: `--dry-run` needs `-y` under `docker exec`, and step 6's CSV route. Left: the 11-21 day rebuild, the copy's deletion after 11-28.
-- S210a: #584 answered (a bad ISS reading echoed by its Type 9 gust, not RF; reporter's nearby station saw nothing). S210b: one 4-min gap on 11-20 02:23 ET after a CRC-valid 83.6 mph frame the time gate passed (#536); four time-gate drops 11-18 to 11-21, none with a gap. S210c: ROADMAP diet, shipped text moved verbatim to `docs/ROADMAP-ARCHIVE.md` (#602). S210d: upstream threads re-read (#601). Owner calls: dashboard leaves derived `windGust10_mph` empty (ops#442); repo About and topics set; `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1` in the owner's shell. ops#465/ops#440 answered. S207a-d rolled to the archive.

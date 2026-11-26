@@ -11,7 +11,7 @@ not any one consumer. The dashboard is a **separate repo** — no dashboard chan
 
 ---
 
-## ▶ Resume here (S212 → S213)
+## ▶ Resume here (S213 → S214)
 
 ### What's settled (do not re-derive)
 
@@ -40,21 +40,20 @@ dead NAS-LEASE yield removed, `lease_dir` ignored with one INFO line; on `dev`, 
 at the next `marvinctl pull` + restart (tenant root's `dev` checkout): **no pull during the soak.**
 Rollout after it: pull, restart, verify sha + `service version is 0.20+ws.3`; owner deletes
 `lease_dir` from the live conf and `weewx.conf.rx-baseline`; heartofgold may drop `/nas-lease`.
-Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0249.**
+Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0250.**
 
 **DEC-0238's soak (SWAPPED 11-23 7:58:14 AM ET):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
 marvin: `librtlsdr.so.2.0.3`, driver sha `7b6fb60a…` = prod's) as `:marvin-live`, 24 h settle, then
 seven days. PASS: 0 gaps over 90 s, 0 stalls, 0 `rtldavis exited`, 0 `PLL not
-locked`, mean `rxCheckPercent` ≥ 99.5. Rollback `tag …:v2.4.0 …:marvin-live` + restart. Score
-against post-move days (report the pre-move week too); DEC-0236 starts the day after the soak ends
-(heartofgold A5). Never swap inside DEC-0236's window.
+locked`, mean `rxCheckPercent` ≥ 99.5. Rollback `tag …:v2.4.0 …:marvin-live` + restart. DEC-0236 starts the
+day after it ends (heartofgold A5). Never swap inside DEC-0236's window.
 
 **DEC-0236:** the NAS run is pre-registered on ops#440 (readout `ops/ab_frames.py`): frame-level
 agreement with prod, gain 372, 24 h burn-in then seven days; it judges a reference receiver, never
 the V4L against the v3. **V4L (S202):** the NAS stick is a Blog V4L; only librtlsdr v2.0.3 drives
 it. Test tags `v2.4.0-v4l-test` and `v2.4.0-v4l-rtl433-test`; source branch **`s202-v4l-test`
 pushed S204 as a record, never merged.** Findings: `docs/RTLSDR-V4-AND-PINNING.md`.
-**NAS shakedown** `weewx-v4ltest` runs until DEC-0236's start; nothing from it counts.
+**NAS shakedown** `weewx-v4ltest` runs until DEC-0236's start. **V4L ~88% since 11-22** (98.4% vs prod 99.8%, 11-15 to 11-20): LNA likely left inline unpowered; owner checks before DEC-0236.
 
 CI fails, not skips, the Go gate tests (DEC-0230). DEC-0233: `docs/INTERFACES.md` is a
 specification. **Maintainers: check a MANIFEST edit with ops' `checks/manifest-coverage-sweep.sh` before landing
@@ -74,9 +73,11 @@ narrowed to its port: **tell marvin before moving its jack.**
    after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) After a NAS reboot, re-read `weewx-v4ltest`'s USB node. (c) **#584:**
    DEC-0245 (S211): B, a driver check of `windGust10` against received wind, accepted, not built;
    re-run the design's readout after a 25 mph event first (`docs/WINDGUST-PLAUSIBILITY-DESIGN.md`).
-0. **DEC-0238's soak:** moved 11-21 (gap 13:40 to 14:03 ET, v3 on `5-1`); 11-22 clean (1,440/1,440,
-   rxCheck 99.94%); settle ended 11-24 7:58 AM; scored **11-27 to 12-04 00:00 ET** (owner). Unscored 11-24 and 11-25 to 7:57 AM: all bars met,
-   rxCheck 99.96%. Time-gate drops rose: 7 in 48 h after the swap vs 8 in 18.6 days, CRC failures flat, no gap: report it. No `dongle:` line on this image (it predates DEC-0235): the port grant is what names the v3. Reads daily; explain any 11-25/26 fault. After it: one readout, post it, then (PASS) the pin branch's PR.
+0. **DEC-0238's soak:** scored **11-27 to 12-04 00:00 ET** (owner, amended S213); 11-24 to 11-26
+   reported apart, any fault there explained. 11-24 and 11-25 met every bar (1,440/1,440, 0 faults,
+   rxCheck 99.96/99.93%). Time-gate drops: 7 in 48 h after the swap, 2 on 11-25: report. No `dongle:`
+   line on this image. Read 11-26, then daily; one readout on ops#440; PASS opens the pin branch's PR.
+   Proposed: the NAS USB fault test (`docs/RTLSDR-V4-AND-PINNING.md`, end).
 1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 + DEC-0240 + DEC-0244 + DEC-0247 +
    DEC-0238's pin; build, prove, release by the notes file's checklist; DEC-0242's rollout
    rides the same window; then prod's `RTLSDR_DEVICE` = the v3's serial (owner-run unit edit).
@@ -87,7 +88,7 @@ narrowed to its port: **tell marvin before moving its jack.**
    Zaphod's session runs it, on the owner's yes.
 3. **Decisions and design:** the S197 cross-repo drift ops issue (owner's go); ops#449 closes when
    the sweep reads `dev`; optional Go patch (exit when `ReadAsync` returns, its own DEC).
-   Outside review (S211): C1 burst carry-over held (no conflicts seen), C3: DEC-0248, cap stays 16, confirm-on-reject designed (cap choice open); S3 settled (the hygiene sentence, not the rows).
+   Outside review (S211): C1 burst carry-over held (no conflicts seen), C3: confirm-on-reject on held `claude/c3-rain-confirm-a9f413` (`454f638`, DEC-0249, cap 45), own minor after the next image; S3 settled (the hygiene sentence, not the rows).
 4. **Gate results since 11-21 10:55 ET**; around 2026-12-04 re-run `ops/garbage_gap_corr.py` over 30
    days (#536 open until then).
 5. **Upstream:** lheijst/rtldavis#2, weewx-influx2#1, matthewwall/weewx-wcloud#6, #514; the devsel
@@ -99,14 +100,14 @@ narrowed to its port: **tell marvin before moving its jack.**
    gate dropped a frame` (last 11-08) · first `unhealthy` · `rejecting implausible`, `unknown message
    type`, loopjson `not finite`. ops#440 cleanup at the end (`BACKLOG.md`). Carry-forwards: `BACKLOG.md`.
 
-## Current state (S212)
+## Current state (S213)
 
 | Thing | State |
 |---|---|
 | Prod | marvin, soak image `v2.4.0-v4l-test` since 11-23 7:58 AM ET, weewx 5.5.2, gain 372. Writer 1.2.0 since 2026-11-12 22:42 ET |
 | InfluxDB / monitor | `weewx-influxdb.service`; monitor sha `2f8a1eda…` (S193's message-only edit live at next restart), `REMEDY_MODE=none` |
 | Reception | 99.9% mean at USB `5-1`; 11-05 to 11-21: one gap (11-20 02:23, 4 min) plus S210's restart (11-21 11:23) |
-| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`4c9a24e`) adds DEC-0232/0235/0237/0240/0244/0247 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
+| `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`3f11a5b`) adds DEC-0232/0235/0237/0240/0244/0247 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
 | Trackers | repo: #579 (DEC-0237), #553, #536, #475 parked, #380, #514, #586, #584 · ops: #465, #440, #449, #110 |
 
@@ -118,11 +119,11 @@ unexplained, 2 RF-dead root cause (DEC-0081), 3 ERR-0005, 4 the 6-hourly email w
 
 ## Model tier
 
-S212: Opus 5.5. S213: Sonnet.
+S213: Opus 5.5. S214: Sonnet.
 
 ## Gotchas — `docs/GOTCHAS.md`
 
 §1 any tool's zero/green · §2 any PR, merge or handoff write · §3 NAS, marvin or campaign · §4
 judging live, dead or shipped.
 
-_Last updated: 2026-11-25 (S212)._
+_Last updated: 2026-11-26 (S213)._
