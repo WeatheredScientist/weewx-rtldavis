@@ -10,6 +10,7 @@ under [Pre-S16].
 
 - `docs/ROADMAP.md` read line by line against DEC-0230 to DEC-0248: seven lines moved, the S202 and S210c entries moved verbatim to `docs/ROADMAP-ARCHIVE.md` Block 7, next check S222. No code, no prod change.
 - DEC-0238's soak: 11-25 to 7:57 AM ET meets every bar (478 records, 0 gaps, exits, PLL or stalls; mean `rxCheckPercent` 99.96%), as does 11-24 (unscored, 1,440 records). Reported, not scored: 7 time-gate drops in the 48 h after the swap against 8 in the 18.6 days before it, with CRC failures per minute unchanged (about 254); none followed by a gap, cause unknown.
+- DEC-0238's scored window moved to 11-27 00:00 to 12-04 00:00 ET (owner's choice; amendment in `docs/DECISIONS-FULL.md`): bars unchanged, 11-24 to 11-26 reported separately and any fault there must be explained before a PASS. No prod change
 - Next-image prep on held branch `s212-librtlsdr-pin` (`1cba5bc`, pushed, no PR until DEC-0238's PASS): librtlsdr v2.0.3 pinned and asserted, `docs/RELEASE-NOTES-NEXT.md` (v2.5.0 draft and release-day checklist), `doctor`'s V4L caveat dropped, DEC-0237's missing QUICKSTART row. The base stage builds on arm64 and a wrong sha256 stops it; amd64 and the full image wait for CI. S209 rolled to the archive.
 
 ## [S211] — 2026-11-21 — #584 gust plausibility design drafted and measured (no DEC, no code)

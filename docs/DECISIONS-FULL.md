@@ -13756,6 +13756,19 @@ window ends. DEC-0236 has no start date yet; if one is set first, the soak waits
 - **Soak on the NAS V4L instead:** a different stick, tuner branch, antenna and host; it says nothing
   about the v3's path, which is what prod runs.
 
+### Amendment (2026-11-25, S212): the scored window moves to 11-27 00:00 to 12-04 00:00 ET
+
+The swap was 11-23 7:58:14 AM ET, and the window first recorded was 11-25 to 12-02. The owner asked
+for about 11-28 to 12-03 and chose 11-27 to 12-04 (owner's menu choice): seven full days, as before,
+bars unchanged. 11-25 and 11-26 stay clear for a possible heartofgold alarm install on marvin
+(ops#487).
+
+Data had been seen when it moved: 11-24 (unscored) and 11-25 to 7:57 AM ET, both meeting every bar.
+So that the move cannot drop a failure, 11-24 to 11-26 are read by the same bars and reported
+separately in the readout, and **any fault in them must be explained before a PASS.** A fault the
+image may have caused there counts as "any doubt". The image stays unchanged, with no
+`marvinctl pull`, until the window ends; DEC-0236 and the next minor image follow it.
+
 ## DEC-0239 — Tier-file caps are gated in this repo's CI (S205)
 
 **Status:** Accepted (owner in chat S205: "let's knock out ops457 for good") · **Date:** 2026-11-16

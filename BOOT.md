@@ -75,8 +75,8 @@ narrowed to its port: **tell marvin before moving its jack.**
    DEC-0245 (S211): B, a driver check of `windGust10` against received wind, accepted, not built;
    re-run the design's readout after a 25 mph event first (`docs/WINDGUST-PLAUSIBILITY-DESIGN.md`).
 0. **DEC-0238's soak:** moved 11-21 (gap 13:40 to 14:03 ET, v3 on `5-1`); 11-22 clean (1,440/1,440,
-   rxCheck 99.94%); settle ended 11-24 7:58 AM; scored 11-25 to 12-02 00:00 ET. 11-24 (unscored) and 11-25 to 7:57 AM: all bars met,
-   rxCheck 99.96%. Time-gate drops rose: 7 in 48 h after the swap vs 8 in 18.6 days, CRC failures flat, no gap: report it. No `dongle:` line on this image (it predates DEC-0235): the port grant is what names the v3. First full scored read: 11-26. Daily reads per the bars. After it: one readout, post it, then (PASS) the pin branch's PR.
+   rxCheck 99.94%); settle ended 11-24 7:58 AM; scored **11-27 to 12-04 00:00 ET** (owner). Unscored 11-24 and 11-25 to 7:57 AM: all bars met,
+   rxCheck 99.96%. Time-gate drops rose: 7 in 48 h after the swap vs 8 in 18.6 days, CRC failures flat, no gap: report it. No `dongle:` line on this image (it predates DEC-0235): the port grant is what names the v3. Reads daily; explain any 11-25/26 fault. After it: one readout, post it, then (PASS) the pin branch's PR.
 1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 + DEC-0240 + DEC-0244 + DEC-0247 +
    DEC-0238's pin; build, prove, release by the notes file's checklist; DEC-0242's rollout
    rides the same window; then prod's `RTLSDR_DEVICE` = the v3's serial (owner-run unit edit).
