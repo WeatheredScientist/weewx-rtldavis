@@ -53,7 +53,7 @@ agreement with prod, gain 372, 24 h burn-in then seven days; it judges a referen
 the V4L against the v3. **V4L (S202):** the NAS stick is a Blog V4L; only librtlsdr v2.0.3 drives
 it. Test tags `v2.4.0-v4l-test` and `v2.4.0-v4l-rtl433-test`; source branch **`s202-v4l-test`
 pushed S204 as a record, never merged.** Findings: `docs/RTLSDR-V4-AND-PINNING.md`.
-**NAS shakedown** `weewx-v4ltest` runs until DEC-0236's start. **V4L ~90% since 11-22** (98.4% vs prod 99.8%, 11-15 to 11-20): antenna moved 11-21 (LNA out); 11-26 re-site no better; owner re-sites before DEC-0236.
+**NAS shakedown** `weewx-v4ltest` runs until DEC-0236's start. **V4L ~98%** since the antenna was raised away from the electronics (11-26 afternoon); 2 AM backup dip now ~1 pt. Keep it there for DEC-0236.
 
 CI fails, not skips, the Go gate tests (DEC-0230). DEC-0233: `docs/INTERFACES.md` is a
 specification. **Maintainers: check a MANIFEST edit with ops' `checks/manifest-coverage-sweep.sh` before landing
@@ -73,11 +73,9 @@ narrowed to its port: **tell marvin before moving its jack.**
    after 11-28, step 8 deletes `weewx.sdb.pre-dec0232`. (b) After a NAS reboot, re-read `weewx-v4ltest`'s USB node. (c) **#584:**
    DEC-0245 (S211): B, a driver check of `windGust10` against received wind, accepted, not built;
    re-run the design's readout after a 25 mph event first (`docs/WINDGUST-PLAUSIBILITY-DESIGN.md`).
-0. **DEC-0238's soak:** scored **11-27 to 12-04 00:00 ET** (owner, amended S213); 11-24 to 11-26
-   reported apart, any fault there explained. 11-24 and 11-25 met every bar (1,440/1,440, 0 faults,
-   rxCheck 99.96/99.93%). Time-gate drops: 7 in 48 h after the swap, 2 on 11-25: report. No `dongle:`
-   line on this image. Read 11-26, then daily; one readout on ops#440; PASS opens the pin branch's PR.
-   Proposed: the NAS USB fault test (`docs/RTLSDR-V4-AND-PINNING.md`, end).
+0. **DEC-0238's soak PASSED** (S213, owner's call): closed early 11-27 4:45 PM ET on 4.4 clean days
+   (0 faults; rxCheck 99.93 to 99.96%; amendment in `DECISIONS-FULL.md`). Next: the PR for
+   `s212-librtlsdr-pin`. The NAS USB fault test stays proposed (`docs/RTLSDR-V4-AND-PINNING.md`).
 1. **The next minor image**, after the soak: DEC-0235 + DEC-0232 + DEC-0237 + DEC-0240 + DEC-0244 + DEC-0247 +
    DEC-0238's pin; build, prove, release by the notes file's checklist; DEC-0242's rollout
    rides the same window; then prod's `RTLSDR_DEVICE` = the v3's serial (owner-run unit edit).

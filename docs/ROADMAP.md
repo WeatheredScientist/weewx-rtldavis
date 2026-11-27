@@ -130,9 +130,9 @@ S210c; their full text, with every PR and issue number, is `docs/ROADMAP-ARCHIVE
       exits), DEC-0240 (the starter conf ships every uploader off) and DEC-0244 (the starter runs the
       loop writer and DewpointCacher, Influx idles on `replace_me`, the mount's `bin/user` imports),
       DEC-0247 (a failed thermistor is no reading; message 9's gust only from the wind channel), plus
-      DEC-0238's librtlsdr v2.0.3 pin, **not built**: its prod soak of the library alone is running
-      (swapped 11-23 7:58 AM ET, scored 11-27 to 12-04 00:00 ET; the prod line above is v2.4.0's tree on
-      that library, `v2.4.0-v4l-test`). After a PASS the pin joins this image. **Then, in its own minor:**
+      DEC-0238's librtlsdr v2.0.3 pin, **not built**: its prod soak of the library alone PASSED, closed
+      early on 4.4 clean days (11-23 to 11-27, owner's call, S213; prod runs v2.4.0's tree on that
+      library, `v2.4.0-v4l-test`). The pin joins this image (`s212-librtlsdr-pin`). **Then, in its own minor:**
       confirm-on-reject (DEC-0248), on the owner's yes and cap choice. Each release carries a one-line
       reason for its number; a major needs the owner's explicit yes (DEC-0246). DEC-0242 (`influx.py` `0.20+ws.3`) rides
       the mounted checkout, not the image. **V4L (ops#440):** the NAS stick is a Blog V4L, which the

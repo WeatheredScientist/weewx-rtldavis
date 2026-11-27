@@ -13769,6 +13769,33 @@ separately in the readout, and **any fault in them must be explained before a PA
 image may have caused there counts as "any doubt". The image stays unchanged, with no
 `marvinctl pull`, until the window ends; DEC-0236 and the next minor image follow it.
 
+### Amendment (2026-11-27, S213): closed early as PASS on 4.4 clean days
+
+The owner paused the soak at about 4:45 PM ET 11-27 ("we are pausing the soak b/c it is gating all of
+our work", ops#440), then chose in chat to close it now as PASS rather than resume later (owner's menu
+choice). This is a shortened soak, not a seven-day one: the evidence is 11-23 7:58 AM to 11-27 4:45
+PM ET, about 4.4 days of prod's v3 on librtlsdr v2.0.3 (`v2.4.0-v4l-test`).
+
+| Day (ET) | Records | Gaps > 90 s | Stalls / exits / PLL | Time-gate drops | Mean `rxCheckPercent` |
+|---|---|---|---|---|---|
+| 11-23 from the swap | 1,437 of the day | 1 (the swap restart, 7:57, 240 s) | 0 / 0 / 0 | 4 | not read |
+| 11-24 | 1,440 | 0 | 0 / 0 / 0 | 2 | 99.96 |
+| 11-25 | 1,440 | 0 | 0 / 0 / 0 | 2 | 99.93 |
+| 11-26 | 1,440 | 0 | 0 / 0 / 0 | 0 | 99.96 |
+| 11-27 to 4:40 PM | 1,021 | 0 | 0 / 0 / 0 | 0 | 99.94 |
+
+Every ERROR in the period is an uploader or the WeatherLink barometer fetch failing outbound (the 106 on
+11-23 cluster at 10:40 AM and 4:09 PM, an internet outage). None comes from the receiver. Two short
+dashboard deploys (11-27 1:36 to 1:42 PM, 4:47 PM) touched nothing of weewx's.
+
+What it does not show: a USB fault or a dongle reset on v2.0.3 (none happened; the NAS USB fault test
+stays proposed), or anything rarer than about once a week. The pre-soak rate of decoder exits and
+stalls on v2.4.0 was already zero for weeks, so seven days would have added little power.
+
+Consequences: the soak image stays in prod as `:marvin-live` (rollback `:v2.4.0` unchanged). The pin
+branch `s212-librtlsdr-pin` gets its PR, and the next minor image, DEC-0242's rollout, DEC-0236's V4L
+run and then confirm-on-reject (DEC-0248) are no longer gated on the soak.
+
 ## DEC-0239 — Tier-file caps are gated in this repo's CI (S205)
 
 **Status:** Accepted (owner in chat S205: "let's knock out ops457 for good") · **Date:** 2026-11-16
