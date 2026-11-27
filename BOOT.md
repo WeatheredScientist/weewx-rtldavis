@@ -40,7 +40,7 @@ dead NAS-LEASE yield removed, `lease_dir` ignored with one INFO line; on `dev`, 
 at the next `marvinctl pull` + restart (tenant root's `dev` checkout): **no pull during the soak.**
 Rollout after it: pull, restart, verify sha + `service version is 0.20+ws.3`; owner deletes
 `lease_dir` from the live conf and `weewx.conf.rx-baseline`; heartofgold may drop `/nas-lease`.
-Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0250.**
+Tag `influx-v0.20+ws.3` (the workflow publishes the zip) is the owner's go. **Next DEC: DEC-0251.**
 
 **DEC-0238's soak (SWAPPED 11-23 7:58:14 AM ET):** `v2.4.0-v4l-test` (`b599bf27…`; verified S204 on
 marvin: `librtlsdr.so.2.0.3`, driver sha `7b6fb60a…` = prod's) as `:marvin-live`, 24 h settle, then
@@ -53,7 +53,7 @@ agreement with prod, gain 372, 24 h burn-in then seven days; it judges a referen
 the V4L against the v3. **V4L (S202):** the NAS stick is a Blog V4L; only librtlsdr v2.0.3 drives
 it. Test tags `v2.4.0-v4l-test` and `v2.4.0-v4l-rtl433-test`; source branch **`s202-v4l-test`
 pushed S204 as a record, never merged.** Findings: `docs/RTLSDR-V4-AND-PINNING.md`.
-**NAS shakedown** `weewx-v4ltest` runs until DEC-0236's start. **V4L ~88% since 11-22** (98.4% vs prod 99.8%, 11-15 to 11-20): LNA likely left inline unpowered; owner checks before DEC-0236.
+**NAS shakedown** `weewx-v4ltest` runs until DEC-0236's start. **V4L ~90% since 11-22** (98.4% vs prod 99.8%, 11-15 to 11-20): antenna moved 11-21 (LNA out); 11-26 re-site no better; owner re-sites before DEC-0236.
 
 CI fails, not skips, the Go gate tests (DEC-0230). DEC-0233: `docs/INTERFACES.md` is a
 specification. **Maintainers: check a MANIFEST edit with ops' `checks/manifest-coverage-sweep.sh` before landing
@@ -86,14 +86,14 @@ narrowed to its port: **tell marvin before moving its jack.**
    readout; revert. **Then #586**: the Zaphod dev/test receiver (`docs/ZAPHOD-DEV-RECEIVER-DESIGN.md`,
    proposed; its DEC is assigned when it's accepted) takes the V4L the day after this window ends.
    Zaphod's session runs it, on the owner's yes.
-3. **Decisions and design:** the S197 cross-repo drift ops issue (owner's go); ops#449 closes when
+3. **Decisions and design:** the S197 drift ops issue (drafted S213); ops#449 closes when
    the sweep reads `dev`; optional Go patch (exit when `ReadAsync` returns, its own DEC).
    Outside review (S211): C1 burst carry-over held (no conflicts seen), C3: confirm-on-reject on held `claude/c3-rain-confirm-a9f413` (`454f638`, DEC-0249, cap 45), own minor after the next image; S3 settled (the hygiene sentence, not the rows).
 4. **Gate results since 11-21 10:55 ET**; around 2026-12-04 re-run `ops/garbage_gap_corr.py` over 30
    days (#536 open until then).
 5. **Upstream:** lheijst/rtldavis#2, weewx-influx2#1, matthewwall/weewx-wcloud#6, #514; the devsel
    patch on the owner's go. Keep `docs/UPSTREAM-THREADS.md` current.
-6. **Needs the owner:** the hot-swap code (#553). The owner's shell now sets
+6. **DEC-0250:** once heartofgold drops the rx unit, cut it from `ops/tenant_mounts.py`. The owner's shell sets
    `CHECK_SECRETS_REQUIRE_IDENTIFIERS=1`: a worktree needs `scripts/.identifiers` copied in.
 7. **Phase 6's acceptance test** and the first arm64 run against a live radio.
 8. **Watch only:** `no bar_absolute` · WU gold star · OWM/Windy rain in mm (ERR-0010) · `Go burst
@@ -109,7 +109,7 @@ narrowed to its port: **tell marvin before moving its jack.**
 | Reception | 99.9% mean at USB `5-1`; 11-05 to 11-21: one gap (11-20 02:23, 4 min) plus S210's restart (11-21 11:23) |
 | `main`/`dev` | `main` = v2.4.0 (`c376037`, `prod-baseline-20261104`); `dev` (`3f11a5b`) adds DEC-0232/0235/0237/0240/0244/0247 (next image), DEC-0242's `influx.py` (next pull) and loopjson 1.2.0 (live) |
 | Docker Hub | `:latest` = `:v2.4.0`, multi-arch; digests in `CONSTANTS.md`; plus the two V4L test tags |
-| Trackers | repo: #579 (DEC-0237), #553, #536, #475 parked, #380, #514, #586, #584 · ops: #465, #440, #449, #110 |
+| Trackers | repo: #579 (DEC-0237), #536, #475 parked, #380, #514, #586, #584 · ops: #465, #440, #449, #110 |
 
 ## Blockers
 

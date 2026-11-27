@@ -14205,3 +14205,46 @@ An outside review (finding C3) showed that the cap ignores elapsed time: counts 
 ### Why
 
 No rain loss is shown: 31 days of logs hold no counter rejection. That is weak, since little of that time had heavy rain and the summer logs are gone, so the cap's safety cannot be claimed from it either way. Confirmation uses what a real counter move has and a random corruption almost never has: it persists.
+
+## DEC-0250 — The RX campaign apparatus is retired; the driver's hot-swap stays (S213)
+
+**Status:** Accepted (owner's menu choice, S213) · **Date:** 2026-11-26 (S213) · **Answers:** #553 ·
+**Supersedes:** DEC-0241 · **Applies:** DEC-0014 (No-Rewrite).
+
+### Context
+
+DEC-0241 kept the apparatus because a gain campaign might reuse the script with the hot-swap. Gain
+has been settled at 372 since DEC-0125, no campaign has run since DEC-0096, and the next radio
+experiments (DEC-0236's run, then #586) use a second receiver, not prod restarts. On marvin (read
+S213 with `marvinctl --tenant weewx`) the deployed unit is disabled and its `ExecStart` target,
+`/srv/docker/weewx/rx_experiment.sh`, does not exist, so the unit could not run if started.
+
+### Decision
+
+Move verbatim to `ARCHIVE/rx-campaign/`: `ops/rx_experiment.sh`, `ops/weewx-rx-experiment.service`,
+`ops/weewx-rx-experiment.timer`, `tests/test_rx_experiment.py` and `docs/CAMPAIGN-B-RUNBOOK.md`.
+`tests/test_smtp_tls_verification.py` loses the script's starttls test and its positive control;
+the monitor's checks stay. Kept: the driver's hot-swap (DEC-0117, off unless configured, useful
+on a dev receiver), `weewx_monitor.py`'s `campaign.inhibit` (a generic deliberate-restart
+inhibit), and `ops/freeze_baseline.py` and `ops/campaign_analyze.py`, which read old logs.
+
+### Alternatives considered
+
+- Retire the hot-swap too: changes the baked driver for no consumer gain, and #586 can use it.
+- Keep (DEC-0241): leaves 17 permanent skips and a reference unit for a script that is gone.
+
+### Migration and order
+
+DEC-0241 planned heartofgold first. This repo moves first because nothing here reaches marvin
+until a `marvinctl pull`, and none is allowed before the soak ends (DEC-0238, 12-04). Then:
+
+1. heartofgold (ops issue): remove both unit files from `host/etc/systemd/system/`, the deployed
+   unit and timer, and the entries in `install-weewx-privdrop.sh`, the privilege-lint test and
+   `heartbeat.conf`. The root-owned `monitor.env` symlink kept for this script can go with them.
+2. Here, after step 1: drop `weewx-rx-experiment.service` from `ops/tenant_mounts.py`'s `OWN_UNITS`.
+3. Owner, any time after the soak: delete `weewx.conf.rx-baseline` and `rx_experiment.state` from the
+   tenant root, and `CONSTANTS.md`'s "+ baseline" notes go (the two-copies hazard, DEC-0080, ends).
+
+### Consequences
+
+The test count drops by 68 (66 + 2); the 17 permanent skips are gone. Rollback is `git mv` back.
