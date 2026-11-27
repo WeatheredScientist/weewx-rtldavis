@@ -1,6 +1,6 @@
 # Release notes, next minor image (proposed v2.5.0): DRAFT
 
-**Held.** For the release after DEC-0238's soak passes (scored to 12-02 00:00 ET). Delete this file in the
+**Ready.** DEC-0238's soak passed (closed early 11-27 on 4.4 clean days, owner's call). Delete this file in the
 release PR once the text is in the GitHub release. `TODO` marks what only release day can fill.
 
 ## Release text
@@ -13,7 +13,7 @@ A lost dongle now restarts the station instead of leaving it silent, two dongles
 - **A decoder that cannot run now exits the container** (DEC-0237, #579). If the dongle disappears, the decoder exits on every retry; after three exits in a row with no packet between them the driver exits too, so `restart: unless-stopped` or systemd recreates the container with fresh device nodes. Expect recovery about 6 minutes after the loss. With no restart policy the container stops. Set `RTLDAVIS_EXIT_AFTER=0` for the old behavior (retry forever).
 - **A failed thermistor is no reading** (DEC-0247). Analog outside-temperature sensors, soil and leaf stations: a failed decode used to publish 24 °C. The temperature is now left out, as is soil moisture, which is computed from it. Leaf wetness is unaffected. Digital outside sensors see no change.
 - **The 10-minute gust comes only from the wind channel** (DEC-0247). With a separate anemometer transmitter, the ISS's own 10-minute gust is no longer published as `windGust10`. If the ISS carries your wind, nothing changes.
-- **librtlsdr is now osmocom v2.0.3** (DEC-0238), which adds the RTL-SDR Blog V4L. It ran on the reference station's V3 for a seven-day soak: TODO result.
+- **librtlsdr is now osmocom v2.0.3** (DEC-0238), which adds the RTL-SDR Blog V4L. It ran on the reference station's V3 for 4.4 days (11-23 to 11-27) with no decoder stall, exit or PLL fault, and reception unchanged at 99.9%.
 - **The bundled InfluxDB uploader is `0.20+ws.3`** (DEC-0242). `lease_dir` in `[[Influx]]` is ignored, with one INFO line. You can delete it.
 
 **New**
@@ -36,7 +36,7 @@ Running v2.4.0? An existing `weewx.conf` is left alone. Check that your containe
 
 ## Release-day checklist
 
-1. Soak PASS read and posted on ops#440; merge this branch. FAIL: drop the librtlsdr line and the pin; the rest still ships.
+1. Soak PASS read and posted on ops#440 (done 11-27); this branch merged.
 2. Bump in one PR: `Dockerfile:3`, `docker-compose.yml`, the README and QUICKSTART download URLs and banner lines, `DRIVER_VERSION` to `0.20+ws.11` with its header ledger row, and `CHANGES-FROM-UPSTREAM.md`'s driver row.
 3. Build on marvin, then prove: `exec-ro` for `librtlsdr.so.2.0.3` and the driver sha; the start log's `dongle:` line names the v3 (the first image here that prints it).
 4. `image-publish.yml`, `scripts/join_multiarch.sh`, the GitHub release and `:latest` as `docs/CONVENTIONS.md` says; DEC-0242's rollout in the same window.
