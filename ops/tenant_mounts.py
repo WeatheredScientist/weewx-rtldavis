@@ -56,8 +56,7 @@ USAGE
                                                 # missing influxdb/ entry
 
 Transport is `marvinctl --tenant weewx cat <unit-file>` -- unit FILES, not
-`marvinctl unit`'s runtime status, because a periodic unit (weewx-rx-experiment,
-weewx-influxdb-backup) shows no ExecStart line in `systemctl status` once it
+`marvinctl unit`'s runtime status, because a periodic unit (weewx-influxdb-backup) shows no ExecStart line in `systemctl status` once it
 has exited; the file is authoritative regardless of whether anything is
 currently running. Per marvin's own ops#288 comment: unit files are readable
 over every tenant's read path, box-wide, not just weewx's own -- that is what
@@ -84,7 +83,6 @@ OWN_UNITS = [
     "weewx.service",
     "weewx-influxdb.service",
     "weewx-influxdb-backup.service",
-    "weewx-rx-experiment.service",
 ]
 
 # Known cross-tenant consumers that read INTO weewx's tree, discovered live via
@@ -118,8 +116,8 @@ def _marvinctl_cat(unit_file: str) -> str | None:
 
 def _join_execstart(unit_text: str) -> str:
     """Join every ExecStart= block's backslash-continued lines into one
-    string. A unit can carry more than one ExecStart= (weewx-rx-experiment.service
-    has two, `tick` and `guard`) -- all are scanned, concatenated, since a
+    string. A unit can carry more than one ExecStart= (the retired
+    weewx-rx-experiment.service had two, `tick` and `guard`) -- all are scanned, concatenated, since a
     mount could in principle live on any of them.
     """
     lines = unit_text.splitlines()
