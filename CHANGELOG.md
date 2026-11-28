@@ -12,6 +12,7 @@ under [Pre-S16].
 - 11-25 met every bar (1,440/1,440 records, 0 gaps, exits, PLL or stalls; mean `rxCheckPercent` 99.93%); 2 time-gate drops. heartofgold's radar alarm install (4:24:50 to 4:24:59 PM ET 11-25) left no gap
 - The NAS V4L against prod's v3, 5-minute slots: 98.4% vs 99.8% from 11-15 to 11-20, ~88.7% vs 99.95% since 11-22 (an LNA likely left inline unpowered after the AcuRite listen; owner to check). Losses uncorrelated, so receiver-side
 - `docs/RTLSDR-V4-AND-PINNING.md`: a USB fault test for the NAS V4L, exercising v2.0.3's one change on the v3's path (#618, proposed, not run). DEC-0250 retires the RX campaign apparatus to `ARCHIVE/rx-campaign/` (supersedes DEC-0241, #553), keeping the hot-swap; BOOT's V4L line corrected: the antenna move on 11-21, not the LNA. DEC-0238's soak closed early as PASS on 4.4 clean days (owner's call, 11-27, amendment in `docs/DECISIONS-FULL.md`); the V4L back to ~98% after the antenna was raised. No prod change
+- Merged: #621 (DEC-0250), #622 (soak PASS), #623 (librtlsdr v2.0.3 pin, rebased from `s212-librtlsdr-pin`, now deleted). S197 drift filed as ops#488 (the dashboard accepted all three items; hyperlocal-forecast tracks usUnits as hlf#724). heartofgold removed the rx unit from marvin (ops#489, 11-27 6:07 PM ET), so `ops/tenant_mounts.py` drops it from `OWN_UNITS`. Opus 5.5, no bare `/model`.
 
 ## [S212] — 2026-11-25 — ROADMAP full reconciliation (on time); partial read of the first soak day
 
