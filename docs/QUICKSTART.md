@@ -13,7 +13,7 @@ minutes on a Raspberry Pi; the console, if you have one, keeps working.
 - An RTL-SDR Blog V3 or V4 dongle and a 915 MHz antenna, vertical, on a 1 to 3 m USB extension away
   from the computer. EU stations use 868 MHz, New Zealand 921 MHz; the antenna has to match. The V3
   is what this project runs. The image's librtlsdr also supports the V4; its first live run here is
-  planned for December 2026. Test a V4 with `doctor` below, not with the host's own `rtl_test`:
+  planned for December 2026. Images newer than v2.4.0 also support the V4L. Test a V4 with `doctor` below, not with the host's own `rtl_test`:
   Debian 12 and Raspberry Pi OS 12 ship a librtlsdr too old for the V4.
 - A Linux computer that stays on, with a free USB port: a Raspberry Pi 4 or 5 running the 64-bit
   OS, a mini PC, a home server, or a NAS that runs Docker. amd64 and arm64 both work. Windows and
@@ -98,6 +98,7 @@ start again.
 | `Permission denied` opening the dongle | The udev rule did not apply. Re-run the setup script, unplug and re-plug; check `PUID`/`PGID` in `.env` match `id -u` and `id -g` |
 | Driver line appears, no `LOOP` after ten minutes (that is, no `Added record` line in `weewx.log`) | Radio, not software. Check the USB cable and re-plug; antenna vertical and away from the computer; band and channel match the ISS; try `-gain 0` (auto) in `[Rtldavis]` |
 | `weewx.conf` not found | Rare now: the first start writes it, and `doctor` says `not seeded yet` until then |
+| The container restarts every few minutes, and the log says the decoder exited several times in a row | The dongle is missing or cannot be opened; check the cable and `doctor`. After three decoder exits in a row with no packet, the container exits so it can come back with fresh USB device nodes. Needs an image newer than v2.4.0. `RTLDAVIS_EXIT_AFTER` in `.env` changes the count; `0` turns it off |
 | `more than one dongle`, or `dongle: ... matches the serial of 2 dongles` | Two RTL-SDRs are plugged in and the station cannot tell which is its own. See "More than one dongle" below |
 | A V4 found as `R828D` with poor or no reception on the host's `rtl_test` | The host's librtlsdr predates the V4 (Debian 12, Pi OS 12). The container's does not: check with `doctor` |
 

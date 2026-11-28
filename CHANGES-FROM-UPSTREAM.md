@@ -34,7 +34,7 @@ since S165, DEC-0219; the pin is the `ARG` lines in the base stage):
 | InfluxDB uploader | [matthewwall/weewx-influx](https://github.com/matthewwall/weewx-influx) → [david-lutz/weewx-influx2](https://github.com/david-lutz/weewx-influx2) (InfluxDB 2.x port) → **patched by us** |
 | WeatherCloud uploader | [matthewwall/weewx-wcloud](https://github.com/matthewwall/weewx-wcloud) → us (unmodified except an SPDX tag) |
 | OgoXe uploader | weewx 5.2 `restx.py` (Tom Keffer) → smeisens/weewx-wundergroundlike → OgoXe developers / Sigi Meisenbichler / Vince Skahan → **patched by us** |
-| USB / SDR | [steve-m/librtlsdr](https://github.com/steve-m/librtlsdr), [jpoirier/gortlsdr](https://github.com/jpoirier/gortlsdr) → us (unmodified) |
+| USB / SDR | [steve-m/librtlsdr](https://github.com/steve-m/librtlsdr), [jpoirier/gortlsdr](https://github.com/jpoirier/gortlsdr) → us (unmodified; from osmocom v2.0.3, commit `797f814`, in place of the v2.0.2+2 copy bundled in `src.tgz`, DEC-0238) |
 | Wind EC table | **kobuki** (`calc_wind_speed_ec`), via Luc's driver |
 
 Everything above is GPLv3 or compatible, and every original copyright notice is intact. We are

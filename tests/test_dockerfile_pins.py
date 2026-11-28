@@ -6,8 +6,8 @@ reproducible, and a replaced upstream file would have slipped in silently. This 
 branch-tracking URL comes back, if a fetched file loses its sha256 check, or if a pin ARG is not a
 full commit id / full sha256.
 
-Since DEC-0219 the image installs `influx.py` from this repo's extension, so `src.tgz` is the one
-remaining download; the checks below no longer expect two.
+Since DEC-0219 the image installs `influx.py` from this repo's extension, so it is no longer a
+download. DEC-0238 adds one: librtlsdr v2.0.3, replacing the copy bundled in `src.tgz`.
 
 Run:  python3 -m pytest tests/ (pytest only)
 """
@@ -63,6 +63,17 @@ def test_every_downloaded_file_is_checked_before_use():
     for out in outputs:
         assert re.search(r"_SHA256\}  %s\" \| sha256sum -c -" % re.escape(out), text), (
             "%s is downloaded but never checked with sha256sum -c" % out)
+
+
+def test_librtlsdr_pin_replaces_the_bundled_copy():
+    # DEC-0238: the old tree goes, the pinned one is unpacked in its place, and the build asserts it
+    text = _dockerfile()
+    assert _args()["LIBRTLSDR_COMMIT"] == "797f8143266d983c56d8f35d2d442527529dd8a5"
+    order = [text.index(s) for s in (
+        "tar zxf src.tgz", "rm -rf /tmp/src/librtlsdr ", "tar zxf /tmp/librtlsdr.tgz", "cmake ../",
+        "test -f /usr/local/lib/librtlsdr.so.2.0.3",
+        'grep -q "Blog V4L" /usr/local/lib/librtlsdr.so.2.0.3')]
+    assert order == sorted(order)
 
 
 def test_dupgate_assertion_kept():

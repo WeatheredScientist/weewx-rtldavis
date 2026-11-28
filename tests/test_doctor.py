@@ -210,3 +210,9 @@ def test_every_row_doctor_names_is_in_the_quickstart_table():
     for code, row in doctor.ROWS.items():
         assert any(row in cell for cell in first_cells), \
             'exit %d names %r, which is not in QUICKSTART.md\'s table' % (code, row)
+
+
+def test_model_names_the_v4l_without_a_support_caveat():
+    # DEC-0238: the image's librtlsdr is v2.0.3, which supports the V4L
+    assert doctor.model('RTLSDRBlog', 'Blog V4L') == 'RTL-SDR Blog V4L'
+    assert doctor.model('RTLSDRBlog', 'Blog V4') == 'RTL-SDR Blog V4'
